@@ -7,6 +7,7 @@ A high-performance chat interface for DeepSeek's R2 Distill models, combining GP
 - **Uncensored Efficiency** - Optimized for DeepSeek's R2 Distill models (8B/32B/70B GGUF)
 - **GPU-First Design** - CUDA 11.7/12.4 focus with NVIDIA 10-series+ compatibility
 - **Research-Grade Tools** - Integrated RAG, web search, and cognitive visualization
+- **Virtual Environment Support** - Isolated Python dependencies for clean installations
 
 ## Core Features
 ✅ **Completed in Phase 1**  
@@ -14,6 +15,7 @@ A high-performance chat interface for DeepSeek's R2 Distill models, combining GP
 - Gradio interface scaffolding
 - Configuration system with JSON management
 - Directory structure for model/vectorstore management
+- Virtual environment setup for dependency isolation
 
 🚧 **Upcoming Features (Phases 2-5)**  
 - Cognitive Process Visualizer (Brainmap)
@@ -24,9 +26,9 @@ A high-performance chat interface for DeepSeek's R2 Distill models, combining GP
 
 ## Installation
 **System Requirements**  
-- NVIDIA GPU with cuda 11-12
+- NVIDIA GPU with CUDA 11.7 or 12.4
 - Windows 10/11
-- CUDA Toolkit 11.7 or 12.4
+- Python 3.8 or higher
 
 ```bash
 git clone https://github.com/yourusername/Chat-Gradio-Deep
@@ -36,9 +38,10 @@ python installer.py
 
 **Install Process**  
 1. Select CUDA version during installation  
-2. Automatic model directory setup  
-3. Configuration file generation  
-4. Dependency installation (Gradio, LangChain, llama.cpp)
+2. Automatic virtual environment setup (`.venv`)  
+3. Python dependency installation (Gradio, LangChain, llama-cpp-python)  
+4. llama.cpp binary download and extraction  
+5. Configuration file generation  
 
 ## Configuration
 `data/configuration.json` structure:
@@ -48,11 +51,16 @@ python installer.py
     "model_path": "data/models/deepseek-r2-distill.Q4_K_M.gguf",
     "n_gpu_layers": 35,
     "temperature": 0.7,
-    "llama_cli_path": "data/llama-cu11.7-bin/bin/llama-cli.exe"
+    "llama_cli_path": "data/llama-cu11.7-bin/bin/llama-cli.exe",
+    "use_python_bindings": true
   },
   "ui_settings": {
     "font_size": 14,
     "accent_color": "#4CAF50"
+  },
+  "cuda_config": {
+    "version": "11.7",
+    "llama_bin_path": "data/llama-cu11.7-bin"
   }
 }
 ```
@@ -63,6 +71,7 @@ python installer.py
 - [X] Directory structure setup
 - [X] Basic Gradio interface
 - [X] Configuration management
+- [X] Virtual environment integration
 
 ### Phase 2: Chat Interface (Current Focus)
 - [ ] Message history management
@@ -86,12 +95,13 @@ python installer.py
 - [ ] Security audits
 
 ## Key Dependencies
-| Component       | Version | Purpose                          |
-|-----------------|---------|----------------------------------|
-| llama.cpp       | b4722   | GPU-accelerated inference        |
-| Gradio          | 4.30.0  | Web interface framework          |
-| LangChain       | 0.2.1   | RAG pipeline management          |
-| llama-cpp-python| 0.2.57  | Python bindings for llama.cpp    |
+| Component           | Version | Purpose                          |
+|---------------------|---------|----------------------------------|
+| llama.cpp           | b4722   | GPU-accelerated inference        |
+| Gradio              | 4.30.0  | Web interface framework          |
+| LangChain           | 0.2.1   | RAG pipeline management          |
+| llama-cpp-python    | 0.2.57  | Python bindings for llama.cpp    |
+| FAISS               | 1.8.0   | Vector storage and search        |
 
 ## Contributing
 1. Fork the repository
@@ -101,4 +111,5 @@ python installer.py
 5. Open Pull Request
 
 ## License
-It will be a `Wiseman-Timelord's Glorified License`.
+**Wiseman-Timelord's Glorified License**  
+```
