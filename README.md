@@ -1,5 +1,8 @@
 # Chat-Gradio-Deep
-A high-performance chat interface for DeepSeek's R2 Distill models, combining GPU efficiency with ChatGPT-like usability.
+Status: Alpha 
+
+## Description
+A high-performance chat interface for DeepSeek's R2 Distill models, combining GPU efficiency with ChatGPT-like usability. It will be designed specifically for my programming projects, as I now have confidence that the following models from deepseek, are going to be Epic, and remove any need for me to be using online chatbots, other than speed of inference, but still, after I have made the thing, I will be looking to enhance the thing, and who knows, some kind of amazing additional features, after I get it up to speed, that will totally make my life easier, and I am totally going to borrow ideas, just as they do, to keep up with each other.
 
 ## Features
 - **Uncensored Efficiency** - Optimized for DeepSeek's R2 Distill models (8B/32B/70B GGUF)
