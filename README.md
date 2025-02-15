@@ -1,2 +1,2 @@
-# Chat-DeepSeek-Gradio
+# Chat-Gradio-Deep
 A chat interface for these impressive GPT4 level models from deepseek, hopefully somewhat as good as the lenx interface.
