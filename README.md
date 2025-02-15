@@ -1,4 +1,4 @@
-# Chat-Gradio-Deep
+# Chat-Gradio-Gguf
 Status: Alpha 
 
 ## Description
