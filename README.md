@@ -2,10 +2,10 @@
 Status: Alpha 
 
 ## Description
-A high-performance chat interface for DeepSeek's R2 Distill models, combining GPU efficiency with ChatGPT-like usability. It will be designed specifically for my programming projects, as I now have confidence that the following models from deepseek, are going to be Epic, and remove any need for me to be using online chatbots, other than speed of inference, but still, after I have made the thing, I will be looking to enhance the thing, and who knows, some kind of amazing additional features, after I get it up to speed, that will totally make my life easier, and I am totally going to borrow ideas, just as they do, to keep up with each other.
+A high-performance chat interface optimized for whatever I find to be the current best model, that will be mentioned below in the links section, combining GPU efficiency with ChatGPT-like usability. It will be designed specifically for my usage, and necessity for features, so it will be streamlined, and non-bloated. I now have confidence that the following generations of models are going to be Epic, and remove any need for me to be using online chatbots, other than speed of inference, but still, after I have made the thing, I will be looking to enhance the thing, and who knows, some kind of amazing additional features, after I get it up to speed, that will totally make my life easier, and I am totally going to borrow ideas, just as they do, to keep up with each other.
 
 ## Features
-- **Uncensored Efficiency** - Optimized for DeepSeek's R2 Distill models (8B/32B/70B GGUF)
+- **Uncensored Efficiency** - Optimized for Gguf models, automatic num layers on GPU.
 - **GPU-First Design** - CUDA 11.7/12.4 focus with NVIDIA 10-series+ compatibility
 - **Research-Grade Tools** - Integrated RAG, web search, and cognitive visualization
 - **Virtual Environment Support** - Isolated Python dependencies for clean installations
@@ -43,6 +43,8 @@ A high-performance chat interface for DeepSeek's R2 Distill models, combining GP
 - 4-bit quantization support (though I dont understand why this is an item in the list, surely llama.cpp binaries just load Q_4, Q_5, Q_6, all the same way? I dont only want to use Q_4, maybe I dont understand).
 - Layer-wise GPU offloading (assess free vram, assess size of model, assess how many layers the model has, determine layer size by using the calculations `(ModelSize * 1.25) / NumLayers) = SizePerLayer` and `VRamSize / SizePerLayer = NumLayersFitVRam`, then we would use whatever whole number for `NumLayersFitVRam` as the number of layers to put on VRam. 
 - after the first response to the user, the model should have an additonal response with a special prompt, where it is asked to summarize the session, and then create a 3 word description, that it will use for the label on the history tab. It should not add the, prompt or response, for figuring out the label to the session, other than on the session label.
+- drop down box in configuration page in gradio interface, to select model to use, with a refresh button next to it.
+- Other things in config page of gradio interface will need drop-down boxes where possible, for example, sensible options for temperature would be, `0`, `0.25`, `0.5`, `0.75`, `1`.
 
 ## Potential Development - Not to be implemented currently.
 - We could load 2 models, one for chat and thinking, and one for code production, load both at the same time, with equal number of layers from each model, whatever will fit, but both models have some layers on the gpu, the rest in system ram. the best small big code model on huggingface is `Nxcode-CQ-7B-orpo`, specifically the file `Nxcode-CQ-7B-orpo-Q6_K.gguf`, its the best at python, so better than other 70b or 32b models, and as a result I should still have plenty of system ram free. The idea is the chat model would be made aware of this other model, possibly it would be done as an agent, and the chat model would be filling out prompts of what it wants created, and sending that to the code model, then the code model would respond to the chat model, and there would be a note in the chatlog in the session `Sending Prompt to Code Model...` and `...Generating Code for Chat Model...` and `...Response Received from Code Model`, then begin output, where it will have assessed and checked what it received, or re-prompt appropriately, or something of the likes.
