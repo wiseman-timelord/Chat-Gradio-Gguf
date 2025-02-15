@@ -24,7 +24,7 @@ A high-performance chat interface for DeepSeek's R2 Distill models, combining GP
 
 ## Installation
 **System Requirements**  
-- NVIDIA GPU (6GB+ VRAM)
+- NVIDIA GPU with cuda 11-12
 - Windows 10/11
 - CUDA Toolkit 11.7 or 12.4
 
