@@ -103,13 +103,6 @@ python installer.py
 | llama-cpp-python    | 0.2.57  | Python bindings for llama.cpp    |
 | FAISS               | 1.8.0   | Vector storage and search        |
 
-## Contributing
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push branch (`git push origin feature/AmazingFeature`)
-5. Open Pull Request
-
 ## License
 **Wiseman-Timelord's Glorified License** is detailed in the file `.\Licence.txt`, that will later be added.
 
