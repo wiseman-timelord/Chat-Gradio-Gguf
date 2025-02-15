@@ -111,5 +111,5 @@ python installer.py
 5. Open Pull Request
 
 ## License
-**Wiseman-Timelord's Glorified License**  
-```
+**Wiseman-Timelord's Glorified License** is detailed in the file `.\Licence.txt`.
+
