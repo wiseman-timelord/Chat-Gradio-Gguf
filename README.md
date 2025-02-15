@@ -14,11 +14,6 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 - **Enhanced Interface Controls** - Load/Unload model, restart session, and shutdown program with ease
 
 ## Installation
-**System Requirements**  
-- NVIDIA GPU with CUDA 11.7 or 12.4
-- Windows 10/11
-- Python 3.8 or higher
-
 **Install Process**  
 1. Select CUDA version during installation  
 2. Automatic virtual environment setup (`.venv`)  
@@ -51,12 +46,13 @@ A high-performance chat interface optimized for GGUF models, designed for effici
   - Logging: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
 
 ## Requirements
-- Python Libraries - Gradio, LangChain, llama-cpp-python, FAISS.
-- Pre-Compiled Binaries - llama.cpp (b4722).
+- Windows 10/11 - Its a Windows program, it will be also compatible with linux later.
+- NVIDIA GPU - CUDA, 11.7 or 12.4, compatible.
+- Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 
 ## Links
-- (Lamarckvergence-14B-i1-Gguf)[https://huggingface.co/mradermacher/Lamarckvergence-14B-i1-GGUF] - Best Chat Modelin Gguf format.
-- (Nxcode-CQ-7B-orpol-Gguf)[https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF] - Best code mode in GGUF format.
+- (Lamarckvergence-14B-i1-Gguf)[https://huggingface.co/mradermacher/Lamarckvergence-14B-i1-GGUF] - Best Small Chat Model in Gguf format.
+- (Nxcode-CQ-7B-orpol-Gguf)[https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF] - Best Python code mode in GGUF format.
 
 ## License
 **Wiseman-Timelord's Glorified License** is detailed in the file `.\Licence.txt`, that will later be added.
