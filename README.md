@@ -24,42 +24,25 @@ A high-performance chat interface for DeepSeek's R2 Distill models, combining GP
 5. Configuration file generation  
 
 ## Development Roadmap
-### Phase 1: Core Infrastructure (Completed)
-- [X] CUDA installer with version selection
-- [X] Directory structure setup
-- [X] Basic Gradio interface
-- [X] Configuration management
-- [X] Virtual environment integration
+- DONE:
+- CUDA installer with version selection
+- Directory structure setup
+- Basic Gradio interface
+- Configuration management
+- Virtual environment integration
+- OUTSTANDING:
+- Message history management (I dont understand, is this for saving previous sessions, or for within a session? It would be nice to have another column on the left, that saved a history for each session in a folder such as `.\history\######` where `#` is a number in serial, but in the file it should have a title at the top and any additional info required, and just save them as `.txt` files, then we can remove `.\logs` so long as errors are printed to the terminal, we dont need to log terminal activity.
+- Token streaming
+- Code block formatting triggered by sections marked with "```" and "```", being printed.
+- Input file formats accepted, `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`.
+- FAISS vector storage
+- Contextual injection system
+- 4-bit quantization support (though I dont understand why this is an item in the list, surely llama.cpp binaries just load Q_4, Q_5, Q_6, all the same way? I dont only want to use Q_4, maybe I dont understand).
+- Layer-wise GPU offloading (assess free vram, assess size of model, assess how many layers the model has, determine layer size by using the calculations `(ModelSize * 1.25) / NumLayers) = SizePerLayer` and `VRamSize / SizePerLayer = NumLayersFitVRam`, then we would use whatever whole number for `NumLayersFitVRam` as the number of layers to put on VRam. 
 
-### Phase 2: Chat Interface (Current Focus)
-- [ ] Message history management
-- [ ] Token streaming
-- [ ] Code block formatting
-- [ ] Brainmap visualization prototype
-
-### Phase 3: RAG Integration
-- [ ] PDF/DOCX parsing
-- [ ] FAISS vector storage
-- [ ] Contextual injection system
-
-### Phase 4: Performance Optimization
-- [ ] VRAM management
-- [ ] 4-bit quantization support
-- [ ] Layer-wise GPU offloading
-
-### Phase 5: Deployment Ready
-- [ ] Windows installer package
-- [ ] Model download helper
-- [ ] Security audits
-
-## Key Dependencies
-| Component           | Version | Purpose                          |
-|---------------------|---------|----------------------------------|
-| llama.cpp           | b4722   | GPU-accelerated inference        |
-| Gradio              | 4.30.0  | Web interface framework          |
-| LangChain           | 0.2.1   | RAG pipeline management          |
-| llama-cpp-python    | 0.2.57  | Python bindings for llama.cpp    |
-| FAISS               | 1.8.0   | Vector storage and search        |
+## Requirements
+- Python Libraries - Gradio, LangChain, llama-cpp-python, FAISS.
+- Pre-Compiled Binaries - llama.cpp (b4722).
 
 ## License
 **Wiseman-Timelord's Glorified License** is detailed in the file `.\Licence.txt`, that will later be added.
