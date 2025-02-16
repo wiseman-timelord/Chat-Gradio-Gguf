@@ -43,11 +43,6 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 ### Notation
 - we are using the calculation `(ModelFileSize * 1.25) / NumLayers = LayerSize` then `TotalVRam / LayerSize = NumLayersOnGpu`, then convert that to whole number, and then load that number of layers of the model to the gpu with the load model command.
 
-## Potential Development - Not to be implemented currently.
-- **Dual-Model Support**: Load two models simultaneously—one for chat and one for code generation. The chat model would act as an agent, sending prompts to the code model and integrating responses into the chat log.  
-  - Example Workflow: 1. Chat model sends a prompt to the code model. 2. Code model generates code and sends it back. 3. Chat model reviews and integrates the response.  
-  - Logging: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
-
 ## Requirements
 - Windows 10/11 - Its a Windows program, it will be also compatible with linux later.
 - NVIDIA GPU - CUDA, 11.7 or 12.4, compatible.
@@ -56,6 +51,11 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 ## Links
 - (Lamarckvergence-14B-i1-Gguf)[https://huggingface.co/mradermacher/Lamarckvergence-14B-i1-GGUF] - Best Small Chat Model in Gguf format.
 - (Nxcode-CQ-7B-orpol-Gguf)[https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF] - Best Python code mode in GGUF format.
+
+## Ideas - Not to be implemented currently.
+- **Dual-Model Support**: Load two models simultaneously—one for chat and one for code generation. The chat model would act as an agent, sending prompts to the code model and integrating responses into the chat log.  
+  - Example Workflow: 1. Chat model sends a prompt to the code model. 2. Code model generates code and sends it back. 3. Chat model reviews and integrates the response.  
+  - Logging: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
 
 ## License
 **Wiseman-Timelord's Glorified License** is detailed in the file `.\Licence.txt`, that will later be added.
