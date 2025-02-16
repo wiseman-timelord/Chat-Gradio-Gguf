@@ -40,6 +40,9 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 - **Model Selection Dropdown**: Add a dropdown in the Gradio interface to select and switch between models.  
 - **Configuration Page Enhancements**: Add dropdowns for settings like temperature (`0`, `0.25`, `0.5`, `0.75`, `1`).  
 
+### Notation
+- we are using the calculation `(ModelFileSize * 1.25) / NumLayers = LayerSize` then `TotalVRam / LayerSize = NumLayersOnGpu`, then convert that to whole number, and then load that number of layers of the model to the gpu with the load model command.
+
 ## Potential Development - Not to be implemented currently.
 - **Dual-Model Support**: Load two models simultaneously—one for chat and one for code generation. The chat model would act as an agent, sending prompts to the code model and integrating responses into the chat log.  
   - Example Workflow: 1. Chat model sends a prompt to the code model. 2. Code model generates code and sends it back. 3. Chat model reviews and integrates the response.  
