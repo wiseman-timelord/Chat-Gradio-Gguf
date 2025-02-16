@@ -49,8 +49,8 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 - Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 
 ## Links
-- (Lamarckvergence-14B-i1-Gguf)[https://huggingface.co/mradermacher/Lamarckvergence-14B-i1-GGUF] - Best Small Chat Model in Gguf format.
-- (Nxcode-CQ-7B-orpol-Gguf)[https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF] - Best Python code mode in GGUF format.
+- [Lamarckvergence-14B-i1-Gguf](https://huggingface.co/mradermacher/Lamarckvergence-14B-i1-GGUF) - Best Small Chat Model in Gguf format.
+- [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best Python code mode in GGUF format.
 
 ## Ideas - Not to be implemented currently.
 - **Dual-Model Support**: Load two models simultaneously—one for chat and one for code generation. The chat model would act as an agent, sending prompts to the code model and integrating responses into the chat log.  
