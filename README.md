@@ -46,7 +46,7 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 
 ## Requirements
 - Windows 10/11 - Its a Windows program, it will be also compatible with linux later.
-- NVIDIA GPU - CUDA, 11.7 or 12.4, compatible.
+- Llama.Cpp - Compatible here with, Avx2, Vulkan, Kompute (Experimental Vulkan+).
 - Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 
 ## Links
