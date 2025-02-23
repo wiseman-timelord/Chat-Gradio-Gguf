@@ -2,13 +2,13 @@
 Status: Alpha 
 
 ## Description
-A high-performance chat interface optimized for GGUF models, designed for efficiency and usability. The project is tailored to my specific needs, ensuring a streamlined and non-bloated experience. With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool eliminates the need for online chatbots while providing local, uncensored, and efficient inference. The interface is designed to evolve with additional features that enhance productivity and usability.
+A high-performance chat interface optimized for GGUF models, designed for efficiency and usability. The project is tailored to my specific needs, ensuring a streamlined and non-bloated experience. With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool eliminates the need for online chatbots while providing local, uncensored, and efficient inference. The interface is designed to evolve with additional features that enhance productivity and usability. The main concept is, to download a DeepSeek R1 model, and use it without the restrictions found on the website, and with a comparable or better interface, or at least as good as it gets before the project becomes too large.
 
 ## Features
 - **Uncensored Efficiency** - Optimized for Gguf models, automatic num layers on GPU.
-- **GPU-First Design** - CUDA 11.7/12.4 focus with NVIDIA 10-series+ compatibility
-- **Research-Grade Tools** - Integrated RAG, web search, and cognitive visualization
-- **Virtual Environment Support** - Isolated Python dependencies for clean installations
+- **GPU-First Design** - Made for AMD Non-Rocm cards, but will be compatible with nVidia/others through Vulkan/Kompute.
+- **Research-Grade Tools** - Integrated RAG, web search, chunking, summarization.
+- **Virtual Environment** - Isolated Python installations to a `.\venv` folder.
 - **Simplified File Support** - Read and utilize `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml` files
 - **Configurable Context Window** - Set `n_ctx` to 8192, 16384, 24576, or 32768
 - **Enhanced Interface Controls** - Load/Unload model, restart session, and shutdown program with ease
@@ -23,20 +23,21 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 
 ## Development Roadmap
 ### Completed  
-- CUDA installer with version selection.  
+- Llama.cpp installer with variant selection.  
 - Directory structure setup.  
 - Basic Gradio interface.  
 - Configuration management.  
 - Virtual environment integration.  
-- Support for **Lamarckvergence-14B** and **Nxcode-CQ-7B** models.  
+- Support `Lamarckvergence-14B-GGUF` model (current best model under 15b).  
 - Message history management with session labeling.  
 ### Outstanding  
 - **Token Streaming**: Real-time token generation for smoother interactions.  
 - **Code Block Formatting**: Automatically format code blocks marked with ` ``` `.  
 - **FAISS Vector Storage**: Implement vector storage for enhanced RAG capabilities.  
 - **Contextual Injection System**: Dynamically inject context into prompts.  
-- **Layer-wise GPU Offloading**: Automatically calculate and allocate layers based on available VRAM.  
-- **Session Summarization**: After the first response, summarize the session and generate a 3-word label for the history tab.  
+- **GPU Selection**: The user may have more than 1 card, so somehow we need to be able to detect the cards, and offer the user the option to select beteen them from auto-populated dropdown box.
+- **Layer-wise GPU Offloading**: Automatically calculate and allocate layers based on available VRAM. (we must make the user specify how much VRam the card has in settings, as AMD non-Rocm cards do not expose this, default to 8). 
+- **Session Summarization**: After the first response from the AI, the model would immediately be used in a hidden (non-session aware) interaction with a special prompt, to summarize the nature of the session in 3-words, based on the, input and response, that will become the `Three word label` for the new session in the history tab, and then it will require to switch back to normal operation, with awareness of the session.  
 - **Model Selection Dropdown**: Add a dropdown in the Gradio interface to select and switch between models.  
 - **Configuration Page Enhancements**: Add dropdowns for settings like temperature (`0`, `0.25`, `0.5`, `0.75`, `1`).  
 
