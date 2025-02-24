@@ -5,13 +5,15 @@ Status: Alpha - We are now experimenting using Grok3 for the creation of this pr
 A high-performance chat interface optimized for GGUF models, designed for efficiency and usability. The project is tailored to my specific needs, ensuring a streamlined and non-bloated experience. With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool eliminates the need for online chatbots while providing local, uncensored, and efficient inference. The interface is designed to evolve with additional features that enhance productivity and usability. The main concept is, to download the best smaller models on HuggingFace, and use them, without the restrictions and with comparable interface, found on premium AI services.
 
 ## Features
-- **Uncensored Efficiency** - Optimized for Gguf models, automatic calculation of num layers on GPU.
-- **GPU-First Design** - Will be compatible with Amd/nVidia/intel through Vulkan/Kompute.
-- **Research-Grade Tools** - Integrated RAG, web search, chunking, summarization.
-- **Virtual Environment** - Isolated Python installations to a `.\venv` folder.
-- **Simplified File Support** - Read and utilize `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml` files
-- **Configurable Context Window** - Set `n_ctx` to 8192, 16384, 24576, or 32768
-- **Enhanced Interface Controls** - Load/Unload model, restart session, and shutdown program with ease
+- **Uncensored Efficiency**: Optimized for GGUF models like `Lamarckvergence-14B-GGUF`, auto-calculates GPU layers.
+- **GPU Support**: Compatible with AMD/NVIDIA/Intel GPUs via Vulkan/Kompute, with GPU selection dropdown.
+- **Research-Grade Tools**: Includes RAG with FAISS, web search, chunking, summarization, and code formatting.
+- **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
+- **Simplified File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml` files.
+- **Configurable Context Window**: Set `n_ctx` to 8192, 16384, 24576, or 32768 via dropdown.
+- **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
+- **Token Streaming**: Real-time token generation for seamless chat interactions.
+- **Model Selection**: Dropdown lists GGUF models from `.\models\*.gguf` for easy switching.
 
 ## Requirements
 - Windows 10/11 - Its a Windows program, it will be also compatible with linux later.
@@ -27,7 +29,13 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 5. Configuration file generation with, llama and vulkan, paths noted.   
 
 ### Notation
-- we are using the calculation `(ModelFileSize * 1.25) / NumLayers = LayerSize` then `TotalVRam / LayerSize = NumLayersOnGpu`, then convert that to whole number, and then load that number of layers of the model to the gpu with the load model command.
+- Tabs on left of `Chat` page; "Start New Session" at top, 10-session limit.
+- Auto-labeled sessions (e.g., "Query about worms") stored in `.\data\history\*`.
+- Vulkan/Kompute supports all GPUs; optimized for non-ROCM AMD without extras.
+- Loads from `.\models` with VRAM dropdown (1GB to 32GB, default 8GB).
+- Settings tab offers temperature (-1 to 1) and VRAM options via dropdowns.
+- We use `(ModelFileSize * 1.25) / NumLayers = LayerSize`, then `TotalVRam / LayerSize = NumLayersOnGpu`.
+- Result is rounded to a whole number for GPU layer offloading in the load model command.
 
 ### Development
 - This program is under development...
