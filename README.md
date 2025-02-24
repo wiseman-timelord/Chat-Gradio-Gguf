@@ -21,8 +21,8 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 4. llama.cpp binary download and extraction  
 5. Configuration file generation  
 
-## Development Roadmap
-### Completed  
+## Development
+All this requires to be implemented...  
 - Llama.cpp installer with variant selection.  
 - Directory structure setup.  
 - Basic Gradio interface.  
@@ -30,7 +30,6 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 - Virtual environment integration.  
 - Support `Lamarckvergence-14B-GGUF` model (current best model under 15b).  
 - Message history management with session labeling.  
-### Outstanding  
 - **Token Streaming**: Real-time token generation for smoother interactions.  
 - **Code Block Formatting**: Automatically format code blocks marked with ` ``` `.  
 - **FAISS Vector Storage**: Implement vector storage for enhanced RAG capabilities.  
@@ -50,7 +49,7 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 - Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 
 ## Links
-- [Lamarckvergence-14B-i1-Gguf](https://huggingface.co/mradermacher/Lamarckvergence-14B-i1-GGUF) - Best Small Chat Model in Gguf format.
+- [Lamarckvergence-14B-Gguf](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best Small Chat Model in Gguf format.
 - [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best Python code mode in GGUF format.
 
 ## Ideas - Not to be implemented currently.
