@@ -31,27 +31,32 @@ timeout /t 1 >nul
 REM Functions
 goto :SkipFunctions
 
-:DisplayTitle
-REM cls
-echo ===============================================================================
-echo "              _________           ________          ________                 "
-echo "              \_   ___ \         /  _____/         /  _____/                 "
-echo "              /    \  \/  ______/   \  ___  ______/   \  ___                 "
-echo "              \     \____/_____/\    \_\  \/_____/\    \_\  \                "
-echo "               \______  /        \______  /        \______  /                "
-echo "                      \/                \/                \/                 "
-echo ===============================================================================
+:DisplaySeparatorThick
+echo =======================================================================================================================
 goto :eof
 
-:DisplaySeparator
-echo ===============================================================================
+:DisplaySeparatorThin
+echo -----------------------------------------------------------------------------------------------------------------------
+goto :eof
+
+:DisplayTitle
+call :DisplaySeparatorThick
+echo "                                  _________           ________          ________                                     "
+echo "                                  \_   ___ \         /  _____/         /  _____/                                     "
+echo "                                  /    \  \/  ______/   \  ___  ______/   \  ___                                     "
+echo "                                  \     \____/_____/\    \_\  \/_____/\    \_\  \                                    "
+echo "                                   \______  /        \______  /        \______  /                                    "
+echo "                                          \/                \/                \/                                     "
+call :DisplaySeparatorThin
 goto :eof
 
 :MainMenu
 color 0B
 call :DisplayTitle
-echo     Batch Menu
-call :DisplaySeparator
+echo     Chat-Gradio-Gguf: Batch Menu
+call :DisplaySeparatorThick
+echo.
+echo.
 echo.
 echo.
 echo.
@@ -63,7 +68,10 @@ echo.
 echo.
 echo.
 echo.
-call :DisplaySeparator
+echo.
+echo.
+echo.
+call :DisplaySeparatorThick
 set /p "choice=Selection; Options = 1-2, Exit = X: "
 
 REM Process user input
@@ -96,7 +104,6 @@ if /i "%choice%"=="2" (
     echo Running Installer...
 	timeout /t 1 >nul
 	cls
-	call :DisplaySeparator
 	python.exe .\installer.py
     if errorlevel 1 (
         echo Error during installation
