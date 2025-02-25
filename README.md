@@ -66,19 +66,21 @@ Selection; Options = 1-2, Exit = X:
 - Llama.Cpp - Compatible here with, Avx2, Vulkan, Kompute (Experimental Vulkan+).
 - Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 
-### Installation
-**Install Process**  
-1. Select Llama.Cpp version during installation  
-2. Automatic virtual environment setup (`.venv`)  
-3. Python dependency installation (Gradio, LangChain, llama-cpp-python)  
-4. llama.cpp binary download and extraction  
-5. Configuration file generation with, llama and vulkan, paths noted.   
-
+### Instructions
+1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Chat-Gradio-Gguf` or `C:\Programs\Chat-Gradio-Gguf`. 
+2. Right click the file `Chat-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load.
+3. Select `2` from the Batch Menu, to begin installation.
+4. you will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware.
+5. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder.
+6. After the install completes, check for any install issues, you may need to install again if there are.
+7. You will then be returned to the Batch Menu, where you, now and in future, select 1 to run to run `Chat-Gradio-Gguf`.
+ 
 ### Notation
 - Tabs on left of `Chat` page; "Start New Session" at top, 10-session limit.
 - Auto-labeled sessions (e.g., "Query about worms") stored in `.\data\history\*`.
 - Vulkan/Kompute supports all GPUs; optimized for non-ROCM AMD without extras.
-- Loads from `.\models` with VRAM dropdown (1GB to 32GB, default 8GB).
+- You will of course need to have a `*.Gguf` model in `.\models`, in order for anything to work.
+- VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram on the selected card.
 - Settings tab offers temperature (-1 to 1) and VRAM options via dropdowns.
 - We use `(ModelFileSize * 1.25) / NumLayers = LayerSize`, then `TotalVRam / LayerSize = NumLayersOnGpu`.
 - Result is rounded to a whole number for GPU layer offloading in the load model command.
