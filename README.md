@@ -14,6 +14,7 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
 - **Token Streaming**: Real-time token generation for seamless chat interactions.
 - **Model Selection**: Dropdown lists GGUF models from `.\models\*.gguf` for easy switching.
+- **Auto-Model Handle**: Uses hotwords in model name, to better handle, ctx, temperature, modes, prompts, etc.
 
 ## Requirements
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
