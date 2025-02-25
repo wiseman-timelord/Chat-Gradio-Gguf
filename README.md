@@ -39,7 +39,7 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 
 ### Development
 - Implement enhancements based on research of models stated below.
-- Implement enhanced thinking section, for the models that have it, soes not to be using it if the model is not a thinking model, but if it is because it is having a hotword related to the models we found to specifically be thinking models, such as `R1`, then have some kind of `Thinking...`, then under that line, for each line of thought we would have a `█` chatacter that would expand out for each line by 1 chatacter, until it finishes thinking, at which point, it would on the new line, print `Thought for #.#s.`, then output the response `Response:\n Example response text`. 
+- Implement enhanced thinking section, for the models that have it, soes not to be using it if the model is not a thinking model, but if it is because it is having a hotword related to the models we found to specifically be thinking models, such as `R1`, then have some kind of `Thinking:`, and on the new line, for each line of thought we would represent this with an additional `█` chatacter, until it finishes thinking, at which point, it would on the new line, print `Thought for #.#s.`, then output the response `Response:\n Example response text`, keeps things simple. 
 
 ## Links
 - [Lamarckvergence-14B-Gguf](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best Small Chat Model in Gguf format, filename `Lamarckvergence-14B.Q6_K_M.gguf`.
