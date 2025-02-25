@@ -1,5 +1,6 @@
 # Script: `.\scripts\interface.py`
 
+# Imports...
 import gradio as gr
 import re
 from pathlib import Path
@@ -10,10 +11,13 @@ from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
     MODEL_LOADED, ACTIVE_SESSION, ALLOWED_EXTENSIONS, CTX_OPTIONS,
     MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, TEMP_OPTIONS,
-    VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS, MAX_SESSIONS
+    VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS, MAX_SESSIONS,
+    current_model_settings
 )
-from scripts import utility  # Updated import for utility functions
+from scripts import utility
+from scripts.models import get_streaming_response, get_response
 
+# Functions...
 def format_response(output: str) -> str:
     formatted = []
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', output, re.DOTALL)
@@ -34,7 +38,7 @@ def chat_interface(message: str, history):
         if len(history) == 1:
             summary_prompt = f"Summarize the following conversation in exactly three words:\nUser: {message}\nAssistant: {full_response}"
             globals()["session_label"] = get_response(summary_prompt).strip()
-            utility.save_session_history(history)  # Save with label
+            utility.save_session_history(history)
     except Exception as e:
         history[-1] = (history[-1][0], f'<span style="color: red;">Error: {str(e)}</span>')
         yield history
@@ -44,19 +48,21 @@ def get_available_models():
     return [f.name for f in model_dir.glob("*.gguf")]
 
 def change_model(model_name):
-    """Switch to a different model."""
-    from scripts.temporary import MODEL_PATH
-    globals()["MODEL_PATH"] = f"data/models/{model_name}"
+    from scripts.temporary import MODEL_PATH, TEMPERATURE, current_model_settings
+    from scripts.models import get_model_settings, initialize_model, unload_model
+    MODEL_PATH = f"models/{model_name}"
+    settings = get_model_settings(model_name)
+    current_model_settings.update(settings)
+    TEMPERATURE = settings["temperature"]
     unload_model()
-    load_model()
-    return gr.Textbox(interactive=True), gr.Button(interactive=False)
+    initialize_model(None)
+    model_info_text = f"Loaded model: {model_name}, Category: {settings['category']}"
+    return gr.Textbox(interactive=True), gr.Button(interactive=False), model_info_text
 
 def web_search_trigger(query):
-    """Trigger a web search."""
-    return utility.web_search(query)  # Updated to use utility
+    return utility.web_search(query)
 
 def process_uploaded_files(files):
-    """Process uploaded files."""
     files_dir = Path("files")
     files_dir.mkdir(exist_ok=True)
     for file in files:
@@ -64,9 +70,9 @@ def process_uploaded_files(files):
         dest_path = files_dir / original_name
         with open(file.name, 'rb') as src, open(dest_path, 'wb') as dst:
             dst.write(src.read())
-    docs = utility.load_and_chunk_documents(files_dir)  # Updated to use utility
+    docs = utility.load_and_chunk_documents(files_dir)
     if docs:
-        utility.create_vectorstore(docs)  # Updated to use utility
+        utility.create_vectorstore(docs)
     from scripts.models import reload_vectorstore
     reload_vectorstore("general_knowledge")
     return "Files uploaded and processed successfully"
@@ -88,7 +94,7 @@ def create_session_controls():
     return row, load_btn, unload_btn, shutdown_btn
 
 def get_saved_sessions():
-    return utility.get_saved_sessions()  # Updated to use utility
+    return utility.get_saved_sessions()
 
 def start_new_session():
     global message_history, session_label
@@ -98,27 +104,41 @@ def start_new_session():
 
 def load_session(session_file):
     if session_file:
-        label, history = utility.load_session_history(Path(HISTORY_DIR) / session_file)  # Updated to use utility
+        label, history = utility.load_session_history(Path(HISTORY_DIR) / session_file)
         global session_label
         session_label = label
         return history
     return []
 
+def load_model():
+    from scripts.models import initialize_model
+    from scripts.temporary import MODEL_PATH, current_model_settings
+    initialize_model(None)
+    model_name = Path(MODEL_PATH).name
+    category = current_model_settings["category"]
+    model_info_text = f"Loaded model: {model_name}, Category: {category}"
+    return gr.Textbox(interactive=True), gr.Button(interactive=False), model_info_text
+
+def unload_model():
+    from scripts.models import unload_model as unload
+    unload()
+    return gr.Textbox(interactive=False), gr.Button(interactive=True), "No model loaded"
+
 def launch_interface():
     with gr.Blocks() as demo:
-        chatbot = gr.Chatbot(height=500)  # Increased height for better visibility
+        chatbot = gr.Chatbot(height=500)
         input_box = gr.Textbox(interactive=False, placeholder="Load a model to start chatting...")
 
         with gr.Row():
-            with gr.Column(scale=1):  # Left sidebar for session tabs
+            with gr.Column(scale=1):
                 session_tabs = gr.Tabs()
                 with session_tabs:
                     with gr.Tab("Start New Session", id="new_session"):
-                        pass  # Placeholder for new session tab
-                    # Dynamic session tabs will be updated via a function
+                        pass
 
-            with gr.Column(scale=4):  # Main chat area
+            with gr.Column(scale=4):
                 with gr.Tab("Chat"):
+                    model_info = gr.Textbox(label="Current Model", interactive=False, value="No model loaded")
                     control_row = create_control_row()
                     web_btn = gr.Button("Web Search")
                     web_output = gr.Textbox(label="Web Results", interactive=False)
@@ -134,7 +154,7 @@ def launch_interface():
                 value=MODEL_PATH.split('/')[-1]
             )
             temperature_dropdown = gr.Dropdown(
-                choices=[-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1],  # Per readme.md
+                choices=[-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1],
                 label="Temperature",
                 value=TEMPERATURE
             )
@@ -144,7 +164,7 @@ def launch_interface():
                 value=N_CTX
             )
             vram_dropdown = gr.Dropdown(
-                choices=[1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768],  # Per readme.md
+                choices=[1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768],
                 label="VRAM Size (MB)",
                 value=VRAM_SIZE
             )
@@ -198,11 +218,11 @@ def launch_interface():
         )
         load_btn.click(
             fn=load_model,
-            outputs=[input_box, load_btn]
+            outputs=[input_box, load_btn, model_info]
         )
         unload_btn.click(
             fn=unload_model,
-            outputs=[input_box, load_btn]
+            outputs=[input_box, load_btn, model_info]
         )
         shutdown_btn.click(
             fn=lambda: exit(0),
@@ -212,7 +232,7 @@ def launch_interface():
         model_dropdown.change(
             fn=change_model,
             inputs=[model_dropdown],
-            outputs=[input_box, load_btn]
+            outputs=[input_box, load_btn, model_info]
         )
         temperature_dropdown.change(
             fn=lambda x: utility.update_setting("temperature", x),
@@ -248,18 +268,12 @@ def launch_interface():
             inputs=None,
             outputs=[session_tabs]
         )
-
+        restart_btn.click(
+            fn=start_new_session,
+            inputs=None,
+            outputs=[chatbot, input_box]
+        )
     demo.launch()
-
-def load_model():
-    from scripts.models import initialize_model
-    initialize_model(None)
-    return gr.Textbox(interactive=True), gr.Button(interactive=False)
-
-def unload_model():
-    from scripts.models import unload_model
-    unload_model()
-    return gr.Textbox(interactive=False), gr.Button(interactive=True)
 
 if __name__ == "__main__":
     launch_interface()

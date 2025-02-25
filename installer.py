@@ -60,7 +60,7 @@ BACKEND_OPTIONS = {
 }
 CONFIG_TEMPLATE = {
     "model_settings": {
-        "model_path": "data/models/deepseek-r2-distill.Q4_K_M.gguf",
+        "model_path": "models/deepseek-r2-distill.Q4_K_M.gguf",
         "n_gpu_layers": 35,
         "n_ctx": 4096,
         "temperature": 0.7,
