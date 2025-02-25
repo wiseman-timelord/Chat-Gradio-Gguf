@@ -96,6 +96,7 @@ Selection; Options = 1-2, Exit = X:
 ## Development
 - Get installer script working 100% for this stage.
 - Implement enhanced thinking section, for the models that have it, soes not to be using it if the model is not a thinking model, but if it is because it is having a hotword related to the models we found to specifically be thinking models, such as `R1`, then have some kind of `Thinking:`, and on the new line, for each line of thought we would represent this with an additional `█` chatacter, until it finishes thinking, at which point, it would on the new line, print `Thought for #.#s.`, then output the response `Response:\n Example response text`, keeps things simple. 
+- Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
 
 ### Ideas - Not to be implemented currently.
 - **Dual-Model Support**: Load two models simultaneously—one for chat and one for code generation. The chat model would act as an agent, sending prompts to the code model and integrating responses into the chat log.  
