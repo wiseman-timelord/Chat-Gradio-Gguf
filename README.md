@@ -73,7 +73,7 @@ Selection; Options = 1-2, Exit = X:
 4. you will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware.
 5. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder.
 6. After the install completes, check for any install issues, you may need to install again if there are.
-7. You will then be returned to the Batch Menu, where you, now and in future, select 1 to run to run `Chat-Gradio-Gguf`.
+7. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`.
  
 ### Notation
 - Tabs on left of `Chat` page; "Start New Session" at top, 10-session limit.
