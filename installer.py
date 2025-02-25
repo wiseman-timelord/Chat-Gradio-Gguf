@@ -25,7 +25,7 @@ VULKAN_PATHS = [
     Path("C:/drivers/VulkanSDK")
 ]
 REQUIREMENTS = [
-    "gradio==4.30.0",
+    "gradio==4.3.0",
     "langchain==0.2.1",
     "faiss-cpu==1.8.0",
     "requests==2.31.0",
@@ -117,12 +117,16 @@ def get_user_choice(prompt: str, options: list) -> str:
 
 # Installation Functions...
 def find_vulkan_versions() -> Dict[str, Path]:
+    print("Checking for Vulkan SDK...")
     vulkan_versions = {}
     env_sdk = os.environ.get("VULKAN_SDK")
+    env_sdk_base = None
+    
+    # Check VULKAN_SDK first
     if env_sdk:
         env_path = Path(env_sdk)
-        lib_path = env_path / "Lib/vulkan-1.lib"  # Check Lib for SDK presence
-        print(f"Checking VULKAN_SDK: {env_path}")
+        env_sdk_base = env_path.parent
+        lib_path = env_path / "Lib/vulkan-1.lib"
         if lib_path.exists():
             version = env_path.name
             vulkan_versions[version] = env_path
@@ -130,22 +134,19 @@ def find_vulkan_versions() -> Dict[str, Path]:
         else:
             print(f"No vulkan-1.lib at {lib_path}")
     
+    # Check VULKAN_PATHS, skipping the base path already checked via VULKAN_SDK
     for base_path in VULKAN_PATHS:
-        print(f"Checking base path: {base_path}")
+        if env_sdk_base and str(base_path.resolve()).lower() == str(env_sdk_base.resolve()).lower():
+            continue
         if base_path.exists():
-            print(f"Base path exists: {base_path}")
             for sdk_dir in base_path.iterdir():
                 if sdk_dir.is_dir():
                     version = sdk_dir.name
                     lib_path = sdk_dir / "Lib/vulkan-1.lib"
-                    print(f"Checking directory: {sdk_dir}")
                     if lib_path.exists():
                         vulkan_versions[version] = sdk_dir
                         print(f"Found Vulkan SDK at {sdk_dir} with version {version}")
-                    else:
-                        print(f"No vulkan-1.lib at {lib_path}")
-        else:
-            print(f"Base path does not exist: {base_path}")
+    
     print(f"Detected Vulkan versions: {vulkan_versions}")
     return vulkan_versions
 
@@ -241,26 +242,6 @@ def create_venv() -> bool:
         print_status(f"Failed to create venv: {e}", False)
         return False
 
-def install_python_deps(backend: str) -> bool:
-    print_status("Installing Python Dependencies...")
-    try:
-        pip_exe = str(VENV_DIR / "Scripts" / "pip.exe")
-        subprocess.run([pip_exe, "install", "--upgrade", "pip"], check=True)
-        subprocess.run([pip_exe, "install"] + REQUIREMENTS, check=True)
-        backend_info = BACKEND_OPTIONS[backend]
-        if backend_info.get("needs_python_bindings", False):
-            if "Vulkan" in backend:
-                subprocess.run([
-                    pip_exe, "install", "llama-cpp-python",
-                    "--no-binary", "llama-cpp-python",
-                    "--config-settings=cmake.define.LLAMA_VULKAN=ON"
-                ], check=True)
-        print_status("Dependencies installed in venv")
-        return True
-    except subprocess.CalledProcessError as e:
-        print_status(f"Dependency install failed: {e}", False)
-        return False
-
 def check_llama_conflicts() -> bool:
     try:
         import llama_cpp
@@ -327,6 +308,39 @@ def create_config(backend: str) -> None:  # No vulkan_path needed
     except Exception as e:
         print_status(f"Failed to create config: {str(e)}", False)
 
+def install_python_deps(backend: str) -> bool:
+    print_status("Installing Python Dependencies...")
+    try:
+        python_exe = str(VENV_DIR / "Scripts" / "python.exe")
+        pip_exe = str(VENV_DIR / "Scripts" / "pip.exe")
+        
+        # Attempt initial pip upgrade, expecting it might fail on older versions
+        try:
+            subprocess.run([pip_exe, "install", "--upgrade", "pip"], check=True)
+        except subprocess.CalledProcessError:
+            print_status("Initial pip upgrade failed (common with older pip versions)", False)
+        
+        # Force pip upgrade using python -m pip, which is reliable
+        subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+        print_status("Pip upgraded successfully")
+        
+        # Install requirements with the upgraded pip
+        subprocess.run([pip_exe, "install"] + REQUIREMENTS, check=True)
+        
+        backend_info = BACKEND_OPTIONS[backend]
+        if backend_info.get("needs_python_bindings", False):
+            if "Vulkan" in backend:
+                subprocess.run([
+                    pip_exe, "install", "llama-cpp-python",
+                    "--no-binary", "llama-cpp-python",
+                    "--config-settings=cmake.define.LLAMA_VULKAN=ON"
+                ], check=True)
+        print_status("Dependencies installed in venv")
+        return True
+    except subprocess.CalledProcessError as e:
+        print_status(f"Dependency install failed: {e}", False)
+        return False
+
 # Menu Functions...
 def select_backend_type() -> None:
     global BACKEND_TYPE
@@ -340,7 +354,7 @@ def select_backend_type() -> None:
         options[1]: "GPU/CPU - Vulkan",
         options[2]: "GPU/CPU - Kompute"
     }
-    choice = get_user_choice("Select the Llama.Cpp Backend Type...", options)
+    choice = get_user_choice("Select the Llama.Cpp type:", options)
     BACKEND_TYPE = mapping[choice]
 
 # Main Installation Flow...
