@@ -51,7 +51,8 @@ call :DisplaySeparatorThin
 goto :eof
 
 :MainMenu
-color 0B
+cls
+color 0F
 call :DisplayTitle
 echo     Chat-Gradio-Gguf: Batch Menu
 call :DisplaySeparatorThick
@@ -76,13 +77,17 @@ set /p "choice=Selection; Menu Options = 1-2, Exit Batch = X: "
 
 REM Process user input
 if /i "%choice%"=="1" (
-    color 1B
-    call :DisplayTitle
-    echo Starting %TITLE%...
+    cls
+    color 06
+    call :DisplaySeparatorThick
+	echo     Chat-Gradio-Gguf: Launcher
+    call :DisplaySeparatorThick
+	echo.
+	echo Starting %TITLE%...
     set PYTHONUNBUFFERED=1
     
     REM Activate venv and launch
-    call .\venv\Scripts\activate.bat
+    call .\.venv\Scripts\activate.bat
     python.exe -u .\launcher.py
     
     REM Check for errors
@@ -91,16 +96,19 @@ if /i "%choice%"=="1" (
         pause
     )
     
-    REM Deactivate venv
-    deactivate
+    REM Deactivate venv using full path to batch file
+    call .\.venv\Scripts\deactivate.bat
     set PYTHONUNBUFFERED=0
-    pause
     goto MainMenu
 )
 
 if /i "%choice%"=="2" (
     cls
-    color 1B
+    color 06
+    call :DisplaySeparatorThick
+	echo     Chat-Gradio-Gguf: Installer
+    call :DisplaySeparatorThick
+	echo.
     echo Running Installer...
 	timeout /t 1 >nul
 	cls
@@ -108,7 +116,10 @@ if /i "%choice%"=="2" (
     if errorlevel 1 (
         echo Error during installation
     )
-    goto MainMenu
+    call .\.venv\Scripts\deactivate.bat
+    set PYTHONUNBUFFERED=0
+	pause
+	goto MainMenu
 )
 
 if /i "%choice%"=="X" (

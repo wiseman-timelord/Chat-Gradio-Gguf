@@ -28,12 +28,13 @@ VULKAN_PATHS = [
     Path("C:/drivers/VulkanSDK")
 ]
 REQUIREMENTS = [
-    "gradio==4.3.0",
+    "gradio==4.44.1",
     "langchain==0.2.1",
     "faiss-cpu==1.8.0",
     "requests==2.31.0",
     "tqdm==4.66.1",
     "llama-cpp-python",
+    "langchain-community",
     "pygments==2.17.2",
     "sentence-transformers==2.2.2"
 ]

@@ -2,14 +2,16 @@
 
 from pathlib import Path
 from scripts import temporary
-from utility import load_config
+from scripts.utility import load_config
 
 def main():
     try:
+        print("Initializing system...")
         load_config()
         from scripts.utility import load_and_chunk_documents, create_vectorstore
         docs = load_and_chunk_documents(Path("files"))
         if docs:
+            print("Building knowledge base...")
             create_vectorstore(docs)
         from scripts.models import initialize_model
         initialize_model(None)
