@@ -59,7 +59,7 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 Selection; Options = 1-2, Exit = X:
 
 ```
-- The installer is comprehensive...
+- The installer works effectively...
 ```
 ========================================================================================================================
     Chat-Gradio-Gguf: Installation
@@ -98,7 +98,6 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
  Press any key for Batch Menu...
 
 ```
-
 
 ## Requirements
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
