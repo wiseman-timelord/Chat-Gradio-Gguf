@@ -58,8 +58,40 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 =======================================================================================================================
 Selection; Options = 1-2, Exit = X:
 
+```
+- The installer is "there" now...
+```
+========================================================================================================================
+    Chat-Gradio-Gguf: Installation
+========================================================================================================================
+
+Installing Chat-Gradio-Gguf...
+Found Vulkan SDK at C:\Program_Filez\VulkanSDK\1.4.304.1 with version 1.4.304.1
+Detected Vulkan versions: {'1.4.304.1': WindowsPath('C:/Program_Filez/VulkanSDK/1.4.304.1')}
+Confirmed Vulkan SDK 1.4.x version: 1.4.304.1
+Creating Directory Structure...                              [OK]
+Found directory: data                                        [OK]
+Found directory: files                                       [OK]
+Created directory: data/temp                                 [OK]
+Found directory: scripts                                     [OK]
+Found directory: models                                      [OK]
+Found directory: data/vectorstores                           [OK]
+Creating Virtual Environment...                              [OK]
+Virtual environment created at .venv                         [OK]
+Installing Python Dependencies...                            [OK]
+Requirement already satisfied: pip in c:\program_filez\chat-gradio-gguf\.venv\lib\site-packages (25.0.1)
+Pip upgraded successfully                                    [OK]
+Installing dependencies with custom wheel index...           [OK]
+Dependencies installed in venv                               [OK]
+Downloading llama.cpp (GPU/CPU - Vulkan)...                  [OK]
+100%|█████████████████████████████████████████████████████████████████████████████| 22.4M/22.4M [00:19<00:00, 1.15MB/s]
+llama.cpp installed successfully                             [OK]
+Configuration file created                                   [OK]
+Chat-Gradio-Gguf installed successfully!                     [OK]
+ Press any key for Batch Menu...
 
 ```
+
 
 ## Requirements
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
