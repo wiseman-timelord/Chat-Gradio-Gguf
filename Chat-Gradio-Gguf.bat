@@ -72,7 +72,7 @@ echo.
 echo.
 echo.
 call :DisplaySeparatorThick
-set /p "choice=Selection; Options = 1-2, Exit = X: "
+set /p "choice=Selection; Menu Options = 1-2, Exit Batch = X: "
 
 REM Process user input
 if /i "%choice%"=="1" (
