@@ -2,10 +2,11 @@
 
 from pathlib import Path
 from scripts import temporary
+from utility import load_config
 
 def main():
     try:
-        utility.load_config()  # Updated import
+        load_config()
         from scripts.utility import load_and_chunk_documents, create_vectorstore
         docs = load_and_chunk_documents(Path("files"))
         if docs:

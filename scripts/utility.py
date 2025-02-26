@@ -108,32 +108,65 @@ def create_vectorstore(documents: list) -> None:
 def save_config():
     """Save current settings to config.json, preserving existing keys."""
     from temporary import (
-        MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, VRAM_SIZE, SELECTED_GPU, MAX_SESSIONS
+        MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
+        LLAMA_CLI_PATH, VRAM_SIZE, SELECTED_GPU, DYNAMIC_GPU_LAYERS, MMAP,
+        MLOCK, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_MAX_DOCS, MAX_SESSIONS,
+        BACKEND_TYPE, LLAMA_BIN_PATH
     )
+    from pathlib import Path
+    import json
+
     config_path = Path("data/config.json")
     if config_path.exists():
         with open(config_path, "r") as f:
             config = json.load(f)
     else:
         config = {}
-    if "model_settings" not in config:
-        config["model_settings"] = {}
-    if "history_settings" not in config:
-        config["history_settings"] = {}
-    config["model_settings"]["model_path"] = MODEL_PATH
-    config["model_settings"]["n_gpu_layers"] = N_GPU_LAYERS
-    config["model_settings"]["n_ctx"] = N_CTX
-    config["model_settings"]["temperature"] = TEMPERATURE
-    config["model_settings"]["vram_size"] = VRAM_SIZE
-    config["model_settings"]["selected_gpu"] = SELECTED_GPU
-    config["history_settings"]["max_sessions"] = MAX_SESSIONS
+
+    # Update model_settings
+    config["model_settings"] = {
+        "model_path": MODEL_PATH,
+        "n_gpu_layers": N_GPU_LAYERS,
+        "n_ctx": N_CTX,
+        "temperature": TEMPERATURE,
+        "use_python_bindings": USE_PYTHON_BINDINGS,
+        "llama_cli_path": LLAMA_CLI_PATH,
+        "vram_size": VRAM_SIZE,
+        "selected_gpu": SELECTED_GPU,
+        "dynamic_gpu_layers": DYNAMIC_GPU_LAYERS,
+        "mmap": MMAP,
+        "mlock": MLOCK
+    }
+
+    # Update rag_settings
+    config["rag_settings"] = {
+        "chunk_size": RAG_CHUNK_SIZE,
+        "chunk_overlap": RAG_CHUNK_OVERLAP,
+        "max_docs": RAG_MAX_DOCS
+    }
+
+    # Update history_settings
+    config["history_settings"] = {
+        "max_sessions": MAX_SESSIONS
+    }
+
+    # Update backend_config (typically set by installer, but preserved here)
+    config["backend_config"] = {
+        "type": BACKEND_TYPE,
+        "llama_bin_path": LLAMA_BIN_PATH
+    }
+
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
 def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary."""
-    from temporary import MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, VRAM_SIZE, SELECTED_GPU, MAX_SESSIONS
-    from interface import change_model  # Import here to avoid circular import
+    from temporary import (
+        MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, VRAM_SIZE, SELECTED_GPU,
+        MAX_SESSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_MAX_DOCS
+    )
+    from interface import change_model  # Avoid circular import
+
     reload_required = False
     if key == "temperature":
         globals()["TEMPERATURE"] = float(value)
@@ -150,6 +183,13 @@ def update_setting(key, value):
         globals()["SELECTED_GPU"] = value
     elif key == "max_sessions":
         globals()["MAX_SESSIONS"] = int(value)
+    elif key == "rag_chunk_size":
+        globals()["RAG_CHUNK_SIZE"] = int(value)
+    elif key == "rag_chunk_overlap":
+        globals()["RAG_CHUNK_OVERLAP"] = int(value)
+    elif key == "rag_max_docs":
+        globals()["RAG_MAX_DOCS"] = int(value)
+
     if reload_required:
         return change_model(MODEL_PATH.split('/')[-1])
     return None, None
@@ -158,34 +198,37 @@ def load_config():
     """Load configuration from config.json into temporary globals."""
     from temporary import (
         MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
-        BACKEND_TYPE, LLAMA_CLI_PATH, RAG_AUTO_LOAD, RAG_CHUNK_SIZE,
-        RAG_CHUNK_OVERLAP, RAG_MAX_DOCS, VRAM_SIZE, SELECTED_GPU,
-        DYNAMIC_GPU_LAYERS, MMAP, MLOCK, MAX_SESSIONS
+        BACKEND_TYPE, LLAMA_CLI_PATH, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP,
+        RAG_MAX_DOCS, VRAM_SIZE, SELECTED_GPU, DYNAMIC_GPU_LAYERS, MMAP,
+        MLOCK, MAX_SESSIONS, LLAMA_BIN_PATH
     )
-    config_path = Path(__file__).parent.parent / "data" / "config.json"  # Adjusted path
+    from pathlib import Path
+    import json
+
+    config_path = Path(__file__).parent.parent / "data" / "config.json"
     if config_path.exists():
         with open(config_path) as f:
             config = json.load(f)
+            # Model Settings
             globals()["MODEL_PATH"] = config["model_settings"]["model_path"]
             globals()["N_GPU_LAYERS"] = config["model_settings"]["n_gpu_layers"]
             globals()["N_CTX"] = config["model_settings"]["n_ctx"]
             globals()["TEMPERATURE"] = config["model_settings"]["temperature"]
             globals()["USE_PYTHON_BINDINGS"] = config["model_settings"]["use_python_bindings"]
-            globals()["BACKEND_TYPE"] = config["backend_config"]["type"]
             globals()["LLAMA_CLI_PATH"] = config["model_settings"]["llama_cli_path"]
-            globals()["RAG_AUTO_LOAD"] = config["rag_settings"]["auto_load"]
-            globals()["RAG_CHUNK_SIZE"] = config["rag_settings"]["chunk_size"]
-            globals()["RAG_CHUNK_OVERLAP"] = config["rag_settings"]["chunk_overlap"]
-            globals()["RAG_MAX_DOCS"] = config["rag_settings"]["max_docs"]
             globals()["VRAM_SIZE"] = config["model_settings"]["vram_size"]
             globals()["SELECTED_GPU"] = config["model_settings"]["selected_gpu"]
             globals()["DYNAMIC_GPU_LAYERS"] = config["model_settings"]["dynamic_gpu_layers"]
             globals()["MMAP"] = config["model_settings"].get("mmap", True)
             globals()["MLOCK"] = config["model_settings"].get("mlock", False)
+            # RAG Settings
+            globals()["RAG_CHUNK_SIZE"] = config["rag_settings"]["chunk_size"]
+            globals()["RAG_CHUNK_OVERLAP"] = config["rag_settings"]["chunk_overlap"]
+            globals()["RAG_MAX_DOCS"] = config["rag_settings"]["max_docs"]
+            # History Settings
             globals()["MAX_SESSIONS"] = config.get("history_settings", {}).get("max_sessions", 10)
-            if "vulkan_sdk" in config:
-                import os
-                vulkan_bin_path = config["vulkan_sdk"]["bin_path"]
-                os.environ["PATH"] = os.environ["PATH"] + os.pathsep + vulkan_bin_path
+            # Backend Config
+            globals()["BACKEND_TYPE"] = config["backend_config"]["type"]
+            globals()["LLAMA_BIN_PATH"] = config["backend_config"]["llama_bin_path"]
     else:
         raise FileNotFoundError("Configuration file not found at data/config.json")

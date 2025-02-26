@@ -9,10 +9,9 @@ from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
 from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
-    MODEL_LOADED, ACTIVE_SESSION, ALLOWED_EXTENSIONS, CTX_OPTIONS,
-    MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, TEMP_OPTIONS,
-    VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS, MAX_SESSIONS,
-    current_model_settings
+    MODEL_LOADED, ALLOWED_EXTENSIONS, CTX_OPTIONS, MODEL_PATH, N_GPU_LAYERS,
+    N_CTX, TEMPERATURE, TEMP_OPTIONS, VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS,
+    MAX_SESSIONS, current_model_settings
 )
 from scripts import utility
 from scripts.models import get_streaming_response, get_response

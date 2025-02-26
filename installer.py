@@ -14,8 +14,8 @@ VULKAN_TARGET_VERSION = "1.4.304.1"
 LLAMACPP_TARGET_VERSION = "b4778"
 BACKEND_TYPE = None # Will be set by the backend menu
 DIRECTORIES = [
-    "data", "files", "data/temp", "scripts",
-    "models", "data/vectorstores"
+    "data", "files", "scripts", "models",
+    "data/vectorstores", "data/history", "data/temp"
 ]
 VULKAN_PATHS = [
     Path("C:/VulkanSDK"),

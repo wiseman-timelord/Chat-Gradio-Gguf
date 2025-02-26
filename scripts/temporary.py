@@ -4,56 +4,58 @@
 import time
 
 # General Constants/Variables/Lists/Maps/Arrays
-MODEL_DIR = "models"  # Updated per readme.md
-VECTORSTORE_DIR = "data/vectorstores"
-TEMP_DIR = "temp"
-HISTORY_DIR = "data/history"
-SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"
-MODEL_LOADED = False
-rag_documents = []
-session_label = ""
+MODEL_DIR = "models"  # Directory for GGUF models
+VECTORSTORE_DIR = "data/vectorstores"  # Directory for vector stores
+TEMP_DIR = "data/temp"  # Temporary directory aligned with installer
+HISTORY_DIR = "data/history"  # Directory for session history
+VULKAN_DLL_PATH = "C:\\Windows\\SysWOW64\\vulkan-1.dll"  # Reference path for Vulkan DLL
+SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"  # Format for session file names
+MODEL_LOADED = False  # Tracks if model is loaded
+rag_documents = []  # Placeholder for RAG documents
+session_label = ""  # Current session label
 
-# Configurable Settings
-MODEL_PATH = "models/Lamarckvergence-14B-GGUF"  # Updated per readme.md
-N_CTX = 8192
-TEMPERATURE = 0.7
-DYNAMIC_GPU_LAYERS = True
-VRAM_SIZE = 8192  # Default 8GB in MB per readme.md
-SELECTED_GPU = None
-MMAP = True
-MLOCK = False
-BACKEND_TYPE = "vulkan"
-LLAMA_CLI_PATH = ""
-RAG_AUTO_LOAD = ["general_knowledge"]
-RAG_CHUNK_SIZE = 2048
-RAG_CHUNK_OVERLAP = 256
-RAG_MAX_DOCS = 5
-MAX_SESSIONS = 10
+# Configurable Settings (Loaded from JSON)
+MODEL_PATH = "models/Lamarckvergence-14B-GGUF"  # Default model path
+N_CTX = 8192  # Default context window size
+TEMPERATURE = 0.7  # Default temperature
+DYNAMIC_GPU_LAYERS = True  # Enable dynamic GPU layer calculation
+VRAM_SIZE = 8192  # Default VRAM size in MB (8GB)
+SELECTED_GPU = None  # Selected GPU device
+MMAP = True  # Use memory mapping
+MLOCK = False  # Use memory locking
+USE_PYTHON_BINDINGS = True  # Use Python bindings by default
+LLAMA_CLI_PATH = ""  # Path to llama-cli.exe, set by config
+BACKEND_TYPE = ""  # Backend type (e.g., "GPU/CPU - Vulkan"), set by config
+LLAMA_BIN_PATH = ""  # Directory of llama.cpp binaries, set by config
+RAG_CHUNK_SIZE = 2048  # RAG chunk size
+RAG_CHUNK_OVERLAP = 256  # RAG chunk overlap
+RAG_MAX_DOCS = 5  # Max RAG documents
+MAX_SESSIONS = 10  # Max number of saved sessions
+RAG_AUTO_LOAD = ["general_knowledge"]  # Default RAG vectorstores to load
 
 # UI Constants
-USER_COLOR = "#ffffff"
-THINK_COLOR = "#c8a2c8"
-RESPONSE_COLOR = "#add8e6"
-SEPARATOR = "=" * 40
-MID_SEPARATOR = "-" * 30
+USER_COLOR = "#ffffff"  # Color for user messages
+THINK_COLOR = "#c8a2c8"  # Color for thinking indicators
+RESPONSE_COLOR = "#add8e6"  # Color for assistant responses
+SEPARATOR = "=" * 40  # UI separator line
+MID_SEPARATOR = "-" * 30  # UI mid-separator line
 
 # Model Constants
-DEFAULT_TEMPERATURE = 0.7
-DEFAULT_N_CTX = 4096
-DEFAULT_N_GPU_LAYERS = 35
+DEFAULT_TEMPERATURE = 0.7  # Fallback temperature
+DEFAULT_N_CTX = 4096  # Fallback context size
+DEFAULT_N_GPU_LAYERS = 35  # Fallback GPU layers
 
 # Session Settings
-MAX_SESSIONS = 10  # Default max num sessions history
-HISTORY_OPTIONS = [5, 10, 20, 40, 80]  # Max num sessions options 
+HISTORY_OPTIONS = [5, 10, 20, 40, 80]  # Options for max sessions in UI
 
 # Options for Dropdowns
-ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}
-CTX_OPTIONS = [8192, 16384, 24576, 32768]
-TEMP_OPTIONS = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]  # Per readme.md
-VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]
+ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}  # Supported file extensions
+CTX_OPTIONS = [8192, 16384, 24576, 32768]  # Context window options
+TEMP_OPTIONS = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]  # Temperature options per readme
+VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]  # VRAM options in MB
 
 # Global LLM instance
-llm = None
+llm = None  # Placeholder for Llama instance
 
 # Model Categories and Keywords
 category_keywords = {
