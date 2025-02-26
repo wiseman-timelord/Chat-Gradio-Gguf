@@ -27,36 +27,26 @@ A high-performance chat interface optimized for GGUF models, designed for effici
 - **Auto-Model Handle**: Uses hotwords in model name, to better handle, ctx, temperature, modes, prompts, etc.
 
 ### Preview
-- The batch is "there" now...
+- Launching the Gradio server...
 ```
 =======================================================================================================================
-"                                  _________           ________          ________                                     "
-"                                  \_   ___ \         /  _____/         /  _____/                                     "
-"                                  /    \  \/  ______/   \  ___  ______/   \  ___                                     "
-"                                  \     \____/_____/\    \_\  \/_____/\    \_\  \                                    "
-"                                   \______  /        \______  /        \______  /                                    "
-"                                          \/                \/                \/                                     "
------------------------------------------------------------------------------------------------------------------------
-    Chat-Gradio-Gguf: Batch Menu
+    Chat-Gradio-Gguf: Launcher
 =======================================================================================================================
 
+Starting Chat-Gradio-Gguf...
+Initializing system...
+Vectorstore not found: general_knowledge
+Running on local URL:  http://127.0.0.1:7860
+
+To create a public link, set `share=True` in `launch()`.
 
 
 
 
 
-    1. Launch Main Program
-
-    2. Run Install Script
 
 
 
-
-
-
-
-=======================================================================================================================
-Selection; Options = 1-2, Exit = X:
 
 ```
 - The installer works effectively...
@@ -132,7 +122,9 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- Installer has been updated, some things are changed, we must update the scripts of the program, to ensure the scripts of the program are now conformed with the expectations of the installer. For example, folder locations, JSON configuration, library versions and capabilities. Among other things, we had some issues with `llama-cpp-python`, and had to use a version that had a custom wheel built in or something? IDK. investigate the installer script, and determine the required changes in the scripts of the main program. also `vulkan-1.dll` or whatever its labelled, is to be assumed to be in `C:\Windows\SysWOW64`, as this is where it is installed to by default now, so we are not relying upon having the location noted in the Json, which, I think may have been happening before possibly, we need to check it, but there should be a constant in `temporary.py` with the full path, and scripts in the main program refer to it as required. Also llama.cpp is installed/located at `.\data\llama-vulkan-bin\llama-cli.exe`, so ensure there is a constant in `temporary.py`, that is referred to as requried in the scripts of the main program. 
+- Batch works. Installer works. Launcher works up to Gradio Server.
+- Testing and bugfixing, required for main program.
+- Review and improvement, of Gradio Interface required.
 
 ### Ideas - Not to be implemented currently.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
