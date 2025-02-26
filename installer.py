@@ -185,7 +185,6 @@ def find_vulkan_versions() -> Dict[str, Path]:
 
 # Installation Functions...
 def create_directories() -> None:
-    print_status("Creating Directory Structure...")
     for dir_path in DIRECTORIES:
         full_path = BASE_DIR / dir_path
         if not full_path.exists():
@@ -204,20 +203,33 @@ def create_config(backend: str) -> None:
     config["model_settings"]["use_python_bindings"] = backend_info["needs_python_bindings"]
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, 'w') as f:
-            json.dump(config, f, indent=2)
-        print_status("Configuration file created")
+        if config_path.exists():
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            print_status("Configuration file over-written")
+        else:
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            print_status("Configuration file created")
     except Exception as e:
         print_status(f"Failed to create config: {str(e)}", False)
 
 def create_venv() -> bool:
-    print_status("Creating Virtual Environment...")
     try:
-        subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
-        print_status("Virtual environment created at .venv")
+        if VENV_DIR.exists():
+            import shutil
+            shutil.rmtree(VENV_DIR)
+            subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+            print_status("Replacing Virtual Environment.")
+        else:
+            subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+            print_status("Creating Virtual Environment.")
         return True
     except subprocess.CalledProcessError as e:
         print_status(f"Failed to create venv: {e}", False)
+        return False
+    except Exception as e:
+        print_status(f"Failed to delete venv: {e}", False)
         return False
 
 def check_vulkan_support() -> bool:
