@@ -126,12 +126,12 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Good fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- Implement enhanced thinking section, for the models that have it, soes not to be using it if the model is not a thinking model, but if it is because it is having a hotword related to the models we found to specifically be thinking models, such as `R1`, then have some kind of `Thinking:`, and on the new line, for each line of thought we would represent this with an additional `█` chatacter, until it finishes thinking, at which point, it would on the new line, print `Thought for #.#s.`, then output the response `Response:\n Example response text`, keeps things simple. 
-- Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
+- Installer has been updated, some things are changed, we must update the scripts of the program, to ensure the scripts of the program are now conformed with the expectations of the installer. For example, folder locations, JSON configuration, library versions and capabilities. Among other things, we had some issues with `llama-cpp-python`, and had to use a version that had a custom wheel built in or something? IDK. investigate the installer script, and determine the required changes in the scripts of the main program.
 
 ### Ideas - Not to be implemented currently.
-- **Dual-Model Support**: Load two models simultaneously—one for chat and one for code generation. The chat model would act as an agent, sending prompts to the code model and integrating responses into the chat log.  
-- Example Workflow: 1. Chat model requries code, so it sends a prompt to the code model with requirements and appropriate snippets. 2. Code model generates/updates code and sends it back. 3. Chat model reviews and integrates the response to the appropriate script(s), and saves the relevant script(s). This would also require setting a second model for code, and possibly some kind of, `Chat, Chat-Code, Code`, type of switch in the chat page, to select mode of operation, and it would detect changes in the switch, and load appropriate models. `Chat` would be normal chat to chat model, `Chat-Code` would be using the chat model to form improved prompts to send to the code model, while for the chat model to then be acting appropriately, essentially the code model would become an agent under the control of the code model, and the `Code` mode would be chatting with only the code model. 
+- Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
+- Agentic workflows, potentially using purpose built fine tuned models, for, thinking, interaction, or code. 
+- There is also an idea of the `Performance` model and the `Quality` model, where the user could switch between, albeit this could also be, fast for simple tasks like creating the title of the session, and slow for interaction, or the likes.
 - Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
 
 ## License
