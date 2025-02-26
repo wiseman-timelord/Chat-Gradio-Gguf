@@ -26,8 +26,8 @@ class ContextInjector:
         from scripts.temporary import VECTORSTORE_DIR
         vs_path = Path(VECTORSTORE_DIR) / f"{name}"
         if vs_path.exists():
-            from langchain.vectorstores import FAISS
-            from langchain.embeddings import HuggingFaceEmbeddings
+            from langchain_community.vectorstores import FAISS
+            from langchain_community.embeddings import HuggingFaceEmbeddings
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
             self.vectorstores[name] = FAISS.load_local(str(vs_path), embeddings)
         else:
@@ -52,6 +52,7 @@ context_injector = ContextInjector()
 # Functions...
 def reload_vectorstore(name: str):
     context_injector.load_vectorstore(name)
+    return "Knowledge updated"
 
 def get_model_size(model_path: str) -> float:
     """Get model file size in MB."""
@@ -68,16 +69,30 @@ def get_model_layers(model_path: str) -> int:
     except Exception:
         return 0
 
-def calculate_gpu_layers(model_path: str, vram_size: float) -> int:
-    """Calculate number of layers to offload to GPU based on VRAM size."""
+def calculate_gpu_layers(model_path: str, vram_size: float) -> tuple:
+    """Calculate GPU layers and return (gpu_layers, total_layers)."""
+    if not Path(model_path).exists():
+        raise ValueError(f"Model file not found at {model_path}!")
+    if vram_size <= 0:
+        raise ValueError(f"Invalid VRAM size: {vram_size} MB!")
+    
     model_size = get_model_size(model_path)  # Model size in MB
     num_layers = get_model_layers(model_path)
     if num_layers == 0:
-        return 0
-    layer_size = (model_size * 1.25) / num_layers  # Per readme.md notation
+        raise RuntimeError(f"Failed to retrieve layer count from {model_path}!")
+    
+    layer_size = (model_size * 1.25) / num_layers  # Per readme.md
     available_vram = (vram_size / 1024) * 0.9  # Convert MB to GB, use 90% of VRAM
     max_layers = int(available_vram / layer_size)
-    return min(max_layers, num_layers)
+    final_layers = min(max_layers, num_layers) if max_layers > 0 else 0
+    
+    print(f"Model: {Path(model_path).name}")
+    print(f"Model Size: {model_size:.2f} MB")
+    print(f"Total Layers: {num_layers}")
+    print(f"VRAM Available: {vram_size} MB ({available_vram:.2f} GB usable)")
+    print(f"Calculated GPU Layers: {final_layers}")
+    
+    return final_layers, num_layers
 
 def get_model_settings(model_name):
     from scripts.temporary import (
@@ -102,42 +117,63 @@ def get_model_settings(model_name):
         "prompt_template": prompt_templates["general_chat"]
     }
 
+def get_available_models():
+    """List available GGUF models in the models directory."""
+    model_dir = Path("models")
+    return [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
+
 def initialize_model(_):
-    """Initialize the GGUF model with dynamic GPU layer offloading."""
-    global llm, MODEL_LOADED
+    """Initialize the GGUF model with mandatory dynamic GPU layer offloading."""
+    global llm, MODEL_LOADED, N_GPU_LAYERS
     try:
+        if MODEL_LOADED:
+            unload_model()  # Unload existing model before initializing a new one
         if USE_PYTHON_BINDINGS:
             model_path = Path(MODEL_PATH)
-            n_gpu_layers = 0  # Default to 0, dynamically calculated if enabled
-            if DYNAMIC_GPU_LAYERS:
-                n_gpu_layers = calculate_gpu_layers(str(model_path), VRAM_SIZE / 1024)
+            if not model_path.exists():
+                return "Error: Model file not found!"
+            
+            N_GPU_LAYERS, total_layers = calculate_gpu_layers(str(model_path), VRAM_SIZE)
+            if total_layers == 0:
+                return "Error: Failed to retrieve model layers!"
+            
             llm = Llama(
                 model_path=str(model_path),
                 n_ctx=N_CTX,
-                n_gpu_layers=n_gpu_layers,
+                n_gpu_layers=N_GPU_LAYERS,
                 mmap=MMAP,
                 mlock=MLOCK,
                 verbose=False
             )
+            MODEL_LOADED = True
+            
+            if N_GPU_LAYERS == total_layers:
+                return f"Model loaded, layer distribution: VRam = {total_layers}"
+            else:
+                return f"GPU: {N_GPU_LAYERS}, CPU: {total_layers - N_GPU_LAYERS}"
         else:
             if not Path(LLAMA_CLI_PATH).exists():
-                raise FileNotFoundError("llama-cli executable not found")
-        MODEL_LOADED = True
+                return "Error: llama-cli executable not found!"
+            N_GPU_LAYERS, total_layers = calculate_gpu_layers(MODEL_PATH, VRAM_SIZE)
+            return f"CLI mode: Using {N_GPU_LAYERS} GPU layers."
     except Exception as e:
         MODEL_LOADED = False
-        raise RuntimeError(f"Model initialization failed: {str(e)}")
+        return f"Critical Error: Model initialization failed! {str(e)}"
 
 def unload_model():
-    global llm, MODEL_LOADED
-    if llm:
+    """Unload the current model and reset global state."""
+    global llm, MODEL_LOADED, N_GPU_LAYERS
+    if MODEL_LOADED and llm is not None:
         try:
             del llm
             llm = None
             MODEL_LOADED = False
+            N_GPU_LAYERS = 0
+            print("Model unloaded successfully.")
         except Exception as e:
             print(f"Error unloading model: {str(e)}")
     else:
-        print("No model is currently loaded")
+        print("No model loaded to unload.")
 
 def get_streaming_response(prompt: str):
     global llm

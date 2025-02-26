@@ -17,16 +17,17 @@ session_label = ""  # Current session label
 # Configurable Settings (Loaded from JSON)
 MODEL_PATH = "models/Lamarckvergence-14B-GGUF"  # Default model path
 N_CTX = 8192  # Default context window size
-TEMPERATURE = 0.7  # Default temperature
-DYNAMIC_GPU_LAYERS = True  # Enable dynamic GPU layer calculation
+TEMPERATURE = 0.75  # Default temperature
 VRAM_SIZE = 8192  # Default VRAM size in MB (8GB)
 SELECTED_GPU = None  # Selected GPU device
+DYNAMIC_GPU_LAYERS = True # Kompute/Vulkan = True, Avx2 = False
 MMAP = True  # Use memory mapping
 MLOCK = False  # Use memory locking
 USE_PYTHON_BINDINGS = True  # Use Python bindings by default
 LLAMA_CLI_PATH = ""  # Path to llama-cli.exe, set by config
 BACKEND_TYPE = ""  # Backend type (e.g., "GPU/CPU - Vulkan"), set by config
 LLAMA_BIN_PATH = ""  # Directory of llama.cpp binaries, set by config
+N_GPU_LAYERS = 0  # Number of layers to offload to GPU, calculated at runtime
 RAG_CHUNK_SIZE = 2048  # RAG chunk size
 RAG_CHUNK_OVERLAP = 256  # RAG chunk overlap
 RAG_MAX_DOCS = 5  # Max RAG documents
@@ -41,7 +42,7 @@ SEPARATOR = "=" * 40  # UI separator line
 MID_SEPARATOR = "-" * 30  # UI mid-separator line
 
 # Model Constants
-DEFAULT_TEMPERATURE = 0.7  # Fallback temperature
+DEFAULT_TEMPERATURE = 0.75  # Fallback temperature
 DEFAULT_N_CTX = 4096  # Fallback context size
 DEFAULT_N_GPU_LAYERS = 35  # Fallback GPU layers
 
@@ -56,6 +57,22 @@ VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 
 
 # Global LLM instance
 llm = None  # Placeholder for Llama instance
+
+# Status text entries
+STATUS_TEXTS = {
+    "model_loading": "Loading model...",
+    "model_loaded": "Model loaded successfully",
+    "model_unloading": "Unloading model...",
+    "model_unloaded": "Model unloaded successfully",
+    "vram_calc": "Calculating layers...",
+    "rag_process": "Analyzing documents...",
+    "session_restore": "Restoring session...",
+    "config_saved": "Settings saved",
+    "docs_processed": "Documents ready",
+    "generating_response": "Generating response...",
+    "response_generated": "Response generated",
+    "error": "An error occurred"
+}
 
 # Model Categories and Keywords
 category_keywords = {
@@ -77,11 +94,11 @@ model_prompts = {
 
 # Temperature Defaults per Category
 temperature_defaults = {
-    "code": 0.6,
-    "nsfw": 0.8,
+    "code": 0.5,
+    "nsfw": 0.75,
     "reasoning": 0.5,
-    "uncensored": 0.7,
-    "general_chat": 0.7
+    "uncensored": 0.75,
+    "general_chat": 0.75
 }
 
 # Prompt Templates per Category
