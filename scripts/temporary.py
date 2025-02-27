@@ -33,6 +33,7 @@ RAG_CHUNK_OVERLAP = 256  # RAG chunk overlap
 RAG_MAX_DOCS = 5  # Max RAG documents
 MAX_SESSIONS = 10  # Max number of saved sessions
 RAG_AUTO_LOAD = ["general_knowledge"]  # Default RAG vectorstores to load
+REPEAT_PENALTY = 1.0
 
 # UI Constants
 USER_COLOR = "#ffffff"  # Color for user messages
@@ -54,6 +55,7 @@ ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}
 CTX_OPTIONS = [8192, 16384, 24576, 32768]  # Context window options
 TEMP_OPTIONS = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]  # Temperature options per readme
 VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]  # VRAM options in MB
+REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]  # Repeat penalty options
 
 # Global LLM instance
 llm = None  # Placeholder for Llama instance

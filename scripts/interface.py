@@ -9,7 +9,8 @@ from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
     MODEL_LOADED, ALLOWED_EXTENSIONS, CTX_OPTIONS, MODEL_PATH, N_CTX,
     TEMPERATURE, TEMP_OPTIONS, VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS,
-    MAX_SESSIONS, current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS
+    MAX_SESSIONS, current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS,
+    REPEAT_OPTIONS, REPEAT_PENALTY, MLOCK
 )
 from scripts import utility
 from scripts.models import (
@@ -177,7 +178,7 @@ def launch_interface():
                             send_btn = gr.Button("Send Input", variant="primary", scale=2)
                             edit_previous_btn = gr.Button("Edit Previous", scale=1)
                             attach_files_btn = gr.UploadButton("Attach Files", file_types=list(ALLOWED_EXTENSIONS), file_count="multiple", scale=1)
-                            save_session_btn = gr.Button("Save Session", scale=1)  # Reintroduced
+                            save_session_btn = gr.Button("Save Session", scale=1)
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
 
             with gr.Tab("Configuration"):
@@ -187,27 +188,41 @@ def launch_interface():
                     value=MODEL_PATH.split('/')[-1],
                     allow_custom_value=True
                 )
-                temperature_dropdown = gr.Dropdown(
-                    choices=TEMP_OPTIONS,
-                    label="Temperature",
-                    value=TEMPERATURE,
-                    allow_custom_value=True
-                )
-                n_ctx_dropdown = gr.Dropdown(
-                    choices=CTX_OPTIONS,
-                    label="Context Window",
-                    value=N_CTX
-                )
-                vram_dropdown = gr.Dropdown(
-                    choices=VRAM_OPTIONS,
-                    label="VRAM Size (MB)",
-                    value=VRAM_SIZE
-                )
-                gpu_dropdown = gr.Dropdown(
-                    choices=utility.get_available_gpus(),
-                    label="Select GPU",
-                    value=SELECTED_GPU
-                )
+                # Row for Temperature, Repeat Penalty, and Context Window
+                with gr.Row():
+                    temperature_dropdown = gr.Dropdown(
+                        choices=TEMP_OPTIONS,
+                        label="Temperature",
+                        value=TEMPERATURE,
+                        allow_custom_value=True
+                    )
+                    repeat_penalty_dropdown = gr.Dropdown(
+                        choices=REPEAT_OPTIONS,
+                        label="Repeat Penalty",
+                        value=REPEAT_PENALTY,
+                        allow_custom_value=True
+                    )
+                    n_ctx_dropdown = gr.Dropdown(
+                        choices=CTX_OPTIONS,
+                        label="Context Window",
+                        value=N_CTX
+                    )
+                # Row for Select GPU, VRam Size, and MLock Enabled
+                with gr.Row():
+                    gpu_dropdown = gr.Dropdown(
+                        choices=utility.get_available_gpus(),
+                        label="Select GPU",
+                        value=SELECTED_GPU
+                    )
+                    vram_dropdown = gr.Dropdown(
+                        choices=VRAM_OPTIONS,
+                        label="VRAM Size (MB)",
+                        value=VRAM_SIZE
+                    )
+                    mlock_checkbox = gr.Checkbox(
+                        label="MLock Enabled",
+                        value=MLOCK
+                    )
                 gr.Markdown("Note: GPU layers calculated from model details and VRAM. 0 layers = CPU-only.")
                 status_text_settings = gr.Textbox(label="Status", interactive=False)
                 
@@ -217,7 +232,7 @@ def launch_interface():
                     unload_btn = gr.Button("Unload Model", variant="secondary", scale=1)
                     save_settings_btn = gr.Button("Save Settings", scale=1)
 
-        # Helper functions
+        # Helper functions (unchanged from original)
         def update_session_tabs():
             sessions = utility.get_saved_sessions()
             tabs = [gr.Tab("Session History Index", id="session_history")]
@@ -435,6 +450,20 @@ def launch_interface():
             inputs=[gpu_dropdown],
             outputs=[user_input, load_btn],
             api_name="update_selected_gpu"
+        )
+
+        repeat_penalty_dropdown.change(
+            fn=lambda x: utility.update_setting("repeat_penalty", x),
+            inputs=[repeat_penalty_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="update_repeat_penalty"
+        )
+
+        mlock_checkbox.change(
+            fn=lambda x: utility.update_setting("mlock", x),
+            inputs=[mlock_checkbox],
+            outputs=[user_input, load_btn],
+            api_name="update_mlock"
         )
 
     demo.launch()

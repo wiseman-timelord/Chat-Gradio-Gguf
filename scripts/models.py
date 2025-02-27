@@ -189,9 +189,9 @@ def get_streaming_response(prompt: str):
         if current_model_settings["category"] == "reasoning":
             yield "Thinking:"
             start_time = time.time()
-            thinking_steps = 5  # Number of thinking steps
+            thinking_steps = 5
             for i in range(thinking_steps):
-                time.sleep(0.5)  # Simulate thinking duration per step
+                time.sleep(0.5)
                 yield f"Thinking:\n{'█' * (i + 1)}"
             elapsed_time = time.time() - start_time
             yield f"Thought for {elapsed_time:.1f}s."
@@ -199,6 +199,7 @@ def get_streaming_response(prompt: str):
         stream = llm.create_completion(
             prompt=formatted_prompt,
             temperature=TEMPERATURE,
+            repeat_penalty=REPEAT_PENALTY,
             max_tokens=2048,
             stream=True
         )
@@ -212,6 +213,7 @@ def get_streaming_response(prompt: str):
             "-m", MODEL_PATH,
             "-p", formatted_prompt,
             "--temp", str(TEMPERATURE),
+            "--repeat-penalty", str(REPEAT_PENALTY),
             "--ctx-size", str(N_CTX),
             "--n-predict", "2048",
             "--log-disable"
@@ -268,6 +270,7 @@ def get_response(prompt: str) -> str:
         output = llm.create_completion(
             prompt=formatted_prompt,
             temperature=TEMPERATURE,
+            repeat_penalty=REPEAT_PENALTY,
             stop=["</s>", "USER:", "ASSISTANT:"],
             max_tokens=2048
         )
@@ -279,6 +282,7 @@ def get_response(prompt: str) -> str:
             "-m", MODEL_PATH,
             "-p", formatted_prompt,
             "--temp", str(TEMPERATURE),
+            "--repeat-penalty", str(REPEAT_PENALTY),
             "--ctx-size", str(N_CTX),
             "--n-predict", "2048",
             "--log-disable"

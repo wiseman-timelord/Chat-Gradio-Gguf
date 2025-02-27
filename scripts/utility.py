@@ -1,5 +1,6 @@
 # Script: `.\scripts\utility.py`
 
+# Imports...
 import re, subprocess, json
 from pathlib import Path
 from datetime import datetime
@@ -8,6 +9,7 @@ from .temporary import (
     ALLOWED_EXTENSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, MAX_SESSIONS
 )
 
+# Functions...
 def get_available_gpus():
     """Detect available GPUs on Windows for Vulkan/Kompute compatibility."""
     try:
@@ -77,7 +79,7 @@ def web_search(query: str, num_results: int = 3) -> str:
 def load_and_chunk_documents(directory: Path) -> list:
     """Load and chunk documents for RAG."""
     from langchain.text_splitter import RecursiveCharacterTextSplitter
-    from langchain_community.document_loaders import TextLoader  # Updated import
+    from langchain_community.document_loaders import TextLoader
     documents = []
     try:
         for file in directory.iterdir():
@@ -99,18 +101,17 @@ def create_vectorstore(documents: list) -> None:
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         vectorstore = FAISS.from_documents(documents, embeddings)
         save_dir = Path(VECTORSTORE_DIR) / "general_knowledge"
-        save_dir.parent.mkdir(parents=True, exist_ok=True)  # Create directory if missing
+        save_dir.parent.mkdir(parents=True, exist_ok=True)
         vectorstore.save_local(str(save_dir))
     except Exception as e:
         print(f"Error creating vectorstore: {e}")
 
-# Moved Functions from interface.py and launcher.py
 def save_config():
     from temporary import (
         MODEL_PATH, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
         LLAMA_CLI_PATH, VRAM_SIZE, SELECTED_GPU, MMAP, MLOCK,
         RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_MAX_DOCS, MAX_SESSIONS,
-        BACKEND_TYPE, LLAMA_BIN_PATH
+        BACKEND_TYPE, LLAMA_BIN_PATH, REPEAT_PENALTY
     )
     config_path = Path("data/config.json")
     if config_path.exists():
@@ -123,6 +124,7 @@ def save_config():
         "model_path": MODEL_PATH,
         "n_ctx": N_CTX,
         "temperature": TEMPERATURE,
+        "repeat_penalty": REPEAT_PENALTY,
         "use_python_bindings": USE_PYTHON_BINDINGS,
         "llama_cli_path": LLAMA_CLI_PATH,
         "vram_size": VRAM_SIZE,
@@ -150,9 +152,10 @@ def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary."""
     from temporary import (
         MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, VRAM_SIZE, SELECTED_GPU,
-        MAX_SESSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_MAX_DOCS
+        MAX_SESSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_MAX_DOCS,
+        REPEAT_PENALTY, MLOCK
     )
-    from interface import change_model  # Avoid circular import
+    from interface import change_model
 
     reload_required = False
     if key == "temperature":
@@ -176,6 +179,10 @@ def update_setting(key, value):
         globals()["RAG_CHUNK_OVERLAP"] = int(value)
     elif key == "rag_max_docs":
         globals()["RAG_MAX_DOCS"] = int(value)
+    elif key == "repeat_penalty":
+        globals()["REPEAT_PENALTY"] = float(value)
+    elif key == "mlock":
+        globals()["MLOCK"] = bool(value)
 
     if reload_required:
         return change_model(MODEL_PATH.split('/')[-1])
@@ -186,7 +193,7 @@ def load_config():
         MODEL_PATH, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
         BACKEND_TYPE, LLAMA_CLI_PATH, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP,
         RAG_MAX_DOCS, VRAM_SIZE, SELECTED_GPU, MMAP, MLOCK, MAX_SESSIONS,
-        LLAMA_BIN_PATH, DYNAMIC_GPU_LAYERS  # <-- Add DYNAMIC_GPU_LAYERS
+        LLAMA_BIN_PATH, DYNAMIC_GPU_LAYERS, REPEAT_PENALTY
     )
     config_path = Path(__file__).parent.parent / "data" / "config.json"
     if config_path.exists():
@@ -195,6 +202,7 @@ def load_config():
             globals()["MODEL_PATH"] = config["model_settings"]["model_path"]
             globals()["N_CTX"] = config["model_settings"]["n_ctx"]
             globals()["TEMPERATURE"] = config["model_settings"]["temperature"]
+            globals()["REPEAT_PENALTY"] = config["model_settings"].get("repeat_penalty", 1.0)
             globals()["USE_PYTHON_BINDINGS"] = config["model_settings"]["use_python_bindings"]
             globals()["LLAMA_CLI_PATH"] = config["model_settings"]["llama_cli_path"]
             globals()["VRAM_SIZE"] = config["model_settings"]["vram_size"]
