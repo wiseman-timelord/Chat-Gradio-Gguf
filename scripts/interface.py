@@ -209,6 +209,9 @@ def launch_interface():
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
                             
             with gr.Tab("Configuration"):
+                with gr.Row():
+                    model_dir_text = gr.Textbox(label="Model Folder", value=MODEL_FOLDER, scale=20)
+                    browse_btn = gr.Button("Browse", scale=1)
                 model_dropdown = gr.Dropdown(
                     choices=get_available_models(),
                     label="Select Model",
@@ -261,11 +264,10 @@ def launch_interface():
                     )
                     max_docs_dropdown = gr.Dropdown(
                         choices=MAX_DOCS_OPTIONS,
-                        label="Max RAG Docs (Max Attatchments)",
-                        value=RAG_MAX_DOCS
+                        label="Max RAG Docs (Max Attachments)",  # Fixed typo from "Attatchments"
+                        value=RAG_MAX_DOCS,
+                        allow_custom_value=True
                     )
-                with gr.Row():
-                    model_dir_text = gr.Textbox(label="Model Folder", value=MODEL_FOLDER)
                 gr.Markdown("Note: GPU layers calculated from model details and VRAM. 0 layers = CPU-only.")
                 status_text_settings = gr.Textbox(label="Status", interactive=False)
                 with gr.Row():
