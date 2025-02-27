@@ -1,9 +1,11 @@
 # Script: `.\scripts\launcher.py`
 
+# Imports...
 from pathlib import Path
 from scripts import temporary
 from scripts.utility import load_config
 
+# Main Function...
 def main():
     try:
         print("Initializing system...")
@@ -21,5 +23,6 @@ def main():
         print(f"Error: {str(e)}")
         raise
 
+# Entry Point...
 if __name__ == "__main__":
     main()

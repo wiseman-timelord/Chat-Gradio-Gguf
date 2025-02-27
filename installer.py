@@ -62,7 +62,7 @@ BACKEND_OPTIONS = {
 }
 CONFIG_TEMPLATE = {
     "model_settings": {
-        "model_path": "models/Lamarckvergence-14B-GGUF",
+        "model_path": "models/Select_a_model...",
         "n_gpu_layers": 35,
         "n_ctx": 8192,
         "temperature": 0.75,
