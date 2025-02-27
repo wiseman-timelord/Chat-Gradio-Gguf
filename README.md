@@ -115,6 +115,8 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - with regards to rag settings, possibly things like, `chunk_size` and `chunk_overlap`, should be calculated based on a percentage of the `n_ctx`, possibly, `n_ctx / 2 = chunk_size` and `chunk_overlap / 16 = chunk_overlap`, this way we could reduce by 2 keys in the Json. The re-calculaton would be done at the optimal point, im guessing that would be if the n_ctx changes or model is loaded/reloaded.
 - there is a key for `max_docs`, this should be next to `max_session_history` option on `configuration` page, and have options, `2, 4, 6, 8` defaulting to `4`.
 - Ongoing improvement of Gradio Interface required, until it "looks right". 
+- It would be nice to be able to set the model folder, again, key in, temporary and json, plus relevant updates in applicable functons.
+- I want to rename `.\data\config.json` to `.\data\persistent.json`, simple enough.
 
 ### Ideas - Not to be implemented currently.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
