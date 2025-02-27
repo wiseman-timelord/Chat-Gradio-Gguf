@@ -195,7 +195,7 @@ def create_directories() -> None:
             print_status(f"Found directory: {dir_path}")
 
 def create_config(backend: str) -> None:
-    config_path = BASE_DIR / "data" / "config.json"
+    config_path = BASE_DIR / "data" / "persistent.json"
     config = copy.deepcopy(CONFIG_TEMPLATE)
     backend_info = BACKEND_OPTIONS[backend]
     config["backend_config"]["type"] = backend
@@ -417,7 +417,6 @@ def install():
     create_config(BACKEND_TYPE)
     
     print_status(f"{APP_NAME} installed successfully!")
-    input(" Press any key for Batch Menu...")  # Updated prompt
 
 # Main Entry Point...
 def main():

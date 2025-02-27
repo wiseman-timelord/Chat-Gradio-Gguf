@@ -131,7 +131,6 @@ if /i "%choice%"=="X" (
 )
 
 REM Invalid input handling
-echo.
 echo Invalid selection. Please try again.
 timeout /t 2 >nul
 goto MainMenu
