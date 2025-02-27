@@ -183,10 +183,10 @@ def launch_interface():
                             with gr.Tab("Session History Index", id="session_history"):
                                 start_new_session_btn = gr.Button("Start New Session")
                     with gr.Column(scale=20):  # Adjusted for session history width
-                        session_log = gr.Chatbot(label="Session Log", height=500)
+                        session_log = gr.Chatbot(label="Session Log", height=400)
                         user_input = gr.Textbox(
                             label="User Input",
-                            lines=5,  # Expand to 5 lines with scrolling
+                            lines=4,  # Expand to 5 lines with scrolling
                             interactive=False,
                             placeholder="Enter text here..."
                         )
