@@ -105,7 +105,7 @@ Advised models in, 14B, ~8B, 3B, require relevantly, ~11GB, ~7GB, ~3GB, they are
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- There is the button to attach files, however, there is no indication of what files are attached, and we cannot add any more rows, so somehow we need to indicate how many attachments there are currently, and what they are. Need to figure this out.
+- Working on File Slot Buttons
 
 ### Far Development.
 - If there is some small 1B model, we could download and use, to create the session history label for the session, then this would be better, than the user having to wait for whatever more capable model is doing, so as to produce quick labels for session history. preferably a <256MB download, and again, the context size is automatic based on the size of the first, input and response, but if it runs out of context, then we will cut it where it runs out, as for example, if we just have most of the users first input, then this should be good enough to create a unique 3 word label.
