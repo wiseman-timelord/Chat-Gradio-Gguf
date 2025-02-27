@@ -1,5 +1,3 @@
-# Script: `.\scripts\interface.py`
-
 # Imports...
 import gradio as gr
 import re, os
@@ -38,32 +36,70 @@ def web_search_trigger(query):
     except Exception as e:
         return f"Error: {str(e)}"
 
-def process_uploaded_files(files):
+def process_uploaded_files(files, loaded_files, rag_max_docs):
+    """Process uploaded files, add to loaded_files up to rag_max_docs, and update vector store."""
     try:
         files_dir = Path("files")
         files_dir.mkdir(exist_ok=True)
+        new_files = []
         for file in files:
             original_name = Path(file.name).name
             dest_path = files_dir / original_name
             with open(file.name, 'rb') as src, open(dest_path, 'wb') as dst:
                 dst.write(src.read())
-        docs = utility.load_and_chunk_documents(files_dir)
-        if docs:
-            utility.create_vectorstore(docs)
-            reload_vectorstore("general_knowledge")
-            return "Files loaded and Ready"
+            new_files.append(str(dest_path))
+        # Add new files to loaded_files, respecting rag_max_docs limit
+        available_slots = rag_max_docs - len(loaded_files)
+        if available_slots > 0:
+            loaded_files.extend(new_files[:available_slots])
+            status_msg = "Files added successfully" if len(new_files) <= available_slots else f"Added {available_slots} files, {len(new_files) - available_slots} ignored (max reached)"
         else:
-            return "Error: No valid documents"
+            status_msg = "No available slots, files not added"
+        # Rebuild vector store with current loaded files
+        docs = utility.load_and_chunk_documents(loaded_files)
+        utility.create_vectorstore(docs)
+        # Update button labels and visibilities
+        button_updates = update_file_slot_ui(loaded_files, rag_max_docs)[:-1]  # Exclude attach_files_btn update
+        return [loaded_files, status_msg] + button_updates
     except Exception as e:
-        return f"Error: {str(e)}"
+        return [loaded_files, f"Error: {str(e)}"] + [gr.update() for _ in range(10)]
 
-def create_control_row():
-    return gr.Row(
-        gr.Button("Send Input", variant="primary"),
-        gr.UploadButton("Attach Files", file_types=list(ALLOWED_EXTENSIONS), file_count="multiple"),
-        gr.Button("Edit Previous"),
-        gr.Button("Remove Last")
-    )
+def eject_file(loaded_files, slot_index, rag_max_docs):
+    """Eject a file from the specified slot and update the vector store."""
+    if 0 <= slot_index < len(loaded_files):
+        file_to_remove = loaded_files.pop(slot_index)
+        docs = utility.load_and_chunk_documents(loaded_files)
+        utility.create_vectorstore(docs)
+        button_updates = update_file_slot_ui(loaded_files, rag_max_docs)[:-1]
+        return [loaded_files, f"Ejected {Path(file_to_remove).name}"] + button_updates
+    return [loaded_files, "No file to eject"] + [gr.update() for _ in range(10)]
+
+def update_file_slot_ui(loaded_files, rag_max_docs):
+    """Update the labels and visibility of file slot buttons."""
+    button_updates = []
+    for i in range(10):
+        if i < rag_max_docs:
+            if i < len(loaded_files):
+                filename = Path(loaded_files[i]).name
+                short_name = filename[:17] + "..." if len(filename) > 20 else filename
+                label = f"Eject: {short_name}"
+            else:
+                label = "File Slot"
+            visible = True
+        else:
+            label = ""
+            visible = False
+        button_updates.append(gr.update(value=label, visible=visible))
+    attach_files_visible = rag_max_docs > 0
+    return button_updates + [gr.update(visible=attach_files_visible)]
+
+def update_rag_max_docs(rag_max_docs, loaded_files):
+    """Update RAG_MAX_DOCS, truncate loaded_files if necessary, and refresh UI."""
+    if len(loaded_files) > rag_max_docs:
+        loaded_files = loaded_files[:rag_max_docs]
+        docs = utility.load_and_chunk_documents(loaded_files)
+        utility.create_vectorstore(docs)
+    return [loaded_files] + update_file_slot_ui(loaded_files, rag_max_docs)
 
 def get_saved_sessions():
     return utility.get_saved_sessions()
@@ -151,11 +187,11 @@ def shutdown_program():
     from scripts.temporary import STATUS_TEXTS
     try:
         print("Shutting down: Unloading model...")
-        unload_model()  # Gracefully unload the model
+        unload_model()
         print("Model unloaded. Terminating program...")
-        demo.close()  # Close the Gradio server (accessible within launch_interface scope)
+        demo.close()
         import os
-        os._exit(0)  # Forcefully exit Python to return to batch menu
+        os._exit(0)
     except Exception as e:
         print(f"Error during shutdown: {str(e)}")
         return STATUS_TEXTS["error"]
@@ -174,13 +210,10 @@ def chat_interface(message: str, history):
             history[-1] = (history[-1][0], format_response(full_response))
             yield history, temporary.STATUS_TEXTS["generating_response"]
         if len(history) == 1:
-            # Calculate context size: Total Characters * 1.25
             summary_prompt = f"Summarize the following conversation in exactly three words:\nUser: {message}\nAssistant: {full_response}"
             prompt_length = len(summary_prompt)
             n_ctx_to_use = int(prompt_length * 1.25)
-            # Ensure n_ctx_to_use is within model limits, default to N_CTX if exceeded
             n_ctx_to_use = min(n_ctx_to_use, temporary.N_CTX)
-            # Note: We assume get_response uses the model's n_ctx, no direct way to set it per call
             temporary.session_label = get_response(summary_prompt).strip()
         utility.save_session_history(history)
         yield history, temporary.STATUS_TEXTS["response_generated"]
@@ -189,26 +222,51 @@ def chat_interface(message: str, history):
         yield history, f"Error: {str(e)}"
 
 def launch_interface():
-    global demo  # Make demo accessible for shutdown
-    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable { overflow-y: auto; }") as demo:
-        rag_max_docs_state = gr.State(value=RAG_MAX_DOCS)  # Track RAG_MAX_DOCS
-        
+    global demo
+    with gr.Blocks(title="Chat-Gradio-Gguf", css="""
+        .scrollable { overflow-y: auto; }
+        .button-row {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 4px !important;
+            margin-bottom: 4px !important;
+        }
+        .button-row .gradio-button {
+            flex: 1 !important; /* Make buttons share equal space in the row */
+            min-width: 100px !important; /* Minimum width for buttons */
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+    """) as demo:
+        # State variables
+        loaded_files_state = gr.State(value=[])
+        rag_max_docs_state = gr.State(value=RAG_MAX_DOCS)
+
         with gr.Tabs() as tabs:
             with gr.Tab("Conversation"):
                 with gr.Row():
-                    with gr.Column(scale=1):  # Adjusted for session history width
+                    with gr.Column(scale=1):
+                        # Dynamically create rows of buttons
+                        file_slot_buttons = []
+                        for row_index in range(5):  # Maximum of 5 rows (10 buttons)
+                            with gr.Row(elem_classes=["button-row"]):
+                                for col_index in range(2):  # 2 buttons per row
+                                    btn = gr.Button(visible=False, elem_classes=["file-slot-btn"])
+                                    file_slot_buttons.append(btn)
                         session_tabs = gr.Tabs()
                         with session_tabs:
                             with gr.Tab("Session History Index", id="session_history"):
                                 start_new_session_btn = gr.Button("Start New Session")
-                    with gr.Column(scale=20):  # Adjusted for session history width
-                        session_log = gr.Chatbot(label="Session Log", height=350, elem_classes=["scrollable"])  # Added scrollable class
+                    with gr.Column(scale=20):
+                        session_log = gr.Chatbot(label="Session Log", height=350, elem_classes=["scrollable"])
                         user_input = gr.Textbox(
                             label="User Input",
                             lines=3,
                             interactive=False,
                             placeholder="Enter text here...",
-                            elem_classes=["scrollable"]  # Added scrollable class
+                            elem_classes=["scrollable"]
                         )
                         status_text = gr.Textbox(
                             label="Status",
@@ -217,7 +275,6 @@ def launch_interface():
                         )
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="primary", scale=2)
-                        
                         with gr.Row():
                             edit_previous_btn = gr.Button("Edit Previous", scale=1)
                             attach_files_btn = gr.UploadButton(
@@ -225,11 +282,11 @@ def launch_interface():
                                 file_types=list(ALLOWED_EXTENSIONS),
                                 file_count="multiple",
                                 scale=1,
-                                visible=(RAG_MAX_DOCS > 0)  # Dynamic visibility
+                                visible=(RAG_MAX_DOCS > 0)
                             )
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
-                            shutdown_btn = gr.Button("Shutdown Program", variant="stop", scale=1)  # New button added
-                            
+                            shutdown_btn = gr.Button("Shutdown Program", variant="stop", scale=1)
+
             with gr.Tab("Configuration"):
                 with gr.Row():
                     model_dir_text = gr.Textbox(label="Model Folder", value=MODEL_FOLDER, scale=20)
@@ -306,70 +363,6 @@ def launch_interface():
                 tabs.append(gr.Tab(label, id=session))
             return gr.Tabs.update(children=tabs)
 
-        def update_status(msg):
-            return gr.Textbox.update(value=msg)
-
-        def safe_chat_interface(message: str, history):
-            from scripts.temporary import STATUS_TEXTS
-            history.append((message, ""))
-            yield history, STATUS_TEXTS["generating_response"]
-            try:
-                full_response = ""
-                for token in get_streaming_response(message):
-                    full_response += token
-                    history[-1] = (history[-1][0], full_response)
-                    yield history, STATUS_TEXTS["generating_response"]
-                if len(history) == 1:
-                    summary_prompt = f"Summarize the following conversation in exactly three words:\nUser: {message}\nAssistant: {full_response}"
-                    globals()["session_label"] = get_response(summary_prompt).strip()
-                utility.save_session_history(history)
-                yield history, STATUS_TEXTS["response_generated"]
-            except Exception as e:
-                history[-1] = (history[-1][0], f'<span style="color: red;">Error: {str(e)}</span>')
-                yield history, f"Error: {str(e)}"
-
-        def safe_process_uploaded_files(files):
-            try:
-                return process_uploaded_files(files)
-            except Exception as e:
-                return f"Error: {str(e)}"
-
-        def safe_load_model():
-            try:
-                return load_model()
-            except Exception as e:
-                return [
-                    gr.Textbox.update(interactive=False),
-                    gr.Button.update(interactive=True),
-                    gr.Textbox.update(value="No model loaded"),
-                    gr.Textbox.update(value=f"Error: {str(e)}"),
-                    gr.Textbox.update(value=f"Error: {str(e)}")
-                ]
-
-        def safe_unload_model_ui():
-            try:
-                return unload_model_ui()
-            except Exception as e:
-                return [
-                    gr.Textbox.update(interactive=False),
-                    gr.Button.update(interactive=True),
-                    gr.Textbox.update(value="No model loaded"),
-                    gr.Textbox.update(value=f"Error: {str(e)}"),
-                    gr.Textbox.update(value=f"Error: {str(e)}")
-                ]
-
-        def safe_load_session(tab_id):
-            try:
-                return load_session(tab_id) if tab_id != "session_history" else start_new_session()
-            except Exception as e:
-                return [session_log, f"Error: {str(e)}"]
-
-        def safe_start_new_session():
-            try:
-                return start_new_session()
-            except Exception as e:
-                return [session_log, f"Error: {str(e)}"]
-
         def edit_previous(history, input_box):
             if len(history) >= 2:
                 history = history[:-2]
@@ -382,22 +375,6 @@ def launch_interface():
             else:
                 return history, gr.Textbox.update(value="")
 
-        def shutdown_program():
-            """Unload the model and terminate the program."""
-            from scripts.models import unload_model
-            from scripts.temporary import STATUS_TEXTS
-            try:
-                print("Shutting down: Unloading model...")
-                unload_model()  # Gracefully unload the model
-                print("Model unloaded. Terminating program...")
-                demo.close()  # Close the Gradio server
-                import os
-                os._exit(0)  # Forcefully exit Python to return to batch menu
-            except Exception as e:
-                print(f"Error during shutdown: {str(e)}")
-                return STATUS_TEXTS["error"]
-            return STATUS_TEXTS["model_unloaded"]
-
         # Event handlers for Conversation tab
         edit_previous_btn.click(
             fn=edit_previous,
@@ -407,7 +384,7 @@ def launch_interface():
         )
 
         send_btn.click(
-            fn=safe_chat_interface,
+            fn=chat_interface,
             inputs=[user_input, session_log],
             outputs=[session_log, status_text],
             api_name="chat_interface"
@@ -419,14 +396,14 @@ def launch_interface():
         )
 
         attach_files_btn.upload(
-            fn=safe_process_uploaded_files,
-            inputs=[attach_files_btn],
-            outputs=[status_text],
+            fn=process_uploaded_files,
+            inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state],
+            outputs=[loaded_files_state, status_text] + file_slot_buttons,
             api_name="process_uploaded_files"
         )
 
         start_new_session_btn.click(
-            fn=safe_start_new_session,
+            fn=start_new_session,
             inputs=None,
             outputs=[session_log, user_input],
             api_name="restart_session"
@@ -443,15 +420,23 @@ def launch_interface():
             api_name="shutdown_program"
         )
 
+        for i, btn in enumerate(file_slot_buttons):
+            btn.click(
+                fn=lambda state, rag_max, idx=i: eject_file(state, idx, rag_max),
+                inputs=[loaded_files_state, rag_max_docs_state],
+                outputs=[loaded_files_state, status_text] + file_slot_buttons,
+                api_name=f"eject_file_{i}"
+            )
+
         # Event handlers for Configuration tab
         load_btn.click(
-            fn=safe_load_model,
+            fn=load_model,
             outputs=[user_input, load_btn, status_text, status_text_settings],
             api_name="load_model"
         )
 
         unload_btn.click(
-            fn=safe_unload_model_ui,
+            fn=unload_model_ui,
             outputs=[user_input, load_btn, status_text, status_text_settings],
             api_name="unload_model"
         )
@@ -464,7 +449,7 @@ def launch_interface():
         )
 
         session_tabs.select(
-            fn=safe_load_session,
+            fn=load_session,
             inputs=[session_tabs],
             outputs=[session_log, user_input],
             api_name="load_session"
@@ -483,9 +468,13 @@ def launch_interface():
         )
 
         max_docs_dropdown.change(
-            fn=lambda x: (utility.update_setting("rag_max_docs", x), gr.update(visible=(int(x) > 0))),
+            fn=lambda x: int(x),
             inputs=[max_docs_dropdown],
-            outputs=[user_input, load_btn, attach_files_btn],  # Update button visibility
+            outputs=[rag_max_docs_state]
+        ).then(
+            fn=update_rag_max_docs,
+            inputs=[rag_max_docs_state, loaded_files_state],
+            outputs=[loaded_files_state] + file_slot_buttons + [attach_files_btn],
             api_name="update_rag_max_docs"
         )
 
@@ -498,6 +487,14 @@ def launch_interface():
             fn=lambda: gr.Dropdown.update(choices=get_available_models()),
             outputs=[model_dropdown],
             api_name="update_model_dropdown"
+        )
+
+        # Initial UI setup
+        demo.load(
+            fn=update_file_slot_ui,
+            inputs=[loaded_files_state, rag_max_docs_state],
+            outputs=file_slot_buttons + [attach_files_btn],
+            api_name="initial_file_slot_ui"
         )
 
     demo.launch()

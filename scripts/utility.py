@@ -77,18 +77,18 @@ def web_search(query: str, num_results: int = 3) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
-def load_and_chunk_documents(directory: Path) -> list:
-    """Load and chunk documents for RAG."""
+def load_and_chunk_documents(file_paths: list) -> list:
+    """Load and chunk documents from a list of file paths for RAG."""
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain_community.document_loaders import TextLoader
     from .temporary import N_CTX, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER
     documents = []
     try:
-        chunk_size = N_CTX // (RAG_CHUNK_SIZE_DEVIDER)  # Default to 4 if 0
-        chunk_overlap = N_CTX // (RAG_CHUNK_OVERLAP_DEVIDER)  # Default to 32 if 0
-        for file in directory.iterdir():
-            if file.suffix[1:].lower() in ALLOWED_EXTENSIONS:
-                loader = TextLoader(str(file))
+        chunk_size = N_CTX // (RAG_CHUNK_SIZE_DEVIDER if RAG_CHUNK_SIZE_DEVIDER != 0 else 4)
+        chunk_overlap = N_CTX // (RAG_CHUNK_OVERLAP_DEVIDER if RAG_CHUNK_OVERLAP_DEVIDER != 0 else 32)
+        for file_path in file_paths:
+            if Path(file_path).suffix[1:].lower() in ALLOWED_EXTENSIONS:
+                loader = TextLoader(file_path)
                 docs = loader.load()
                 splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 chunks = splitter.split_documents(docs)
@@ -111,7 +111,7 @@ def create_vectorstore(documents: list) -> None:
         print(f"Error creating vectorstore: {e}")
 
 def save_config():
-    from temporary import (
+    from .temporary import (
         MODEL_PATH, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
         LLAMA_CLI_PATH, VRAM_SIZE, SELECTED_GPU, MMAP, MLOCK,
         RAG_MAX_DOCS, MAX_SESSIONS, BACKEND_TYPE, LLAMA_BIN_PATH,
