@@ -105,7 +105,9 @@ Advised models in, 14B, ~8B, 3B, require relevantly, ~11GB, ~7GB, ~3GB, they are
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- Working on File Slot Buttons
+- Working on File Slot Buttons. 
+- lets also have a similar system for the session history, to obtain optimal layout, I am thinking default 9 session history slot buttons under the `Start New Session` button, that would also start off `Empty History Slot`, then later with the name of the session after it is generated, then there would be a rotation of the buttons and sessions, each time a new session is created, and when there are more session history items than 9, the oldest one now 10th will be lost in making room for the new session. If there is no response from the ai within a session, so as for no label to have been created, then it does not need to rotate, because the session has not got to the stage of creating a new label. 
+remove, session history slots and maximum number of rag documents, from json, and just have a constant for both in the `temporary.py`, so I can determine how many slots it has configured for each, from the constants in temporary, and be able to tweak until I have decided upon how it will be. 
 
 ### Far Development.
 - If there is some small 1B model, we could download and use, to create the session history label for the session, then this would be better, than the user having to wait for whatever more capable model is doing, so as to produce quick labels for session history. preferably a <256MB download, and again, the context size is automatic based on the size of the first, input and response, but if it runs out of context, then we will cut it where it runs out, as for example, if we just have most of the users first input, then this should be good enough to create a unique 3 word label.
