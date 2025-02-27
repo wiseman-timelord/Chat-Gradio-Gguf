@@ -31,7 +31,7 @@ N_GPU_LAYERS = 0  # Number of layers to offload to GPU, calculated at runtime
 RAG_CHUNK_SIZE = 2048  # RAG chunk size
 RAG_CHUNK_OVERLAP = 256  # RAG chunk overlap
 RAG_MAX_DOCS = 5  # Max RAG documents
-MAX_SESSIONS = 10  # Max number of saved sessions
+MAX_SESSIONS = 10  # Max number of saved sessions, configurable via HISTORY_OPTIONS
 RAG_AUTO_LOAD = ["general_knowledge"]  # Default RAG vectorstores to load
 REPEAT_PENALTY = 1.0
 
@@ -47,15 +47,15 @@ DEFAULT_TEMPERATURE = 0.75  # Fallback temperature
 DEFAULT_N_CTX = 4096  # Fallback context size
 DEFAULT_N_GPU_LAYERS = 35  # Fallback GPU layers
 
-# Session Settings
-HISTORY_OPTIONS = [5, 10, 20, 40, 80]  # Options for max sessions in UI
-
 # Options for Dropdowns
 ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}  # Supported file extensions
 CTX_OPTIONS = [8192, 16384, 24576, 32768]  # Context window options
 TEMP_OPTIONS = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]  # Temperature options per readme
 VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]  # VRAM options in MB
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]  # Repeat penalty options
+
+# Session Settings
+HISTORY_OPTIONS = [5, 10, 20, 40, 80]  # Options for max sessions in UI
 
 # Global LLM instance
 llm = None  # Placeholder for Llama instance

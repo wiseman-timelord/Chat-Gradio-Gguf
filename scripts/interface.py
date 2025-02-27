@@ -10,7 +10,7 @@ from scripts.temporary import (
     MODEL_LOADED, ALLOWED_EXTENSIONS, CTX_OPTIONS, MODEL_PATH, N_CTX,
     TEMPERATURE, TEMP_OPTIONS, VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS,
     MAX_SESSIONS, current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS,
-    REPEAT_OPTIONS, REPEAT_PENALTY, MLOCK
+    REPEAT_OPTIONS, REPEAT_PENALTY, MLOCK, HISTORY_DIR
 )
 from scripts import utility
 from scripts.models import (
@@ -173,7 +173,7 @@ def launch_interface():
                         user_input = gr.Textbox(label="User Input", interactive=False, placeholder="Enter text here...")
                         status_text = gr.Textbox(label="Status", interactive=False, value="Select and load a model on Configuration page.")
                         
-                        # Buttons and switch row, defined like the working version
+                        # Buttons and switch row
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="primary", scale=2)
                             edit_previous_btn = gr.Button("Edit Previous", scale=1)
@@ -223,16 +223,23 @@ def launch_interface():
                         label="MLock Enabled",
                         value=MLOCK
                     )
+                # Row for Program/UI Settings
+                with gr.Row():
+                    max_sessions_dropdown = gr.Dropdown(
+                        choices=HISTORY_OPTIONS,
+                        label="Max Session History",
+                        value=MAX_SESSIONS
+                    )
                 gr.Markdown("Note: GPU layers calculated from model details and VRAM. 0 layers = CPU-only.")
                 status_text_settings = gr.Textbox(label="Status", interactive=False)
                 
-                # Buttons row, defined like the working version
+                # Buttons row
                 with gr.Row():
                     load_btn = gr.Button("Load Model", variant="secondary", scale=1)
                     unload_btn = gr.Button("Unload Model", variant="secondary", scale=1)
                     save_settings_btn = gr.Button("Save Settings", scale=1)
 
-        # Helper functions (unchanged from original)
+        # Helper functions
         def update_session_tabs():
             sessions = utility.get_saved_sessions()
             tabs = [gr.Tab("Session History Index", id="session_history")]
@@ -466,7 +473,22 @@ def launch_interface():
             api_name="update_mlock"
         )
 
+        max_sessions_dropdown.change(
+            fn=lambda x: utility.update_setting("max_sessions", x),
+            inputs=[max_sessions_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="update_max_sessions"
+        ).then(
+            fn=update_session_tabs,
+            inputs=None,
+            outputs=[session_tabs],
+            api_name="update_session_tabs_4"
+        )
+
     demo.launch()
+
+if __name__ == "__main__":
+    launch_interface()
 
 if __name__ == "__main__":
     launch_interface()
