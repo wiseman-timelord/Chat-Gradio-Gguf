@@ -9,7 +9,7 @@ from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
     MODEL_LOADED, ALLOWED_EXTENSIONS, CTX_OPTIONS, MODEL_PATH, N_CTX,
     TEMPERATURE, TEMP_OPTIONS, VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS,
-    MAX_SESSIONS, current_model_settings, N_GPU_LAYERS
+    MAX_SESSIONS, current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS
 )
 from scripts import utility
 from scripts.models import (
@@ -198,7 +198,7 @@ def launch_interface():
                     value=N_CTX
                 )
                 vram_dropdown = gr.Dropdown(
-                    choices=[1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768],
+                    choices=VRAM_OPTIONS,
                     label="VRAM Size (MB)",
                     value=VRAM_SIZE
                 )
@@ -216,22 +216,20 @@ def launch_interface():
                 save_settings_btn = gr.Button("Save Settings")
                 config_buttons_row = gr.Row(load_btn, unload_btn, save_settings_btn)
 
-        # Helper function for Edit Previous
+        # Helper function for Edit Previous (assumed defined elsewhere)
         def edit_previous(history, input_box):
             if len(history) >= 2:
-                # Remove last assistant response and last user input
                 history = history[:-2]
                 last_user_input = history[-1][0] if history else ""
                 return history, gr.Textbox.update(value=last_user_input)
             elif len(history) == 1:
-                # Only user input exists, remove it
                 last_user_input = history[0][0]
                 history = []
                 return history, gr.Textbox.update(value=last_user_input)
             else:
                 return history, gr.Textbox.update(value="")
 
-        # Event handlers (abbreviated for brevity; assumed to be defined elsewhere)
+        # Event handlers (simplified for brevity, assumed defined elsewhere)
         edit_previous_btn.click(fn=edit_previous, inputs=[session_log, user_input], outputs=[session_log, user_input])
         send_btn.click(fn=chat_interface, inputs=[user_input, session_log], outputs=[session_log, status_text])
         attach_files_btn.upload(fn=process_uploaded_files, inputs=[attach_files_btn], outputs=[status_text])
