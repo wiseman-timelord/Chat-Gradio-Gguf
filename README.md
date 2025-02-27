@@ -9,7 +9,7 @@
 "                                          \/                \/                \/                                     "
 -----------------------------------------------------------------------------------------------------------------------
 ```
-Status: Alpha - Mid-development, UI is almost complete and code mostly present.
+Status: Alpha - Mid-development.
 
 ## Description
 A high-quality chat interface optimized for GGUF models, designed for efficiency and usability. The project is tailored to my specific needs, ensuring a streamlined and non-bloated experience. With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool eliminates the need for online chatbots while providing local, uncensored, and efficient inference. The interface is designed to evolve with additional features that enhance productivity and usability. The main concept is, to download the best smaller models on HuggingFace, and use them, without the restrictions and with comparable interface, found on premium AI services.
@@ -32,10 +32,10 @@ A high-quality chat interface optimized for GGUF models, designed for efficiency
 
 
 ### Preview
-- The "Conversation" page...
+- The "Conversation" page, still a few things to work out, but mostly there...
 ![preview_image](media/conversation_page.jpg)
 
-- The "Configuration" page...
+- The "Configuration" page, adding logically, but keeping critical, soes, no bloat...
 ![preview_image](media/configuration_page.jpg)
 
 - The Terminal Display...
