@@ -25,9 +25,7 @@ A high-quality chat interface optimized for GGUF models, designed for efficiency
 - **Token Streaming**: Real-time token generation for seamless chat interactions.
 - **Model Selection**: Dropdown lists GGUF models from `.\models\*.gguf` for easy switching.
 - **Auto-Model Handle**: Uses hotwords in model name, to better handle, ctx, temperature, modes, prompts, etc.
-- **FAISS Vector Database**: Stores numerical vectors, and retrieves items based on proximity in meaning.
-
-In your program, the vector store acts as a semantic search database for RAG, enabling the chatbot to pull in relevant context from documents.
+- **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
 
 
 
