@@ -118,6 +118,10 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - There is also an idea of the `Performance` model and the `Quality` model, where the user could switch between, albeit this could also be, fast for simple tasks like creating the title of the session, and slow for interaction, or the likes.
 - Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
 
+## Credits
+- [X](https://x.com/) - [Grok](https://x.com/i/grok), at the time Grok3Beta. For much of the complete updated functions that I implemented. I found only 1 flaw in the AI, that was with arranging multiple buttons in the same row.
+- [Deepseek](https://www.deepseek.com/), at the time, 3 and R1. For the things Grok3Beta was, unabled or found hard, to do.
+
 ## License
 **Wiseman-Timelord's Glorified License** is detailed in the file `.\Licence.txt`, that will later be added.
 
