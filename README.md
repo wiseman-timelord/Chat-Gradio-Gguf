@@ -110,8 +110,10 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - Possibly we need options to turn off attachments, possibly being able to set rag documents to 0, then it would have some kind of more streamlined approach to operating in this mode of 0 documents. But, we do not with to loose the ability to chunk large texts such as websites or large user inputs. idk, needs assessment, but when max rag docs is set to 0, then we would not need the attach file button on conversation page, so that button needs to be dynamic, and not appear if max rag docs is 0.
 - Is the status text in the correct location, should it be under the buttons, make 2 images and compare side by side.
 - The `User Input` and `Session Log`, boxes should individually automatically gain a scrolling feature, when the text is larger than the applicable box. 
+- If there is some small 1B model, we could download and use, to create the session history label for the session, then this would be better, than the user having to wait for whatever more capable model is doing, so as to produce quick labels for session history. preferably a <256MB download, and again, the context size is automatic based on the size of the first, input and response, but if it runs out of context, then we will cut it where it runs out, as for example, if we just have most of the users first input, then this should be good enough to create a unique 3 word label.
 - Ongoing improvement of Gradio Interface required, until it "looks right". 
 - Testing and bugfixing, required for all features of main program.
+
 
 ### Ideas - Not to be implemented currently.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
