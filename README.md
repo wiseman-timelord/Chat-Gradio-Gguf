@@ -71,44 +71,6 @@ To create a public link, set `share=True` in `launch()`.
 
 ```
 
-- The installer works effectively...
-```
-========================================================================================================================
-    Chat-Gradio-Gguf: Installation
-========================================================================================================================
-
-Installing Chat-Gradio-Gguf...
-Found Vulkan SDK at C:\Program_Filez\VulkanSDK\1.4.304.1 with version 1.4.304.1
-Detected Vulkan versions: {'1.4.304.1': WindowsPath('C:/Program_Filez/VulkanSDK/1.4.304.1')}
-Confirmed Vulkan SDK 1.4.x version: 1.4.304.1
-Found directory: data                                        [OK]
-Found directory: files                                       [OK]
-Found directory: scripts                                     [OK]
-Found directory: models                                      [OK]
-Found directory: data/vectorstores                           [OK]
-Found directory: data/history                                [OK]
-Found directory: data/temp                                   [OK]
-Replacing Virtual Environment.                               [OK]
-Installing Python Dependencies...                            [OK]
-Requirement already satisfied: pip in c:\program_filez\chat-gradio-gguf\.venv\lib\site-packages (22.3)
-Collecting pip
-  Using cached pip-25.0.1-py3-none-any.whl (1.8 MB)
-Installing collected packages: pip
-  Attempting uninstall: pip
-    Found existing installation: pip 22.3
-    Uninstalling pip-22.3:
-      Successfully uninstalled pip-22.3
-Successfully installed pip-25.0.1
-Pip upgraded successfully                                    [OK]
-Installing dependencies with custom wheel index...           [OK]
-Dependencies installed in venv                               [OK]
-Downloading llama.cpp (GPU/CPU - Kompute)...                 [OK]
-100%|█████████████████████████████████████████████████████████████████████████████| 17.5M/17.5M [03:53<00:00, 75.0kB/s]
-llama.cpp installed successfully                             [OK]
-Configuration file over-written                              [OK]
-Chat-Gradio-Gguf installed successfully!
-```
-
 ## Requirements
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
