@@ -6,7 +6,8 @@ from pathlib import Path
 from datetime import datetime
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
-    ALLOWED_EXTENSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, MAX_SESSIONS
+    ALLOWED_EXTENSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, MAX_SESSIONS,
+    current_session_id, session_label
 )
 
 # Functions...
@@ -34,13 +35,13 @@ def strip_html(text: str) -> str:
     return re.sub(r'<[^>]+>', '', text)
 
 def save_session_history(history: list) -> str:
-    """Save chat history with a session label."""
+    """Save chat history using current_session_id, overwriting the existing file."""
     history_dir = Path(HISTORY_DIR)
     history_dir.mkdir(exist_ok=True)
-    from temporary import session_label
+    if current_session_id is None:
+        current_session_id = datetime.now().strftime(SESSION_FILE_FORMAT)
+    file_path = history_dir / f"session_{current_session_id}.json"
     label = session_label if session_label else "Untitled"
-    session_id = datetime.now().strftime(SESSION_FILE_FORMAT) + (f"_{label.replace(' ', '_')}" if label != "Untitled" else "")
-    file_path = history_dir / f"session_{session_id}.json"
     session_data = {
         "label": label,
         "history": history

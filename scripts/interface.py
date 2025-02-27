@@ -1,3 +1,5 @@
+# Script: `.\scripts\interface.py`
+
 # Imports...
 import gradio as gr
 import re
@@ -27,25 +29,6 @@ def format_response(output: str) -> str:
         formatted_code = highlight(code, lexer, HtmlFormatter())
         output = output.replace(f'```{lang}\n{code}```', formatted_code)
     return f'<span style="color: {RESPONSE_COLOR}">{output}</span>'
-
-def chat_interface(message: str, history):
-    from scripts.temporary import STATUS_TEXTS
-    history.append((f'<span style="color: {USER_COLOR}">{message}</span>', ""))
-    yield history, STATUS_TEXTS["generating_response"]
-    try:
-        full_response = ""
-        for token in get_streaming_response(message):
-            full_response += token
-            history[-1] = (history[-1][0], format_response(full_response))
-            yield history, STATUS_TEXTS["generating_response"]
-        if len(history) == 1:
-            summary_prompt = f"Summarize the following conversation in exactly three words:\nUser: {message}\nAssistant: {full_response}"
-            globals()["session_label"] = get_response(summary_prompt).strip()
-            utility.save_session_history(history)
-        yield history, STATUS_TEXTS["response_generated"]
-    except Exception as e:
-        history[-1] = (history[-1][0], f'<span style="color: red;">Error: {str(e)}</span>')
-        yield history, f"Error: {str(e)}"
 
 def unload_model_ui():
     from scripts.temporary import STATUS_TEXTS
@@ -115,18 +98,21 @@ def get_saved_sessions():
     return utility.get_saved_sessions()
 
 def start_new_session():
-    global message_history, session_label
-    message_history = []
-    session_label = ""
+    from scripts import temporary
+    temporary.current_session_id = datetime.now().strftime(temporary.SESSION_FILE_FORMAT)
+    temporary.session_label = ""
     return gr.Chatbot(value=[]), gr.Textbox(value="")
 
 def load_session(session_file):
+    from scripts import temporary
+    from scripts import utility
     if session_file:
-        label, history = utility.load_session_history(Path(HISTORY_DIR) / session_file)
-        global session_label
-        session_label = label
+        session_id = session_file.replace("session_", "").replace(".json", "")
+        temporary.current_session_id = session_id
+        label, history = utility.load_session_history(Path(temporary.HISTORY_DIR) / session_file)
+        temporary.session_label = label
         return history, "Session loaded"
-    return history, "Session loaded"
+    return [], "Session loaded"
 
 def load_model():
     from scripts.temporary import STATUS_TEXTS
@@ -158,6 +144,33 @@ def load_model():
             gr.Textbox.update(value=f"Error: {str(e)}")
         ]
 
+def chat_interface(message: str, history):
+    from scripts import temporary
+    from scripts import utility
+    from scripts.models import get_response, get_streaming_response
+    history.append((f'<span style="color: {temporary.USER_COLOR}">{message}</span>', ""))
+    yield history, temporary.STATUS_TEXTS["generating_response"]
+    try:
+        full_response = ""
+        for token in get_streaming_response(message):
+            full_response += token
+            history[-1] = (history[-1][0], format_response(full_response))
+            yield history, temporary.STATUS_TEXTS["generating_response"]
+        if len(history) == 1:
+            # Calculate context size: Total Characters * 1.25
+            summary_prompt = f"Summarize the following conversation in exactly three words:\nUser: {message}\nAssistant: {full_response}"
+            prompt_length = len(summary_prompt)
+            n_ctx_to_use = int(prompt_length * 1.25)
+            # Ensure n_ctx_to_use is within model limits, default to N_CTX if exceeded
+            n_ctx_to_use = min(n_ctx_to_use, temporary.N_CTX)
+            # Note: We assume get_response uses the model's n_ctx, no direct way to set it per call
+            temporary.session_label = get_response(summary_prompt).strip()
+        utility.save_session_history(history)
+        yield history, temporary.STATUS_TEXTS["response_generated"]
+    except Exception as e:
+        history[-1] = (history[-1][0], f'<span style="color: red;">Error: {str(e)}</span>')
+        yield history, f"Error: {str(e)}"
+
 def launch_interface():
     with gr.Blocks(title="Chat-Gradio-Gguf") as demo:
         with gr.Tabs() as tabs:
@@ -173,12 +186,11 @@ def launch_interface():
                         user_input = gr.Textbox(label="User Input", interactive=False, placeholder="Enter text here...")
                         status_text = gr.Textbox(label="Status", interactive=False, value="Select and load a model on Configuration page.")
                         
-                        # Buttons and switch row
+                        # Buttons and switch row (Updated: Removed save_session_btn)
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="primary", scale=2)
                             edit_previous_btn = gr.Button("Edit Previous", scale=1)
                             attach_files_btn = gr.UploadButton("Attach Files", file_types=list(ALLOWED_EXTENSIONS), file_count="multiple", scale=1)
-                            save_session_btn = gr.Button("Save Session", scale=1)
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
 
             with gr.Tab("Configuration"):
@@ -264,7 +276,7 @@ def launch_interface():
                 if len(history) == 1:
                     summary_prompt = f"Summarize the following conversation in exactly three words:\nUser: {message}\nAssistant: {full_response}"
                     globals()["session_label"] = get_response(summary_prompt).strip()
-                    utility.save_session_history(history)
+                utility.save_session_history(history)
                 yield history, STATUS_TEXTS["response_generated"]
             except Exception as e:
                 history[-1] = (history[-1][0], f'<span style="color: red;">Error: {str(e)}</span>')
@@ -273,12 +285,6 @@ def launch_interface():
         def safe_process_uploaded_files(files):
             try:
                 return process_uploaded_files(files)
-            except Exception as e:
-                return f"Error: {str(e)}"
-
-        def safe_save_session_history(history):
-            try:
-                return utility.save_session_history(history)
             except Exception as e:
                 return f"Error: {str(e)}"
 
@@ -355,18 +361,6 @@ def launch_interface():
             inputs=[attach_files_btn],
             outputs=[status_text],
             api_name="process_uploaded_files"
-        )
-
-        save_session_btn.click(
-            fn=safe_save_session_history,
-            inputs=[session_log],
-            outputs=[status_text],
-            api_name="save_session_history"
-        ).then(
-            fn=update_session_tabs,
-            inputs=None,
-            outputs=[session_tabs],
-            api_name="update_session_tabs_2"
         )
 
         start_new_session_btn.click(
@@ -486,9 +480,6 @@ def launch_interface():
         )
 
     demo.launch()
-
-if __name__ == "__main__":
-    launch_interface()
 
 if __name__ == "__main__":
     launch_interface()

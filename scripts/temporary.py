@@ -13,6 +13,7 @@ SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"  # Format for session file names
 MODEL_LOADED = False  # Tracks if model is loaded
 rag_documents = []  # Placeholder for RAG documents
 session_label = ""  # Current session label
+current_session_id = None  # Unique ID for the current session
 
 # Configurable Settings (Loaded from JSON)
 MODEL_PATH = "models/Select_a_model..."  # Default model path
