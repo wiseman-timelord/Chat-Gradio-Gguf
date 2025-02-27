@@ -15,7 +15,7 @@ rag_documents = []  # Placeholder for RAG documents
 session_label = ""  # Current session label
 
 # Configurable Settings (Loaded from JSON)
-MODEL_PATH = "models/Lamarckvergence-14B-GGUF"  # Default model path
+MODEL_PATH = "models/Select_a_model..."  # Default model path
 N_CTX = 8192  # Default context window size
 TEMPERATURE = 0.75  # Default temperature
 VRAM_SIZE = 8192  # Default VRAM size in MB (8GB)

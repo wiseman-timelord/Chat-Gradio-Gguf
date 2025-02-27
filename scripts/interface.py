@@ -56,7 +56,7 @@ def unload_model_ui():
     ]
     unload_model()
     yield [
-        gr.Textbox.update(interactive=False, placeholder="Load a model to start chatting..."),
+        gr.Textbox.update(interactive=False, placeholder="Check Status box..."),
         gr.Button.update(interactive=True),
         gr.Textbox.update(value="No model loaded"),
         gr.Textbox.update(value=STATUS_TEXTS["model_unloaded"]),
@@ -169,15 +169,16 @@ def launch_interface():
                                 start_new_session_btn = gr.Button("Start New Session")
                     with gr.Column(scale=4):
                         session_log = gr.Chatbot(label="Session Log", height=500)
-                        user_input = gr.Textbox(label="User Input", interactive=False, placeholder="Load a model to start chatting...")
-                        status_text = gr.Textbox(label="Status", interactive=False, value="Select and load a model on Configuration page")
+                        user_input = gr.Textbox(label="User Input", interactive=False, placeholder="Enter text here...")
+                        status_text = gr.Textbox(label="Status", interactive=False, value="Select and load a model on Configuration page.")
                         
-                        # Buttons and switch row
-                        send_btn = gr.Button("Send Input", variant="primary")
-                        edit_previous_btn = gr.Button("Edit Previous")
-                        attach_files_btn = gr.UploadButton("Attach Files", file_types=list(ALLOWED_EXTENSIONS), file_count="multiple")
-                        web_search_switch = gr.Checkbox(label="Web-Search", value=False)
-                        buttons_row = gr.Row(send_btn, edit_previous_btn, attach_files_btn, web_search_switch)
+                        # Buttons and switch row, defined like the working version
+                        with gr.Row():
+                            send_btn = gr.Button("Send Input", variant="primary", scale=2)
+                            edit_previous_btn = gr.Button("Edit Previous", scale=1)
+                            attach_files_btn = gr.UploadButton("Attach Files", file_types=list(ALLOWED_EXTENSIONS), file_count="multiple", scale=1)
+                            save_session_btn = gr.Button("Save Session", scale=1)  # Reintroduced
+                            web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
 
             with gr.Tab("Configuration"):
                 model_dropdown = gr.Dropdown(
@@ -210,13 +211,91 @@ def launch_interface():
                 gr.Markdown("Note: GPU layers calculated from model details and VRAM. 0 layers = CPU-only.")
                 status_text_settings = gr.Textbox(label="Status", interactive=False)
                 
-                # Buttons row
-                load_btn = gr.Button("Load Model", variant="secondary")
-                unload_btn = gr.Button("Unload Model", variant="secondary")
-                save_settings_btn = gr.Button("Save Settings")
-                config_buttons_row = gr.Row(load_btn, unload_btn, save_settings_btn)
+                # Buttons row, defined like the working version
+                with gr.Row():
+                    load_btn = gr.Button("Load Model", variant="secondary", scale=1)
+                    unload_btn = gr.Button("Unload Model", variant="secondary", scale=1)
+                    save_settings_btn = gr.Button("Save Settings", scale=1)
 
-        # Helper function for Edit Previous (assumed defined elsewhere)
+        # Helper functions
+        def update_session_tabs():
+            sessions = utility.get_saved_sessions()
+            tabs = [gr.Tab("Session History Index", id="session_history")]
+            for session in sessions[:MAX_SESSIONS]:
+                label, _ = utility.load_session_history(Path(HISTORY_DIR) / session)
+                tabs.append(gr.Tab(label, id=session))
+            return gr.Tabs.update(children=tabs)
+
+        def update_status(msg):
+            return gr.Textbox.update(value=msg)
+
+        def safe_chat_interface(message: str, history):
+            from scripts.temporary import STATUS_TEXTS
+            history.append((message, ""))
+            yield history, STATUS_TEXTS["generating_response"]
+            try:
+                full_response = ""
+                for token in get_streaming_response(message):
+                    full_response += token
+                    history[-1] = (history[-1][0], full_response)
+                    yield history, STATUS_TEXTS["generating_response"]
+                if len(history) == 1:
+                    summary_prompt = f"Summarize the following conversation in exactly three words:\nUser: {message}\nAssistant: {full_response}"
+                    globals()["session_label"] = get_response(summary_prompt).strip()
+                    utility.save_session_history(history)
+                yield history, STATUS_TEXTS["response_generated"]
+            except Exception as e:
+                history[-1] = (history[-1][0], f'<span style="color: red;">Error: {str(e)}</span>')
+                yield history, f"Error: {str(e)}"
+
+        def safe_process_uploaded_files(files):
+            try:
+                return process_uploaded_files(files)
+            except Exception as e:
+                return f"Error: {str(e)}"
+
+        def safe_save_session_history(history):
+            try:
+                return utility.save_session_history(history)
+            except Exception as e:
+                return f"Error: {str(e)}"
+
+        def safe_load_model():
+            try:
+                return load_model()
+            except Exception as e:
+                return [
+                    gr.Textbox.update(interactive=False),
+                    gr.Button.update(interactive=True),
+                    gr.Textbox.update(value="No model loaded"),
+                    gr.Textbox.update(value=f"Error: {str(e)}"),
+                    gr.Textbox.update(value=f"Error: {str(e)}")
+                ]
+
+        def safe_unload_model_ui():
+            try:
+                return unload_model_ui()
+            except Exception as e:
+                return [
+                    gr.Textbox.update(interactive=False),
+                    gr.Button.update(interactive=True),
+                    gr.Textbox.update(value="No model loaded"),
+                    gr.Textbox.update(value=f"Error: {str(e)}"),
+                    gr.Textbox.update(value=f"Error: {str(e)}")
+                ]
+
+        def safe_load_session(tab_id):
+            try:
+                return load_session(tab_id) if tab_id != "session_history" else start_new_session()
+            except Exception as e:
+                return [session_log, f"Error: {str(e)}"]
+
+        def safe_start_new_session():
+            try:
+                return start_new_session()
+            except Exception as e:
+                return [session_log, f"Error: {str(e)}"]
+
         def edit_previous(history, input_box):
             if len(history) >= 2:
                 history = history[:-2]
@@ -229,14 +308,134 @@ def launch_interface():
             else:
                 return history, gr.Textbox.update(value="")
 
-        # Event handlers (simplified for brevity, assumed defined elsewhere)
-        edit_previous_btn.click(fn=edit_previous, inputs=[session_log, user_input], outputs=[session_log, user_input])
-        send_btn.click(fn=chat_interface, inputs=[user_input, session_log], outputs=[session_log, status_text])
-        attach_files_btn.upload(fn=process_uploaded_files, inputs=[attach_files_btn], outputs=[status_text])
-        start_new_session_btn.click(fn=start_new_session, outputs=[session_log, user_input])
-        load_btn.click(fn=load_model, outputs=[user_input, load_btn, status_text, status_text_settings])
-        unload_btn.click(fn=unload_model_ui, outputs=[user_input, load_btn, status_text, status_text_settings])
-        save_settings_btn.click(fn=utility.save_config, outputs=[status_text_settings])
+        # Event handlers for Conversation tab
+        edit_previous_btn.click(
+            fn=edit_previous,
+            inputs=[session_log, user_input],
+            outputs=[session_log, user_input],
+            api_name="edit_previous"
+        )
+
+        send_btn.click(
+            fn=safe_chat_interface,
+            inputs=[user_input, session_log],
+            outputs=[session_log, status_text],
+            api_name="chat_interface"
+        ).then(
+            fn=update_session_tabs,
+            inputs=None,
+            outputs=[session_tabs],
+            api_name="update_session_tabs_1"
+        )
+
+        attach_files_btn.upload(
+            fn=safe_process_uploaded_files,
+            inputs=[attach_files_btn],
+            outputs=[status_text],
+            api_name="process_uploaded_files"
+        )
+
+        save_session_btn.click(
+            fn=safe_save_session_history,
+            inputs=[session_log],
+            outputs=[status_text],
+            api_name="save_session_history"
+        ).then(
+            fn=update_session_tabs,
+            inputs=None,
+            outputs=[session_tabs],
+            api_name="update_session_tabs_2"
+        )
+
+        start_new_session_btn.click(
+            fn=safe_start_new_session,
+            inputs=None,
+            outputs=[session_log, user_input],
+            api_name="restart_session"
+        ).then(
+            fn=lambda: "New session started",
+            outputs=[status_text],
+            api_name="new_session_started"
+        )
+
+        # Event handlers for Configuration tab
+        load_btn.click(
+            fn=safe_load_model,
+            outputs=[user_input, load_btn, status_text, status_text_settings],
+            api_name="load_model"
+        )
+
+        unload_btn.click(
+            fn=safe_unload_model_ui,
+            outputs=[user_input, load_btn, status_text, status_text_settings],
+            api_name="unload_model"
+        )
+
+        save_settings_btn.click(
+            fn=utility.save_config,
+            inputs=None,
+            outputs=[status_text_settings],
+            api_name="save_config"
+        )
+
+        # Session tab selection
+        session_tabs.select(
+            fn=safe_load_session,
+            inputs=[session_tabs],
+            outputs=[session_log, user_input],
+            api_name="load_session"
+        ).then(
+            fn=update_session_tabs,
+            inputs=None,
+            outputs=[session_tabs],
+            api_name="update_session_tabs_3"
+        )
+
+        # Settings updates
+        temperature_dropdown.change(
+            fn=lambda x: utility.update_setting("temperature", x),
+            inputs=[temperature_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="update_temperature"
+        )
+
+        n_ctx_dropdown.change(
+            fn=lambda x: utility.update_setting("n_ctx", x),
+            inputs=[n_ctx_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="update_n_ctx"
+        )
+
+        vram_dropdown.change(
+            fn=lambda x: utility.update_setting("vram_size", x),
+            inputs=[vram_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="update_vram_size"
+        ).then(
+            fn=lambda: gr.Textbox.update(value=f"Calculated: {N_GPU_LAYERS} (0 means all in system RAM)"),
+            inputs=None,
+            outputs=[status_text_settings],
+            api_name="update_gpu_layers_info"
+        )
+
+        model_dropdown.change(
+            fn=change_model,
+            inputs=[model_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="change_model"
+        ).then(
+            fn=lambda: gr.Textbox.update(value=f"Calculated: {N_GPU_LAYERS} (0 means all in system RAM)"),
+            inputs=None,
+            outputs=[status_text_settings],
+            api_name="update_gpu_layers_info_2"
+        )
+
+        gpu_dropdown.change(
+            fn=lambda x: utility.update_setting("selected_gpu", x),
+            inputs=[gpu_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="update_selected_gpu"
+        )
 
     demo.launch()
 
