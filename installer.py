@@ -61,31 +61,30 @@ BACKEND_OPTIONS = {
     }
 }
 CONFIG_TEMPLATE = {
-    "model_settings": {
-        "model_path": "models/Select_a_model...",
-        "n_gpu_layers": 35,
-        "n_ctx": 8192,
-        "temperature": 0.75,
-        "llama_cli_path": "",
-        "use_python_bindings": True,
-        "mmap": True,
-        "mlock": False,
-        "vram_size": 8192,
-        "selected_gpu": None,
-        "dynamic_gpu_layers": True
-    },
-    "rag_settings": {
-        "chunk_size": 2048,
-        "chunk_overlap": 256,
-        "max_docs": 5
-    },
-    "history_settings": {
-        "max_sessions": 10
-    },
-    "backend_config": {
-        "type": "",
-        "llama_bin_path": ""
-    }
+  "model_settings": {
+    "model_dir": "models",
+    "n_ctx": 8192,
+    "temperature": 0.75,
+    "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
+    "use_python_bindings": false,
+    "mmap": true,
+    "mlock": false,
+    "vram_size": 8192,
+    "selected_gpu": null,
+    "dynamic_gpu_layers": true,
+    "n_batch": 1024,
+    "repeat_penalty": 1.0
+  },
+  "rag_settings": {
+    "max_docs": 6
+  },
+  "history_settings": {
+    "max_sessions": 10
+  },
+  "backend_config": {
+    "type": "GPU/CPU - Vulkan",
+    "llama_bin_path": "data/llama-vulkan-bin"
+  }
 }
 
 # Utility Functions...
