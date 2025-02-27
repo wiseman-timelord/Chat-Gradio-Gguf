@@ -65,7 +65,7 @@ CONFIG_TEMPLATE = {
         "model_path": "models/Lamarckvergence-14B-GGUF",
         "n_gpu_layers": 35,
         "n_ctx": 8192,
-        "temperature": 0.7,
+        "temperature": 0.75,
         "llama_cli_path": "",
         "use_python_bindings": True,
         "mmap": True,
