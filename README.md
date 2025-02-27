@@ -38,13 +38,14 @@ A high-quality chat interface optimized for GGUF models, designed for efficiency
 - The "Configuration" page...
 ![preview_image](media/configuration_page.jpg)
 
-- Launching the Gradio Server...
+- The Engine remains in the Terminal...
 ```
 =======================================================================================================================
     Chat-Gradio-Gguf: Launcher
 =======================================================================================================================
 
 Starting Chat-Gradio-Gguf...
+Starting `launcher` Imports.
 Vectorstore not found: general_knowledge
 `launcher` Imports Complete.
 Starting `launcher.main`.
@@ -52,6 +53,7 @@ No files in `.files`.
 Running on local URL:  http://127.0.0.1:7860
 
 To create a public link, set `share=True` in `launch()`.
+
 
 
 
