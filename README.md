@@ -65,12 +65,10 @@ Pip upgraded successfully                                    [OK]
 Installing dependencies with custom wheel index...           [OK]
 Dependencies installed in venv                               [OK]
 Downloading llama.cpp (GPU/CPU - Kompute)...                 [OK]
-100%|█████████████████████████████████████████████████████████████████████████████| 17.5M/17.5M [03:20<00:00, 87.1kB/s]
+100%|█████████████████████████████████████████████████████████████████████████████| 17.5M/17.5M [03:53<00:00, 75.0kB/s]
 llama.cpp installed successfully                             [OK]
 Configuration file over-written                              [OK]
-Chat-Gradio-Gguf installed successfully!                     [OK]
- Press any key for Batch Menu...
-
+Chat-Gradio-Gguf installed successfully!
 ```
 
 ## Requirements
