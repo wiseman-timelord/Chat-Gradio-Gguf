@@ -106,7 +106,6 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- Testing and bugfixing, required for all features of main program.
 - Possibly we need options to turn off advanced features like RAG, idk, needs assessment, would no rag disable attach file options? In which case the button for attach files would be shown dynamically. 
 - The session history column needs to be 2/3 its current width.
 - It needs a `n_batch` dropdown in configuration in the row of options starting with temperature, and it should be after `Context Window`, labelled `Batch Size`, withe the options `128, 256, 512, 1024, 2048, 4096`, defaulting to `1024`, this will require again, line with + options in temporary, and a line in json for the variable, and possibly an update to the load/save/update config functions, as well as how it interacts with llama in the argument.
@@ -114,9 +113,10 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - The `User Input` box should automatically expand to up to 5 lines to compensate for text input amount, while symultaneously the `Session Log` box would relatively shorten by up to 5 lines, and when the text input box goes over 5 lines of input, it should automatically gain a scrolling feature. Simlarly, if the text for the `Session Log` is larger than the box size, then it should also automatically add a slider, to allow the user to scroll through the history in the session. Like regular chatbots work.  
 - with regards to rag settings, possibly things like, `chunk_size` and `chunk_overlap`, should be calculated based on a percentage of the `n_ctx`, possibly, `n_ctx / 2 = chunk_size` and `chunk_overlap / 16 = chunk_overlap`, this way we could reduce by 2 keys in the Json. The re-calculaton would be done at the optimal point, im guessing that would be if the n_ctx changes or model is loaded/reloaded.
 - there is a key for `max_docs`, this should be next to `max_session_history` option on `configuration` page, and have options, `2, 4, 6, 8` defaulting to `4`.
-- Ongoing improvement of Gradio Interface required, until it "looks right". 
 - It would be nice to be able to set the model folder, again, key in, temporary and json, plus relevant updates in applicable functons.
 - I want to rename `.\data\config.json` to `.\data\persistent.json`, simple enough.
+- Ongoing improvement of Gradio Interface required, until it "looks right". 
+- Testing and bugfixing, required for all features of main program.
 
 ### Ideas - Not to be implemented currently.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
