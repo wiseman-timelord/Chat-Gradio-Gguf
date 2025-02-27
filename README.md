@@ -109,10 +109,10 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - Testing and bugfixing, required for all features of main program.
 - Possibly we need options to turn off advanced features like RAG, idk, needs assessment, would no rag disable attach file options? In which case the button for attach files would be shown dynamically. 
 - The session history column needs to be 2/3 its current width.
+- It needs a `n_batch` dropdown in configuration in the row of options starting with temperature, and it should be after `Context Window`, labelled `Batch Size`, withe the options `128, 256, 512, 1024, 2048, 4096`, defaulting to `1024`, this will require again, line with + options in temporary, and a line in json for the variable, and possibly an update to the load/save/update config functions, as well as how it interacts with llama in the argument.
 - Is the status text in the correct location, should it be under the buttons, make 2 images and compare side by side.
 - The `User Input` box should automatically expand to up to 5 lines to compensate for text input amount, while symultaneously the `Session Log` box would relatively shorten by up to 5 lines, and when the text input box goes over 5 lines of input, it should automatically gain a scrolling feature. Simlarly, if the text for the `Session Log` is larger than the box size, then it should also automatically add a slider, to allow the user to scroll through the history in the session. Like regular chatbots work.  
 - Ongoing improvement of Gradio Interface required, until it "looks right". 
-
 
 ### Ideas - Not to be implemented currently.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
