@@ -27,28 +27,12 @@ A high-quality chat interface optimized for GGUF models, designed for efficiency
 - **Auto-Model Handle**: Uses hotwords in model name, to better handle, ctx, temperature, modes, prompts, etc.
 
 ### Preview
-- Launching the Gradio server...
-```
-=======================================================================================================================
-    Chat-Gradio-Gguf: Launcher
-=======================================================================================================================
+- The `Conversation` page...
+![preview_image](media/conversation_page.jpg)
 
-Starting Chat-Gradio-Gguf...
-Initializing system...
-Vectorstore not found: general_knowledge
-Running on local URL:  http://127.0.0.1:7860
+- The `Configuration` page...
+![preview_image](media/configuration_page.jpg)
 
-To create a public link, set `share=True` in `launch()`.
-
-
-
-
-
-
-
-
-
-```
 - The installer works effectively...
 ```
 ========================================================================================================================
@@ -122,7 +106,6 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- Batch works. Installer works. Launcher works up to Gradio Server.
 - Testing and bugfixing, required for main program.
 - Review and improvement, of Gradio Interface required.
 
