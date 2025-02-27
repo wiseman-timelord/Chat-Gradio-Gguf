@@ -106,8 +106,13 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- Testing and bugfixing, required for main program.
-- Review and improvement, of Gradio Interface required.
+- Testing and bugfixing, required for all features of main program.
+- Possibly we need options to turn off advanced features like RAG, idk, needs assessment, would no rag disable attach file options? In which case the button for attach files would be shown dynamically. 
+- The session history column needs to be 2/3 its current width.
+- Is the status text in the correct location, should it be under the buttons, make 2 images and compare side by side.
+- The `User Input` box should automatically expand to up to 5 lines to compensate for text input amount, while symultaneously the `Session Log` box would relatively shorten by up to 5 lines, and when the text input box goes over 5 lines of input, it should automatically gain a scrolling feature. Simlarly, if the text for the `Session Log` is larger than the box size, then it should also automatically add a slider, to allow the user to scroll through the history in the session. Like regular chatbots work.  
+- Ongoing improvement of Gradio Interface required, until it "looks right". 
+
 
 ### Ideas - Not to be implemented currently.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
