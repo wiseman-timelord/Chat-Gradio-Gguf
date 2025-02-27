@@ -2,7 +2,7 @@
 
 # Imports...
 import gradio as gr
-import re
+import re, os
 from pathlib import Path
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
@@ -145,6 +145,22 @@ def load_model():
             gr.Textbox.update(value=f"Error: {str(e)}")
         ]
 
+def shutdown_program():
+    """Unload the model and terminate the program."""
+    from scripts.models import unload_model
+    from scripts.temporary import STATUS_TEXTS
+    try:
+        print("Shutting down: Unloading model...")
+        unload_model()  # Gracefully unload the model
+        print("Model unloaded. Terminating program...")
+        demo.close()  # Close the Gradio server (accessible within launch_interface scope)
+        import os
+        os._exit(0)  # Forcefully exit Python to return to batch menu
+    except Exception as e:
+        print(f"Error during shutdown: {str(e)}")
+        return STATUS_TEXTS["error"]
+    return STATUS_TEXTS["model_unloaded"]
+
 def chat_interface(message: str, history):
     from scripts import temporary
     from scripts import utility
@@ -173,6 +189,7 @@ def chat_interface(message: str, history):
         yield history, f"Error: {str(e)}"
 
 def launch_interface():
+    global demo  # Make demo accessible for shutdown
     with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable { overflow-y: auto; }") as demo:
         rag_max_docs_state = gr.State(value=RAG_MAX_DOCS)  # Track RAG_MAX_DOCS
         
@@ -211,6 +228,7 @@ def launch_interface():
                                 visible=(RAG_MAX_DOCS > 0)  # Dynamic visibility
                             )
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
+                            shutdown_btn = gr.Button("Shutdown Program", variant="stop", scale=1)  # New button added
                             
             with gr.Tab("Configuration"):
                 with gr.Row():
@@ -279,7 +297,7 @@ def launch_interface():
                     unload_btn = gr.Button("Unload Model", variant="secondary", scale=1)
                     save_settings_btn = gr.Button("Save Settings", scale=1)
 
-        # Helper functions (unchanged except where noted below)
+        # Helper functions
         def update_session_tabs():
             sessions = utility.get_saved_sessions()
             tabs = [gr.Tab("Session History Index", id="session_history")]
@@ -364,6 +382,22 @@ def launch_interface():
             else:
                 return history, gr.Textbox.update(value="")
 
+        def shutdown_program():
+            """Unload the model and terminate the program."""
+            from scripts.models import unload_model
+            from scripts.temporary import STATUS_TEXTS
+            try:
+                print("Shutting down: Unloading model...")
+                unload_model()  # Gracefully unload the model
+                print("Model unloaded. Terminating program...")
+                demo.close()  # Close the Gradio server
+                import os
+                os._exit(0)  # Forcefully exit Python to return to batch menu
+            except Exception as e:
+                print(f"Error during shutdown: {str(e)}")
+                return STATUS_TEXTS["error"]
+            return STATUS_TEXTS["model_unloaded"]
+
         # Event handlers for Conversation tab
         edit_previous_btn.click(
             fn=edit_previous,
@@ -400,6 +434,13 @@ def launch_interface():
             fn=lambda: "New session started",
             outputs=[status_text],
             api_name="new_session_started"
+        )
+
+        shutdown_btn.click(
+            fn=shutdown_program,
+            inputs=None,
+            outputs=[status_text],
+            api_name="shutdown_program"
         )
 
         # Event handlers for Configuration tab
