@@ -117,10 +117,10 @@ def print_status(message: str, success: bool = True) -> None:
 # Configure...
 def get_user_choice(prompt: str, options: list) -> str:
     print_header("Install Options")
-    print(f"\n\n\n\n\n\n\n {prompt}\n\b")
+    print(f"\n\n\n\n\n {prompt}\n\b")
     for i, option in enumerate(options, 1):
         print(f"    {i}. {option}\n")
-    print(f"\n\n\n\n\n\n\n{'='*120}")
+    print(f"\n\n\n\n\n{'='*120}")
     while True:
         choice = input(" Selection; Menu Options = 1-{}, Exit Installer = X: ".format(len(options))).strip().upper()
         if choice == "X":
