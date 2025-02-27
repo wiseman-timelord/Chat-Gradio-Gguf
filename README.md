@@ -75,7 +75,7 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 
 ## Requirements
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
-- Llama.Cpp - Compatible here with, Avx2, Vulkan, Kompute (Experimental Vulkan+).
+- Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
 - Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 
 ### Instructions
