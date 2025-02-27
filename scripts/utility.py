@@ -114,7 +114,7 @@ def save_config():
         RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_MAX_DOCS, MAX_SESSIONS,
         BACKEND_TYPE, LLAMA_BIN_PATH, REPEAT_PENALTY
     )
-    config_path = Path("data/config.json")
+    config_path = Path("data/persistent.json")
     if config_path.exists():
         with open(config_path, "r") as f:
             config = json.load(f)
@@ -196,7 +196,7 @@ def load_config():
         RAG_MAX_DOCS, VRAM_SIZE, SELECTED_GPU, MMAP, MLOCK, MAX_SESSIONS,
         LLAMA_BIN_PATH, DYNAMIC_GPU_LAYERS, REPEAT_PENALTY
     )
-    config_path = Path(__file__).parent.parent / "data" / "config.json"
+    config_path = Path(__file__).parent.parent / "data" / "persistent.json"
     if config_path.exists():
         with open(config_path) as f:
             config = json.load(f)
@@ -218,4 +218,4 @@ def load_config():
             globals()["BACKEND_TYPE"] = config["backend_config"]["type"]
             globals()["LLAMA_BIN_PATH"] = config["backend_config"]["llama_bin_path"]
     else:
-        raise FileNotFoundError("Configuration file not found at data/config.json")
+        raise FileNotFoundError("Configuration file not found at data/persistent.json")
