@@ -9,7 +9,7 @@
 "                                          \/                \/                \/                                     "
 -----------------------------------------------------------------------------------------------------------------------
 ```
-Status: Alpha - Early development, but moving along fast.
+Status: Alpha - Early development, but moving along fast. UI is pretty much there.
 
 ## Description
 A high-quality chat interface optimized for GGUF models, designed for efficiency and usability. The project is tailored to my specific needs, ensuring a streamlined and non-bloated experience. With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool eliminates the need for online chatbots while providing local, uncensored, and efficient inference. The interface is designed to evolve with additional features that enhance productivity and usability. The main concept is, to download the best smaller models on HuggingFace, and use them, without the restrictions and with comparable interface, found on premium AI services.
@@ -106,13 +106,13 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- If there is some small 1B model, we could download and use, to create the session history label for the session, then this would be better, than the user having to wait for whatever more capable model is doing, so as to produce quick labels for session history. preferably a <256MB download, and again, the context size is automatic based on the size of the first, input and response, but if it runs out of context, then we will cut it where it runs out, as for example, if we just have most of the users first input, then this should be good enough to create a unique 3 word label.
+- There is the button to attach files, however, there is no indication of what files are attached, and we cannot add any more rows, so somehow we need to indicate how many attachments there are currently, and what they are. Need to figure this out.
 - Is the status text in the correct location, should it be under the buttons, make 2 images and compare side by side.
+
+### Far Development.
+- If there is some small 1B model, we could download and use, to create the session history label for the session, then this would be better, than the user having to wait for whatever more capable model is doing, so as to produce quick labels for session history. preferably a <256MB download, and again, the context size is automatic based on the size of the first, input and response, but if it runs out of context, then we will cut it where it runs out, as for example, if we just have most of the users first input, then this should be good enough to create a unique 3 word label.
 - Ongoing improvement of Gradio Interface required, until it "looks right". 
 - Testing and bugfixing, required for all features of main program.
-
-
-### Ideas - Not to be implemented currently.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
 - Agentic workflows, potentially using purpose built fine tuned models, for, thinking, interaction, or code. 
 - There is also an idea of the `Performance` model and the `Quality` model, where the user could switch between, albeit this could also be, fast for simple tasks like creating the title of the session, and slow for interaction, or the likes.
