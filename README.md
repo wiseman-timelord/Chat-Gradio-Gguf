@@ -17,7 +17,7 @@ A high-quality chat interface optimized for GGUF models, designed for efficiency
 ### Features
 - **Uncensored Efficiency**: Optimized for GGUF, auto-calculating layers, dependent on, model details and Free VRam.
 - **GPU Support**: Compatible with AMD/NVIDIA/Intel GPUs via Vulkan/Kompute/Cuda/Avx2, with GPU selection dropdown.
-- **Research-Grade Tools**: Includes RAG with FAISS, web search, chunking, summarization, and code formatting.
+- **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, and code formatting.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
 - **Simplified File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml` files.
 - **Configurable Context Window**: Set `n_ctx` to 8192, 16384, 24576, or 32768 via dropdown.
@@ -25,7 +25,7 @@ A high-quality chat interface optimized for GGUF models, designed for efficiency
 - **Token Streaming**: Real-time token generation for seamless chat interactions.
 - **Model Selection**: Dropdown lists GGUF models from `.\models\*.gguf` for easy switching.
 - **Auto-Model Handle**: Uses hotwords in model name, to better handle, ctx, temperature, modes, prompts, etc.
-- **Vector Store**: Stores numerical vectors, and retrieves items based on how close two vectors are in meaning.
+- **FAISS Vectoring**: Stores numerical vectors, and retrieves items based on proximity in meaning.
 Example: Query "What’s the weather like?" might retrieve a chunk like "The sky is blue" because their embeddings are close, even without exact keyword matches.
 
 In your program, the vector store acts as a semantic search database for RAG, enabling the chatbot to pull in relevant context from documents.
