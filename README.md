@@ -106,7 +106,7 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 
 ## Development
-- Possibly we need options to turn off advanced features like RAG, idk, needs assessment, would no rag disable attach file options? In which case the button for attach files would be shown dynamically. 
+- Possibly we need options to turn off attachments, possibly being able to set rag documents to 0, then it would have some kind of more streamlined approach to operating in this mode of 0 documents. But, we do not with to loose the ability to chunk large texts such as websites or large user inputs. idk, needs assessment, but when max rag docs is set to 0, then we would not need the attach file button on conversation page, so that button needs to be dynamic, and not appear if max rag docs is 0.
 - Is the status text in the correct location, should it be under the buttons, make 2 images and compare side by side.
 - The `User Input` and `Session Log`, boxes should individually automatically gain a scrolling feature, when the text is larger than the applicable box. 
 - Ongoing improvement of Gradio Interface required, until it "looks right". 
