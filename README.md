@@ -46,12 +46,12 @@ A high-quality chat interface optimized for GGUF models, designed for efficiency
 
 Starting Chat-Gradio-Gguf...
 Vectorstore not found: general_knowledge
-Initializing system...
+`launcher` Imports Complete.
+Starting `launcher.main`.
 No files in `.files`.
 Running on local URL:  http://127.0.0.1:7860
 
 To create a public link, set `share=True` in `launch()`.
-
 
 
 
