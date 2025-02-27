@@ -120,7 +120,7 @@ Advised models in, 14B, ~8B, 3B, require relevantly, ~11GB, ~7GB, ~3GB, they are
 - Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
 
 ## Credits
-- [X](https://x.com/) - [Grok](https://x.com/i/grok), at the time Grok3Beta. For much of the complete updated functions that I implemented. I found only 1 major flaw in the AI, that was with being unable to have multiple buttons in the same row.
+- [X](https://x.com/) - [Grok](https://x.com/i/grok), at the time Grok3Beta. For much of the complete updated functions that I implemented.
 - [Deepseek](https://www.deepseek.com/), at the time, 3 and R1. For re-attempting the things Grok3Beta was having difficulty with.
 
 ## License
