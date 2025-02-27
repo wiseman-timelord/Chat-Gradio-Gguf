@@ -118,8 +118,8 @@ def get_model_settings(model_name):
     }
 
 def get_available_models():
-    """List available GGUF models in the models directory."""
-    model_dir = Path("models")
+    from .temporary import MODEL_FOLDER  # Changed from MODEL_DIR
+    model_dir = Path(MODEL_FOLDER)
     return [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
 
 def initialize_model(_):
@@ -127,7 +127,7 @@ def initialize_model(_):
     global llm, MODEL_LOADED, N_GPU_LAYERS
     try:
         if MODEL_LOADED:
-            unload_model()  # Unload existing model before initializing a new one
+            unload_model()
         if USE_PYTHON_BINDINGS:
             model_path = Path(MODEL_PATH)
             if not model_path.exists():
@@ -141,6 +141,7 @@ def initialize_model(_):
                 model_path=str(model_path),
                 n_ctx=N_CTX,
                 n_gpu_layers=N_GPU_LAYERS,
+                n_batch=N_BATCH,  # Added
                 mmap=MMAP,
                 mlock=MLOCK,
                 verbose=False
@@ -215,6 +216,7 @@ def get_streaming_response(prompt: str):
             "--temp", str(TEMPERATURE),
             "--repeat-penalty", str(REPEAT_PENALTY),
             "--ctx-size", str(N_CTX),
+            "--batch-size", str(N_BATCH),  # Added
             "--n-predict", "2048",
             "--log-disable"
         ]
@@ -284,6 +286,7 @@ def get_response(prompt: str) -> str:
             "--temp", str(TEMPERATURE),
             "--repeat-penalty", str(REPEAT_PENALTY),
             "--ctx-size", str(N_CTX),
+            "--batch-size", str(N_BATCH),  # Added
             "--n-predict", "2048",
             "--log-disable"
         ]

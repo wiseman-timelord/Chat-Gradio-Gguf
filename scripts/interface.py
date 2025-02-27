@@ -12,7 +12,8 @@ from scripts.temporary import (
     MODEL_LOADED, ALLOWED_EXTENSIONS, CTX_OPTIONS, MODEL_PATH, N_CTX,
     TEMPERATURE, TEMP_OPTIONS, VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS,
     MAX_SESSIONS, current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS,
-    REPEAT_OPTIONS, REPEAT_PENALTY, MLOCK, HISTORY_DIR
+    REPEAT_OPTIONS, REPEAT_PENALTY, MLOCK, HISTORY_DIR, BATCH_OPTIONS,
+    N_BATCH, MAX_DOCS_OPTIONS, RAG_MAX_DOCS, MODEL_FOLDER
 )
 from scripts import utility
 from scripts.models import (
@@ -29,36 +30,6 @@ def format_response(output: str) -> str:
         formatted_code = highlight(code, lexer, HtmlFormatter())
         output = output.replace(f'```{lang}\n{code}```', formatted_code)
     return f'<span style="color: {RESPONSE_COLOR}">{output}</span>'
-
-def unload_model_ui():
-    from scripts.temporary import STATUS_TEXTS
-    yield [
-        gr.Textbox.update(interactive=False),
-        gr.Button.update(interactive=False),
-        gr.Textbox.update(value=STATUS_TEXTS["model_unloading"]),
-        gr.Textbox.update(value=STATUS_TEXTS["model_unloading"])
-    ]
-    unload_model()
-    yield [
-        gr.Textbox.update(interactive=False, placeholder="Check Status box..."),
-        gr.Button.update(interactive=True),
-        gr.Textbox.update(value="No model loaded"),
-        gr.Textbox.update(value=STATUS_TEXTS["model_unloaded"]),
-        gr.Textbox.update(value=STATUS_TEXTS["model_unloaded"])
-    ]
-
-def change_model(model_name):
-    from scripts.temporary import MODEL_PATH, TEMPERATURE, current_model_settings
-    from scripts import utility
-    MODEL_PATH = f"models/{model_name}"
-    settings = get_model_settings(model_name)
-    current_model_settings.update(settings)
-    TEMPERATURE = settings["temperature"]
-    unload_model()
-    initialize_model(None)
-    utility.save_config()
-    model_info_text = f"Loaded model: {model_name}, Category: {settings['category']}"
-    return gr.Textbox(interactive=True), gr.Button(interactive=False), model_info_text
 
 def web_search_trigger(query):
     try:
@@ -113,6 +84,36 @@ def load_session(session_file):
         temporary.session_label = label
         return history, "Session loaded"
     return [], "Session loaded"
+
+def unload_model_ui():
+    from scripts.temporary import STATUS_TEXTS
+    yield [
+        gr.Textbox.update(interactive=False),
+        gr.Button.update(interactive=False),
+        gr.Textbox.update(value=STATUS_TEXTS["model_unloading"]),
+        gr.Textbox.update(value=STATUS_TEXTS["model_unloading"])
+    ]
+    unload_model()
+    yield [
+        gr.Textbox.update(interactive=False, placeholder="Check Status box..."),
+        gr.Button.update(interactive=True),
+        gr.Textbox.update(value="No model loaded"),
+        gr.Textbox.update(value=STATUS_TEXTS["model_unloaded"]),
+        gr.Textbox.update(value=STATUS_TEXTS["model_unloaded"])
+    ]
+
+def change_model(model_name):
+    from scripts.temporary import MODEL_PATH, TEMPERATURE, current_model_settings, MODEL_FOLDER
+    from scripts import utility
+    MODEL_PATH = f"{MODEL_FOLDER}/{model_name}"
+    settings = get_model_settings(model_name)
+    current_model_settings.update(settings)
+    TEMPERATURE = settings["temperature"]
+    unload_model()
+    initialize_model(None)
+    utility.save_config()
+    model_info_text = f"Loaded model: {model_name}, Category: {settings['category']}"
+    return gr.Textbox(interactive=True), gr.Button(interactive=False), model_info_text
 
 def load_model():
     from scripts.temporary import STATUS_TEXTS
@@ -176,21 +177,33 @@ def launch_interface():
         with gr.Tabs() as tabs:
             with gr.Tab("Conversation"):
                 with gr.Row():
-                    with gr.Column(scale=1):
+                    with gr.Column(scale=1):  # Adjusted for session history width
                         session_tabs = gr.Tabs()
                         with session_tabs:
                             with gr.Tab("Session History Index", id="session_history"):
                                 start_new_session_btn = gr.Button("Start New Session")
-                    with gr.Column(scale=4):
+                    with gr.Column(scale=20):  # Adjusted for session history width
                         session_log = gr.Chatbot(label="Session Log", height=500)
-                        user_input = gr.Textbox(label="User Input", interactive=False, placeholder="Enter text here...")
-                        status_text = gr.Textbox(label="Status", interactive=False, value="Select and load a model on Configuration page.")
-                        
-                        # Buttons and switch row (Updated: Removed save_session_btn)
+                        user_input = gr.Textbox(
+                            label="User Input",
+                            lines=5,  # Expand to 5 lines with scrolling
+                            interactive=False,
+                            placeholder="Enter text here..."
+                        )
+                        status_text = gr.Textbox(
+                            label="Status",
+                            interactive=False,
+                            value="Select and load a model on Configuration page."
+                        )
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="primary", scale=2)
                             edit_previous_btn = gr.Button("Edit Previous", scale=1)
-                            attach_files_btn = gr.UploadButton("Attach Files", file_types=list(ALLOWED_EXTENSIONS), file_count="multiple", scale=1)
+                            attach_files_btn = gr.UploadButton(
+                                "Attach Files",
+                                file_types=list(ALLOWED_EXTENSIONS),
+                                file_count="multiple",
+                                scale=1
+                            )
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
 
             with gr.Tab("Configuration"):
@@ -200,7 +213,6 @@ def launch_interface():
                     value=MODEL_PATH.split('/')[-1],
                     allow_custom_value=True
                 )
-                # Row for Temperature, Repeat Penalty, and Context Window
                 with gr.Row():
                     temperature_dropdown = gr.Dropdown(
                         choices=TEMP_OPTIONS,
@@ -219,7 +231,11 @@ def launch_interface():
                         label="Context Window",
                         value=N_CTX
                     )
-                # Row for Select GPU, VRam Size, and MLock Enabled
+                    batch_size_dropdown = gr.Dropdown(
+                        choices=BATCH_OPTIONS,
+                        label="Batch Size",
+                        value=N_BATCH
+                    )
                 with gr.Row():
                     gpu_dropdown = gr.Dropdown(
                         choices=utility.get_available_gpus(),
@@ -235,17 +251,21 @@ def launch_interface():
                         label="MLock Enabled",
                         value=MLOCK
                     )
-                # Row for Program/UI Settings
                 with gr.Row():
                     max_sessions_dropdown = gr.Dropdown(
                         choices=HISTORY_OPTIONS,
                         label="Max Session History",
                         value=MAX_SESSIONS
                     )
+                    max_docs_dropdown = gr.Dropdown(
+                        choices=MAX_DOCS_OPTIONS,
+                        label="Max RAG Documents",
+                        value=RAG_MAX_DOCS
+                    )
+                with gr.Row():
+                    model_dir_text = gr.Textbox(label="Model Folder", value=MODEL_FOLDER)
                 gr.Markdown("Note: GPU layers calculated from model details and VRAM. 0 layers = CPU-only.")
                 status_text_settings = gr.Textbox(label="Status", interactive=False)
-                
-                # Buttons row
                 with gr.Row():
                     load_btn = gr.Button("Load Model", variant="secondary", scale=1)
                     unload_btn = gr.Button("Unload Model", variant="secondary", scale=1)
@@ -394,7 +414,6 @@ def launch_interface():
             api_name="save_config"
         )
 
-        # Session tab selection
         session_tabs.select(
             fn=safe_load_session,
             inputs=[session_tabs],
@@ -407,7 +426,6 @@ def launch_interface():
             api_name="update_session_tabs_3"
         )
 
-        # Settings updates
         temperature_dropdown.change(
             fn=lambda x: utility.update_setting("temperature", x),
             inputs=[temperature_dropdown],
@@ -437,7 +455,7 @@ def launch_interface():
         model_dropdown.change(
             fn=change_model,
             inputs=[model_dropdown],
-            outputs=[user_input, load_btn],
+            outputs=[user_input, load_btn, status_text_settings],  # Updated outputs
             api_name="change_model"
         ).then(
             fn=lambda: gr.Textbox.update(value=f"Calculated: {N_GPU_LAYERS} (0 means all in system RAM)"),
@@ -477,6 +495,31 @@ def launch_interface():
             inputs=None,
             outputs=[session_tabs],
             api_name="update_session_tabs_4"
+        )
+
+        batch_size_dropdown.change(
+            fn=lambda x: utility.update_setting("n_batch", x),
+            inputs=[batch_size_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="update_n_batch"
+        )
+
+        max_docs_dropdown.change(
+            fn=lambda x: utility.update_setting("rag_max_docs", x),
+            inputs=[max_docs_dropdown],
+            outputs=[user_input, load_btn],
+            api_name="update_rag_max_docs"
+        )
+
+        model_dir_text.change(
+            fn=lambda x: utility.update_setting("model_folder", x),
+            inputs=[model_dir_text],
+            outputs=[user_input, load_btn],
+            api_name="update_model_folder"
+        ).then(
+            fn=lambda: gr.Dropdown.update(choices=get_available_models()),
+            outputs=[model_dropdown],
+            api_name="update_model_dropdown"
         )
 
     demo.launch()

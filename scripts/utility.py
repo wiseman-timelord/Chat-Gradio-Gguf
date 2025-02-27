@@ -6,8 +6,8 @@ from pathlib import Path
 from datetime import datetime
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
-    ALLOWED_EXTENSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, MAX_SESSIONS,
-    current_session_id, session_label
+    ALLOWED_EXTENSIONS, MAX_SESSIONS,
+    current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER
 )
 
 # Functions...
@@ -81,13 +81,16 @@ def load_and_chunk_documents(directory: Path) -> list:
     """Load and chunk documents for RAG."""
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain_community.document_loaders import TextLoader
+    from .temporary import N_CTX, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER
     documents = []
     try:
+        chunk_size = N_CTX // (RAG_CHUNK_SIZE_DEVIDER)  # Default to 4 if 0
+        chunk_overlap = N_CTX // (RAG_CHUNK_OVERLAP_DEVIDER)  # Default to 32 if 0
         for file in directory.iterdir():
             if file.suffix[1:].lower() in ALLOWED_EXTENSIONS:
                 loader = TextLoader(str(file))
                 docs = loader.load()
-                splitter = RecursiveCharacterTextSplitter(chunk_size=RAG_CHUNK_SIZE, chunk_overlap=RAG_CHUNK_OVERLAP)
+                splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 chunks = splitter.split_documents(docs)
                 documents.extend(chunks)
     except Exception as e:
@@ -111,8 +114,8 @@ def save_config():
     from temporary import (
         MODEL_PATH, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
         LLAMA_CLI_PATH, VRAM_SIZE, SELECTED_GPU, MMAP, MLOCK,
-        RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_MAX_DOCS, MAX_SESSIONS,
-        BACKEND_TYPE, LLAMA_BIN_PATH, REPEAT_PENALTY
+        RAG_MAX_DOCS, MAX_SESSIONS, BACKEND_TYPE, LLAMA_BIN_PATH,
+        REPEAT_PENALTY, N_BATCH, MODEL_FOLDER
     )
     config_path = Path("data/persistent.json")
     if config_path.exists():
@@ -122,7 +125,7 @@ def save_config():
         config = {}
 
     config["model_settings"] = {
-        "model_path": MODEL_PATH,
+        "model_dir": MODEL_FOLDER,
         "n_ctx": N_CTX,
         "temperature": TEMPERATURE,
         "repeat_penalty": REPEAT_PENALTY,
@@ -131,11 +134,10 @@ def save_config():
         "vram_size": VRAM_SIZE,
         "selected_gpu": SELECTED_GPU,
         "mmap": MMAP,
-        "mlock": MLOCK
+        "mlock": MLOCK,
+        "n_batch": N_BATCH
     }
     config["rag_settings"] = {
-        "chunk_size": RAG_CHUNK_SIZE,
-        "chunk_overlap": RAG_CHUNK_OVERLAP,
         "max_docs": RAG_MAX_DOCS
     }
     config["history_settings"] = {
@@ -153,8 +155,8 @@ def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary."""
     from temporary import (
         MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, VRAM_SIZE, SELECTED_GPU,
-        MAX_SESSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_MAX_DOCS,
-        REPEAT_PENALTY, MLOCK
+        MAX_SESSIONS, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER, RAG_MAX_DOCS,
+        REPEAT_PENALTY, MLOCK, N_BATCH  # Added N_BATCH
     )
     from interface import change_model
 
@@ -174,16 +176,17 @@ def update_setting(key, value):
         globals()["SELECTED_GPU"] = value
     elif key == "max_sessions":
         globals()["MAX_SESSIONS"] = int(value)
-    elif key == "rag_chunk_size":
-        globals()["RAG_CHUNK_SIZE"] = int(value)
-    elif key == "rag_chunk_overlap":
-        globals()["RAG_CHUNK_OVERLAP"] = int(value)
     elif key == "rag_max_docs":
         globals()["RAG_MAX_DOCS"] = int(value)
     elif key == "repeat_penalty":
         globals()["REPEAT_PENALTY"] = float(value)
     elif key == "mlock":
         globals()["MLOCK"] = bool(value)
+    elif key == "n_batch":
+        globals()["N_BATCH"] = int(value)
+    elif key == "model_folder":
+        globals()["MODEL_FOLDER"] = value
+        reload_required = True  # Requires model reload
 
     if reload_required:
         return change_model(MODEL_PATH.split('/')[-1])
@@ -192,15 +195,15 @@ def update_setting(key, value):
 def load_config():
     from .temporary import (
         MODEL_PATH, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
-        BACKEND_TYPE, LLAMA_CLI_PATH, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP,
+        BACKEND_TYPE, LLAMA_CLI_PATH, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER,
         RAG_MAX_DOCS, VRAM_SIZE, SELECTED_GPU, MMAP, MLOCK, MAX_SESSIONS,
-        LLAMA_BIN_PATH, DYNAMIC_GPU_LAYERS, REPEAT_PENALTY
+        LLAMA_BIN_PATH, DYNAMIC_GPU_LAYERS, REPEAT_PENALTY, N_BATCH  # Added N_BATCH
     )
     config_path = Path(__file__).parent.parent / "data" / "persistent.json"
     if config_path.exists():
         with open(config_path) as f:
             config = json.load(f)
-            globals()["MODEL_PATH"] = config["model_settings"]["model_path"]
+            globals()["MODEL_FOLDER"] = config["model_settings"].get("model_dir", "models")
             globals()["N_CTX"] = config["model_settings"]["n_ctx"]
             globals()["TEMPERATURE"] = config["model_settings"]["temperature"]
             globals()["REPEAT_PENALTY"] = config["model_settings"].get("repeat_penalty", 1.0)
@@ -211,11 +214,10 @@ def load_config():
             globals()["MMAP"] = config["model_settings"].get("mmap", True)
             globals()["MLOCK"] = config["model_settings"].get("mlock", False)
             globals()["DYNAMIC_GPU_LAYERS"] = config["model_settings"].get("dynamic_gpu_layers", True)
-            globals()["RAG_CHUNK_SIZE"] = config["rag_settings"]["chunk_size"]
-            globals()["RAG_CHUNK_OVERLAP"] = config["rag_settings"]["chunk_overlap"]
             globals()["RAG_MAX_DOCS"] = config["rag_settings"]["max_docs"]
             globals()["MAX_SESSIONS"] = config.get("history_settings", {}).get("max_sessions", 10)
             globals()["BACKEND_TYPE"] = config["backend_config"]["type"]
             globals()["LLAMA_BIN_PATH"] = config["backend_config"]["llama_bin_path"]
+            globals()["N_BATCH"] = config["model_settings"].get("n_batch", 1024)  # Added
     else:
         raise FileNotFoundError("Configuration file not found at data/persistent.json")

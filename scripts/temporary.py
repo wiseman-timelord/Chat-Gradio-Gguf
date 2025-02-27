@@ -4,7 +4,7 @@
 import time
 
 # General Constants/Variables/Lists/Maps/Arrays
-MODEL_DIR = "models"  # Directory for GGUF models
+MODEL_FOLDER = "models"  # Directory for GGUF models
 VECTORSTORE_DIR = "data/vectorstores"  # Directory for vector stores
 TEMP_DIR = "data/temp"  # Temporary directory aligned with installer
 HISTORY_DIR = "data/history"  # Directory for session history
@@ -14,6 +14,8 @@ MODEL_LOADED = False  # Tracks if model is loaded
 rag_documents = []  # Placeholder for RAG documents
 session_label = ""  # Current session label
 current_session_id = None  # Unique ID for the current session
+RAG_CHUNK_SIZE_DEVIDER = 4  # RAG chunk size = n_ctx / RAG_CHUNK_SIZE_DEVIDER
+RAG_CHUNK_OVERLAP_DEVIDER = 32  # RAG chunk overlap = n_ctx / RAG_CHUNK_OVERLAP_DEVIDER
 
 # Configurable Settings (Loaded from JSON)
 MODEL_PATH = "models/Select_a_model..."  # Default model path
@@ -29,12 +31,11 @@ LLAMA_CLI_PATH = ""  # Path to llama-cli.exe, set by config
 BACKEND_TYPE = ""  # Backend type (e.g., "GPU/CPU - Vulkan"), set by config
 LLAMA_BIN_PATH = ""  # Directory of llama.cpp binaries, set by config
 N_GPU_LAYERS = 0  # Number of layers to offload to GPU, calculated at runtime
-RAG_CHUNK_SIZE = 2048  # RAG chunk size
-RAG_CHUNK_OVERLAP = 256  # RAG chunk overlap
-RAG_MAX_DOCS = 5  # Max RAG documents
+RAG_MAX_DOCS = 6  # Max RAG documents
 MAX_SESSIONS = 10  # Max number of saved sessions, configurable via HISTORY_OPTIONS
 RAG_AUTO_LOAD = ["general_knowledge"]  # Default RAG vectorstores to load
 REPEAT_PENALTY = 1.0
+N_BATCH = 1024  # Default batch size
 
 # UI Constants
 USER_COLOR = "#ffffff"  # Color for user messages
@@ -54,9 +55,11 @@ CTX_OPTIONS = [8192, 16384, 24576, 32768]  # Context window options
 TEMP_OPTIONS = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]  # Temperature options per readme
 VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]  # VRAM options in MB
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]  # Repeat penalty options
+BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096] # n_batch (output length)
 
-# Session Settings
+# Program options
 HISTORY_OPTIONS = [5, 10, 20, 40, 80]  # Options for max sessions in UI
+MAX_DOCS_OPTIONS = [2, 4, 6, 8]  # Added
 
 # Global LLM instance
 llm = None  # Placeholder for Llama instance
