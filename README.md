@@ -98,7 +98,7 @@ Chat-Gradio-Gguf installed successfully!                     [OK]
 - Result is rounded to a whole number for GPU layer offloading in the load model command.
 
 ### Models
-14B, ~8B, 3B, require, 12GB, 8GB, 4GB, vram, ideally on a compute mode card. 
+Advised models in, 14B, ~8B, 3B, require relevantly, ~11GB, ~7GB, ~3GB, they are all reletively fast.
 - [Lamarckvergence-14B-Gguf](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best <15b Model at at the time in Gguf format, filename `Lamarckvergence-14B.Q6_K_M.gguf`.
 - [DeepSeek-R1-Distill-Qwen-14B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-14B-Uncensored-Reasoner-GGUF) - Possibly good Uncensored Small Chat model in GGUF format, filename `DeepSeek-R1-Distill-Qwen-14B-Uncensored-Reasoner.Q6_K.gguf`.
 - [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model at the time in Gguf format, filename `qwen2.5-7b-cabs-v0.4.Q6_K.gguf`.
