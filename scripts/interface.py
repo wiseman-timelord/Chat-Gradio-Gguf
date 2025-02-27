@@ -197,6 +197,8 @@ def launch_interface():
                         )
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="primary", scale=2)
+                        
+                        with gr.Row():
                             edit_previous_btn = gr.Button("Edit Previous", scale=1)
                             attach_files_btn = gr.UploadButton(
                                 "Attach Files",
@@ -205,7 +207,7 @@ def launch_interface():
                                 scale=1
                             )
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
-
+                            
             with gr.Tab("Configuration"):
                 model_dropdown = gr.Dropdown(
                     choices=get_available_models(),
@@ -216,24 +218,24 @@ def launch_interface():
                 with gr.Row():
                     temperature_dropdown = gr.Dropdown(
                         choices=TEMP_OPTIONS,
-                        label="Temperature",
+                        label="Temperature (Creativity)",
                         value=TEMPERATURE,
                         allow_custom_value=True
                     )
                     repeat_penalty_dropdown = gr.Dropdown(
                         choices=REPEAT_OPTIONS,
-                        label="Repeat Penalty",
+                        label="Repeat Penalty (Do not repeat)",
                         value=REPEAT_PENALTY,
                         allow_custom_value=True
                     )
                     n_ctx_dropdown = gr.Dropdown(
                         choices=CTX_OPTIONS,
-                        label="Context Window",
+                        label="Context Window (Speed vs Context)",
                         value=N_CTX
                     )
                     batch_size_dropdown = gr.Dropdown(
                         choices=BATCH_OPTIONS,
-                        label="Batch Size",
+                        label="Batch Size (Output Length)",
                         value=N_BATCH
                     )
                 with gr.Row():
@@ -244,11 +246,11 @@ def launch_interface():
                     )
                     vram_dropdown = gr.Dropdown(
                         choices=VRAM_OPTIONS,
-                        label="VRAM Size (MB)",
+                        label="VRAM Size (Free GPU Memory)",
                         value=VRAM_SIZE
                     )
                     mlock_checkbox = gr.Checkbox(
-                        label="MLock Enabled",
+                        label="MLock Enabled (Load full model)",
                         value=MLOCK
                     )
                 with gr.Row():
@@ -259,7 +261,7 @@ def launch_interface():
                     )
                     max_docs_dropdown = gr.Dropdown(
                         choices=MAX_DOCS_OPTIONS,
-                        label="Max RAG Documents",
+                        label="Max RAG Docs (Max Attatchments)",
                         value=RAG_MAX_DOCS
                     )
                 with gr.Row():
