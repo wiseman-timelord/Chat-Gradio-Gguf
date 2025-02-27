@@ -173,7 +173,9 @@ def chat_interface(message: str, history):
         yield history, f"Error: {str(e)}"
 
 def launch_interface():
-    with gr.Blocks(title="Chat-Gradio-Gguf") as demo:
+    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable { overflow-y: auto; }") as demo:
+        rag_max_docs_state = gr.State(value=RAG_MAX_DOCS)  # Track RAG_MAX_DOCS
+        
         with gr.Tabs() as tabs:
             with gr.Tab("Conversation"):
                 with gr.Row():
@@ -183,12 +185,13 @@ def launch_interface():
                             with gr.Tab("Session History Index", id="session_history"):
                                 start_new_session_btn = gr.Button("Start New Session")
                     with gr.Column(scale=20):  # Adjusted for session history width
-                        session_log = gr.Chatbot(label="Session Log", height=400)
+                        session_log = gr.Chatbot(label="Session Log", height=350, elem_classes=["scrollable"])  # Added scrollable class
                         user_input = gr.Textbox(
                             label="User Input",
-                            lines=4,  # Expand to 5 lines with scrolling
+                            lines=3,
                             interactive=False,
-                            placeholder="Enter text here..."
+                            placeholder="Enter text here...",
+                            elem_classes=["scrollable"]  # Added scrollable class
                         )
                         status_text = gr.Textbox(
                             label="Status",
@@ -204,7 +207,8 @@ def launch_interface():
                                 "Attach Files",
                                 file_types=list(ALLOWED_EXTENSIONS),
                                 file_count="multiple",
-                                scale=1
+                                scale=1,
+                                visible=(RAG_MAX_DOCS > 0)  # Dynamic visibility
                             )
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
                             
@@ -253,7 +257,7 @@ def launch_interface():
                         value=VRAM_SIZE
                     )
                     mlock_checkbox = gr.Checkbox(
-                        label="MLock Enabled (Load full model)",
+                        label="MLock Enabled (Keep model loaded)",
                         value=MLOCK
                     )
                 with gr.Row():
@@ -264,7 +268,7 @@ def launch_interface():
                     )
                     max_docs_dropdown = gr.Dropdown(
                         choices=MAX_DOCS_OPTIONS,
-                        label="Max RAG Docs (Max Attachments)",  # Fixed typo from "Attatchments"
+                        label="Max RAG Docs (Max Attachments)",
                         value=RAG_MAX_DOCS,
                         allow_custom_value=True
                     )
@@ -275,7 +279,7 @@ def launch_interface():
                     unload_btn = gr.Button("Unload Model", variant="secondary", scale=1)
                     save_settings_btn = gr.Button("Save Settings", scale=1)
 
-        # Helper functions
+        # Helper functions (unchanged except where noted below)
         def update_session_tabs():
             sessions = utility.get_saved_sessions()
             tabs = [gr.Tab("Session History Index", id="session_history")]
@@ -437,81 +441,10 @@ def launch_interface():
             api_name="update_temperature"
         )
 
-        n_ctx_dropdown.change(
-            fn=lambda x: utility.update_setting("n_ctx", x),
-            inputs=[n_ctx_dropdown],
-            outputs=[user_input, load_btn],
-            api_name="update_n_ctx"
-        )
-
-        vram_dropdown.change(
-            fn=lambda x: utility.update_setting("vram_size", x),
-            inputs=[vram_dropdown],
-            outputs=[user_input, load_btn],
-            api_name="update_vram_size"
-        ).then(
-            fn=lambda: gr.Textbox.update(value=f"Calculated: {N_GPU_LAYERS} (0 means all in system RAM)"),
-            inputs=None,
-            outputs=[status_text_settings],
-            api_name="update_gpu_layers_info"
-        )
-
-        model_dropdown.change(
-            fn=change_model,
-            inputs=[model_dropdown],
-            outputs=[user_input, load_btn, status_text_settings],  # Updated outputs
-            api_name="change_model"
-        ).then(
-            fn=lambda: gr.Textbox.update(value=f"Calculated: {N_GPU_LAYERS} (0 means all in system RAM)"),
-            inputs=None,
-            outputs=[status_text_settings],
-            api_name="update_gpu_layers_info_2"
-        )
-
-        gpu_dropdown.change(
-            fn=lambda x: utility.update_setting("selected_gpu", x),
-            inputs=[gpu_dropdown],
-            outputs=[user_input, load_btn],
-            api_name="update_selected_gpu"
-        )
-
-        repeat_penalty_dropdown.change(
-            fn=lambda x: utility.update_setting("repeat_penalty", x),
-            inputs=[repeat_penalty_dropdown],
-            outputs=[user_input, load_btn],
-            api_name="update_repeat_penalty"
-        )
-
-        mlock_checkbox.change(
-            fn=lambda x: utility.update_setting("mlock", x),
-            inputs=[mlock_checkbox],
-            outputs=[user_input, load_btn],
-            api_name="update_mlock"
-        )
-
-        max_sessions_dropdown.change(
-            fn=lambda x: utility.update_setting("max_sessions", x),
-            inputs=[max_sessions_dropdown],
-            outputs=[user_input, load_btn],
-            api_name="update_max_sessions"
-        ).then(
-            fn=update_session_tabs,
-            inputs=None,
-            outputs=[session_tabs],
-            api_name="update_session_tabs_4"
-        )
-
-        batch_size_dropdown.change(
-            fn=lambda x: utility.update_setting("n_batch", x),
-            inputs=[batch_size_dropdown],
-            outputs=[user_input, load_btn],
-            api_name="update_n_batch"
-        )
-
         max_docs_dropdown.change(
-            fn=lambda x: utility.update_setting("rag_max_docs", x),
+            fn=lambda x: (utility.update_setting("rag_max_docs", x), gr.update(visible=(int(x) > 0))),
             inputs=[max_docs_dropdown],
-            outputs=[user_input, load_btn],
+            outputs=[user_input, load_btn, attach_files_btn],  # Update button visibility
             api_name="update_rag_max_docs"
         )
 

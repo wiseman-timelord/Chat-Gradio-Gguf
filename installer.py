@@ -12,7 +12,7 @@ VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
 VULKAN_TARGET_VERSION = "1.4.304.1"
 LLAMACPP_TARGET_VERSION = "b4778"
-BACKEND_TYPE = None # Will be set by the backend menu
+BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
     "data", "files", "scripts", "models",
     "data/vectorstores", "data/history", "data/temp"
@@ -58,33 +58,47 @@ BACKEND_OPTIONS = {
         "cli_path": "data/llama-kompute-bin/llama-cli.exe",
         "needs_python_bindings": False,
         "vulkan_required": True
+    },
+    "GPU/CPU - CUDA 11.7": {
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b4784/llama-b4784-bin-win-cuda-cu11.7-x64.zip",
+        "dest": "data/llama-cuda-11.7-bin",
+        "cli_path": "data/llama-cuda-11.7-bin/llama-cli.exe",
+        "needs_python_bindings": False,
+        "cuda_required": True
+    },
+    "GPU/CPU - CUDA 12.4": {
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b4784/llama-b4784-bin-win-cuda-cu12.4-x64.zip",
+        "dest": "data/llama-cuda-12.4-bin",
+        "cli_path": "data/llama-cuda-12.4-bin/llama-cli.exe",
+        "needs_python_bindings": False,
+        "cuda_required": True
     }
 }
 CONFIG_TEMPLATE = {
-  "model_settings": {
-    "model_dir": "models",
-    "n_ctx": 8192,
-    "temperature": 0.75,
-    "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
-    "use_python_bindings": false,
-    "mmap": true,
-    "mlock": false,
-    "vram_size": 8192,
-    "selected_gpu": null,
-    "dynamic_gpu_layers": true,
-    "n_batch": 1024,
-    "repeat_penalty": 1.0
-  },
-  "rag_settings": {
-    "max_docs": 6
-  },
-  "history_settings": {
-    "max_sessions": 10
-  },
-  "backend_config": {
-    "type": "GPU/CPU - Vulkan",
-    "llama_bin_path": "data/llama-vulkan-bin"
-  }
+    "model_settings": {
+        "model_dir": "models",
+        "n_ctx": 8192,
+        "temperature": 0.75,
+        "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
+        "use_python_bindings": False,
+        "mmap": True,
+        "mlock": False,
+        "vram_size": 8192,
+        "selected_gpu": None,
+        "dynamic_gpu_layers": True,
+        "n_batch": 1024,
+        "repeat_penalty": 1.0
+    },
+    "rag_settings": {
+        "max_docs": 6
+    },
+    "history_settings": {
+        "max_sessions": 10
+    },
+    "backend_config": {
+        "type": "GPU/CPU - Vulkan",
+        "llama_bin_path": "data/llama-vulkan-bin"
+    }
 }
 
 # Utility Functions...
@@ -360,12 +374,16 @@ def select_backend_type() -> None:
     options = [
         "AVX2 - CPU Only - Must be compatible with AVX2 (slowest)",
         "Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU fallback",
-        "Kompute - Enhanced Vulkan (experimental)"
+        "Kompute - GPU/CPU - Experimental Vulkan for AMD/nVidia/Intel",
+        "CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback",
+        "CUDA 12.4 - GPU/CPU - For CUDA 12.4 GPUs with CPU fallback"
     ]
     mapping = {
         options[0]: "CPU Only - AVX2",
         options[1]: "GPU/CPU - Vulkan",
-        options[2]: "GPU/CPU - Kompute"
+        options[2]: "GPU/CPU - Kompute",
+        options[3]: "GPU/CPU - CUDA 11.7",
+        options[4]: "GPU/CPU - CUDA 12.4"
     }
     choice = get_user_choice("Select the Llama.Cpp type:", options)
     BACKEND_TYPE = mapping[choice]

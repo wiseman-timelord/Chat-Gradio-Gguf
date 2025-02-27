@@ -59,7 +59,7 @@ BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096] # n_batch (output length)
 
 # Program options
 HISTORY_OPTIONS = [5, 10, 20, 40, 80]  # Options for max sessions in UI
-MAX_DOCS_OPTIONS = [2, 4, 6, 8]  # Added
+MAX_DOCS_OPTIONS = [0, 2, 4, 6, 8] # Added
 
 # Global LLM instance
 llm = None  # Placeholder for Llama instance
