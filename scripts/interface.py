@@ -352,6 +352,17 @@ def launch_interface():
                     allow_custom_value=True
                 )
                 with gr.Row():
+                    n_ctx_dropdown = gr.Dropdown(
+                        choices=CTX_OPTIONS,
+                        label="Context Window (Speed vs Context)",
+                        value=N_CTX
+                    )
+                    batch_size_dropdown = gr.Dropdown(
+                        choices=BATCH_OPTIONS,
+                        label="Batch Size (Output Length)",
+                        value=N_BATCH
+                    )
+                with gr.Row():
                     temperature_dropdown = gr.Dropdown(
                         choices=TEMP_OPTIONS,
                         label="Temperature (Creativity)",
@@ -363,16 +374,6 @@ def launch_interface():
                         label="Repeat Penalty (Do not repeat)",
                         value=REPEAT_PENALTY,
                         allow_custom_value=True
-                    )
-                    n_ctx_dropdown = gr.Dropdown(
-                        choices=CTX_OPTIONS,
-                        label="Context Window (Speed vs Context)",
-                        value=N_CTX
-                    )
-                    batch_size_dropdown = gr.Dropdown(
-                        choices=BATCH_OPTIONS,
-                        label="Batch Size (Output Length)",
-                        value=N_BATCH
                     )
                 with gr.Row():
                     gpu_dropdown = gr.Dropdown(
