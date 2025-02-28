@@ -302,9 +302,9 @@ def launch_interface():
                         # Start New Session button at the top
                         start_new_session_btn = gr.Button("Start New Session", variant="primary")
                         
-                        # Session history slots - Fixed 8 buttons
+                        # Session history slots - Fixed 9 buttons
                         with gr.Column():
-                            session_buttons = [gr.Button("Empty History Slot") for _ in range(8)]
+                            session_buttons = [gr.Button("Empty History Slot") for _ in range(9)]
                         
                         # File slot buttons - Fixed 6 buttons (3 rows of 2)
                         with gr.Column():
@@ -330,7 +330,8 @@ def launch_interface():
                         )
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="primary", scale=4)
-                            edit_previous_btn = gr.Button("Edit Previous", scale=1)                      
+                            edit_previous_btn = gr.Button("Edit Previous", scale=1)       
+                        with gr.Row():                            
                             attach_files_btn = gr.UploadButton(
                                 "Attach Files",
                                 visible=True,
@@ -400,7 +401,7 @@ def launch_interface():
             """Update session buttons with labels from saved sessions."""
             sessions = utility.get_saved_sessions()
             button_updates = []
-            for i in range(8):  # Fixed 8 buttons
+            for i in range(9):  # Fixed 9 buttons
                 if i < len(sessions):
                     session_path = Path(HISTORY_DIR) / sessions[i]
                     try:
