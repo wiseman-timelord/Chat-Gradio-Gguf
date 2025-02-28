@@ -95,7 +95,7 @@ def update_file_slot_ui(loaded_files, rag_max_docs):
             label = f"{short_name}"
             variant = "secondary"
         else:
-            label = "Slot Empty"
+            label = "File Slot Free"
             variant = "primary"
         button_updates.append(gr.update(value=label, visible=True, variant=variant))
     
@@ -132,7 +132,7 @@ def update_file_slot_ui(loaded_files, rag_max_docs):
                 label = f"{short_name}"
                 variant = "secondary"
             else:
-                label = "Slot Empty"
+                label = "File Slot Free"
                 variant = "primary"
             visible = True
         else:
@@ -311,8 +311,8 @@ def launch_interface():
                             file_slot_buttons = []
                             for row in range(3):
                                 with gr.Row(elem_classes=["button-row"]):
-                                    file_slot_buttons.append(gr.Button("Slot Empty", visible=True, variant="primary"))
-                                    file_slot_buttons.append(gr.Button("Slot Empty", visible=True, variant="primary"))
+                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="primary"))
+                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="primary"))
 
                     with gr.Column(scale=20):
                         session_log = gr.Chatbot(label="Session Log", height=375, elem_classes=["scrollable"])
@@ -338,7 +338,7 @@ def launch_interface():
                                 file_count="multiple"
                             )
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
-                            shutdown_btn = gr.Button("Shutdown Program", variant="stop", scale=1)
+                            shutdown_btn = gr.Button("Exit Program", variant="stop", scale=1)
 
             with gr.Tab("Configuration"):
                 with gr.Row():
@@ -409,7 +409,7 @@ def launch_interface():
                     except:
                         btn_label = f"Session {i+1}"
                 else:
-                    btn_label = "Empty History Slot"
+                    btn_label = "History Slot Empty"
                 button_updates.append(gr.update(value=btn_label, visible=True))
             return button_updates
 
@@ -431,7 +431,7 @@ def launch_interface():
                     label = f"{short_name}"
                     variant = "secondary"
                 else:
-                    label = "Slot Empty"
+                    label = "File Slot Free"
                     variant = "primary"
                 button_updates.append(gr.update(value=label, visible=True, variant=variant))
             attach_files_visible = len(loaded_files) < 6
