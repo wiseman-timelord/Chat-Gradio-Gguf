@@ -29,14 +29,15 @@ VULKAN_PATHS = [
 ]
 REQUIREMENTS = [
     "gradio==4.44.1",
-    "langchain==0.2.1",
-    "faiss-cpu==1.8.0",
+    "langchain==0.3.19",
+    "faiss-cpu==1.8.0", 
     "requests==2.31.0",
     "tqdm==4.66.1",
     "llama-cpp-python",
-    "langchain-community",
+    "langchain-community==0.3.18",
     "pygments==2.17.2",
-    "sentence-transformers==2.2.2"
+    "sentence-transformers==2.6.0",
+    "langchain_huggingface==0.1.2"  # Add this new requirement
 ]
 BACKEND_OPTIONS = {
     "CPU Only - AVX2": {
@@ -60,14 +61,14 @@ BACKEND_OPTIONS = {
         "vulkan_required": True
     },
     "GPU/CPU - CUDA 11.7": {
-        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b4784/llama-b4784-bin-win-cuda-cu11.7-x64.zip",
+        "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-cuda-cu11.7-x64.zip",
         "dest": "data/llama-cuda-11.7-bin",
         "cli_path": "data/llama-cuda-11.7-bin/llama-cli.exe",
         "needs_python_bindings": False,
         "cuda_required": True
     },
     "GPU/CPU - CUDA 12.4": {
-        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b4784/llama-b4784-bin-win-cuda-cu12.4-x64.zip",
+        "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-cuda-cu12.4-x64.zip",
         "dest": "data/llama-cuda-12.4-bin",
         "cli_path": "data/llama-cuda-12.4-bin/llama-cli.exe",
         "needs_python_bindings": False,
@@ -79,7 +80,7 @@ CONFIG_TEMPLATE = {
         "model_dir": "models",
         "n_ctx": 8192,
         "temperature": 0.75,
-        "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
+        "llama_cli_path": "",
         "use_python_bindings": False,
         "mmap": True,
         "mlock": False,
@@ -89,15 +90,9 @@ CONFIG_TEMPLATE = {
         "n_batch": 1024,
         "repeat_penalty": 1.0
     },
-    "rag_settings": {
-        "max_docs": 6
-    },
-    "history_settings": {
-        "max_sessions": 10
-    },
     "backend_config": {
-        "type": "GPU/CPU - Vulkan",
-        "llama_bin_path": "data/llama-vulkan-bin"
+        "type": "",
+        "llama_bin_path": ""
     }
 }
 
@@ -233,17 +228,21 @@ def create_venv() -> bool:
         if VENV_DIR.exists():
             import shutil
             shutil.rmtree(VENV_DIR)
-            subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
-            print_status("Replacing Virtual Environment.")
-        else:
-            subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
-            print_status("Creating Virtual Environment.")
+            print_status("Removed existing virtual environment")
+        subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+        print_status("Created fresh virtual environment")
+        
+        # Verify venv Python exists
+        python_exe = VENV_DIR / "Scripts" / "python.exe"
+        if not python_exe.exists():
+            raise FileNotFoundError(f"Python executable not found at {python_exe}")
+        print_status("Verified virtual environment setup")
         return True
     except subprocess.CalledProcessError as e:
         print_status(f"Failed to create venv: {e}", False)
         return False
     except Exception as e:
-        print_status(f"Failed to delete venv: {e}", False)
+        print_status(f"Unexpected error: {str(e)}", False)
         return False
 
 def check_vulkan_support() -> bool:
@@ -340,32 +339,74 @@ def install_python_deps(backend: str) -> bool:
         python_exe = str(VENV_DIR / "Scripts" / "python.exe")
         pip_exe = str(VENV_DIR / "Scripts" / "pip.exe")
         
-        subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", "pip"], check=True)
-        print_status("Pip upgraded successfully")
+        if not os.path.exists(pip_exe):
+            raise FileNotFoundError(f"Pip not found at {pip_exe}. Venv creation may have failed.")
         
-        print_status("Installing dependencies with custom wheel index...")
-        subprocess.run(
-            [pip_exe, "install"] + REQUIREMENTS + [
-                "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu",
-                "--prefer-binary"
-            ],
+        # Upgrade pip
+        print_status("Upgrading pip in venv...")
+        result = subprocess.run(
+            [python_exe, "-m", "pip", "install", "--upgrade", "pip"],
             check=True,
             capture_output=True,
             text=True
         )
+        print(result.stdout)
+        if result.stderr:
+            print(f"Pip upgrade warnings/errors: {result.stderr}")
+        print_status("Pip upgraded successfully")
+        
+        # Install dependencies
+        print_status("Installing dependencies with custom wheel index...")
+        cmd = (
+            [pip_exe, "install"] + REQUIREMENTS + [
+                "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu",
+                "--prefer-binary",
+                "--verbose"  # For detailed output
+            ]
+        )
+        print(f"Running command: {' '.join(cmd)}")
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print(result.stdout)
+        if result.stderr:
+            print(f"Installation warnings/errors: {result.stderr}")
+        
+        # Verify key dependency
+        print_status("Verifying sentence-transformers installation...")
+        check_result = subprocess.run(
+            [python_exe, "-c", "import sentence_transformers; print('sentence-transformers installed')"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print(check_result.stdout)
+        if check_result.stderr:
+            print(f"Verification warnings/errors: {check_result.stderr}")
         
         print_status("Dependencies installed in venv")
         return True
     except subprocess.CalledProcessError as e:
         print_status(f"Dependency install failed: {e}", False)
-        if "llama_cpp_python" in str(e):
+        print(f"Command output: {e.stdout}")
+        print(f"Command error: {e.stderr}")
+        if "llama_cpp_python" in str(e.stderr):
             print("Error: Could not install llama-cpp-python from pre-built wheels.")
-            print("Possible reasons:")
-            print("- No compatible wheel found for your Python version at the custom index.")
-            print("- Check your Python version with 'python --version' (should be 3.8-3.11).")
+            print(f"Python version: {sys.version}")
             print("Solutions:")
-            print("- Ensure you're using a supported Python version (e.g., 3.11) and rerun the installer.")
-            print("- Or, install Visual Studio Build Tools to build from source if no wheels are available.")
+            print("- Ensure Python is 3.8-3.11.")
+            print("- Install Visual Studio Build Tools for source build if needed.")
+        elif "sentence-transformers" in str(e.stderr):
+            print("Error: Could not install sentence-transformers.")
+            print("Solutions:")
+            print("- Check internet connection.")
+            print(f"- Run manually: {pip_exe} install sentence-transformers==2.2.2")
+        return False
+    except Exception as e:
+        print_status(f"Unexpected error: {str(e)}", False)
         return False
 
 # Menu Functions...
@@ -418,6 +459,7 @@ def install():
         time.sleep(2)
         sys.exit(1)
     
+    # Activate venv and install deps
     with activate_venv():
         if not install_python_deps(BACKEND_TYPE):
             time.sleep(2)
@@ -433,7 +475,7 @@ def install():
     
     create_config(BACKEND_TYPE)
     
-    print_status(f"{APP_NAME} installed successfully!")
+    print_status("Install processes completed.")
 
 # Main Entry Point...
 def main():
