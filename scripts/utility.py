@@ -6,8 +6,8 @@ from pathlib import Path
 from datetime import datetime
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
-    ALLOWED_EXTENSIONS, MAX_SESSIONS,
-    current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER
+    ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER,
+    RAG_CHUNK_OVERLAP_DEVIDER
 )
 
 # Functions...
@@ -100,8 +100,8 @@ def load_and_chunk_documents(file_paths: list) -> list:
 def create_vectorstore(documents: list) -> None:
     """Create and save a FAISS vector store from documents."""
     try:
-        from langchain.embeddings import HuggingFaceEmbeddings
-        from langchain.vectorstores import FAISS
+        from langchain_huggingface import HuggingFaceEmbeddings
+        from langchain_community.vectorstores import FAISS
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         vectorstore = FAISS.from_documents(documents, embeddings)
         save_dir = Path(VECTORSTORE_DIR) / "general_knowledge"
@@ -110,114 +110,102 @@ def create_vectorstore(documents: list) -> None:
     except Exception as e:
         print(f"Error creating vectorstore: {e}")
 
+def get_saved_sessions():
+    """Get list of saved session files sorted by modification time."""
+    history_dir = Path(HISTORY_DIR)
+    session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+    return [f.name for f in session_files]
+
+def trim_session_history(max_sessions):
+    history_dir = Path(HISTORY_DIR)
+    session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+    while len(session_files) > max_sessions:
+        oldest_file = session_files.pop()
+        oldest_file.unlink()
+
 def save_config():
-    from .temporary import (
-        MODEL_PATH, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
-        LLAMA_CLI_PATH, VRAM_SIZE, SELECTED_GPU, MMAP, MLOCK,
-        RAG_MAX_DOCS, MAX_SESSIONS, BACKEND_TYPE, LLAMA_BIN_PATH,
-        REPEAT_PENALTY, N_BATCH, MODEL_FOLDER
-    )
     config_path = Path("data/persistent.json")
-    if config_path.exists():
-        with open(config_path, "r") as f:
-            config = json.load(f)
-    else:
-        config = {}
-
-    config["model_settings"] = {
-        "model_dir": MODEL_FOLDER,
-        "n_ctx": N_CTX,
-        "temperature": TEMPERATURE,
-        "repeat_penalty": REPEAT_PENALTY,
-        "use_python_bindings": USE_PYTHON_BINDINGS,
-        "llama_cli_path": LLAMA_CLI_PATH,
-        "vram_size": VRAM_SIZE,
-        "selected_gpu": SELECTED_GPU,
-        "mmap": MMAP,
-        "mlock": MLOCK,
-        "n_batch": N_BATCH
+    from scripts import temporary
+    config = {
+        "model_settings": {
+            "model_dir": temporary.MODEL_FOLDER,
+            "n_ctx": temporary.N_CTX,
+            "temperature": temporary.TEMPERATURE,
+            "repeat_penalty": temporary.REPEAT_PENALTY,
+            "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
+            "llama_cli_path": temporary.LLAMA_CLI_PATH,
+            "vram_size": temporary.VRAM_SIZE,
+            "selected_gpu": temporary.SELECTED_GPU,
+            "mmap": temporary.MMAP,
+            "mlock": temporary.MLOCK,
+            "n_batch": temporary.N_BATCH,
+            "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS
+        },
+        "backend_config": {
+            "type": temporary.BACKEND_TYPE,
+            "llama_bin_path": temporary.LLAMA_BIN_PATH
+        }
     }
-    config["rag_settings"] = {
-        "max_docs": RAG_MAX_DOCS
-    }
-    config["history_settings"] = {
-        "max_sessions": MAX_SESSIONS
-    }
-    config["backend_config"] = {
-        "type": BACKEND_TYPE,
-        "llama_bin_path": LLAMA_BIN_PATH
-    }
-
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
+    return "Settings saved to persistent.json"
 
 def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary."""
-    from temporary import (
-        MODEL_PATH, N_GPU_LAYERS, N_CTX, TEMPERATURE, VRAM_SIZE, SELECTED_GPU,
-        MAX_SESSIONS, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER, RAG_MAX_DOCS,
-        REPEAT_PENALTY, MLOCK, N_BATCH  # Added N_BATCH
-    )
-    from interface import change_model
+    from scripts import temporary
+    from .interface import change_model
 
     reload_required = False
     if key == "temperature":
-        globals()["TEMPERATURE"] = float(value)
+        temporary.TEMPERATURE = float(value)
     elif key == "n_ctx":
-        globals()["N_CTX"] = int(value)
+        temporary.N_CTX = int(value)
         reload_required = True
     elif key == "n_gpu_layers":
-        globals()["N_GPU_LAYERS"] = int(value)
+        temporary.N_GPU_LAYERS = int(value)
         reload_required = True
     elif key == "vram_size":
-        globals()["VRAM_SIZE"] = int(value)
+        temporary.VRAM_SIZE = int(value)
         reload_required = True
     elif key == "selected_gpu":
-        globals()["SELECTED_GPU"] = value
-    elif key == "max_sessions":
-        globals()["MAX_SESSIONS"] = int(value)
-    elif key == "rag_max_docs":
-        globals()["RAG_MAX_DOCS"] = int(value)
+        temporary.SELECTED_GPU = value
     elif key == "repeat_penalty":
-        globals()["REPEAT_PENALTY"] = float(value)
+        temporary.REPEAT_PENALTY = float(value)
     elif key == "mlock":
-        globals()["MLOCK"] = bool(value)
+        temporary.MLOCK = bool(value)
     elif key == "n_batch":
-        globals()["N_BATCH"] = int(value)
+        temporary.N_BATCH = int(value)
     elif key == "model_folder":
-        globals()["MODEL_FOLDER"] = value
-        reload_required = True  # Requires model reload
+        temporary.MODEL_FOLDER = value
+        reload_required = True
 
     if reload_required:
-        return change_model(MODEL_PATH.split('/')[-1])
+        return change_model(temporary.MODEL_PATH.split('/')[-1])
     return None, None
 
 def load_config():
-    from .temporary import (
-        MODEL_PATH, N_CTX, TEMPERATURE, USE_PYTHON_BINDINGS,
-        BACKEND_TYPE, LLAMA_CLI_PATH, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER,
-        RAG_MAX_DOCS, VRAM_SIZE, SELECTED_GPU, MMAP, MLOCK, MAX_SESSIONS,
-        LLAMA_BIN_PATH, DYNAMIC_GPU_LAYERS, REPEAT_PENALTY, N_BATCH  # Added N_BATCH
-    )
-    config_path = Path(__file__).parent.parent / "data" / "persistent.json"
-    if config_path.exists():
-        with open(config_path) as f:
-            config = json.load(f)
-            globals()["MODEL_FOLDER"] = config["model_settings"].get("model_dir", "models")
-            globals()["N_CTX"] = config["model_settings"]["n_ctx"]
-            globals()["TEMPERATURE"] = config["model_settings"]["temperature"]
-            globals()["REPEAT_PENALTY"] = config["model_settings"].get("repeat_penalty", 1.0)
-            globals()["USE_PYTHON_BINDINGS"] = config["model_settings"]["use_python_bindings"]
-            globals()["LLAMA_CLI_PATH"] = config["model_settings"]["llama_cli_path"]
-            globals()["VRAM_SIZE"] = config["model_settings"]["vram_size"]
-            globals()["SELECTED_GPU"] = config["model_settings"]["selected_gpu"]
-            globals()["MMAP"] = config["model_settings"].get("mmap", True)
-            globals()["MLOCK"] = config["model_settings"].get("mlock", False)
-            globals()["DYNAMIC_GPU_LAYERS"] = config["model_settings"].get("dynamic_gpu_layers", True)
-            globals()["RAG_MAX_DOCS"] = config["rag_settings"]["max_docs"]
-            globals()["MAX_SESSIONS"] = config.get("history_settings", {}).get("max_sessions", 10)
-            globals()["BACKEND_TYPE"] = config["backend_config"]["type"]
-            globals()["LLAMA_BIN_PATH"] = config["backend_config"]["llama_bin_path"]
-            globals()["N_BATCH"] = config["model_settings"].get("n_batch", 1024)  # Added
-    else:
-        raise FileNotFoundError("Configuration file not found at data/persistent.json")
+    config_path = Path("data/persistent.json")
+    with open(config_path) as f:
+        config = json.load(f)
+        # Model settings
+        from scripts import temporary
+        temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", "models")
+        temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
+        temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.75))
+        temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))
+        temporary.USE_PYTHON_BINDINGS = bool(config["model_settings"].get("use_python_bindings", False))
+        temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "data/llama-vulkan-bin/llama-cli.exe")
+        temporary.VRAM_SIZE = int(config["model_settings"].get("vram_size", 8192))
+        temporary.SELECTED_GPU = config["model_settings"].get("selected_gpu", None)
+        temporary.MMAP = bool(config["model_settings"].get("mmap", True))
+        temporary.MLOCK = bool(config["model_settings"].get("mlock", False))
+        temporary.N_BATCH = int(config["model_settings"].get("n_batch", 1024))
+        temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
+        # Interface settings with backward compatibility
+        if "interface_settings" in config:
+            temporary.RAG_MAX_DOCS = int(config["interface_settings"].get("max_docs", 6))
+            temporary.MAX_SESSIONS = int(config["interface_settings"].get("max_sessions", 7))
+        else:
+        # Backend config
+            temporary.BACKEND_TYPE = config["backend_config"].get("type", "GPU/CPU - Vulkan")
+            temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "data/llama-vulkan-bin")

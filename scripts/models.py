@@ -27,9 +27,13 @@ class ContextInjector:
         vs_path = Path(VECTORSTORE_DIR) / f"{name}"
         if vs_path.exists():
             from langchain_community.vectorstores import FAISS
-            from langchain_community.embeddings import HuggingFaceEmbeddings
+            from langchain_huggingface import HuggingFaceEmbeddings
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-            self.vectorstores[name] = FAISS.load_local(str(vs_path), embeddings)
+            self.vectorstores[name] = FAISS.load_local(
+                str(vs_path),
+                embeddings=embeddings,
+                allow_dangerous_deserialization=True  # Explicitly allow deserialization
+            )
         else:
             print(f"Vectorstore not found: {name}")
 

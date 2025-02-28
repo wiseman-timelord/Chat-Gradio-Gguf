@@ -1,3 +1,5 @@
+# Script: `.\scripts\interface.py` 
+
 # Imports...
 import gradio as gr
 import re, os
@@ -8,10 +10,9 @@ from pygments.formatters import HtmlFormatter
 from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
     MODEL_LOADED, ALLOWED_EXTENSIONS, CTX_OPTIONS, MODEL_PATH, N_CTX,
-    TEMPERATURE, TEMP_OPTIONS, VRAM_SIZE, SELECTED_GPU, HISTORY_OPTIONS,
-    MAX_SESSIONS, current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS,
-    REPEAT_OPTIONS, REPEAT_PENALTY, MLOCK, HISTORY_DIR, BATCH_OPTIONS,
-    N_BATCH, MAX_DOCS_OPTIONS, RAG_MAX_DOCS, MODEL_FOLDER
+    TEMPERATURE, TEMP_OPTIONS, VRAM_SIZE, SELECTED_GPU, current_model_settings,
+    N_GPU_LAYERS, VRAM_OPTIONS, REPEAT_OPTIONS, REPEAT_PENALTY, MLOCK,
+    HISTORY_DIR, BATCH_OPTIONS, N_BATCH, MODEL_FOLDER
 )
 from scripts import utility
 from scripts.models import (
@@ -37,60 +38,69 @@ def web_search_trigger(query):
         return f"Error: {str(e)}"
 
 def process_uploaded_files(files, loaded_files, rag_max_docs):
-    """Process uploaded files, add to loaded_files up to rag_max_docs, and update vector store."""
+    """Process uploaded files, add to available slots up to rag_max_docs."""
     try:
         files_dir = Path("files")
         files_dir.mkdir(exist_ok=True)
         new_files = []
-        for file in files:
+        
+        available_slots = [i for i in range(rag_max_docs) if i >= len(loaded_files)]
+        for idx, file in enumerate(files[:len(available_slots)]):
             original_name = Path(file.name).name
             dest_path = files_dir / original_name
             with open(file.name, 'rb') as src, open(dest_path, 'wb') as dst:
                 dst.write(src.read())
             new_files.append(str(dest_path))
-        # Add new files to loaded_files, respecting rag_max_docs limit
-        available_slots = rag_max_docs - len(loaded_files)
-        if available_slots > 0:
-            loaded_files.extend(new_files[:available_slots])
-            status_msg = "Files added successfully" if len(new_files) <= available_slots else f"Added {available_slots} files, {len(new_files) - available_slots} ignored (max reached)"
-        else:
-            status_msg = "No available slots, files not added"
-        # Rebuild vector store with current loaded files
+        
+        loaded_files.extend(new_files)
+        ignored_files = len(files) - len(available_slots)
+        status_msg = f"Added {len(new_files)} files"
+        if ignored_files > 0:
+            status_msg += f", ignored {ignored_files} files (max slots reached)"
+        
         docs = utility.load_and_chunk_documents(loaded_files)
         utility.create_vectorstore(docs)
-        # Update button labels and visibilities
-        button_updates = update_file_slot_ui(loaded_files, rag_max_docs)[:-1]  # Exclude attach_files_btn update
-        return [loaded_files, status_msg] + button_updates
+        
+        button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+        return [loaded_files, status_msg] + button_updates + [attach_files_update]
     except Exception as e:
-        return [loaded_files, f"Error: {str(e)}"] + [gr.update() for _ in range(10)]
+        button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+        return [loaded_files, f"Error: {str(e)}"] + button_updates + [attach_files_update]
+
 
 def eject_file(loaded_files, slot_index, rag_max_docs):
-    """Eject a file from the specified slot and update the vector store."""
+    """Eject a file from the specified slot."""
     if 0 <= slot_index < len(loaded_files):
-        file_to_remove = loaded_files.pop(slot_index)
-        docs = utility.load_and_chunk_documents(loaded_files)
-        utility.create_vectorstore(docs)
-        button_updates = update_file_slot_ui(loaded_files, rag_max_docs)[:-1]
-        return [loaded_files, f"Ejected {Path(file_to_remove).name}"] + button_updates
-    return [loaded_files, "No file to eject"] + [gr.update() for _ in range(10)]
+        try:
+            removed_file = loaded_files.pop(slot_index)
+            Path(removed_file).unlink()
+            docs = utility.load_and_chunk_documents(loaded_files)
+            utility.create_vectorstore(docs)
+            status_msg = f"Ejected {Path(removed_file).name}"
+        except Exception as e:
+            status_msg = f"Error: {str(e)}"
+    else:
+        status_msg = "No file to eject"
+    button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+    return [loaded_files, status_msg] + button_updates + [attach_files_update]
+
 
 def update_file_slot_ui(loaded_files, rag_max_docs):
-    """Update the labels and visibility of file slot buttons."""
+    """Update file slot buttons based on current state."""
     button_updates = []
-    for i in range(10):
-        if i < rag_max_docs:
-            if i < len(loaded_files):
-                filename = Path(loaded_files[i]).name
-                short_name = filename[:17] + "..." if len(filename) > 20 else filename
-                label = f"Eject: {short_name}"
-            else:
-                label = "File Slot"
-            visible = True
+    for i in range(6):  # Fixed 6 buttons
+        if i < len(loaded_files):
+            filename = Path(loaded_files[i]).name
+            short_name = (filename[:13] + "..") if len(filename) > 15 else filename
+            label = f"{short_name}"
+            variant = "secondary"
         else:
-            label = ""
-            visible = False
-        button_updates.append(gr.update(value=label, visible=visible))
-    attach_files_visible = rag_max_docs > 0
+            label = "Slot Empty"
+            variant = "primary"
+        button_updates.append(gr.update(value=label, visible=True, variant=variant))
+    
+    # Show attach files button only if there are empty slots
+    attach_files_visible = len(loaded_files) < 6
     return button_updates + [gr.update(visible=attach_files_visible)]
 
 def update_rag_max_docs(rag_max_docs, loaded_files):
@@ -100,6 +110,49 @@ def update_rag_max_docs(rag_max_docs, loaded_files):
         docs = utility.load_and_chunk_documents(loaded_files)
         utility.create_vectorstore(docs)
     return [loaded_files] + update_file_slot_ui(loaded_files, rag_max_docs)
+
+def handle_slot_click(slot_index, loaded_files):
+    """Handle slot button clicks - either eject file or trigger upload"""
+    if slot_index < len(loaded_files):
+        # Eject existing file
+        return eject_file(loaded_files, slot_index, 6)
+    else:
+        # Trigger file upload for specific slot
+        return [loaded_files, "Click 'Attach Files' to add files to available slots."] + \
+               update_file_slot_ui(loaded_files, 6)
+
+def update_file_slot_ui(loaded_files, rag_max_docs):
+    """Update slot buttons based on current state."""
+    button_updates = []
+    for i in range(10):
+        if i < rag_max_docs:
+            if i < len(loaded_files):
+                filename = Path(loaded_files[i]).name
+                short_name = (filename[:13] + "..") if len(filename) > 12 else filename
+                label = f"{short_name}"
+                variant = "secondary"
+            else:
+                label = "Slot Empty"
+                variant = "primary"
+            visible = True
+        else:
+            label = ""
+            visible = False
+        button_updates.append(gr.update(value=label, visible=visible, variant=variant))
+    
+    # Show attach files button only if there are empty slots
+    attach_files_visible = rag_max_docs > 0 and len(loaded_files) < rag_max_docs
+    return button_updates + [gr.update(visible=attach_files_visible)]
+
+def handle_slot_click(slot_index, loaded_files, rag_max_docs):
+    """Handle slot button clicks - either eject file or trigger upload"""
+    if slot_index < len(loaded_files):
+        # Eject existing file
+        return eject_file(loaded_files, slot_index, rag_max_docs)
+    else:
+        # Trigger file upload for specific slot
+        return [loaded_files, "Click 'Attach Files' to add files to available slots."] + \
+               update_file_slot_ui(loaded_files, rag_max_docs)
 
 def get_saved_sessions():
     return utility.get_saved_sessions()
@@ -210,10 +263,8 @@ def chat_interface(message: str, history):
             history[-1] = (history[-1][0], format_response(full_response))
             yield history, temporary.STATUS_TEXTS["generating_response"]
         if len(history) == 1:
-            summary_prompt = f"Summarize the following conversation in exactly three words:\nUser: {message}\nAssistant: {full_response}"
-            prompt_length = len(summary_prompt)
-            n_ctx_to_use = int(prompt_length * 1.25)
-            n_ctx_to_use = min(n_ctx_to_use, temporary.N_CTX)
+            # Generate a 3-word label based only on the user's first input
+            summary_prompt = f"Generate a 3-word label for a conversation starting with: '{message}'"
             temporary.session_label = get_response(summary_prompt).strip()
         utility.save_session_history(history)
         yield history, temporary.STATUS_TEXTS["response_generated"]
@@ -233,8 +284,8 @@ def launch_interface():
             margin-bottom: 4px !important;
         }
         .button-row .gradio-button {
-            flex: 1 !important; /* Make buttons share equal space in the row */
-            min-width: 100px !important; /* Minimum width for buttons */
+            flex: 1 !important;
+            min-width: 100px !important;
             text-overflow: ellipsis;
             overflow: hidden;
             white-space: nowrap;
@@ -242,28 +293,32 @@ def launch_interface():
     """) as demo:
         # State variables
         loaded_files_state = gr.State(value=[])
-        rag_max_docs_state = gr.State(value=RAG_MAX_DOCS)
+        rag_max_docs_state = gr.State(value=6)  # Fixed to 6
 
         with gr.Tabs() as tabs:
             with gr.Tab("Conversation"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        # Dynamically create rows of buttons
-                        file_slot_buttons = []
-                        for row_index in range(5):  # Maximum of 5 rows (10 buttons)
-                            with gr.Row(elem_classes=["button-row"]):
-                                for col_index in range(2):  # 2 buttons per row
-                                    btn = gr.Button(visible=False, elem_classes=["file-slot-btn"])
-                                    file_slot_buttons.append(btn)
-                        session_tabs = gr.Tabs()
-                        with session_tabs:
-                            with gr.Tab("Session History Index", id="session_history"):
-                                start_new_session_btn = gr.Button("Start New Session")
+                        # Start New Session button at the top
+                        start_new_session_btn = gr.Button("Start New Session", variant="primary")
+                        
+                        # Session history slots - Fixed 8 buttons
+                        with gr.Column():
+                            session_buttons = [gr.Button("Empty History Slot") for _ in range(8)]
+                        
+                        # File slot buttons - Fixed 6 buttons (3 rows of 2)
+                        with gr.Column():
+                            file_slot_buttons = []
+                            for row in range(3):
+                                with gr.Row(elem_classes=["button-row"]):
+                                    file_slot_buttons.append(gr.Button("Slot Empty", visible=True, variant="primary"))
+                                    file_slot_buttons.append(gr.Button("Slot Empty", visible=True, variant="primary"))
+
                     with gr.Column(scale=20):
-                        session_log = gr.Chatbot(label="Session Log", height=350, elem_classes=["scrollable"])
+                        session_log = gr.Chatbot(label="Session Log", height=375, elem_classes=["scrollable"])
                         user_input = gr.Textbox(
                             label="User Input",
-                            lines=3,
+                            lines=4,
                             interactive=False,
                             placeholder="Enter text here...",
                             elem_classes=["scrollable"]
@@ -274,15 +329,13 @@ def launch_interface():
                             value="Select and load a model on Configuration page."
                         )
                         with gr.Row():
-                            send_btn = gr.Button("Send Input", variant="primary", scale=2)
-                        with gr.Row():
-                            edit_previous_btn = gr.Button("Edit Previous", scale=1)
+                            send_btn = gr.Button("Send Input", variant="primary", scale=4)
+                            edit_previous_btn = gr.Button("Edit Previous", scale=1)                      
                             attach_files_btn = gr.UploadButton(
                                 "Attach Files",
-                                file_types=list(ALLOWED_EXTENSIONS),
-                                file_count="multiple",
-                                scale=1,
-                                visible=(RAG_MAX_DOCS > 0)
+                                visible=True,
+                                file_types=[f".{ext}" for ext in ALLOWED_EXTENSIONS],
+                                file_count="multiple"
                             )
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
                             shutdown_btn = gr.Button("Shutdown Program", variant="stop", scale=1)
@@ -335,18 +388,6 @@ def launch_interface():
                         label="MLock Enabled (Keep model loaded)",
                         value=MLOCK
                     )
-                with gr.Row():
-                    max_sessions_dropdown = gr.Dropdown(
-                        choices=HISTORY_OPTIONS,
-                        label="Max Session History",
-                        value=MAX_SESSIONS
-                    )
-                    max_docs_dropdown = gr.Dropdown(
-                        choices=MAX_DOCS_OPTIONS,
-                        label="Max RAG Docs (Max Attachments)",
-                        value=RAG_MAX_DOCS,
-                        allow_custom_value=True
-                    )
                 gr.Markdown("Note: GPU layers calculated from model details and VRAM. 0 layers = CPU-only.")
                 status_text_settings = gr.Textbox(label="Status", interactive=False)
                 with gr.Row():
@@ -355,13 +396,100 @@ def launch_interface():
                     save_settings_btn = gr.Button("Save Settings", scale=1)
 
         # Helper functions
-        def update_session_tabs():
+        def update_session_buttons():
+            """Update session buttons with labels from saved sessions."""
             sessions = utility.get_saved_sessions()
-            tabs = [gr.Tab("Session History Index", id="session_history")]
-            for session in sessions[:MAX_SESSIONS]:
-                label, _ = utility.load_session_history(Path(HISTORY_DIR) / session)
-                tabs.append(gr.Tab(label, id=session))
-            return gr.Tabs.update(children=tabs)
+            button_updates = []
+            for i in range(8):  # Fixed 8 buttons
+                if i < len(sessions):
+                    session_path = Path(HISTORY_DIR) / sessions[i]
+                    try:
+                        label, _ = utility.load_session_history(session_path)
+                        btn_label = f"{label}" if label else f"Session {i+1}"
+                    except:
+                        btn_label = f"Session {i+1}"
+                else:
+                    btn_label = "Empty History Slot"
+                button_updates.append(gr.update(value=btn_label, visible=True))
+            return button_updates
+
+        def load_session_by_index(index):
+            sessions = utility.get_saved_sessions()
+            if index < len(sessions):
+                session_file = sessions[index]
+                return load_session(session_file)
+            else:
+                return [], "No session to load"
+
+        def update_file_slot_ui(loaded_files, rag_max_docs):
+            """Update file slot buttons based on current state."""
+            button_updates = []
+            for i in range(6):  # Fixed 6 buttons
+                if i < len(loaded_files):
+                    filename = Path(loaded_files[i]).name
+                    short_name = (filename[:13] + "..") if len(filename) > 15 else filename
+                    label = f"{short_name}"
+                    variant = "secondary"
+                else:
+                    label = "Slot Empty"
+                    variant = "primary"
+                button_updates.append(gr.update(value=label, visible=True, variant=variant))
+            attach_files_visible = len(loaded_files) < 6
+            return button_updates, gr.update(visible=attach_files_visible)
+
+        def process_uploaded_files(files, loaded_files, rag_max_docs):
+            """Process uploaded files, add to available slots up to rag_max_docs."""
+            try:
+                files_dir = Path("files")
+                files_dir.mkdir(exist_ok=True)
+                new_files = []
+                
+                available_slots = [i for i in range(rag_max_docs) if i >= len(loaded_files)]
+                for idx, file in enumerate(files[:len(available_slots)]):
+                    original_name = Path(file.name).name
+                    dest_path = files_dir / original_name
+                    with open(file.name, 'rb') as src, open(dest_path, 'wb') as dst:
+                        dst.write(src.read())
+                    new_files.append(str(dest_path))
+                
+                loaded_files.extend(new_files)
+                ignored_files = len(files) - len(available_slots)
+                status_msg = f"Added {len(new_files)} files"
+                if ignored_files > 0:
+                    status_msg += f", ignored {ignored_files} files (max slots reached)"
+                
+                docs = utility.load_and_chunk_documents(loaded_files)
+                utility.create_vectorstore(docs)
+                
+                button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+                return [loaded_files, status_msg] + button_updates + [attach_files_update]
+            except Exception as e:
+                button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+                return [loaded_files, f"Error: {str(e)}"] + button_updates + [attach_files_update]
+
+        def eject_file(loaded_files, slot_index, rag_max_docs):
+            """Eject a file from the specified slot."""
+            if 0 <= slot_index < len(loaded_files):
+                try:
+                    removed_file = loaded_files.pop(slot_index)
+                    Path(removed_file).unlink()
+                    docs = utility.load_and_chunk_documents(loaded_files)
+                    utility.create_vectorstore(docs)
+                    status_msg = f"Ejected {Path(removed_file).name}"
+                except Exception as e:
+                    status_msg = f"Error: {str(e)}"
+            else:
+                status_msg = "No file to eject"
+            button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+            return [loaded_files, status_msg] + button_updates + [attach_files_update]
+
+        def handle_slot_click(slot_index, loaded_files, rag_max_docs):
+            """Handle slot button clicks - only eject files, prompt Attach Files for empty slots."""
+            if slot_index < len(loaded_files):
+                return eject_file(loaded_files, slot_index, rag_max_docs)
+            else:
+                button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+                return [loaded_files, "Click 'Attach Files' to add files."] + button_updates + [attach_files_update]
 
         def edit_previous(history, input_box):
             if len(history) >= 2:
@@ -389,16 +517,16 @@ def launch_interface():
             outputs=[session_log, status_text],
             api_name="chat_interface"
         ).then(
-            fn=update_session_tabs,
+            fn=update_session_buttons,
             inputs=None,
-            outputs=[session_tabs],
-            api_name="update_session_tabs_1"
+            outputs=session_buttons,
+            api_name="update_session_buttons_after_send"
         )
 
         attach_files_btn.upload(
             fn=process_uploaded_files,
             inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state],
-            outputs=[loaded_files_state, status_text] + file_slot_buttons,
+            outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn],
             api_name="process_uploaded_files"
         )
 
@@ -420,15 +548,25 @@ def launch_interface():
             api_name="shutdown_program"
         )
 
+        # Slot button click handlers
         for i, btn in enumerate(file_slot_buttons):
             btn.click(
-                fn=lambda state, rag_max, idx=i: eject_file(state, idx, rag_max),
+                fn=lambda state, rag_max, idx=i: handle_slot_click(idx, state, rag_max),
                 inputs=[loaded_files_state, rag_max_docs_state],
-                outputs=[loaded_files_state, status_text] + file_slot_buttons,
-                api_name=f"eject_file_{i}"
+                outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn],
+                api_name=f"slot_{i}_action"
             )
 
-        # Event handlers for Configuration tab
+        # Session button click handlers
+        for i, btn in enumerate(session_buttons):
+            btn.click(
+                fn=lambda idx=i: load_session_by_index(idx),
+                inputs=[],
+                outputs=[session_log, status_text],
+                api_name=f"load_session_{i}"
+            )
+
+        # Configuration tab event handlers
         load_btn.click(
             fn=load_model,
             outputs=[user_input, load_btn, status_text, status_text_settings],
@@ -448,34 +586,11 @@ def launch_interface():
             api_name="save_config"
         )
 
-        session_tabs.select(
-            fn=load_session,
-            inputs=[session_tabs],
-            outputs=[session_log, user_input],
-            api_name="load_session"
-        ).then(
-            fn=update_session_tabs,
-            inputs=None,
-            outputs=[session_tabs],
-            api_name="update_session_tabs_3"
-        )
-
         temperature_dropdown.change(
             fn=lambda x: utility.update_setting("temperature", x),
             inputs=[temperature_dropdown],
             outputs=[user_input, load_btn],
             api_name="update_temperature"
-        )
-
-        max_docs_dropdown.change(
-            fn=lambda x: int(x),
-            inputs=[max_docs_dropdown],
-            outputs=[rag_max_docs_state]
-        ).then(
-            fn=update_rag_max_docs,
-            inputs=[rag_max_docs_state, loaded_files_state],
-            outputs=[loaded_files_state] + file_slot_buttons + [attach_files_btn],
-            api_name="update_rag_max_docs"
         )
 
         model_dir_text.change(
@@ -495,6 +610,11 @@ def launch_interface():
             inputs=[loaded_files_state, rag_max_docs_state],
             outputs=file_slot_buttons + [attach_files_btn],
             api_name="initial_file_slot_ui"
+        ).then(
+            fn=update_session_buttons,
+            inputs=None,
+            outputs=session_buttons,
+            api_name="initial_session_buttons"
         )
 
     demo.launch()

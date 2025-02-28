@@ -31,8 +31,6 @@ LLAMA_CLI_PATH = ""  # Path to llama-cli.exe, set by config
 BACKEND_TYPE = ""  # Backend type (e.g., "GPU/CPU - Vulkan"), set by config
 LLAMA_BIN_PATH = ""  # Directory of llama.cpp binaries, set by config
 N_GPU_LAYERS = 0  # Number of layers to offload to GPU, calculated at runtime
-RAG_MAX_DOCS = 6  # Max RAG documents
-MAX_SESSIONS = 10  # Max number of saved sessions, configurable via HISTORY_OPTIONS
 RAG_AUTO_LOAD = ["general_knowledge"]  # Default RAG vectorstores to load
 REPEAT_PENALTY = 1.0
 N_BATCH = 1024  # Default batch size
@@ -56,10 +54,6 @@ TEMP_OPTIONS = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]  # Temperature op
 VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]  # VRAM options in MB
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]  # Repeat penalty options
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096] # n_batch (output length)
-
-# Program options
-HISTORY_OPTIONS = [5, 10, 20, 40, 80]  # Options for max sessions in UI
-MAX_DOCS_OPTIONS = [0, 2, 4, 6, 8] # Added
 
 # Global LLM instance
 llm = None  # Placeholder for Llama instance
