@@ -424,7 +424,7 @@ def launch_interface():
                     repeat_penalty_dropdown = gr.Dropdown(choices=REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=REPEAT_PENALTY, allow_custom_value=True)
                 with gr.Row():
                     gpu_dropdown = gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=None, scale=20)
-                    vram_dropdown = gr.Dropdown(choices=VRAM_OPTIONS, label="VRAM Size", value=VRAM_SIZE, scale=1)
+                    vram_dropdown = gr.Dropdown(choices=VRAM_OPTIONS, label="Assign Free VRam", value=VRAM_SIZE, scale=3)
                     mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=MLOCK, scale=1)
                 with gr.Row():
                     load_models_btn = gr.Button("Load Models", scale=1)
