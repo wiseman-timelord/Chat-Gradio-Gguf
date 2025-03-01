@@ -82,16 +82,12 @@ To create a public link, set `share=True` in `launch()`.
 9. On the `Configuration` page you would configure appropriately, its all straight forwards.
 10. Go back to the `Conversation` page and begin interactions, ensuring to notice features available.
 
-# Models
-Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, here are the models used to test the program.. 
-1. For ~8B models (Primary/Quality).
-- [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall.
-- Choice between, Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) and Qwen [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) , versions of R1 - Uncensored <8GB, Chat and Reasoning.
-- [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best on Big code Leaderboard for Python, for Coder.
-- [Ninja-v1-NSFW-RP-GGUF](https://huggingface.co/mradermacher/Ninja-v1-NSFW-RP-GGUF) - Most downloaded RP NSFW on huggingface at the time.
-2. For <4B models (Secondary/Fast).
-- [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested.
-- [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
+### Notation
+- Tabs on left of `Chat` page; "Start New Session" at top, 10-session limit.
+- Auto-labeled sessions (e.g., "Query about worms") stored in `.\data\history\*`.
+- VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
+- We use `(ModelFileSize * 1.1875) / NumLayers = LayerSize`, then `TotalVRam / LayerSize = NumLayersOnGpu`.
+- Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section.
 
 ### Model label Keywords...
 1. Keywords for Operation mode...
@@ -102,16 +98,17 @@ Most GGUF text models will work, keep in mind the applicable keywords shown in `
 - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
 - `reasoning` keywords - "reason", "r1", "think".
 
-### Notation
-- Tabs on left of `Chat` page; "Start New Session" at top, 10-session limit.
-- Auto-labeled sessions (e.g., "Query about worms") stored in `.\data\history\*`.
-- Vulkan/Kompute supports all GPUs; optimized for non-ROCM AMD without extras.
-- You will of course need to have a `*.Gguf` model in `.\models`, in order for anything to work.
-- VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram on the selected card.
-- Settings tab offers temperature (-1 to 1) and VRAM options via dropdowns.
-- We use `(ModelFileSize * 1.25) / NumLayers = LayerSize`, then `TotalVRam / LayerSize = NumLayersOnGpu`.
-- Result is rounded to a whole number for GPU layer offloading in the load model command.
-- 9 "History Slots" and "6 File Slots", seemed, like sensible numbers and to fit the display.
+# Models
+You will of course need to have a `*.Gguf` model for anything to work, here are the models used to test the program.. 
+1. For ~8B models (Primary/Quality).
+- [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall.
+- Choice between, Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) and Qwen [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) , versions of R1 - Uncensored <8GB, Chat and Reasoning.
+- [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best on Big code Leaderboard for Python, for Coder.
+- [Ninja-v1-NSFW-RP-GGUF](https://huggingface.co/mradermacher/Ninja-v1-NSFW-RP-GGUF) - Most downloaded RP NSFW on huggingface at the time.
+2. For <4B models (Secondary/Fast).
+- [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested.
+- [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
+
 
 ## Development
 - TBA
