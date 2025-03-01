@@ -12,7 +12,15 @@
 Status: Alpha - Mid-development.
 
 ## Description
-A high-quality chat interface optimized for GGUF models, designed for efficiency and usability. The configuration is tailored to community reported effectiveness, while configurations that often make no difference are ignored, ensuring a comprehensive yet streamlined experience. With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool eliminates the need for online chatbots while providing local, uncensored, and efficient inference. The interface is designed to evolve with additional features that enhance productivity and usability. The main concept is, to download the best smaller models on HuggingFace, and use them, without the restrictions and with comparable interface, found on premium AI services.
+A high-quality chat interface with 4 auto-detected modes of, operation and interface, dependent on if you load a model with hotwords for for, `code`, rpg/rp, Uncensored Chat, `general` 
+model_prompts = {
+    "code": "You are a coding assistant...",
+    "rpg": "You are an NSFW conversational AI...",
+    "uncensored": "You are an uncensored AI...",
+    "general": "You are a general-purpose AI..."
+}
+
+ optimized for GGUF models, designed for efficiency and usability. The configuration is tailored to community reported effectiveness, while configurations that often make no difference are ignored, ensuring a comprehensive yet streamlined experience. With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool eliminates the need for online chatbots while providing local, uncensored, and efficient inference. The interface is designed to evolve with additional features that enhance productivity and usability. The main concept is, to download the best smaller models on HuggingFace, and use them, without the restrictions and with comparable interface, found on premium AI services.
 
 ### Features
 - **Uncensored Efficiency**: Optimized for GGUF, auto-calculating layers, dependent on, model details and Free VRam.
@@ -71,6 +79,24 @@ To create a public link, set `share=True` in `launch()`.
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
 - Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
+- Llm Model - You will need a Large Language Model in GGUF format, See below
+
+### Keywords
+Layers for GPU is auto-detected, there are then keywords on the label of the model...
+- `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
+- `RPG Game` keywords - "nsfw", "adult", "mature", "explicit", "rp", "roleplay".
+- `UnCensored Chat` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
+- `General` keywords - none of the above.
+1. For ~8B models (Primary/Quality).
+- [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall, untested filename `qwen2.5-7b-cabs-v0.4.Q6_K.gguf`.
+- Choice between, Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) and Qwen [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) - Both Uncensored <8GB, Chat and Reasoning, filenames, `DeepSeek-R1-Distill-Llama-8B-Uncensored.Q6_K.gguf` or `DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner.Q6_K.gguf`.
+-  - Uncensored <8GB , filename .
+- [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best on Big code Leaderboard for Python, for Coder, filename `Nxcode-CQ-7B-orpo.Q6_K.gguf`.
+2. For <4B models (Secondary/Fast).
+- [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested, filename `Llama-3.2-3B-Instruct-uncensored-Q3_K_M.gguf`.
+- [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning filename `DeepSeek-R1-Distill-Qwen-1.5B-uncensored.Q3_K_M.gguf`
+
+
 
 ### Instructions
 1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Chat-Gradio-Gguf` or `C:\Programs\Chat-Gradio-Gguf`. 
@@ -92,16 +118,7 @@ To create a public link, set `share=True` in `launch()`.
 - Result is rounded to a whole number for GPU layer offloading in the load model command.
 - 9 "History Slots" and "6 File Slots", seemed, like sensible numbers and to fit the display.
 
-### Models
-Target VRam for Advised models - 8GB. These are not iMatrix, most listed have iMatrix versions.
-1. For Primary/Quality models.
-- [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model at the time in Gguf format, filename `qwen2.5-7b-cabs-v0.4.Q6_K.gguf`.
-- [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best Python code model  at the time in GGUF format, filename `Nxcode-CQ-7B-orpo.Q6_K.gguf`.
-- [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) - Interesting Uncensored <8GB Chat model in GGUF format, filename `DeepSeek-R1-Distill-Llama-8B-Uncensored.Q6_K.gguf`.
-- [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) - Interesting Uncensored <8GB Chat model in GGUF format, filename `DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner.Q6_K.gguf`.
-2. For Secondary/Fast models.
-- [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - Looks like a great model for text processing/secondary model, filename `Llama-3.2-3B-Instruct-uncensored-Q3_K_M.gguf`.
-- [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Very small model, if good, then more ram for main model, filename `DeepSeek-R1-Distill-Qwen-1.5B-uncensored.Q3_K_M.gguf`
+
 
 
 
