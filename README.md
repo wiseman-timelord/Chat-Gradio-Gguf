@@ -111,7 +111,8 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 
 ## Development
-- TBA
+- Test and work on 3 word label creation. Is there some library that comes with its own mini-model we can install in the installer, then we can do, summarization and chunking, with that instead, thus freeing up the second model for, TOT, websearch, etc. The issue I have is that, with limited VRam it would be better to just have 1 model and load more of that model on VRam, so removal of the secondary model option would streamline scripts a bit. The only real reasoning I would want 2 models would be for agentic workflow with coding models, but that would possibly have to be its own program, or come later. 
+- Check model loading/unloading in code. Originally it was loading models on the fly and keeping them in memory until it needed to use the other one, then it would keep that one in memory, and so on. What we want instead is to ensure mlock is just always on.  
 
 ### Far Development.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
