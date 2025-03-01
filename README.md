@@ -15,7 +15,7 @@ Status: Alpha - Early development.
 A high-quality chat interface with 4 auto-detected modes of, operation and interface, for, Coder, Rp Simulator, Uncensored Chat, General Chat, for GGUF models on windows 10 with any GPU.  With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or in that direction. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and text based LLM(s).
 
 ### Features
-- **Uncensored Efficiency**: Optimized for GGUF, auto-calculating layers, dependent on, model details and Free VRam.
+- **Mode Detection **: 3 modes of operation, `code`, `rpg`, `chat`, with, `Uncensored` and `reasoning`, enhancement, with dynamic, prompts and interface. 
 - **GPU Support**: Compatible with AMD/NVIDIA/Intel GPUs via Vulkan/Kompute/Cuda/Avx2, with GPU selection dropdown.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, and code formatting.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
@@ -23,9 +23,9 @@ A high-quality chat interface with 4 auto-detected modes of, operation and inter
 - **Configurable Context Window**: Set `n_ctx` to 8192, 16384, 24576, or 32768 via dropdown.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
 - **Token Streaming**: Real-time token generation for seamless chat interactions.
-- **Model Selection**: Dropdown lists GGUF models from `.\models\*.gguf` for easy switching.
-- **Auto-Model Handle**: Uses keywords in model name, to better handle, ctx, temperature, modes, prompts, etc.
+- **Model Selection**: Auto-populated dropdown lists in custom model folder location, auto-calculating Optimal layer distribution.
 - **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
+- **Dual-Model Operation**: Add an optional secondary smaller model for faster text processing tasks. 
 
 ### Preview
 - The "Conversation" page, still a few things to work out, but mostly there...
@@ -112,16 +112,7 @@ Most GGUF text models will work, so long as they have the appropriate keywords i
 - 9 "History Slots" and "6 File Slots", seemed, like sensible numbers and to fit the display.
 
 ## Development
-Currently the concept is 4 main modes of operation, `code`, `rpg`, `uncensored`, `chat`, but I want to, re-associate uncensored and produce some theory for 2 model mode operation. 
-1. `Uncensored` In the program, this needs to be handled like the Reasoning, that used to be one of the modes but became a feature, and just like the resoning models are handled so as to provide an option to not have the `THINK` phase andy bypass that part, likewise the `uncensored` keywords should be used only automatically to adjust the prompt to unlick the uncensored mode, as should be somewhere in the code already, while for the mode that would have been uncensored to now become merged with general chat mode, as other than the prompt its the same thing. so we need to merge code for, `chat` and `uncensored`, other than the part where it will adapt the prompt for the uncensored operation. For example, I notice the button for `Delete Uncensored Data` for the vector database, so we need to remove the vector database stuff for uncensored mode, and as applicable make it instead use the chat.
-2. I want a load model button, it will do the calculations for the, size and layers, of models configured, for one model load as many layers correctly fit into the VRam onto the GPU, and for 2 models both have an optimal number of layers loaded based on a equal share of the GPU memory, where is one can be completely contained in the model given half of the available vram, then whatever space is left in that half would be added to the free vram in the calculation for the other model's layers.
-3. the configuration of the models will affect the configuration of the interface..
-- `Fast Chat + Fast Chat` - 3 Way conversation? This would require new modification of interface for conversation, but would activate if you load the exact same model in both slots. 
-- `Chat + Fast Chat` - Genearl interaction is done through the Chat Model, while, Fast Chat can enabled for simpler requests and TOT will use fast model also, this where it would be, for example 3K and 6K of same model.
-- `RP + Fast Chat` - Fastchat can be use for summarization then use right panel below/above rp details for summarization, also need to work on prompts and use promts from other chat program I made.
-- `Reasoning + Code` - Agentic code generation would be the way to do it, it would require figuring out, how I would like it to work, which would involve planning, creation, saving, etc. It cant be too impressive, scripts would end up huge, so start with basic stuff. Possibly could also use resoning model with THINK turned off for scraping web for info to assist projects.
-- Single model operation would still be a thing, but whatever tasks would normally be done optimally between modles, would then be done through 1 model, but I need clear definitions for single modle use mode as above, just to clarify. 
-4. history slots would not be visible, but after the user loads the model(s), then the status bar on `Conversation` page will say `Click Start New Session to begin.`, send will not work until the user does, and when the does click `Start New Session` button, then 1 button should appear with `Empty History Slot` written on it, and then the user will type in their thing to the user input box, then click send, and when the user clicks send, then using the best model for the configuration it will summarize the input from the user, and produce the 3 word label for the button, which will be the label on the first saved slot in the session history, and then each time the user produces input, it will save that point in the session to the slot. As already the case the slots are supposed to rotate each time when there is a new session created and saved, losing the oldest one if there is one in the final slot, but for however total current many slots are filled is the number of history slots that should be showing, so a bit of a complicated rotation it would be up to 11, then it would just be 11, because its on a rotation where the 12th one would always be deleted. 
+- TBA
 
 ### Far Development.
 - Testing and Bugfixing - keep testing, while keeping an eye on the terminal for output of, warnings and errors, then find fixes, and a few, refinements or improvements, along the way.
