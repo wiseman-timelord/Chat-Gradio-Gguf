@@ -114,13 +114,8 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - TBA
 
 ### Far Development.
-- Testing and Bugfixing - keep testing, while keeping an eye on the terminal for output of, warnings and errors, then find fixes, and a few, refinements or improvements, along the way.
-- If there is some small 1B model, we could download and use, to create the session history label for the session, then this would be better, than the user having to wait for whatever more capable model is doing, so as to produce quick labels for session history. preferably a <256MB download, and again, the context size is automatic based on the size of the first, input and response, but if it runs out of context, then we will cut it where it runs out, as for example, if we just have most of the users first input, then this should be good enough to create a unique 3 word label.
-- Ongoing improvement of Gradio Interface required, until it "looks right". 
-- Testing and bugfixing, required for all features of main program.
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
-- Agentic workflows, potentially using purpose built fine tuned models, for, thinking, interaction, or code. 
-- There is also an idea of the `Performance` model and the `Quality` model, where the user could switch between, albeit this could also be, fast for simple tasks like creating the title of the session, and slow for interaction, or the likes.
+- Agentic workflows, potentially using purpose built fine tuned models, for, thinking, interaction, or code. Its not intended to be agentic, but it would be interesting if we could assign the fast model to, web-scrape, summarizing into sections then re-summarizing with main model instead of chunking and label generation. Review chunking, what would be better, to wait for a llm or do it programatically.  
 - Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
 
 ## Credits
