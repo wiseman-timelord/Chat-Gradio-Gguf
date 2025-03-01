@@ -82,15 +82,8 @@ To create a public link, set `share=True` in `launch()`.
 9. On the `Configuration` page you would configure appropriately, its all straight forwards.
 10. Go back to the `Conversation` page and begin interactions, ensuring to notice features available.
 
-### Model Keywords for Operational Modes
-Layers for GPU is auto-detected, there are then keywords on the label of the model...
-- `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
-- `RPG Game` keywords - "nsfw", "adult", "mature", "explicit", "rp", "roleplay".
-- `UnCensored Chat` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
-- `General` keywords - none of the above.
-
 # Models
-Most GGUF text models will work, so long as they have the appropriate keywords in the label, which will require time to develop, working on testing with the ones below... 
+Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, here are the models used to test the program.. 
 1. For ~8B models (Primary/Quality).
 - [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall.
 - Choice between, Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) and Qwen [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) , versions of R1 - Uncensored <8GB, Chat and Reasoning.
@@ -99,6 +92,15 @@ Most GGUF text models will work, so long as they have the appropriate keywords i
 2. For <4B models (Secondary/Fast).
 - [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested.
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
+
+### Model label Keywords...
+1. Keywords for Operation mode...
+- `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
+- `RPG Game` keywords - "nsfw", "adult", "mature", "explicit", "rp", "roleplay".
+- `Chat` keywords - none of the above.
+2. Keywords for Enhancements...
+- `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
+- `reasoning` keywords - "reason", "r1", "think".
 
 ### Notation
 - Tabs on left of `Chat` page; "Start New Session" at top, 10-session limit.
