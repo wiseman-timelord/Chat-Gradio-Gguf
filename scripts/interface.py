@@ -343,12 +343,13 @@ def launch_interface():
     """) as demo:
         loaded_files_state = gr.State(value=[])
         rag_max_docs_state = gr.State(value=4)
+        models_loaded_state = gr.State(value=False)  # New state to track model loading
 
         with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        start_new_session_btn = gr.Button("Start New Session", variant="primary", visible=False)
+                        start_new_session_btn = gr.Button("Start New Session", variant="primary", visible=True)  # Always visible
                         session_buttons = [gr.Button("Empty History Slot", visible=False) for _ in range(11)]
                     with gr.Column(scale=20):
                         session_log = gr.Chatbot(label="Session Log", height=425, elem_classes=["scrollable"])
@@ -357,13 +358,11 @@ def launch_interface():
                             send_btn = gr.Button("Send Input", variant="primary", scale=20)
                             edit_previous_btn = gr.Button("Edit Last Input", scale=1)
                             copy_response_btn = gr.Button("Copy Last Output", scale=1)
-
                     with gr.Column(scale=1):
                         theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="Select models to enable mode detection.")
                         web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
                         tot_checkbox = gr.Checkbox(label="Enable TOT", value=False, visible=False)
                         disable_think_switch = gr.Checkbox(label="Disable THINK", value=False, visible=False)
-                        # Define RP components individually with initial values from temporary
                         rp_location = gr.Textbox(label="RP Location", value=temporary.RP_LOCATION, visible=False)
                         user_name = gr.Textbox(label="User Name", value=temporary.USER_NAME, visible=False)
                         user_role = gr.Textbox(label="User Role", value=temporary.USER_ROLE, visible=False)
@@ -378,8 +377,7 @@ def launch_interface():
                             with gr.Row(elem_classes=["button-row"]):
                                 for col in range(2):
                                     file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="primary"))
-
-                with gr.Row():        
+                with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select models on Configuration page.", scale=20)
                     shutdown_btn = gr.Button("Exit Program", variant="stop", scale=1)
 
@@ -428,26 +426,74 @@ def launch_interface():
                     gpu_dropdown = gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=None, scale=20)
                     vram_dropdown = gr.Dropdown(choices=VRAM_OPTIONS, label="VRAM Size", value=VRAM_SIZE, scale=1)
                     mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=MLOCK, scale=1)
-                
                 with gr.Row():
                     load_models_btn = gr.Button("Load Models", scale=1)
                     test_models_btn = gr.Button("Test Models", scale=1)
                     unload_btn = gr.Button("Unload Models", scale=1)
-
                 with gr.Row():
                     erase_general_btn = gr.Button("Erase General Data")
                     erase_rpg_btn = gr.Button("Erase RPG Data")
                     erase_code_btn = gr.Button("Erase Code Data")
                     erase_all_btn = gr.Button("Erase All Data")
-
                 gr.Markdown("Note: GPU layers auto-calculated from, model details and VRam free. 0 layers = CPU-only.")
-                
                 with gr.Row():
                     status_text_settings = gr.Textbox(label="Status", interactive=False, scale=20)
                     save_settings_btn = gr.Button("Save Settings", scale=1)
 
+        # New handler for dynamic Start New Session button
+        def handle_start_session_click(models_loaded):
+            if not models_loaded:
+                return "Load models first on Configuration page...", models_loaded, [], "", gr.update(interactive=False)
+            else:
+                temporary.current_session_id = None
+                temporary.session_label = ""
+                temporary.SESSION_ACTIVE = True
+                return "Type input and click Send to begin...", models_loaded, [], "", gr.update(interactive=True)
+
+        # Updated load_models to set models_loaded_state
+        def load_models(quality_model, fast_model, vram_size):
+            from scripts import temporary, models
+            global quality_llm, fast_llm
+            if quality_model == "Select_a_model...":
+                return "Select a primary model to load.", False
+            models_to_load = [quality_model]
+            if fast_model != "Select_a_model...":
+                models_to_load.append(fast_model)
+            gpu_layers = models.calculate_gpu_layers(models_to_load, vram_size)
+            temporary.N_GPU_LAYERS_QUALITY = gpu_layers.get(quality_model, 0)
+            temporary.N_GPU_LAYERS_FAST = gpu_layers.get(fast_model, 0)
+            if quality_model != "Select_a_model...":
+                model_path = Path(temporary.MODEL_FOLDER) / quality_model
+                temporary.quality_llm = Llama(
+                    model_path=str(model_path),
+                    n_ctx=temporary.N_CTX,
+                    n_gpu_layers=temporary.N_GPU_LAYERS_QUALITY,
+                    n_batch=temporary.N_BATCH,
+                    mmap=temporary.MMAP,
+                    mlock=temporary.MLOCK,
+                    verbose=False
+                )
+            if fast_model != "Select_a_model...":
+                model_path = Path(temporary.MODEL_FOLDER) / fast_model
+                temporary.fast_llm = Llama(
+                    model_path=str(model_path),
+                    n_ctx=temporary.N_CTX,
+                    n_gpu_layers=temporary.N_GPU_LAYERS_FAST,
+                    n_batch=temporary.N_BATCH,
+                    mmap=temporary.MMAP,
+                    mlock=temporary.MLOCK,
+                    verbose=False
+                )
+            temporary.MODELS_LOADED = True
+            status = f"Model(s) loaded, layer distribution: Primary VRAM={temporary.N_GPU_LAYERS_QUALITY}, Fast VRAM={temporary.N_GPU_LAYERS_FAST}"
+            return status, True  # Set models_loaded_state to True
+
         # Event Handlers
-        edit_previous_btn.click(fn=lambda h, i: (h[:-2], h[-2][0]) if len(h) >= 2 else ([], h[0][0]) if len(h) == 1 else (h, ""), inputs=[session_log, user_input], outputs=[session_log, user_input])
+        edit_previous_btn.click(
+            fn=lambda h, i: (h[:-2], h[-2][0]) if len(h) >= 2 else ([], h[0][0]) if len(h) == 1 else (h, ""),
+            inputs=[session_log, user_input],
+            outputs=[session_log, user_input]
+        )
         send_btn.click(
             fn=chat_interface,
             inputs=[user_input, session_log, tot_checkbox, loaded_files_state, disable_think_switch, rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3],
@@ -456,20 +502,28 @@ def launch_interface():
             fn=update_session_buttons, inputs=None, outputs=session_buttons
         )
         attach_files_btn.upload(
-            fn=process_uploaded_files, 
-            inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state, theme_status],  # Added theme_status
+            fn=process_uploaded_files,
+            inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state, theme_status],
             outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn]
         )
         start_new_session_btn.click(
-            fn=start_new_session,
-            inputs=None,
-            outputs=[session_log, status_text, user_input]
+            fn=handle_start_session_click,
+            inputs=[models_loaded_state],
+            outputs=[status_text, models_loaded_state, session_log, user_input, user_input]
         ).then(
             fn=update_session_buttons, inputs=None, outputs=session_buttons
         )
-        shutdown_btn.click(fn=lambda: (unload_models(), demo.close(), os._exit(0), "Program terminated")[3], inputs=None, outputs=[status_text])
+        shutdown_btn.click(
+            fn=lambda: (unload_models(), demo.close(), os._exit(0), "Program terminated")[3],
+            inputs=None,
+            outputs=[status_text]
+        )
         for i, btn in enumerate(file_slot_buttons):
-            btn.click(fn=lambda s, r, idx=i: handle_slot_click(idx, s, r), inputs=[loaded_files_state, rag_max_docs_state], outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn])
+            btn.click(
+                fn=lambda s, r, idx=i: handle_slot_click(idx, s, r),
+                inputs=[loaded_files_state, rag_max_docs_state],
+                outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn]
+            )
         for i, btn in enumerate(session_buttons):
             btn.click(
                 fn=lambda idx=i: load_session_by_index(idx),
@@ -478,8 +532,29 @@ def launch_interface():
             ).then(
                 fn=update_session_buttons, inputs=None, outputs=session_buttons
             )
+        quality_model_dropdown.change(
+            fn=determine_operation_mode,
+            inputs=[quality_model_dropdown],
+            outputs=[theme_status]
+        ).then(
+            fn=lambda mode: context_injector.set_mode(mode.lower()),
+            inputs=[theme_status],
+            outputs=None
+        ).then(
+            fn=update_dynamic_options,
+            inputs=[quality_model_dropdown, loaded_files_state],
+            outputs=[rag_max_docs_state, tot_checkbox, web_search_switch, disable_think_switch, theme_status] + file_slot_buttons + [rp_location, user_name, user_role, ai_npc1, ai_npc2, delete_npc2_btn, ai_npc3, delete_npc3_btn] + [attach_files_btn]
+        ).then(
+            fn=toggle_model_rows,
+            inputs=[quality_model_dropdown],
+            outputs=[fast_row, code_row]
+        )
         erase_general_btn.click(fn=lambda: delete_vectorstore("general"), inputs=None, outputs=[status_text_settings])
-        load_models_btn.click(fn=load_models, inputs=[quality_model_dropdown, fast_model_dropdown, vram_dropdown], outputs=[status_text_settings, start_new_session_btn])
+        load_models_btn.click(
+            fn=load_models,
+            inputs=[quality_model_dropdown, fast_model_dropdown, vram_dropdown],
+            outputs=[status_text_settings, models_loaded_state]
+        )
         erase_rpg_btn.click(fn=lambda: delete_vectorstore("rpg"), inputs=None, outputs=[status_text_settings])
         erase_code_btn.click(fn=lambda: delete_vectorstore("code"), inputs=None, outputs=[status_text_settings])
         erase_all_btn.click(fn=delete_all_vectorstores, inputs=None, outputs=[status_text_settings])
@@ -494,7 +569,10 @@ def launch_interface():
         eject_quality_btn.click(fn=eject_quality_model, outputs=[quality_model_dropdown, quality_mode, fast_model_dropdown, fast_mode, status_text_settings]).then(fn=toggle_model_rows, inputs=[quality_model_dropdown], outputs=[fast_row, code_row])
         refresh_btn.click(fn=lambda: [gr.update(choices=get_available_models()), gr.update(choices=get_available_models())], outputs=[quality_model_dropdown, fast_model_dropdown])
         test_models_btn.click(fn=lambda: "Model testing not implemented", outputs=[status_text_settings])
-        unload_btn.click(fn=lambda: (gr.update(interactive=False), "Models unloaded"), outputs=[user_input, status_text_settings])
+        unload_btn.click(
+            fn=lambda: (unload_models(), gr.update(interactive=False), "Models unloaded", False),
+            outputs=[user_input, status_text_settings, models_loaded_state]
+        )
         save_settings_btn.click(fn=utility.save_config, inputs=None, outputs=[status_text_settings])
         demo.load(fn=lambda: [gr.update(visible=False)] * 11, inputs=None, outputs=session_buttons)
 
