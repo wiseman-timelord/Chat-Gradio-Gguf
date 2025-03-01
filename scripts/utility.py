@@ -131,7 +131,7 @@ def delete_vectorstore(mode: str) -> str:
 
 def delete_all_vectorstores() -> str:
     """Delete all mode-specific vectorstore directories."""
-    modes = ["code", "rpg", "uncensored", "general"]
+    modes = ["code", "rpg", "chat"]  # Updated to new modes
     deleted = []
     for mode in modes:
         vs_dir = Path("data/vectors") / mode
@@ -160,6 +160,43 @@ def trim_session_history(max_sessions):
     while len(session_files) > max_sessions:
         oldest_file = session_files.pop()
         oldest_file.unlink()
+
+def load_models(quality_model, fast_model, vram_size):
+    from scripts import temporary, models
+    global quality_llm, fast_llm
+    if quality_model == "Select_a_model...":
+        return "Select a primary model to load.", gr.update(visible=False)
+    models_to_load = [quality_model]
+    if fast_model != "Select_a_model...":
+        models_to_load.append(fast_model)
+    gpu_layers = models.calculate_gpu_layers(models_to_load, vram_size)
+    temporary.N_GPU_LAYERS_QUALITY = gpu_layers.get(quality_model, 0)
+    temporary.N_GPU_LAYERS_FAST = gpu_layers.get(fast_model, 0)
+    if quality_model != "Select_a_model...":
+        model_path = Path(temporary.MODEL_FOLDER) / quality_model
+        temporary.quality_llm = Llama(
+            model_path=str(model_path),
+            n_ctx=temporary.N_CTX,
+            n_gpu_layers=temporary.N_GPU_LAYERS_QUALITY,
+            n_batch=temporary.N_BATCH,
+            mmap=temporary.MMAP,
+            mlock=temporary.MLOCK,
+            verbose=False
+        )
+    if fast_model != "Select_a_model...":
+        model_path = Path(temporary.MODEL_FOLDER) / fast_model
+        temporary.fast_llm = Llama(
+            model_path=str(model_path),
+            n_ctx=temporary.N_CTX,
+            n_gpu_layers=temporary.N_GPU_LAYERS_FAST,
+            n_batch=temporary.N_BATCH,
+            mmap=temporary.MMAP,
+            mlock=temporary.MLOCK,
+            verbose=False
+        )
+    temporary.MODELS_LOADED = True
+    status = f"Model(s) loaded, layer distribution: Primary VRAM={temporary.N_GPU_LAYERS_QUALITY}, Fast VRAM={temporary.N_GPU_LAYERS_FAST}"
+    return status, gr.update(visible=True)
 
 def save_config():
     config_path = Path("data/persistent.json")
@@ -243,7 +280,7 @@ def update_setting(key, value):
     if reload_required:
         return change_model(temporary.MODEL_PATH.split('/')[-1])
     return None, None
-
+    
 def load_config():
     config_path = Path("data/persistent.json")
     if config_path.exists():
@@ -273,4 +310,6 @@ def load_config():
             temporary.USER_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
             temporary.AI_NPC1 = config["rp_settings"].get("ai_npc1", "Randomer")
             temporary.AI_NPC2 = config["rp_settings"].get("ai_npc2", "Unused")
-            temporary.AI_NPC3 = config["rp_settings"].get("ai_npc3", "Unused")
+            temporary.AI_NPC3 = config["rp_settings"].get("ai_npc3", "Unused")    
+            
+            

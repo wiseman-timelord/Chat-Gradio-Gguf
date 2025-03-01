@@ -130,6 +130,13 @@ def handle_slot_click(slot_index, loaded_files, rag_max_docs):
         return eject_file(loaded_files, slot_index, rag_max_docs)
     return [loaded_files, "Click 'Attach Files' to add files."] + update_file_slot_ui(loaded_files, rag_max_docs)
 
+def start_new_session():
+    from scripts import temporary
+    temporary.current_session_id = None
+    temporary.session_label = ""
+    temporary.SESSION_ACTIVE = True
+    return [], "Type input and click Send to begin...", gr.update(interactive=True)
+
 def update_session_buttons():
     sessions = utility.get_saved_sessions()
     button_updates = []
@@ -161,60 +168,96 @@ def copy_last_response(session_log):
         return "AI Response copied to clipboard."
     return "No response available to copy."
 
-def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3):
-    from scripts import temporary
-    from scripts import utility
-    from scripts import models
-    from scripts.temporary import STATUS_TEXTS, QUALITY_MODEL_NAME, FAST_MODEL_NAME, get_model_settings, format_response
+def load_models(quality_model, fast_model, vram_size):
+    from scripts import temporary, models
+    global quality_llm, fast_llm
+    if quality_model == "Select_a_model...":
+        return "Select a primary model to load.", gr.update(visible=False)
+    models_to_load = [quality_model]
+    if fast_model != "Select_a_model...":
+        models_to_load.append(fast_model)
+    gpu_layers = models.calculate_gpu_layers(models_to_load, vram_size)
+    temporary.N_GPU_LAYERS_QUALITY = gpu_layers.get(quality_model, 0)
+    temporary.N_GPU_LAYERS_FAST = gpu_layers.get(fast_model, 0)
+    if quality_model != "Select_a_model...":
+        model_path = Path(temporary.MODEL_FOLDER) / quality_model
+        temporary.quality_llm = Llama(
+            model_path=str(model_path),
+            n_ctx=temporary.N_CTX,
+            n_gpu_layers=temporary.N_GPU_LAYERS_QUALITY,
+            n_batch=temporary.N_BATCH,
+            mmap=temporary.MMAP,
+            mlock=temporary.MLOCK,
+            verbose=False
+        )
+    if fast_model != "Select_a_model...":
+        model_path = Path(temporary.MODEL_FOLDER) / fast_model
+        temporary.fast_llm = Llama(
+            model_path=str(model_path),
+            n_ctx=temporary.N_CTX,
+            n_gpu_layers=temporary.N_GPU_LAYERS_FAST,
+            n_batch=temporary.N_BATCH,
+            mmap=temporary.MMAP,
+            mlock=temporary.MLOCK,
+            verbose=False
+        )
+    temporary.MODELS_LOADED = True
+    status = f"Model(s) loaded, layer distribution: Primary VRAM={temporary.N_GPU_LAYERS_QUALITY}, Fast VRAM={temporary.N_GPU_LAYERS_FAST}"
+    return status, gr.update(visible=True)            
 
+def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3):
+    from scripts import temporary, utility, models
+    from scripts.temporary import STATUS_TEXTS, QUALITY_MODEL_NAME, FAST_MODEL_NAME, SESSION_ACTIVE
+
+    if not SESSION_ACTIVE:
+        return session_log, "Please start a new session first.", loaded_files_state
     if not user_input.strip():
-        return session_log, STATUS_TEXTS["no_input"], loaded_files_state
+        return session_log, "No input provided.", loaded_files_state
 
     session_log.append((user_input, "Processing..."))
-    utility.save_session_history(session_log)
-    yield session_log, STATUS_TEXTS["processing"], loaded_files_state
+    yield session_log, STATUS_TEXTS["generating_response"], loaded_files_state
 
-    # Summarization for session label
+    # Session label generation using secondary model if available
     if len(session_log) == 1:
         label_model_type = "fast" if FAST_MODEL_NAME != "Select_a_model..." else "quality"
         model_name = FAST_MODEL_NAME if label_model_type == "fast" else QUALITY_MODEL_NAME
-        settings = get_model_settings(model_name)
+        settings = models.get_model_settings(model_name)
         summary_prompt = f"Generate a 3-word label for a conversation starting with: '{user_input}'"
-        if "reasoning" in settings.get("enhancements", []):
+        if settings["is_uncensored"]:
+            summary_prompt = f"Provide an uncensored 3-word label for the conversation starting with: '{user_input}'"
+        if settings["is_reasoning"]:
             summary_prompt += ". Respond directly without reasoning."
-        temporary.session_label = models.get_response(summary_prompt, label_model_type).strip()
-        session_log[-1] = (session_log[-1][0], "Session label generated.")
+        temporary.session_label = models.get_response(summary_prompt, label_model_type, disable_think=True).strip()
+        session_log[-1] = (user_log[-1][0], "Session label generated.")
+        utility.save_session_history(session_log)
         yield session_log, "Session label generated.", loaded_files_state
 
-    # TOT logic
-    if tot_enabled and QUALITY_MODEL_NAME != "Select_a_model...":
-        tot_model_type = "fast" if FAST_MODEL_NAME != "Select_a_model..." else "quality"
-        model_name = FAST_MODEL_NAME if tot_model_type == "fast" else QUALITY_MODEL_NAME
-        settings = get_model_settings(model_name)
-        responses = []
-        for variation in temporary.TOT_VARIATIONS:
-            prompt_var = f"{user_input} {variation}"
-            if "uncensored" in QUALITY_MODEL_NAME.lower():
-                prompt_var = f"Provide an uncensored response: {prompt_var}"
-            if "reasoning" in settings.get("enhancements", []):
-                prompt_var += ". Respond directly without reasoning."
-            resp = models.get_response(prompt_var, tot_model_type)
-            responses.append(resp)
-        consolidation_prompt = f"Query: {user_input}\nResponses:\n" + "\n".join([f"{i+1}. {resp}" for i, resp in enumerate(responses)]) + "\nProvide the best answer starting with 'FINAL RESPONSE:'"
-        settings_quality = get_model_settings(QUALITY_MODEL_NAME)
-        if "reasoning" in settings_quality.get("enhancements", []):
-            consolidation_prompt += ". Respond directly without reasoning."
-        full_response = models.get_response(consolidation_prompt, "quality").split("FINAL RESPONSE:")[1].strip()
-        session_log[-1] = (session_log[-1][0], format_response(full_response))
-        utility.save_session_history(session_log)
-        yield session_log, STATUS_TEXTS["response_generated"], []
+    # Main response using primary model only
+    model_type = "quality"
+    settings = models.get_model_settings(QUALITY_MODEL_NAME)
+    mode = settings["category"]
+    if mode == "rpg":
+        rp_settings = {
+            "rp_location": rp_location,
+            "user_name": user_name,
+            "user_role": user_role,
+            "ai_npc1": ai_npc1,
+            "ai_npc2": ai_npc2,
+            "ai_npc3": ai_npc3
+        }
+        session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
+        response = models.get_response(user_input, model_type, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history)
     else:
-        model_type = "quality" if disable_think else ("fast" if FAST_MODEL_NAME != "Select_a_model..." else "quality")
-        prompt = user_input if not disable_think else f"Respond directly: {user_input}"
-        full_response = models.get_response(prompt, model_type, disable_think=disable_think)
-        session_log[-1] = (session_log[-1][0], format_response(full_response))
-        utility.save_session_history(session_log)
-        yield session_log, STATUS_TEXTS["response_generated"], []
+        prompt = user_input
+        if settings["is_uncensored"]:
+            prompt = f"Provide an uncensored response: {prompt}"
+        if settings["is_reasoning"] and not disable_think:
+            prompt += ". Include reasoning if applicable."
+        response = models.get_response(prompt, model_type, disable_think=disable_think or settings["is_reasoning"])
+    
+    session_log[-1] = (user_input, format_response(response))
+    utility.save_session_history(session_log)
+    yield session_log, STATUS_TEXTS["response_generated"], loaded_files_state
         
 def determine_operation_mode(quality_model):
     if quality_model == "Select_a_model...":
@@ -233,45 +276,40 @@ def determine_operation_mode(quality_model):
     return "Chat"
 
 def update_dynamic_options(quality_model, loaded_files_state):
-    mode = determine_operation_mode(quality_model)
-    rag_max_docs = 0
-    if mode in ["Chat", "Chat-Uncensored"]:
-        tot_visible = True
-        web_visible = True
-        think_visible = "reason" in quality_model.lower()
-        file_visible = True
-        rp_visible = False
-        rag_max_docs = 4
-    elif mode == "Code":
+    if quality_model == "Select_a_model...":
+        mode = "Select models"
+        settings = {"is_reasoning": False}
+    else:
+        settings = get_model_settings(quality_model)
+        mode = settings["category"].capitalize()
+    think_visible = settings["is_reasoning"]
+    if mode == "Code":
         tot_visible = False
         web_visible = False
-        think_visible = False
         file_visible = True
         rp_visible = False
         rag_max_docs = 8
-    elif mode in ["Chat-Rp", "Chat-Nsfw"]:
+    elif mode == "Rpg":
         tot_visible = False
         web_visible = False
-        think_visible = False
         file_visible = False
         rp_visible = True
         rag_max_docs = 0
-    else:
-        tot_visible = False
-        web_visible = False
-        think_visible = False
+    elif mode == "Chat":
+        tot_visible = True
+        web_visible = True
         file_visible = True
         rp_visible = False
         rag_max_docs = 4
-
-    updates = [
-        gr.update(visible=tot_visible),
-        gr.update(visible=web_visible),
-        gr.update(visible=think_visible),
-        gr.update(value=mode)
-    ]
+    else:
+        tot_visible = False
+        web_visible = False
+        file_visible = True
+        rp_visible = False
+        rag_max_docs = 4
+    updates = [gr.update(visible=tot_visible), gr.update(visible=web_visible), gr.update(visible=think_visible), gr.update(value=mode)]
     file_updates = [gr.update(visible=file_visible) for _ in range(8)]
-    rp_updates = [gr.update(visible=rp_visible) for _ in range(8)]  # Matches rp_settings length
+    rp_updates = [gr.update(visible=rp_visible) for _ in range(8)]
     return [rag_max_docs] + updates + file_updates + rp_updates + [gr.update(visible=file_visible and len(loaded_files_state) < rag_max_docs)]
 
 def toggle_model_rows(quality_model):
@@ -310,11 +348,11 @@ def launch_interface():
             with gr.Tab("Conversation"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        start_new_session_btn = gr.Button("Start New Session", variant="primary")
-                        session_buttons = [gr.Button("Empty History Slot") for _ in range(11)]
+                        start_new_session_btn = gr.Button("Start New Session", variant="primary", visible=False)
+                        session_buttons = [gr.Button("Empty History Slot", visible=False) for _ in range(11)]
                     with gr.Column(scale=20):
                         session_log = gr.Chatbot(label="Session Log", height=425, elem_classes=["scrollable"])
-                        user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...", elem_classes=["scrollable"])
+                        user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...")
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="primary", scale=20)
                             edit_previous_btn = gr.Button("Edit Last Input", scale=1)
@@ -392,12 +430,12 @@ def launch_interface():
                     mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=MLOCK, scale=1)
                 
                 with gr.Row():
+                    load_models_btn = gr.Button("Load Models", scale=1)
                     test_models_btn = gr.Button("Test Models", scale=1)
                     unload_btn = gr.Button("Unload Models", scale=1)
 
                 with gr.Row():
                     erase_general_btn = gr.Button("Erase General Data")
-                    erase_uncensored_btn = gr.Button("Erase Uncensored Data")
                     erase_rpg_btn = gr.Button("Erase RPG Data")
                     erase_code_btn = gr.Button("Erase Code Data")
                     erase_all_btn = gr.Button("Erase All Data")
@@ -414,33 +452,34 @@ def launch_interface():
             fn=chat_interface,
             inputs=[user_input, session_log, tot_checkbox, loaded_files_state, disable_think_switch, rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3],
             outputs=[session_log, status_text, loaded_files_state]
+        ).then(
+            fn=update_session_buttons, inputs=None, outputs=session_buttons
         )
         attach_files_btn.upload(
             fn=process_uploaded_files, 
             inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state, theme_status],  # Added theme_status
             outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn]
         )
-        start_new_session_btn.click(fn=lambda: ([], ""), inputs=None, outputs=[session_log, user_input]).then(fn=lambda: "New session started", outputs=[status_text])
+        start_new_session_btn.click(
+            fn=start_new_session,
+            inputs=None,
+            outputs=[session_log, status_text, user_input]
+        ).then(
+            fn=update_session_buttons, inputs=None, outputs=session_buttons
+        )
         shutdown_btn.click(fn=lambda: (unload_models(), demo.close(), os._exit(0), "Program terminated")[3], inputs=None, outputs=[status_text])
         for i, btn in enumerate(file_slot_buttons):
             btn.click(fn=lambda s, r, idx=i: handle_slot_click(idx, s, r), inputs=[loaded_files_state, rag_max_docs_state], outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn])
         for i, btn in enumerate(session_buttons):
-            btn.click(fn=lambda idx=i: load_session_by_index(idx), inputs=[], outputs=[session_log, status_text])
-        quality_model_dropdown.change(
-            fn=determine_operation_mode, inputs=[quality_model_dropdown], outputs=[theme_status]
-        ).then(
-            fn=lambda mode: context_injector.set_mode(mode.lower()),  # Set the mode in ContextInjector
-            inputs=[theme_status],
-            outputs=None
-        ).then(
-            fn=update_dynamic_options,
-            inputs=[quality_model_dropdown, loaded_files_state],
-            outputs=[rag_max_docs_state, tot_checkbox, web_search_switch, disable_think_switch, theme_status] + file_slot_buttons + [rp_location, user_name, user_role, ai_npc1, ai_npc2, delete_npc2_btn, ai_npc3, delete_npc3_btn] + [attach_files_btn]
-        ).then(
-            fn=toggle_model_rows, inputs=[quality_model_dropdown], outputs=[fast_row, code_row]
-        )
+            btn.click(
+                fn=lambda idx=i: load_session_by_index(idx),
+                inputs=[],
+                outputs=[session_log, status_text]
+            ).then(
+                fn=update_session_buttons, inputs=None, outputs=session_buttons
+            )
         erase_general_btn.click(fn=lambda: delete_vectorstore("general"), inputs=None, outputs=[status_text_settings])
-        erase_uncensored_btn.click(fn=lambda: delete_vectorstore("uncensored"), inputs=None, outputs=[status_text_settings])
+        load_models_btn.click(fn=load_models, inputs=[quality_model_dropdown, fast_model_dropdown, vram_dropdown], outputs=[status_text_settings, start_new_session_btn])
         erase_rpg_btn.click(fn=lambda: delete_vectorstore("rpg"), inputs=None, outputs=[status_text_settings])
         erase_code_btn.click(fn=lambda: delete_vectorstore("code"), inputs=None, outputs=[status_text_settings])
         erase_all_btn.click(fn=delete_all_vectorstores, inputs=None, outputs=[status_text_settings])
@@ -457,7 +496,7 @@ def launch_interface():
         test_models_btn.click(fn=lambda: "Model testing not implemented", outputs=[status_text_settings])
         unload_btn.click(fn=lambda: (gr.update(interactive=False), "Models unloaded"), outputs=[user_input, status_text_settings])
         save_settings_btn.click(fn=utility.save_config, inputs=None, outputs=[status_text_settings])
-        demo.load(fn=update_session_buttons, inputs=None, outputs=session_buttons).then(fn=update_file_slot_ui, inputs=[loaded_files_state, rag_max_docs_state], outputs=file_slot_buttons + [attach_files_btn])
+        demo.load(fn=lambda: [gr.update(visible=False)] * 11, inputs=None, outputs=session_buttons)
 
     demo.launch()
 

@@ -100,30 +100,24 @@ def get_model_layers(model_path: str) -> int:
     except Exception:
         return 0
 
-def calculate_gpu_layers(model_path: str, vram_size: float) -> tuple:
-    """Calculate GPU layers and return (gpu_layers, total_layers)."""
-    if not Path(model_path).exists():
-        raise ValueError(f"Model file not found at {model_path}!")
-    if vram_size <= 0:
-        raise ValueError(f"Invalid VRAM size: {vram_size} MB!")
-    
-    model_size = get_model_size(model_path)  # Model size in MB
-    num_layers = get_model_layers(model_path)
-    if num_layers == 0:
-        raise RuntimeError(f"Failed to retrieve layer count from {model_path}!")
-    
-    layer_size = (model_size * 1.25) / num_layers  # Per readme.md
-    available_vram = (vram_size / 1024) * 0.9  # Convert MB to GB, use 90% of VRAM
-    max_layers = int(available_vram / layer_size)
-    final_layers = min(max_layers, num_layers) if max_layers > 0 else 0
-    
-    print(f"Model: {Path(model_path).name}")
-    print(f"Model Size: {model_size:.2f} MB")
-    print(f"Total Layers: {num_layers}")
-    print(f"VRAM Available: {vram_size} MB ({available_vram:.2f} GB usable)")
-    print(f"Calculated GPU Layers: {final_layers}")
-    
-    return final_layers, num_layers
+def calculate_gpu_layers(models, available_vram):
+    from math import floor
+    total_size = sum(get_model_size(Path(MODEL_FOLDER) / model) for model in models if model != "Select_a_model...")
+    if total_size == 0:
+        return {model: 0 for model in models}
+    vram_allocations = {model: (get_model_size(Path(MODEL_FOLDER) / model) / total_size) * available_vram for model in models if model != "Select_a_model..."}
+    gpu_layers = {}
+    for model in models:
+        if model == "Select_a_model...":
+            gpu_layers[model] = 0
+            continue
+        model_path = Path(MODEL_FOLDER) / model
+        num_layers = get_model_layers(str(model_path))
+        safe_size = get_model_size(str(model_path)) * 1.1875
+        layer_size = safe_size / num_layers if num_layers > 0 else 0
+        max_layers = floor(vram_allocations[model] / layer_size) if layer_size > 0 else 0
+        gpu_layers[model] = min(max_layers, num_layers)
+    return gpu_layers
 
 def get_llm(model_type: str):
     from scripts.temporary import (
@@ -132,46 +126,34 @@ def get_llm(model_type: str):
     )
     from llama_cpp import Llama
     from pathlib import Path
-
-    if model_type == "quality":
-        if quality_llm is None and QUALITY_MODEL_NAME != "Select_a_model...":
+    global quality_llm, fast_llm
+    if model_type == "quality" and QUALITY_MODEL_NAME != "Select_a_model...":
+        if quality_llm is None:
             model_path = Path(MODEL_FOLDER) / QUALITY_MODEL_NAME
-            if not model_path.exists():
-                raise ValueError(f"Quality model file not found: {model_path}")
             quality_llm = Llama(
                 model_path=str(model_path),
                 n_ctx=N_CTX,
-                n_gpu_layers=N_GPU_LAYERS,
+                n_gpu_layers=N_GPU_LAYERS_QUALITY,
                 n_batch=N_BATCH,
                 mmap=MMAP,
                 mlock=MLOCK,
                 verbose=False
             )
         return quality_llm
-    elif model_type == "fast":
-        if fast_llm is None and FAST_MODEL_NAME != "Select_a_model...":
+    elif model_type == "fast" and FAST_MODEL_NAME != "Select_a_model...":
+        if fast_llm is None:
             model_path = Path(MODEL_FOLDER) / FAST_MODEL_NAME
-            if not model_path.exists():
-                raise ValueError(f"Fast model file not found: {model_path}")
             fast_llm = Llama(
                 model_path=str(model_path),
                 n_ctx=N_CTX,
-                n_gpu_layers=N_GPU_LAYERS,
+                n_gpu_layers=N_GPU_LAYERS_FAST,
                 n_batch=N_BATCH,
                 mmap=MMAP,
                 mlock=MLOCK,
                 verbose=False
             )
         return fast_llm
-    elif model_type == "both":
-        # Ensure both models are loaded for dual-model tasks
-        quality = get_llm("quality")
-        fast = get_llm("fast")
-        if quality is None or fast is None:
-            raise ValueError("Both models must be loaded for 'both' mode")
-        return {"quality": quality, "fast": fast}
-    else:
-        raise ValueError(f"Invalid model_type: {model_type}")
+    return None
 
 def update_generate_mode(quality_model, fast_model):
     quality_selected = quality_model != "Select_a_model..."
@@ -210,9 +192,11 @@ def get_model_type_for_task(task: str, mode: str):
         raise ValueError("No model selected")
 
 def get_model_settings(model_name):
+    from .temporary import category_keywords, handling_keywords, temperature_defaults
     model_name_lower = model_name.lower()
-    category = "general"  # Default to general
-    enhancements = []
+    category = "chat"  # Default to chat
+    is_uncensored = any(keyword in model_name_lower for keyword in handling_keywords["uncensored"])
+    is_reasoning = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
 
     # Detect primary category
     for cat, keywords in category_keywords.items():
@@ -220,19 +204,20 @@ def get_model_settings(model_name):
             category = cat
             break
 
-    # Detect reasoning enhancement
-    if any(keyword in model_name_lower for keyword in reasoning_keywords):
-        enhancements.append("reasoning")
-
     # Compile settings
     settings = {
         "category": category,
-        "enhancements": enhancements,
-        "temperature": temperature_defaults[category],
-        "system_prompt": model_prompts[category],
-        "prompt_template": prompt_templates[category]
+        "is_uncensored": is_uncensored,
+        "is_reasoning": is_reasoning,
+        "temperature": temperature_defaults[category]
     }
     return settings
+
+def determine_operation_mode(quality_model):
+    if quality_model == "Select_a_model...":
+        return "Select models to enable mode detection."
+    settings = get_model_settings(quality_model)
+    return settings["category"].capitalize()  # Returns "Code", "Rpg", or "Chat"
 
 def get_available_models():
     from .temporary import MODEL_FOLDER  # Changed from MODEL_DIR
@@ -315,43 +300,51 @@ def get_streaming_response(prompt: str, model_type: str):
             buffer += line
             yield buffer
 
-def get_response(prompt: str, model_type: str, disable_think: bool = False, rp_settings: dict = None) -> str:
+def get_response(prompt: str, model_type: str, disable_think: bool = False, rp_settings: dict = None, session_history: str = "") -> str:
     from scripts.temporary import (
         USE_PYTHON_BINDINGS, REPEAT_PENALTY, N_CTX, N_BATCH, MMAP, MLOCK, 
         BACKEND_TYPE, LLAMA_CLI_PATH, MODEL_FOLDER, QUALITY_MODEL_NAME, 
-        FAST_MODEL_NAME, prompt_templates, time, current_model_settings
+        FAST_MODEL_NAME, prompt_templates, time
     )
     from pathlib import Path
 
-    # Enhance prompt with context
+    # Enhance prompt with context from vectorstore if available
     enhanced_prompt = context_injector.inject_context(prompt)
     settings = get_model_settings(QUALITY_MODEL_NAME if model_type == "quality" else FAST_MODEL_NAME)
     mode = settings["category"]
 
-    # Determine formatted prompt based on mode
-    if mode == "nsfw" and rp_settings:  # RP/NSFW mode uses nsfw template with roleplay settings
+    # Determine formatted prompt based on mode and settings
+    if mode == "rpg" and rp_settings:
         used_npcs = [npc for npc in [rp_settings.get("ai_npc1", ""), rp_settings.get("ai_npc2", ""), rp_settings.get("ai_npc3", "")] if npc and npc != "Unused"]
-        formatted_prompt = prompt_templates["nsfw"].format(
-            system_prompt=settings["system_prompt"],
-            rp_location=rp_settings.get("rp_location", "Public"),
-            user_name=rp_settings.get("user_name", "Human"),
-            user_role=rp_settings.get("user_role", "Lead Roleplayer"),
-            ai_npc1=used_npcs[0] if used_npcs else "Randomer",
-            ai_npc2=used_npcs[1] if len(used_npcs) > 1 else "",
-            ai_npc3=used_npcs[2] if len(used_npcs) > 2 else "",
-            user_input=enhanced_prompt
+        num_npcs = max(1, len(used_npcs))  # Default to 1 if no NPCs are used
+        template_key = f"rpg_{num_npcs}"
+        formatted_prompt = prompt_templates[template_key].format(
+            agent_name_1=used_npcs[0] if used_npcs else "Randomer",
+            agent_name_2=used_npcs[1] if len(used_npcs) > 1 else "",
+            agent_name_3=used_npcs[2] if len(used_npcs) > 2 else "",
+            location_name=rp_settings.get("rp_location", "Public"),
+            human_name=rp_settings.get("user_name", "Human"),
+            human_role=rp_settings.get("user_role", "Lead Roleplayer"),
+            session_history=session_history,
+            human_input=enhanced_prompt
         )
+    elif mode == "chat":
+        # Choose between chat and chat_uncensored based on the model's uncensored flag
+        template_key = "uncensored" if settings["is_uncensored"] else "chat"
+        formatted_prompt = prompt_templates[template_key].format(user_input=enhanced_prompt)
     else:
-        # Use the mode-specific template or fallback to general
-        formatted_prompt = prompt_templates.get(mode, prompt_templates["general"]).format(
-            system_prompt=settings["system_prompt"],
-            user_input=enhanced_prompt
-        )
+        # Use the mode-specific template (e.g., "code")
+        formatted_prompt = prompt_templates.get(mode, prompt_templates["chat"]).format(user_input=enhanced_prompt)
 
+    # Load the appropriate model
     llm = get_llm(model_type)
+    if not llm:
+        raise ValueError(f"No valid {model_type} model loaded.")
+
+    # Handle response generation
     if USE_PYTHON_BINDINGS:
         thinking_output = ""
-        if "reasoning" in settings["enhancements"] and not disable_think:
+        if settings["is_reasoning"] and not disable_think:
             thinking_output = "Thinking:\n"
             start_time = time.time()
             for i in range(5):
@@ -386,13 +379,13 @@ def get_response(prompt: str, model_type: str, disable_think: bool = False, rp_s
         if MLOCK:
             cmd += ["--mlock"]
         if "vulkan" in BACKEND_TYPE.lower():
-            cmd += ["--vulkan", "--gpu-layers", str(N_GPU_LAYERS)]
+            cmd += ["--vulkan", "--gpu-layers", str(N_GPU_LAYERS_QUALITY if model_type == "quality" else N_GPU_LAYERS_FAST)]
         elif "kompute" in BACKEND_TYPE.lower():
-            cmd += ["--kompute", "--gpu-layers", str(N_GPU_LAYERS)]
+            cmd += ["--kompute", "--gpu-layers", str(N_GPU_LAYERS_QUALITY if model_type == "quality" else N_GPU_LAYERS_FAST)]
         
         proc = subprocess.run(cmd, capture_output=True, text=True)
         thinking_output = ""
-        if "reasoning" in current_model_settings["category"] and not disable_think:
+        if settings["is_reasoning"] and not disable_think:
             thinking_output = "Thinking:\n"
             start_time = time.time()
             for i in range(5):
