@@ -90,7 +90,6 @@ Layers for GPU is auto-detected, there are then keywords on the label of the mod
 1. For ~8B models (Primary/Quality).
 - [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall, untested filename `qwen2.5-7b-cabs-v0.4.Q6_K.gguf`.
 - Choice between, Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) and Qwen [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) - Both Uncensored <8GB, Chat and Reasoning, filenames, `DeepSeek-R1-Distill-Llama-8B-Uncensored.Q6_K.gguf` or `DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner.Q6_K.gguf`.
--  - Uncensored <8GB , filename .
 - [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best on Big code Leaderboard for Python, for Coder, filename `Nxcode-CQ-7B-orpo.Q6_K.gguf`.
 2. For <4B models (Secondary/Fast).
 - [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested, filename `Llama-3.2-3B-Instruct-uncensored-Q3_K_M.gguf`.
