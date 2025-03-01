@@ -112,12 +112,12 @@ Most GGUF text models will work, so long as they have the appropriate keywords i
 - 9 "History Slots" and "6 File Slots", seemed, like sensible numbers and to fit the display.
 
 ## Development
-Some theory for 2 model mode operation...
+1. Some theory for 2 model mode operation. I want a load model button, it will do the calculations for the detail of models configured, and load all selected models appropriately, therein, the configuration of the models will affect the configuration of the interface..
 - `Fast Chat + Fast Chat` - 3 Way conversation? This would require new modification of interface for conversation, but would activate if you load the exact same model in both slots. 
 - `Chat + Fast Chat` - Genearl interaction is done through the Chat Model, while, Fast Chat can enabled for simpler requests and TOT will use fast model also, this where it would be, for example 3K and 6K of same model.
 - `RP + Fast Chat` - Fastchat can be use for summarization then use right panel below/above rp details for summarization, also need to work on prompts and use promts from other chat program I made.
-- `Reasoning + Code` - Agentic code generation would be the way to do it.
-- `Uncensored` In the program, this needs to be handled like the Reasoning, and not be a mode of operation, but affect how the model is prompted, obviously its a chat model, so we need to merge code for, `chat` and `uncensored`, a little possibly, but ensure to  Loading 2 models Second model should be used for agentic operation.  
+- `Reasoning + Code` - Agentic code generation would be the way to do it, it would require figuring out, how I would like it to work, which would involve planning, creation, saving, etc. It cant be too impressive, scripts would end up huge, so start with basic stuff. Possibly could also use resoning model with THINK turned off for scraping web for info to assist projects.
+2. `Uncensored` In the program, this needs to be handled like the Reasoning, that used to be one of the modes but became a feature, and just like the resoning models are handled so as to provide an option to not have the `THINK` phase andy bypass that part, likewise the `uncensored` keywords should be used only automatically to adjust the prompt to unlick the uncensored mode, as should be somewhere in the code already, while for the mode that would have been uncensored to now become merged with general chat mode, as other than the prompt its the same thing. so we need to merge code for, `chat` and `uncensored`, other than the part where it will adapt the prompt for the uncensored operation.
 
 ### Far Development.
 - Testing and Bugfixing - keep testing, while keeping an eye on the terminal for output of, warnings and errors, then find fixes, and a few, refinements or improvements, along the way.
