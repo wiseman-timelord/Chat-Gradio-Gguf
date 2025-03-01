@@ -99,7 +99,7 @@ Advised models in, 14B, ~8B, 3B, require relevantly, ~11GB, ~7GB, ~3GB, they are
 - [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model at the time in Gguf format, filename `qwen2.5-7b-cabs-v0.4.Q6_K.gguf`.
 - [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best Python code model  at the time in GGUF format, filename `Nxcode-CQ-7B-orpo.Q6_K.gguf`.
 - [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) - Interesting Uncensored <8GB Chat model in GGUF format, filename `DeepSeek-R1-Distill-Llama-8B-Uncensored.Q6_K.gguf`.
-- [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format, filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
+- [Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF](https://huggingface.co/Novaciano/Llama-3.2-3b-NSFW_Aesir_Uncensored-GGUF) - Tested and somewhat good, fast Nsfw Chat model in GGUF format (nVidia ONLY), filename `Llama-3.2-3b-NSFW_Aesir_Uncensored.gguf`.
 - [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - Looks like a great model for text processing/secondary model, filename `Llama-3.2-3B-Instruct-uncensored-Q3_K_M.gguf`.
 
 ## Development
