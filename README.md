@@ -78,6 +78,9 @@ To create a public link, set `share=True` in `launch()`.
 5. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder.
 6. After the install completes, check for any install issues, you may need to install again if there are.
 7. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`.
+8. You will be greeted with the conversation page, but you will first be going to the configuration page.
+9. On the `Configuration` page you would configure appropriately, its all straight forwards.
+10. Go back to the `Conversation` page and begin interactions, ensuring to notice features available.
 
 ### Model Keywords for Operational Modes
 Layers for GPU is auto-detected, there are then keywords on the label of the model...
@@ -109,7 +112,12 @@ Most GGUF text models will work, so long as they have the appropriate keywords i
 - 9 "History Slots" and "6 File Slots", seemed, like sensible numbers and to fit the display.
 
 ## Development
-- Add `Load Models` button back, and ensure that it does the correct calculation individually for all models selected, determing optimal configuration where main model would proportionately have 
+Some theory for 2 model mode operation...
+- `Fast Chat + Fast Chat` - 3 Way conversation? This would require new modification of interface for conversation, but would activate if you load the exact same model in both slots. 
+- `Chat + Fast Chat` - Genearl interaction is done through the Chat Model, while, Fast Chat can enabled for simpler requests and TOT will use fast model also, this where it would be, for example 3K and 6K of same model.
+- `RP + Fast Chat` - Fastchat can be use for summarization then use right panel below/above rp details for summarization, also need to work on prompts and use promts from other chat program I made.
+- `Reasoning + Code` - Agentic code generation would be the way to do it.
+- `Uncensored` In the program, this needs to be handled like the Reasoning, and not be a mode of operation, but affect how the model is prompted, obviously its a chat model, so we need to merge code for, `chat` and `uncensored`, a little possibly, but ensure to  Loading 2 models Second model should be used for agentic operation.  
 
 ### Far Development.
 - Testing and Bugfixing - keep testing, while keeping an eye on the terminal for output of, warnings and errors, then find fixes, and a few, refinements or improvements, along the way.
