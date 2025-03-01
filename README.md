@@ -42,14 +42,11 @@ A high-quality chat interface with 4 auto-detected modes of, operation and inter
 
 Starting Chat-Gradio-Gguf...
 Starting `launcher` Imports.
-Vectorstore not found: general_knowledge
 `launcher` Imports Complete.
 Starting `launcher.main`.
-No files in `.files`.
 Running on local URL:  http://127.0.0.1:7860
 
 To create a public link, set `share=True` in `launch()`.
-
 
 
 
