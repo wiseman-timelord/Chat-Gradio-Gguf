@@ -4,59 +4,73 @@
 import time
 
 # General Constants/Variables/Lists/Maps/Arrays
-MODEL_FOLDER = "models"  # Directory for GGUF models
-VECTORSTORE_DIR = "data/vectorstores"  # Directory for vector stores
-TEMP_DIR = "data/temp"  # Temporary directory aligned with installer
-HISTORY_DIR = "data/history"  # Directory for session history
-VULKAN_DLL_PATH = "C:\\Windows\\SysWOW64\\vulkan-1.dll"  # Reference path for Vulkan DLL
-SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"  # Format for session file names
-MODEL_LOADED = False  # Tracks if model is loaded
-rag_documents = []  # Placeholder for RAG documents
-session_label = ""  # Current session label
-current_session_id = None  # Unique ID for the current session
-RAG_CHUNK_SIZE_DEVIDER = 4  # RAG chunk size = n_ctx / RAG_CHUNK_SIZE_DEVIDER
-RAG_CHUNK_OVERLAP_DEVIDER = 32  # RAG chunk overlap = n_ctx / RAG_CHUNK_OVERLAP_DEVIDER
+MODEL_FOLDER = "models"
+VECTORSTORE_DIR = "data/vectorstores"
+TEMP_DIR = "data/temp"
+HISTORY_DIR = "data/history"
+VULKAN_DLL_PATH = "C:\\Windows\\SysWOW64\\vulkan-1.dll"
+SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"
+MODEL_LOADED = False
+rag_documents = []
+session_label = ""
+current_session_id = None
+RAG_CHUNK_SIZE_DEVIDER = 4
+RAG_CHUNK_OVERLAP_DEVIDER = 32
 
 # Configurable Settings (Loaded from JSON)
-MODEL_PATH = "models/Select_a_model..."  # Default model path
-N_CTX = 8192  # Default context window size
-TEMPERATURE = 0.75  # Default temperature
-VRAM_SIZE = 8192  # Default VRAM size in MB (8GB)
-SELECTED_GPU = None  # Selected GPU device
-DYNAMIC_GPU_LAYERS = True # Kompute/Vulkan = True, Avx2 = False
-MMAP = True  # Use memory mapping
-MLOCK = False  # Use memory locking
-USE_PYTHON_BINDINGS = True  # Use Python bindings by default
-LLAMA_CLI_PATH = ""  # Path to llama-cli.exe, set by config
-BACKEND_TYPE = ""  # Backend type (e.g., "GPU/CPU - Vulkan"), set by config
-LLAMA_BIN_PATH = ""  # Directory of llama.cpp binaries, set by config
-N_GPU_LAYERS = 0  # Number of layers to offload to GPU, calculated at runtime
-RAG_AUTO_LOAD = ["general_knowledge"]  # Default RAG vectorstores to load
+QUALITY_MODEL_NAME = "Select_a_model..."
+FAST_MODEL_NAME = "Select_a_model..."
+N_CTX = 8192
+VRAM_SIZE = 8192
+SELECTED_GPU = None
+DYNAMIC_GPU_LAYERS = True
+MMAP = True
+MLOCK = False
+USE_PYTHON_BINDINGS = True
+LLAMA_CLI_PATH = ""
+BACKEND_TYPE = ""
+LLAMA_BIN_PATH = ""
+N_GPU_LAYERS = 0
+RAG_AUTO_LOAD = ["general_knowledge"]
 REPEAT_PENALTY = 1.0
-N_BATCH = 1024  # Default batch size
+N_BATCH = 1024
+
+# TOT Settings
+TOT_VARIATIONS = [
+    "Please provide a detailed answer.",
+    "Be concise.",
+    "Think step by step."
+]
 
 # UI Constants
-USER_COLOR = "#ffffff"  # Color for user messages
-THINK_COLOR = "#c8a2c8"  # Color for thinking indicators
-RESPONSE_COLOR = "#add8e6"  # Color for assistant responses
-SEPARATOR = "=" * 40  # UI separator line
-MID_SEPARATOR = "-" * 30  # UI mid-separator line
+USER_COLOR = "#ffffff"
+THINK_COLOR = "#c8a2c8"
+RESPONSE_COLOR = "#add8e6"
+SEPARATOR = "=" * 40
+MID_SEPARATOR = "-" * 30
 
 # Model Constants
-DEFAULT_TEMPERATURE = 0.75  # Fallback temperature
-DEFAULT_N_CTX = 4096  # Fallback context size
-DEFAULT_N_GPU_LAYERS = 35  # Fallback GPU layers
+DEFAULT_N_CTX = 4096
+DEFAULT_N_GPU_LAYERS = 35
 
 # Options for Dropdowns
-ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}  # Supported file extensions
-CTX_OPTIONS = [8192, 16384, 24576, 32768]  # Context window options
-TEMP_OPTIONS = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]  # Temperature options per readme
-VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]  # VRAM options in MB
-REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]  # Repeat penalty options
-BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096] # n_batch (output length)
+ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}
+CTX_OPTIONS = [8192, 16384, 24576, 32768]
+VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]
+REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
+BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096]
 
-# Global LLM instance
-llm = None  # Placeholder for Llama instance
+# Global LLM instances
+quality_llm = None
+fast_llm = None
+
+# RPG Settings
+RP_LOCATION = "Public"
+USER_NAME = "Human"
+USER_ROLE = "Lead Roleplayer"
+AI_NPC1 = "Randomer"
+AI_NPC2 = "Unused"
+AI_NPC3 = "Unused"
 
 # Status text entries
 STATUS_TEXTS = {
@@ -76,44 +90,44 @@ STATUS_TEXTS = {
 
 # Model Categories and Keywords
 category_keywords = {
-    "code": ["code", "cq"],
-    "nsfw": ["nsfw", "rp"],
-    "reasoning": ["reasoner", "deepseek-r1"],
-    "uncensored": ["uncensored"],
-    "general_chat": []
+    "code": ["code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell"],
+    "rpg": ["nsfw", "adult", "mature", "explicit", "rp", "roleplay"],
+    "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
+    "general": []  # Fallback category for models without specific keywords
 }
+
+# Reasoning enhancement keywords
+reasoning_keywords = ["reasoner", "r1", "reasoning", "reason"]
 
 # System Prompts per Category
 model_prompts = {
-    "code": "You're an AI coding assistant who helps in solving coding questions. Please provide accurate and efficient code solutions.",
-    "nsfw": "You're an AI designed for roleplay and NSFW content. Please engage in explicit and adult-themed conversations.",
-    "reasoning": "You're an AI assistant that thinks step-by-step before answering. Please provide detailed and reasoned responses.",
-    "uncensored": "You're an AI assistant that can handle any topic without censorship.",
-    "general_chat": "You're a helpful assistant. Please answer questions and provide information in a friendly and informative manner."
+    "code": "You are a coding assistant...",
+    "rpg": "You are an NSFW conversational AI...",
+    "uncensored": "You are an uncensored AI...",
+    "general": "You are a general-purpose AI..."
 }
 
-# Temperature Defaults per Category
+# Temperature defaults per category
 temperature_defaults = {
-    "code": 0.5,
-    "nsfw": 0.75,
-    "reasoning": 0.5,
+    "code": 0.25,
+    "rpg": 0.75,
     "uncensored": 0.75,
-    "general_chat": 0.75
+    "general": 0.5  # Middle value for general models
 }
 
 # Prompt Templates per Category
 prompt_templates = {
-    "code": "{system_prompt}\n\nUSER: {prompt}\nASSISTANT:",
-    "nsfw": "{system_prompt}\n\nUSER: {prompt}\nASSISTANT:",
-    "reasoning": "{system_prompt}\n\nUSER: {prompt}\nASSISTANT: Let's think step by step.",
-    "uncensored": "{system_prompt}\n\nUSER: {prompt}\nASSISTANT:",
-    "general_chat": "{system_prompt}\n\nUSER: {prompt}\nASSISTANT:"
+    "code": "You are a coding assistant. Provide code solutions and explanations.\nUser: {user_input}\nAI: ",
+    "rpg": "You are a role-playing AI. Respond in, character and context to the scenario, to the user.\nUser: {user_input}\nAI: ",
+    "uncensored": "You are an uncensored AI. Provide unfiltered responses.\nUser: {user_input}\nAI: ",
+    "general": "You are a general-purpose AI assistant.\nUser: {user_input}\nAI: ",
+    "rp": "You are roleplaying in {rp_location}. Characters: {user_name} ({user_role}), {ai_npc1}, {ai_npc2}, {ai_npc3}.\nUser: {user_input}\nAI: "
 }
 
 # Current Model Settings
 current_model_settings = {
-    "category": "general_chat",
-    "system_prompt": model_prompts["general_chat"],
-    "temperature": temperature_defaults["general_chat"],
-    "prompt_template": prompt_templates["general_chat"]
+    "category": "general",  # Changed from "general_chat"
+    "system_prompt": model_prompts["general"],
+    "temperature": temperature_defaults["general"],
+    "prompt_template": prompt_templates["general"]
 }

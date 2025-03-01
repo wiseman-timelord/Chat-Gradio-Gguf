@@ -1,26 +1,37 @@
-# Script: `.\scripts\interface.py` 
+# Script: `.\scripts\interface.py`
 
 # Imports...
 import gradio as gr
-import re, os
+import re, os, json, paperclip
 from pathlib import Path
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
+import scripts.temporary as temporary
 from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
-    MODEL_LOADED, ALLOWED_EXTENSIONS, CTX_OPTIONS, MODEL_PATH, N_CTX,
-    TEMPERATURE, TEMP_OPTIONS, VRAM_SIZE, SELECTED_GPU, current_model_settings,
-    N_GPU_LAYERS, VRAM_OPTIONS, REPEAT_OPTIONS, REPEAT_PENALTY, MLOCK,
-    HISTORY_DIR, BATCH_OPTIONS, N_BATCH, MODEL_FOLDER
+    MODEL_LOADED, ALLOWED_EXTENSIONS, N_CTX, VRAM_SIZE, SELECTED_GPU,
+    current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS, REPEAT_OPTIONS,
+    REPEAT_PENALTY, MLOCK, HISTORY_DIR, BATCH_OPTIONS, N_BATCH, MODEL_FOLDER,
+    QUALITY_MODEL_NAME, FAST_MODEL_NAME, STATUS_TEXTS, CTX_OPTIONS
 )
 from scripts import utility
+from scripts.utility import delete_vectorstore, delete_all_vectorstores  # New imports
 from scripts.models import (
     get_streaming_response, get_response, get_available_models, reload_vectorstore,
-    initialize_model, unload_model, get_model_settings
+    unload_models, get_model_settings, context_injector  # Added context_injector
 )
 
 # Functions...
+def validate_model_themes(quality_model, fast_model):
+    if quality_model == "Select_a_model..." or fast_model == "Select_a_model...":
+        return "Select both models to validate themes."
+    quality_settings = get_model_settings(quality_model)
+    fast_settings = get_model_settings(fast_model)
+    if quality_settings["category"] != fast_settings["category"]:
+        return "Error: Models must be of the same theme (e.g., both 'code' or 'nsfw')."
+    return "Models are compatible."
+
 def format_response(output: str) -> str:
     formatted = []
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', output, re.DOTALL)
@@ -37,39 +48,48 @@ def web_search_trigger(query):
     except Exception as e:
         return f"Error: {str(e)}"
 
-def process_uploaded_files(files, loaded_files, rag_max_docs):
-    """Process uploaded files, add to available slots up to rag_max_docs."""
-    try:
-        files_dir = Path("files")
-        files_dir.mkdir(exist_ok=True)
-        new_files = []
-        
-        available_slots = [i for i in range(rag_max_docs) if i >= len(loaded_files)]
-        for idx, file in enumerate(files[:len(available_slots)]):
-            original_name = Path(file.name).name
-            dest_path = files_dir / original_name
-            with open(file.name, 'rb') as src, open(dest_path, 'wb') as dst:
-                dst.write(src.read())
-            new_files.append(str(dest_path))
-        
-        loaded_files.extend(new_files)
-        ignored_files = len(files) - len(available_slots)
-        status_msg = f"Added {len(new_files)} files"
-        if ignored_files > 0:
-            status_msg += f", ignored {ignored_files} files (max slots reached)"
-        
-        docs = utility.load_and_chunk_documents(loaded_files)
-        utility.create_vectorstore(docs)
-        
-        button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-        return [loaded_files, status_msg] + button_updates + [attach_files_update]
-    except Exception as e:
-        button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-        return [loaded_files, f"Error: {str(e)}"] + button_updates + [attach_files_update]
+def delete_npc(npc_index, ai_npc1, ai_npc2, ai_npc3):
+    npc_values = [ai_npc1, ai_npc2, ai_npc3]
+    npc_values[npc_index] = "Unused"
+    return npc_values[0], npc_values[1], npc_values[2]
 
+def save_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3):
+    config_path = Path("data/persistent.json")
+    with open(config_path, "r+") as f:
+        config = json.load(f)
+        config["rp_settings"] = {
+            "rp_location": rp_location,
+            "user_name": user_name,
+            "user_role": user_role,
+            "ai_npc1": ai_npc1,
+            "ai_npc2": ai_npc2,
+            "ai_npc3": ai_npc3
+        }
+        f.seek(0)
+        json.dump(config, f, indent=2)
+    return rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3
+
+def process_uploaded_files(files, loaded_files, rag_max_docs, operation_mode):
+    from scripts.utility import map_operation_mode_to_vectorstore_mode, load_and_chunk_documents, update_vectorstore
+    from langchain_core.documents import Document  # Correct import for Document class
+    from pathlib import Path
+
+    mode = map_operation_mode_to_vectorstore_mode(operation_mode)
+    new_files = []
+    available_slots = rag_max_docs - len(loaded_files)
+    for file in files[:available_slots]:
+        with open(file.name, 'rb') as f:
+            content = f.read().decode('utf-8', errors='ignore')
+        doc = Document(page_content=content, metadata={"source": Path(file.name).name})
+        new_files.append(doc)
+    if new_files:
+        docs = load_and_chunk_documents(new_files)
+        update_vectorstore(docs, mode)
+        loaded_files.extend([f.metadata["source"] for f in new_files])  # Track filenames in-memory
+        return [loaded_files, f"Added {len(new_files)} files to {mode} vectorstore."]
+    return [loaded_files, "No files added."]
 
 def eject_file(loaded_files, slot_index, rag_max_docs):
-    """Eject a file from the specified slot."""
     if 0 <= slot_index < len(loaded_files):
         try:
             removed_file = loaded_files.pop(slot_index)
@@ -84,51 +104,13 @@ def eject_file(loaded_files, slot_index, rag_max_docs):
     button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
     return [loaded_files, status_msg] + button_updates + [attach_files_update]
 
-
 def update_file_slot_ui(loaded_files, rag_max_docs):
-    """Update file slot buttons based on current state."""
     button_updates = []
-    for i in range(6):  # Fixed 6 buttons
-        if i < len(loaded_files):
-            filename = Path(loaded_files[i]).name
-            short_name = (filename[:13] + "..") if len(filename) > 15 else filename
-            label = f"{short_name}"
-            variant = "secondary"
-        else:
-            label = "File Slot Free"
-            variant = "primary"
-        button_updates.append(gr.update(value=label, visible=True, variant=variant))
-    
-    # Show attach files button only if there are empty slots
-    attach_files_visible = len(loaded_files) < 6
-    return button_updates + [gr.update(visible=attach_files_visible)]
-
-def update_rag_max_docs(rag_max_docs, loaded_files):
-    """Update RAG_MAX_DOCS, truncate loaded_files if necessary, and refresh UI."""
-    if len(loaded_files) > rag_max_docs:
-        loaded_files = loaded_files[:rag_max_docs]
-        docs = utility.load_and_chunk_documents(loaded_files)
-        utility.create_vectorstore(docs)
-    return [loaded_files] + update_file_slot_ui(loaded_files, rag_max_docs)
-
-def handle_slot_click(slot_index, loaded_files):
-    """Handle slot button clicks - either eject file or trigger upload"""
-    if slot_index < len(loaded_files):
-        # Eject existing file
-        return eject_file(loaded_files, slot_index, 6)
-    else:
-        # Trigger file upload for specific slot
-        return [loaded_files, "Click 'Attach Files' to add files to available slots."] + \
-               update_file_slot_ui(loaded_files, 6)
-
-def update_file_slot_ui(loaded_files, rag_max_docs):
-    """Update slot buttons based on current state."""
-    button_updates = []
-    for i in range(10):
+    for i in range(8):
         if i < rag_max_docs:
             if i < len(loaded_files):
                 filename = Path(loaded_files[i]).name
-                short_name = (filename[:13] + "..") if len(filename) > 12 else filename
+                short_name = (filename[:13] + "..") if len(filename) > 15 else filename
                 label = f"{short_name}"
                 variant = "secondary"
             else:
@@ -136,488 +118,346 @@ def update_file_slot_ui(loaded_files, rag_max_docs):
                 variant = "primary"
             visible = True
         else:
-            label = ""
+            label = "File Slot Free"
+            variant = "primary"
             visible = False
         button_updates.append(gr.update(value=label, visible=visible, variant=variant))
-    
-    # Show attach files button only if there are empty slots
-    attach_files_visible = rag_max_docs > 0 and len(loaded_files) < rag_max_docs
+    attach_files_visible = len(loaded_files) < rag_max_docs
     return button_updates + [gr.update(visible=attach_files_visible)]
 
 def handle_slot_click(slot_index, loaded_files, rag_max_docs):
-    """Handle slot button clicks - either eject file or trigger upload"""
     if slot_index < len(loaded_files):
-        # Eject existing file
         return eject_file(loaded_files, slot_index, rag_max_docs)
+    return [loaded_files, "Click 'Attach Files' to add files."] + update_file_slot_ui(loaded_files, rag_max_docs)
+
+def update_session_buttons():
+    sessions = utility.get_saved_sessions()
+    button_updates = []
+    for i in range(11):
+        if i < len(sessions):
+            session_path = Path(HISTORY_DIR) / sessions[i]
+            try:
+                label, _ = utility.load_session_history(session_path)
+                btn_label = f"{label}" if label else f"Session {i+1}"
+            except Exception:
+                btn_label = f"Session {i+1}"
+        else:
+            btn_label = "Empty History Slot"
+        button_updates.append(gr.update(value=btn_label, visible=True))
+    return button_updates
+
+def load_session_by_index(index):
+    sessions = utility.get_saved_sessions()
+    if index < len(sessions):
+        session_file = sessions[index]
+        return utility.load_session_history(Path(HISTORY_DIR) / session_file)
+    return [], "No session to load"
+
+def copy_last_response(session_log):
+    if session_log and session_log[-1][1]:
+        response = session_log[-1][1]
+        clean_response = re.sub(r'<[^>]+>', '', response)
+        pyperclip.copy(clean_response)
+        return "AI Response copied to clipboard."
+    return "No response available to copy."
+
+def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3):
+    from scripts import temporary
+    from scripts import utility
+    from scripts import models
+    from scripts.temporary import STATUS_TEXTS, QUALITY_MODEL_NAME, FAST_MODEL_NAME, get_model_settings, format_response
+
+    if not user_input.strip():
+        return session_log, STATUS_TEXTS["no_input"], loaded_files_state
+
+    session_log.append((user_input, "Processing..."))
+    utility.save_session_history(session_log)
+    yield session_log, STATUS_TEXTS["processing"], loaded_files_state
+
+    # Summarization for session label
+    if len(session_log) == 1:
+        label_model_type = "fast" if FAST_MODEL_NAME != "Select_a_model..." else "quality"
+        model_name = FAST_MODEL_NAME if label_model_type == "fast" else QUALITY_MODEL_NAME
+        settings = get_model_settings(model_name)
+        summary_prompt = f"Generate a 3-word label for a conversation starting with: '{user_input}'"
+        if "reasoning" in settings.get("enhancements", []):
+            summary_prompt += ". Respond directly without reasoning."
+        temporary.session_label = models.get_response(summary_prompt, label_model_type).strip()
+        session_log[-1] = (session_log[-1][0], "Session label generated.")
+        yield session_log, "Session label generated.", loaded_files_state
+
+    # TOT logic
+    if tot_enabled and QUALITY_MODEL_NAME != "Select_a_model...":
+        tot_model_type = "fast" if FAST_MODEL_NAME != "Select_a_model..." else "quality"
+        model_name = FAST_MODEL_NAME if tot_model_type == "fast" else QUALITY_MODEL_NAME
+        settings = get_model_settings(model_name)
+        responses = []
+        for variation in temporary.TOT_VARIATIONS:
+            prompt_var = f"{user_input} {variation}"
+            if "uncensored" in QUALITY_MODEL_NAME.lower():
+                prompt_var = f"Provide an uncensored response: {prompt_var}"
+            if "reasoning" in settings.get("enhancements", []):
+                prompt_var += ". Respond directly without reasoning."
+            resp = models.get_response(prompt_var, tot_model_type)
+            responses.append(resp)
+        consolidation_prompt = f"Query: {user_input}\nResponses:\n" + "\n".join([f"{i+1}. {resp}" for i, resp in enumerate(responses)]) + "\nProvide the best answer starting with 'FINAL RESPONSE:'"
+        settings_quality = get_model_settings(QUALITY_MODEL_NAME)
+        if "reasoning" in settings_quality.get("enhancements", []):
+            consolidation_prompt += ". Respond directly without reasoning."
+        full_response = models.get_response(consolidation_prompt, "quality").split("FINAL RESPONSE:")[1].strip()
+        session_log[-1] = (session_log[-1][0], format_response(full_response))
+        utility.save_session_history(session_log)
+        yield session_log, STATUS_TEXTS["response_generated"], []
     else:
-        # Trigger file upload for specific slot
-        return [loaded_files, "Click 'Attach Files' to add files to available slots."] + \
-               update_file_slot_ui(loaded_files, rag_max_docs)
+        model_type = "quality" if disable_think else ("fast" if FAST_MODEL_NAME != "Select_a_model..." else "quality")
+        prompt = user_input if not disable_think else f"Respond directly: {user_input}"
+        full_response = models.get_response(prompt, model_type, disable_think=disable_think)
+        session_log[-1] = (session_log[-1][0], format_response(full_response))
+        utility.save_session_history(session_log)
+        yield session_log, STATUS_TEXTS["response_generated"], []
+        
+def determine_operation_mode(quality_model):
+    if quality_model == "Select_a_model...":
+        return "Select models to enable mode detection."
+    settings = get_model_settings(quality_model)
+    category = settings["category"]
+    if category == "code":
+        return "Code"
+    elif category == "rpg":  # Changed from "nsfw"
+        if "rp" in quality_model.lower() or "roleplay" in quality_model.lower():
+            return "Chat-Rp"  # For roleplay-specific models
+        else:
+            return "Chat-Nsfw"  # For general mature content
+    elif category == "uncensored":
+        return "Chat-Uncensored"
+    return "Chat"
 
-def get_saved_sessions():
-    return utility.get_saved_sessions()
+def update_dynamic_options(quality_model, loaded_files_state):
+    mode = determine_operation_mode(quality_model)
+    rag_max_docs = 0
+    if mode in ["Chat", "Chat-Uncensored"]:
+        tot_visible = True
+        web_visible = True
+        think_visible = "reason" in quality_model.lower()
+        file_visible = True
+        rp_visible = False
+        rag_max_docs = 4
+    elif mode == "Code":
+        tot_visible = False
+        web_visible = False
+        think_visible = False
+        file_visible = True
+        rp_visible = False
+        rag_max_docs = 8
+    elif mode in ["Chat-Rp", "Chat-Nsfw"]:
+        tot_visible = False
+        web_visible = False
+        think_visible = False
+        file_visible = False
+        rp_visible = True
+        rag_max_docs = 0
+    else:
+        tot_visible = False
+        web_visible = False
+        think_visible = False
+        file_visible = True
+        rp_visible = False
+        rag_max_docs = 4
 
-def start_new_session():
-    from scripts import temporary
-    temporary.current_session_id = datetime.now().strftime(temporary.SESSION_FILE_FORMAT)
-    temporary.session_label = ""
-    return gr.Chatbot(value=[]), gr.Textbox(value="")
-
-def load_session(session_file):
-    from scripts import temporary
-    from scripts import utility
-    if session_file:
-        session_id = session_file.replace("session_", "").replace(".json", "")
-        temporary.current_session_id = session_id
-        label, history = utility.load_session_history(Path(temporary.HISTORY_DIR) / session_file)
-        temporary.session_label = label
-        return history, "Session loaded"
-    return [], "Session loaded"
-
-def unload_model_ui():
-    from scripts.temporary import STATUS_TEXTS
-    yield [
-        gr.Textbox.update(interactive=False),
-        gr.Button.update(interactive=False),
-        gr.Textbox.update(value=STATUS_TEXTS["model_unloading"]),
-        gr.Textbox.update(value=STATUS_TEXTS["model_unloading"])
+    updates = [
+        gr.update(visible=tot_visible),
+        gr.update(visible=web_visible),
+        gr.update(visible=think_visible),
+        gr.update(value=mode)
     ]
-    unload_model()
-    yield [
-        gr.Textbox.update(interactive=False, placeholder="Check Status box..."),
-        gr.Button.update(interactive=True),
-        gr.Textbox.update(value="No model loaded"),
-        gr.Textbox.update(value=STATUS_TEXTS["model_unloaded"]),
-        gr.Textbox.update(value=STATUS_TEXTS["model_unloaded"])
-    ]
+    file_updates = [gr.update(visible=file_visible) for _ in range(8)]
+    rp_updates = [gr.update(visible=rp_visible) for _ in range(8)]  # Matches rp_settings length
+    return [rag_max_docs] + updates + file_updates + rp_updates + [gr.update(visible=file_visible and len(loaded_files_state) < rag_max_docs)]
 
-def change_model(model_name):
-    from scripts.temporary import MODEL_PATH, TEMPERATURE, current_model_settings, MODEL_FOLDER
-    from scripts import utility
-    MODEL_PATH = f"{MODEL_FOLDER}/{model_name}"
-    settings = get_model_settings(model_name)
-    current_model_settings.update(settings)
-    TEMPERATURE = settings["temperature"]
-    unload_model()
-    initialize_model(None)
-    utility.save_config()
-    model_info_text = f"Loaded model: {model_name}, Category: {settings['category']}"
-    return gr.Textbox(interactive=True), gr.Button(interactive=False), model_info_text
+def toggle_model_rows(quality_model):
+    visible = quality_model != "Select_a_model..."
+    return [gr.update(visible=visible)] * 2
 
-def load_model():
-    from scripts.temporary import STATUS_TEXTS
-    yield [
-        gr.Textbox.update(interactive=False),
-        gr.Button.update(interactive=False),
-        gr.Textbox.update(value=STATUS_TEXTS["model_loading"]),
-        gr.Textbox.update(value=STATUS_TEXTS["model_loading"])
-    ]
-    try:
-        if MODEL_LOADED:
-            unload_model()
-        status_msg = initialize_model(None)
-        model_name = Path(MODEL_PATH).name
-        category = current_model_settings["category"]
-        yield [
-            gr.Textbox.update(interactive=True, placeholder="Type your message..."),
-            gr.Button.update(interactive=False),
-            gr.Textbox.update(value=f"Loaded model: {model_name}, Category: {category}"),
-            gr.Textbox.update(value=STATUS_TEXTS["model_loaded"]),
-            gr.Textbox.update(value=STATUS_TEXTS["model_loaded"])
-        ]
-    except Exception as e:
-        yield [
-            gr.Textbox.update(interactive=False),
-            gr.Button.update(interactive=True),
-            gr.Textbox.update(value="No model loaded"),
-            gr.Textbox.update(value=f"Error: {str(e)}"),
-            gr.Textbox.update(value=f"Error: {str(e)}")
-        ]
-
-def shutdown_program():
-    """Unload the model and terminate the program."""
-    from scripts.models import unload_model
-    from scripts.temporary import STATUS_TEXTS
-    try:
-        print("Shutting down: Unloading model...")
-        unload_model()
-        print("Model unloaded. Terminating program...")
-        demo.close()
-        import os
-        os._exit(0)
-    except Exception as e:
-        print(f"Error during shutdown: {str(e)}")
-        return STATUS_TEXTS["error"]
-    return STATUS_TEXTS["model_unloaded"]
-
-def chat_interface(message: str, history):
-    from scripts import temporary
-    from scripts import utility
-    from scripts.models import get_response, get_streaming_response
-    history.append((f'<span style="color: {temporary.USER_COLOR}">{message}</span>', ""))
-    yield history, temporary.STATUS_TEXTS["generating_response"]
-    try:
-        full_response = ""
-        for token in get_streaming_response(message):
-            full_response += token
-            history[-1] = (history[-1][0], format_response(full_response))
-            yield history, temporary.STATUS_TEXTS["generating_response"]
-        if len(history) == 1:
-            # Generate a 3-word label based only on the user's first input
-            summary_prompt = f"Generate a 3-word label for a conversation starting with: '{message}'"
-            temporary.session_label = get_response(summary_prompt).strip()
-        utility.save_session_history(history)
-        yield history, temporary.STATUS_TEXTS["response_generated"]
-    except Exception as e:
-        history[-1] = (history[-1][0], f'<span style="color: red;">Error: {str(e)}</span>')
-        yield history, f"Error: {str(e)}"
+def eject_quality_model():
+    from scripts.temporary import QUALITY_MODEL_NAME, quality_llm, FAST_MODEL_NAME, fast_llm
+    if quality_llm is not None:
+        del quality_llm
+        quality_llm = None
+    if fast_llm is not None:
+        del fast_llm
+        fast_llm = None
+    QUALITY_MODEL_NAME = "Select_a_model..."
+    FAST_MODEL_NAME = "Select_a_model..."
+    return (
+        gr.update(value="Select_a_model..."),
+        gr.update(value="No Model Selected"),
+        gr.update(value="Select_a_model..."),
+        gr.update(value="No Model Selected"),
+        "Quality and Fast models ejected"
+    )
 
 def launch_interface():
     global demo
     with gr.Blocks(title="Chat-Gradio-Gguf", css="""
         .scrollable { overflow-y: auto; }
-        .button-row {
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 4px !important;
-            margin-bottom: 4px !important;
-        }
-        .button-row .gradio-button {
-            flex: 1 !important;
-            min-width: 100px !important;
-            text-overflow: ellipsis;
-            overflow: hidden;
-            white-space: nowrap;
-        }
+        .button-row { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 4px !important; margin-bottom: 4px !important; }
+        .button-row .gradio-button { flex: 1 !important; min-width: 100px !important; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
     """) as demo:
-        # State variables
         loaded_files_state = gr.State(value=[])
-        rag_max_docs_state = gr.State(value=6)  # Fixed to 6
+        rag_max_docs_state = gr.State(value=4)
 
-        with gr.Tabs() as tabs:
+        with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        # Start New Session button at the top
                         start_new_session_btn = gr.Button("Start New Session", variant="primary")
-                        
-                        # Session history slots - Fixed 9 buttons
-                        with gr.Column():
-                            session_buttons = [gr.Button("Empty History Slot") for _ in range(9)]
-                        
-                        # File slot buttons - Fixed 6 buttons (3 rows of 2)
-                        with gr.Column():
-                            file_slot_buttons = []
-                            for row in range(3):
-                                with gr.Row(elem_classes=["button-row"]):
-                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="primary"))
+                        session_buttons = [gr.Button("Empty History Slot") for _ in range(11)]
+                    with gr.Column(scale=20):
+                        session_log = gr.Chatbot(label="Session Log", height=425, elem_classes=["scrollable"])
+                        user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...", elem_classes=["scrollable"])
+                        with gr.Row():
+                            send_btn = gr.Button("Send Input", variant="primary", scale=20)
+                            edit_previous_btn = gr.Button("Edit Last Input", scale=1)
+                            copy_response_btn = gr.Button("Copy Last Output", scale=1)
+
+                    with gr.Column(scale=1):
+                        theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="Select models to enable mode detection.")
+                        web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
+                        tot_checkbox = gr.Checkbox(label="Enable TOT", value=False, visible=False)
+                        disable_think_switch = gr.Checkbox(label="Disable THINK", value=False, visible=False)
+                        # Define RP components individually with initial values from temporary
+                        rp_location = gr.Textbox(label="RP Location", value=temporary.RP_LOCATION, visible=False)
+                        user_name = gr.Textbox(label="User Name", value=temporary.USER_NAME, visible=False)
+                        user_role = gr.Textbox(label="User Role", value=temporary.USER_ROLE, visible=False)
+                        ai_npc1 = gr.Textbox(label="AI NPC 1", value=temporary.AI_NPC1, visible=False)
+                        ai_npc2 = gr.Textbox(label="AI NPC 2", value=temporary.AI_NPC2, visible=False)
+                        delete_npc2_btn = gr.Button("Delete NPC 2", visible=False)
+                        ai_npc3 = gr.Textbox(label="AI NPC 3", value=temporary.AI_NPC3, visible=False)
+                        delete_npc3_btn = gr.Button("Delete NPC 3", visible=False)
+                        file_slot_buttons = []
+                        attach_files_btn = gr.UploadButton("Attach Files", visible=True, file_types=[f".{ext}" for ext in ALLOWED_EXTENSIONS], file_count="multiple")
+                        for row in range(4):
+                            with gr.Row(elem_classes=["button-row"]):
+                                for col in range(2):
                                     file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="primary"))
 
-                    with gr.Column(scale=20):
-                        session_log = gr.Chatbot(label="Session Log", height=375, elem_classes=["scrollable"])
-                        user_input = gr.Textbox(
-                            label="User Input",
-                            lines=4,
-                            interactive=False,
-                            placeholder="Enter text here...",
-                            elem_classes=["scrollable"]
-                        )
-                        status_text = gr.Textbox(
-                            label="Status",
-                            interactive=False,
-                            value="Select and load a model on Configuration page."
-                        )
-                        with gr.Row():
-                            send_btn = gr.Button("Send Input", variant="primary", scale=4)
-                            edit_previous_btn = gr.Button("Edit Previous", scale=1)       
-                        with gr.Row():                            
-                            attach_files_btn = gr.UploadButton(
-                                "Attach Files",
-                                visible=True,
-                                file_types=[f".{ext}" for ext in ALLOWED_EXTENSIONS],
-                                file_count="multiple"
-                            )
-                            web_search_switch = gr.Checkbox(label="Web-Search", value=False, scale=1)
-                            shutdown_btn = gr.Button("Exit Program", variant="stop", scale=1)
+                with gr.Row():        
+                    status_text = gr.Textbox(label="Status", interactive=False, value="Select models on Configuration page.", scale=20)
+                    shutdown_btn = gr.Button("Exit Program", variant="stop", scale=1)
 
             with gr.Tab("Configuration"):
                 with gr.Row():
                     model_dir_text = gr.Textbox(label="Model Folder", value=MODEL_FOLDER, scale=20)
                     browse_btn = gr.Button("Browse", scale=1)
-                model_dropdown = gr.Dropdown(
-                    choices=get_available_models(),
-                    label="Select Model",
-                    value=MODEL_PATH.split('/')[-1],
-                    allow_custom_value=True
-                )
+                    refresh_btn = gr.Button("Refresh", scale=1)
                 with gr.Row():
-                    n_ctx_dropdown = gr.Dropdown(
-                        choices=CTX_OPTIONS,
-                        label="Context Window (Speed vs Context)",
-                        value=N_CTX
+                    quality_model_dropdown = gr.Dropdown(
+                        choices=get_available_models(),
+                        label="Select Primary/Quality Model",
+                        value=QUALITY_MODEL_NAME,
+                        allow_custom_value=True,
+                        scale=20
                     )
-                    batch_size_dropdown = gr.Dropdown(
-                        choices=BATCH_OPTIONS,
-                        label="Batch Size (Output Length)",
-                        value=N_BATCH
+                    quality_mode = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
+                    eject_quality_btn = gr.Button("Eject Model", scale=1)
+                fast_row = gr.Row(visible=False)
+                with fast_row:
+                    fast_model_dropdown = gr.Dropdown(
+                        choices=get_available_models(),
+                        label="Select Secondary/Fast Model",
+                        value=FAST_MODEL_NAME,
+                        allow_custom_value=True,
+                        scale=20
                     )
+                    fast_mode = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
+                    eject_fast_btn = gr.Button("Eject Model", scale=1)
+                code_row = gr.Row(visible=False)
+                with code_row:
+                    code_model_dropdown = gr.Dropdown(
+                        choices=get_available_models(),
+                        label="Select Code Model",
+                        value="Select_a_model...",
+                        allow_custom_value=True,
+                        scale=20
+                    )
+                    code_mode = gr.Textbox(label="Mode Detected", interactive=False, value="Code Model Only", scale=1)
+                    eject_code_btn = gr.Button("Eject Model", scale=1)
                 with gr.Row():
-                    temperature_dropdown = gr.Dropdown(
-                        choices=TEMP_OPTIONS,
-                        label="Temperature (Creativity)",
-                        value=TEMPERATURE,
-                        allow_custom_value=True
-                    )
-                    repeat_penalty_dropdown = gr.Dropdown(
-                        choices=REPEAT_OPTIONS,
-                        label="Repeat Penalty (Do not repeat)",
-                        value=REPEAT_PENALTY,
-                        allow_custom_value=True
-                    )
+                    n_ctx_dropdown = gr.Dropdown(choices=CTX_OPTIONS, label="Context (Focus)", value=N_CTX)
+                    batch_size_dropdown = gr.Dropdown(choices=BATCH_OPTIONS, label="Batch Size (Output)", value=N_BATCH)
+                    repeat_penalty_dropdown = gr.Dropdown(choices=REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=REPEAT_PENALTY, allow_custom_value=True)
                 with gr.Row():
-                    gpu_dropdown = gr.Dropdown(
-                        choices=utility.get_available_gpus(),
-                        label="Select GPU",
-                        value=SELECTED_GPU
-                    )
-                    vram_dropdown = gr.Dropdown(
-                        choices=VRAM_OPTIONS,
-                        label="VRAM Size (Free GPU Memory)",
-                        value=VRAM_SIZE
-                    )
-                    mlock_checkbox = gr.Checkbox(
-                        label="MLock Enabled (Keep model loaded)",
-                        value=MLOCK
-                    )
-                gr.Markdown("Note: GPU layers calculated from model details and VRAM. 0 layers = CPU-only.")
-                status_text_settings = gr.Textbox(label="Status", interactive=False)
+                    gpu_dropdown = gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=None, scale=20)
+                    vram_dropdown = gr.Dropdown(choices=VRAM_OPTIONS, label="VRAM Size", value=VRAM_SIZE, scale=1)
+                    mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=MLOCK, scale=1)
+                
                 with gr.Row():
-                    load_btn = gr.Button("Load Model", variant="secondary", scale=1)
-                    unload_btn = gr.Button("Unload Model", variant="secondary", scale=1)
+                    test_models_btn = gr.Button("Test Models", scale=1)
+                    unload_btn = gr.Button("Unload Models", scale=1)
+
+                with gr.Row():
+                    erase_general_btn = gr.Button("Erase General Data")
+                    erase_uncensored_btn = gr.Button("Erase Uncensored Data")
+                    erase_rpg_btn = gr.Button("Erase RPG Data")
+                    erase_code_btn = gr.Button("Erase Code Data")
+                    erase_all_btn = gr.Button("Erase All Data")
+
+                gr.Markdown("Note: GPU layers auto-calculated from, model details and VRam free. 0 layers = CPU-only.")
+                
+                with gr.Row():
+                    status_text_settings = gr.Textbox(label="Status", interactive=False, scale=20)
                     save_settings_btn = gr.Button("Save Settings", scale=1)
 
-        # Helper functions
-        def update_session_buttons():
-            """Update session buttons with labels from saved sessions."""
-            sessions = utility.get_saved_sessions()
-            button_updates = []
-            for i in range(9):  # Fixed 9 buttons
-                if i < len(sessions):
-                    session_path = Path(HISTORY_DIR) / sessions[i]
-                    try:
-                        label, _ = utility.load_session_history(session_path)
-                        btn_label = f"{label}" if label else f"Session {i+1}"
-                    except:
-                        btn_label = f"Session {i+1}"
-                else:
-                    btn_label = "History Slot Empty"
-                button_updates.append(gr.update(value=btn_label, visible=True))
-            return button_updates
-
-        def load_session_by_index(index):
-            sessions = utility.get_saved_sessions()
-            if index < len(sessions):
-                session_file = sessions[index]
-                return load_session(session_file)
-            else:
-                return [], "No session to load"
-
-        def update_file_slot_ui(loaded_files, rag_max_docs):
-            """Update file slot buttons based on current state."""
-            button_updates = []
-            for i in range(6):  # Fixed 6 buttons
-                if i < len(loaded_files):
-                    filename = Path(loaded_files[i]).name
-                    short_name = (filename[:13] + "..") if len(filename) > 15 else filename
-                    label = f"{short_name}"
-                    variant = "secondary"
-                else:
-                    label = "File Slot Free"
-                    variant = "primary"
-                button_updates.append(gr.update(value=label, visible=True, variant=variant))
-            attach_files_visible = len(loaded_files) < 6
-            return button_updates, gr.update(visible=attach_files_visible)
-
-        def process_uploaded_files(files, loaded_files, rag_max_docs):
-            """Process uploaded files, add to available slots up to rag_max_docs."""
-            try:
-                files_dir = Path("files")
-                files_dir.mkdir(exist_ok=True)
-                new_files = []
-                
-                available_slots = [i for i in range(rag_max_docs) if i >= len(loaded_files)]
-                for idx, file in enumerate(files[:len(available_slots)]):
-                    original_name = Path(file.name).name
-                    dest_path = files_dir / original_name
-                    with open(file.name, 'rb') as src, open(dest_path, 'wb') as dst:
-                        dst.write(src.read())
-                    new_files.append(str(dest_path))
-                
-                loaded_files.extend(new_files)
-                ignored_files = len(files) - len(available_slots)
-                status_msg = f"Added {len(new_files)} files"
-                if ignored_files > 0:
-                    status_msg += f", ignored {ignored_files} files (max slots reached)"
-                
-                docs = utility.load_and_chunk_documents(loaded_files)
-                utility.create_vectorstore(docs)
-                
-                button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-                return [loaded_files, status_msg] + button_updates + [attach_files_update]
-            except Exception as e:
-                button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-                return [loaded_files, f"Error: {str(e)}"] + button_updates + [attach_files_update]
-
-        def eject_file(loaded_files, slot_index, rag_max_docs):
-            """Eject a file from the specified slot."""
-            if 0 <= slot_index < len(loaded_files):
-                try:
-                    removed_file = loaded_files.pop(slot_index)
-                    Path(removed_file).unlink()
-                    docs = utility.load_and_chunk_documents(loaded_files)
-                    utility.create_vectorstore(docs)
-                    status_msg = f"Ejected {Path(removed_file).name}"
-                except Exception as e:
-                    status_msg = f"Error: {str(e)}"
-            else:
-                status_msg = "No file to eject"
-            button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-            return [loaded_files, status_msg] + button_updates + [attach_files_update]
-
-        def handle_slot_click(slot_index, loaded_files, rag_max_docs):
-            """Handle slot button clicks - only eject files, prompt Attach Files for empty slots."""
-            if slot_index < len(loaded_files):
-                return eject_file(loaded_files, slot_index, rag_max_docs)
-            else:
-                button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-                return [loaded_files, "Click 'Attach Files' to add files."] + button_updates + [attach_files_update]
-
-        def edit_previous(history, input_box):
-            if len(history) >= 2:
-                history = history[:-2]
-                last_user_input = history[-1][0] if history else ""
-                return history, gr.Textbox.update(value=last_user_input)
-            elif len(history) == 1:
-                last_user_input = history[0][0]
-                history = []
-                return history, gr.Textbox.update(value=last_user_input)
-            else:
-                return history, gr.Textbox.update(value="")
-
-        # Event handlers for Conversation tab
-        edit_previous_btn.click(
-            fn=edit_previous,
-            inputs=[session_log, user_input],
-            outputs=[session_log, user_input],
-            api_name="edit_previous"
-        )
-
+        # Event Handlers
+        edit_previous_btn.click(fn=lambda h, i: (h[:-2], h[-2][0]) if len(h) >= 2 else ([], h[0][0]) if len(h) == 1 else (h, ""), inputs=[session_log, user_input], outputs=[session_log, user_input])
         send_btn.click(
             fn=chat_interface,
-            inputs=[user_input, session_log],
-            outputs=[session_log, status_text],
-            api_name="chat_interface"
-        ).then(
-            fn=update_session_buttons,
-            inputs=None,
-            outputs=session_buttons,
-            api_name="update_session_buttons_after_send"
+            inputs=[user_input, session_log, tot_checkbox, loaded_files_state, disable_think_switch, rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3],
+            outputs=[session_log, status_text, loaded_files_state]
         )
-
         attach_files_btn.upload(
-            fn=process_uploaded_files,
-            inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state],
-            outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn],
-            api_name="process_uploaded_files"
+            fn=process_uploaded_files, 
+            inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state, theme_status],  # Added theme_status
+            outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn]
         )
-
-        start_new_session_btn.click(
-            fn=start_new_session,
-            inputs=None,
-            outputs=[session_log, user_input],
-            api_name="restart_session"
-        ).then(
-            fn=lambda: "New session started",
-            outputs=[status_text],
-            api_name="new_session_started"
-        )
-
-        shutdown_btn.click(
-            fn=shutdown_program,
-            inputs=None,
-            outputs=[status_text],
-            api_name="shutdown_program"
-        )
-
-        # Slot button click handlers
+        start_new_session_btn.click(fn=lambda: ([], ""), inputs=None, outputs=[session_log, user_input]).then(fn=lambda: "New session started", outputs=[status_text])
+        shutdown_btn.click(fn=lambda: (unload_models(), demo.close(), os._exit(0), "Program terminated")[3], inputs=None, outputs=[status_text])
         for i, btn in enumerate(file_slot_buttons):
-            btn.click(
-                fn=lambda state, rag_max, idx=i: handle_slot_click(idx, state, rag_max),
-                inputs=[loaded_files_state, rag_max_docs_state],
-                outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn],
-                api_name=f"slot_{i}_action"
-            )
-
-        # Session button click handlers
+            btn.click(fn=lambda s, r, idx=i: handle_slot_click(idx, s, r), inputs=[loaded_files_state, rag_max_docs_state], outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn])
         for i, btn in enumerate(session_buttons):
-            btn.click(
-                fn=lambda idx=i: load_session_by_index(idx),
-                inputs=[],
-                outputs=[session_log, status_text],
-                api_name=f"load_session_{i}"
-            )
-
-        # Configuration tab event handlers
-        load_btn.click(
-            fn=load_model,
-            outputs=[user_input, load_btn, status_text, status_text_settings],
-            api_name="load_model"
-        )
-
-        unload_btn.click(
-            fn=unload_model_ui,
-            outputs=[user_input, load_btn, status_text, status_text_settings],
-            api_name="unload_model"
-        )
-
-        save_settings_btn.click(
-            fn=utility.save_config,
-            inputs=None,
-            outputs=[status_text_settings],
-            api_name="save_config"
-        )
-
-        temperature_dropdown.change(
-            fn=lambda x: utility.update_setting("temperature", x),
-            inputs=[temperature_dropdown],
-            outputs=[user_input, load_btn],
-            api_name="update_temperature"
-        )
-
-        model_dir_text.change(
-            fn=lambda x: utility.update_setting("model_folder", x),
-            inputs=[model_dir_text],
-            outputs=[user_input, load_btn],
-            api_name="update_model_folder"
+            btn.click(fn=lambda idx=i: load_session_by_index(idx), inputs=[], outputs=[session_log, status_text])
+        quality_model_dropdown.change(
+            fn=determine_operation_mode, inputs=[quality_model_dropdown], outputs=[theme_status]
         ).then(
-            fn=lambda: gr.Dropdown.update(choices=get_available_models()),
-            outputs=[model_dropdown],
-            api_name="update_model_dropdown"
-        )
-
-        # Initial UI setup
-        demo.load(
-            fn=update_file_slot_ui,
-            inputs=[loaded_files_state, rag_max_docs_state],
-            outputs=file_slot_buttons + [attach_files_btn],
-            api_name="initial_file_slot_ui"
+            fn=lambda mode: context_injector.set_mode(mode.lower()),  # Set the mode in ContextInjector
+            inputs=[theme_status],
+            outputs=None
         ).then(
-            fn=update_session_buttons,
-            inputs=None,
-            outputs=session_buttons,
-            api_name="initial_session_buttons"
+            fn=update_dynamic_options,
+            inputs=[quality_model_dropdown, loaded_files_state],
+            outputs=[rag_max_docs_state, tot_checkbox, web_search_switch, disable_think_switch, theme_status] + file_slot_buttons + [rp_location, user_name, user_role, ai_npc1, ai_npc2, delete_npc2_btn, ai_npc3, delete_npc3_btn] + [attach_files_btn]
+        ).then(
+            fn=toggle_model_rows, inputs=[quality_model_dropdown], outputs=[fast_row, code_row]
         )
+        erase_general_btn.click(fn=lambda: delete_vectorstore("general"), inputs=None, outputs=[status_text_settings])
+        erase_uncensored_btn.click(fn=lambda: delete_vectorstore("uncensored"), inputs=None, outputs=[status_text_settings])
+        erase_rpg_btn.click(fn=lambda: delete_vectorstore("rpg"), inputs=None, outputs=[status_text_settings])
+        erase_code_btn.click(fn=lambda: delete_vectorstore("code"), inputs=None, outputs=[status_text_settings])
+        erase_all_btn.click(fn=delete_all_vectorstores, inputs=None, outputs=[status_text_settings])
+        rp_location.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
+        user_name.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
+        user_role.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
+        ai_npc1.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
+        ai_npc2.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
+        ai_npc3.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
+        delete_npc2_btn.click(fn=lambda x, y, z: delete_npc(1, x, y, z), inputs=[ai_npc1, ai_npc2, ai_npc3], outputs=[ai_npc1, ai_npc2, ai_npc3])
+        delete_npc3_btn.click(fn=lambda x, y, z: delete_npc(2, x, y, z), inputs=[ai_npc1, ai_npc2, ai_npc3], outputs=[ai_npc1, ai_npc2, ai_npc3])
+        eject_quality_btn.click(fn=eject_quality_model, outputs=[quality_model_dropdown, quality_mode, fast_model_dropdown, fast_mode, status_text_settings]).then(fn=toggle_model_rows, inputs=[quality_model_dropdown], outputs=[fast_row, code_row])
+        refresh_btn.click(fn=lambda: [gr.update(choices=get_available_models()), gr.update(choices=get_available_models())], outputs=[quality_model_dropdown, fast_model_dropdown])
+        test_models_btn.click(fn=lambda: "Model testing not implemented", outputs=[status_text_settings])
+        unload_btn.click(fn=lambda: (gr.update(interactive=False), "Models unloaded"), outputs=[user_input, status_text_settings])
+        save_settings_btn.click(fn=utility.save_config, inputs=None, outputs=[status_text_settings])
+        demo.load(fn=update_session_buttons, inputs=None, outputs=session_buttons).then(fn=update_file_slot_ui, inputs=[loaded_files_state, rag_max_docs_state], outputs=file_slot_buttons + [attach_files_btn])
 
     demo.launch()
 
