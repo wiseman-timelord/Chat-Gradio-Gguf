@@ -12,15 +12,7 @@
 Status: Alpha - Mid-development.
 
 ## Description
-A high-quality chat interface with 4 auto-detected modes of, operation and interface, dependent on if you load a model with hotwords for for, `code`, rpg/rp, Uncensored Chat, `general` 
-model_prompts = {
-    "code": "You are a coding assistant...",
-    "rpg": "You are an NSFW conversational AI...",
-    "uncensored": "You are an uncensored AI...",
-    "general": "You are a general-purpose AI..."
-}
-
- optimized for GGUF models, designed for efficiency and usability. The configuration is tailored to community reported effectiveness, while configurations that often make no difference are ignored, ensuring a comprehensive yet streamlined experience. With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool eliminates the need for online chatbots while providing local, uncensored, and efficient inference. The interface is designed to evolve with additional features that enhance productivity and usability. The main concept is, to download the best smaller models on HuggingFace, and use them, without the restrictions and with comparable interface, found on premium AI services.
+A high-quality chat interface with 4 auto-detected modes of, operation and interface, for, Coder, Rp Simulator, Uncensored Chat, General Chat, for GGUF models on windows 10 with any GPU.  With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or in that direction. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and text based LLM(s).
 
 ### Features
 - **Uncensored Efficiency**: Optimized for GGUF, auto-calculating layers, dependent on, model details and Free VRam.
@@ -32,7 +24,7 @@ model_prompts = {
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
 - **Token Streaming**: Real-time token generation for seamless chat interactions.
 - **Model Selection**: Dropdown lists GGUF models from `.\models\*.gguf` for easy switching.
-- **Auto-Model Handle**: Uses hotwords in model name, to better handle, ctx, temperature, modes, prompts, etc.
+- **Auto-Model Handle**: Uses keywords in model name, to better handle, ctx, temperature, modes, prompts, etc.
 - **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
 
 ### Preview
@@ -81,12 +73,24 @@ To create a public link, set `share=True` in `launch()`.
 - Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 - Llm Model - You will need a Large Language Model in GGUF format, See below
 
-### Keywords
+### Instructions
+1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Chat-Gradio-Gguf` or `C:\Programs\Chat-Gradio-Gguf`. 
+2. Right click the file `Chat-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load.
+3. Select `2` from the Batch Menu, to begin installation.
+4. you will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware.
+5. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder.
+6. After the install completes, check for any install issues, you may need to install again if there are.
+7. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`.
+
+### Model Keywords for Operational Modes
 Layers for GPU is auto-detected, there are then keywords on the label of the model...
 - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
 - `RPG Game` keywords - "nsfw", "adult", "mature", "explicit", "rp", "roleplay".
 - `UnCensored Chat` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
 - `General` keywords - none of the above.
+
+# Models
+Most GGUF text models will work, so long as they have the appropriate keywords in the label, which will require time to develop, working on testing with the ones below... 
 1. For ~8B models (Primary/Quality).
 - [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall, untested filename `qwen2.5-7b-cabs-v0.4.Q6_K.gguf`.
 - Choice between, Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) and Qwen [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) , versions of R1 - Uncensored <8GB, Chat and Reasoning, filenames, `DeepSeek-R1-Distill-Llama-8B-Uncensored.Q6_K.gguf` or `DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner.Q6_K.gguf`.
@@ -96,17 +100,6 @@ Layers for GPU is auto-detected, there are then keywords on the label of the mod
 - [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested, filename `Llama-3.2-3B-Instruct-uncensored-Q3_K_M.gguf`.
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning filename `DeepSeek-R1-Distill-Qwen-1.5B-uncensored.Q3_K_M.gguf`
 
-
-
-### Instructions
-1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Chat-Gradio-Gguf` or `C:\Programs\Chat-Gradio-Gguf`. 
-2. Right click the file `Chat-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load.
-3. Select `2` from the Batch Menu, to begin installation.
-4. you will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware.
-5. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder.
-6. After the install completes, check for any install issues, you may need to install again if there are.
-7. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`.
- 
 ### Notation
 - Tabs on left of `Chat` page; "Start New Session" at top, 10-session limit.
 - Auto-labeled sessions (e.g., "Query about worms") stored in `.\data\history\*`.
@@ -117,10 +110,6 @@ Layers for GPU is auto-detected, there are then keywords on the label of the mod
 - We use `(ModelFileSize * 1.25) / NumLayers = LayerSize`, then `TotalVRam / LayerSize = NumLayersOnGpu`.
 - Result is rounded to a whole number for GPU layer offloading in the load model command.
 - 9 "History Slots" and "6 File Slots", seemed, like sensible numbers and to fit the display.
-
-
-
-
 
 ## Development
 - Testing and Bugfixing - keep testing, while keeping an eye on the terminal for output of, warnings and errors, then find fixes, and a few, refinements or improvements, along the way.
