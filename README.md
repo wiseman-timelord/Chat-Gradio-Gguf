@@ -117,6 +117,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - possibly the way to go is, `Chatbot - requiring only chat model, doing TOT and webresearch, on 1 model`, `Advanced Chatbot - Requiting Fast + Quality version of same model, for TOT on fast model, switch AUTO/FAST/QUALITY responses, webresearch through fast model`, `Coder - Requiting only Code model`, `Agentic Coder - Requiring, Code and Text, models appropriately`, `Rpg Text - Requiring only RPG model`, `RPG Text + Images - RPG and Image model (fluxschnellgguf), text RPG game with image enhancement`. 
 - Check model loading/unloading in code. Originally it was loading models on the fly and keeping them in memory until it needed to use the other one, then it would keep that one in memory, and so on. What we want instead is to ensure `mlock = on` will result in both models being loaded at once, while `mlock = off`, will only load each model as required, therein, for `mlock = on` we would need to calculate the optimal layers for the VRam as it currently does, and if off, then it will only be calculating the layers for the vram on a individual model basis, as they are individuall loaded and used, before being unloaded. in which case the mlock button should be replaced with `Load Both Models` and be by default `true/enabled`.
 - Make it 1 model operation for now, simplify and get the complete program together, the next generation of the program will be like this...
+```
 | **Mode**             | **Models**                     | **Features**                                      | **Implementation Notes**                                                                 |
 |-----------------------|--------------------------------|--------------------------------------------------|-----------------------------------------------------------------------------------------|
 | Chatbot              | Single chat model (e.g., DeepSeek-V3) | TOT reasoning, web research                     | Use LangChain for TOT (e.g., recursive prompt splitting), SerpAPI for web queries       |
@@ -125,7 +126,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 | Agentic Coder        | Code + text models            | Intent → code → review loop                    | Chain via LangChain agents, store intermediate states in .\data\                       |
 | RPG Text             | Single RPG model              | Narrative, character tracking, uncensored       | Parse entities with regex, save JSON states in .\data\history\                         |
 | RPG Text + Images    | RPG + image model (Flux.1-schnell) | Text RPG + scene images                      | Trigger Flux via llama.cpp image fork, display in Gradio gallery (256x256 max)         |
-
+```
 
 ### Far Development.
 
