@@ -9,7 +9,7 @@
 "                                          \/                \/                \/                                     "
 -----------------------------------------------------------------------------------------------------------------------
 ```
-Status: Alpha - Mid-development.
+Status: Alpha - Early development.
 
 ## Description
 A high-quality chat interface with 4 auto-detected modes of, operation and interface, for, Coder, Rp Simulator, Uncensored Chat, General Chat, for GGUF models on windows 10 with any GPU.  With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or in that direction. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and text based LLM(s).
