@@ -89,13 +89,13 @@ Layers for GPU is auto-detected, there are then keywords on the label of the mod
 # Models
 Most GGUF text models will work, so long as they have the appropriate keywords in the label, which will require time to develop, working on testing with the ones below... 
 1. For ~8B models (Primary/Quality).
-- [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall, untested filename `qwen2.5-7b-cabs-v0.4.Q6_K.gguf`.
-- Choice between, Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) and Qwen [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) , versions of R1 - Uncensored <8GB, Chat and Reasoning, filenames, `DeepSeek-R1-Distill-Llama-8B-Uncensored.Q6_K.gguf` or `DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner.Q6_K.gguf`.
-- [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best on Big code Leaderboard for Python, for Coder, filename `Nxcode-CQ-7B-orpo.Q6_K.gguf`.
-- [Ninja-v1-NSFW-RP-GGUF](https://huggingface.co/mradermacher/Ninja-v1-NSFW-RP-GGUF) - Most downloaded RP NSFW on huggingface at the time, filename `Ninja-v1-NSFW-RP.Q6_K.gguf`
+- [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall.
+- Choice between, Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) and Qwen [DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-7B-Uncensored-Reasoner-GGUF) , versions of R1 - Uncensored <8GB, Chat and Reasoning.
+- [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) - Best on Big code Leaderboard for Python, for Coder.
+- [Ninja-v1-NSFW-RP-GGUF](https://huggingface.co/mradermacher/Ninja-v1-NSFW-RP-GGUF) - Most downloaded RP NSFW on huggingface at the time.
 2. For <4B models (Secondary/Fast).
-- [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested, filename `Llama-3.2-3B-Instruct-uncensored-Q3_K_M.gguf`.
-- [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning filename `DeepSeek-R1-Distill-Qwen-1.5B-uncensored.Q3_K_M.gguf`
+- [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested.
+- [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
 ### Notation
 - Tabs on left of `Chat` page; "Start New Session" at top, 10-session limit.
@@ -109,10 +109,10 @@ Most GGUF text models will work, so long as they have the appropriate keywords i
 - 9 "History Slots" and "6 File Slots", seemed, like sensible numbers and to fit the display.
 
 ## Development
-- Testing and Bugfixing - keep testing, while keeping an eye on the terminal for output of, warnings and errors, then find fixes, and a few, refinements or improvements, along the way.
-- Status page possibly needs to be, at the top or at the bottom, of both pages. I should do some research specifically upon Chatbot interfaces, and determine how to improve the layout optimally.
+- Add `Load Models` button back, and ensure that it does the correct calculation individually for all models selected, determing optimal configuration where main model would proportionately have 
 
 ### Far Development.
+- Testing and Bugfixing - keep testing, while keeping an eye on the terminal for output of, warnings and errors, then find fixes, and a few, refinements or improvements, along the way.
 - If there is some small 1B model, we could download and use, to create the session history label for the session, then this would be better, than the user having to wait for whatever more capable model is doing, so as to produce quick labels for session history. preferably a <256MB download, and again, the context size is automatic based on the size of the first, input and response, but if it runs out of context, then we will cut it where it runs out, as for example, if we just have most of the users first input, then this should be good enough to create a unique 3 word label.
 - Ongoing improvement of Gradio Interface required, until it "looks right". 
 - Testing and bugfixing, required for all features of main program.
