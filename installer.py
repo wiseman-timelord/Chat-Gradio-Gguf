@@ -14,8 +14,9 @@ VULKAN_TARGET_VERSION = "1.4.304.1"
 LLAMACPP_TARGET_VERSION = "b4778"
 BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
-    "data", "files", "scripts", "models",
-    "data/vectorstores", "data/history", "data/temp"
+    "data", "scripts", "models",
+    "data/vectorstores", "data/history", "data/temp",
+    "data/vectors/code", "data/vectors/rpg", "data/vectors/uncensored", "data/vectors/general"
 ]
 VULKAN_PATHS = [
     Path("C:/VulkanSDK"),
@@ -33,6 +34,7 @@ REQUIREMENTS = [
     "faiss-cpu==1.8.0", 
     "requests==2.31.0",
     "tqdm==4.66.1",
+    "paperclip",
     "llama-cpp-python",
     "langchain-community==0.3.18",
     "pygments==2.17.2",
@@ -75,26 +77,36 @@ BACKEND_OPTIONS = {
         "cuda_required": True
     }
 }
-CONFIG_TEMPLATE = {
-    "model_settings": {
-        "model_dir": "models",
-        "n_ctx": 8192,
-        "temperature": 0.75,
-        "llama_cli_path": "",
-        "use_python_bindings": False,
-        "mmap": True,
-        "mlock": False,
-        "vram_size": 8192,
-        "selected_gpu": None,
-        "dynamic_gpu_layers": True,
-        "n_batch": 1024,
-        "repeat_penalty": 1.0
-    },
-    "backend_config": {
-        "type": "",
-        "llama_bin_path": ""
-    }
-}
+CONFIG_TEMPLATE = """{
+  "model_settings": {
+    "model_dir": "models",
+    "quality_model": "",
+    "fast_model": "",
+    "n_ctx": 8192,
+    "temperature": 0.75,
+    "repeat_penalty": 1.0,
+    "use_python_bindings": false,
+    "llama_cli_path": "",
+    "vram_size": 8192,
+    "selected_gpu": null,
+    "mmap": true,
+    "mlock": false,
+    "n_batch": 1024,
+    "dynamic_gpu_layers": true
+  },
+  "backend_config": {
+    "type": "",
+    "llama_bin_path": ""
+  },
+  "rp_settings": {
+    "rp_location": "Public",
+    "user_name": "Human",
+    "user_role": "Lead Roleplayer",
+    "ai_npc1": "Randomer",
+    "ai_npc2": "Unused",
+    "ai_npc3": "Unused"
+  }
+}"""
 
 # Utility Functions...
 def clear_screen() -> None:
@@ -203,22 +215,26 @@ def create_directories() -> None:
             print_status(f"Found directory: {dir_path}")
 
 def create_config(backend: str) -> None:
+    import json
+    from pathlib import Path
+    import copy
+
     config_path = BASE_DIR / "data" / "persistent.json"
-    config = copy.deepcopy(CONFIG_TEMPLATE)
+    # Parse the JSON string into a dictionary
+    config = json.loads(CONFIG_TEMPLATE)
     backend_info = BACKEND_OPTIONS[backend]
+    # Set the backend configuration
     config["backend_config"]["type"] = backend
     config["backend_config"]["llama_bin_path"] = backend_info["dest"]
     config["model_settings"]["llama_cli_path"] = backend_info["cli_path"]
     config["model_settings"]["use_python_bindings"] = backend_info["needs_python_bindings"]
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
         if config_path.exists():
-            with open(config_path, 'w') as f:
-                json.dump(config, f, indent=2)
             print_status("Configuration file over-written")
         else:
-            with open(config_path, 'w') as f:
-                json.dump(config, f, indent=2)
             print_status("Configuration file created")
     except Exception as e:
         print_status(f"Failed to create config: {str(e)}", False)
