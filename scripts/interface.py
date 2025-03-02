@@ -128,24 +128,6 @@ def eject_file(loaded_files, slot_index, rag_max_docs):
     button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
     return [loaded_files, status_msg] + button_updates + [attach_files_update]
 
-def update_file_slot_ui(loaded_files, rag_max_docs):
-    from pathlib import Path
-    button_updates = []
-    for i in range(8):
-        if i < len(loaded_files):  # Show button only if a file is attached at this index
-            filename = Path(loaded_files[i]).name
-            short_name = (filename[:13] + ".." if len(filename) > 15 else filename)
-            label = f"{short_name}"
-            variant = "secondary"
-            visible = True
-        else:
-            label = ""
-            variant = "primary"
-            visible = False
-        button_updates.append(gr.update(value=label, visible=visible, variant=variant))
-    attach_files_visible = len(loaded_files) < rag_max_docs
-    return button_updates + [gr.update(visible=attach_files_visible)]
-
 def handle_slot_click(slot_index, loaded_files, rag_max_docs):
     if slot_index < len(loaded_files):
         removed_file = loaded_files.pop(slot_index)
@@ -166,21 +148,7 @@ def start_new_session():
     temporary.SESSION_ACTIVE = True
     return [], "Type input and click Send to begin...", gr.update(interactive=True)
 
-def update_session_buttons():
-    sessions = utility.get_saved_sessions()
-    button_updates = []
-    for i in range(11):
-        if i < len(sessions):
-            session_path = Path(HISTORY_DIR) / sessions[i]
-            try:
-                label, _ = utility.load_session_history(session_path)
-                btn_label = f"{label}" if label else f"Session {i+1}"
-            except Exception:
-                btn_label = f"Session {i+1}"
-        else:
-            btn_label = "Empty History Slot"
-        button_updates.append(gr.update(value=btn_label, visible=True))
-    return button_updates
+
 
 def load_session_by_index(index):
     sessions = utility.get_saved_sessions()
@@ -284,25 +252,19 @@ def update_dynamic_options(quality_model, loaded_files_state):
         web_visible = False
         file_visible = True
         rp_visible = False
-        rag_max_docs = 8
+        rag_max_docs = 6
     elif mode == "Rpg":
         tot_visible = False
         web_visible = False
         file_visible = True  # Enable file slots for RPG mode
         rp_visible = True
-        rag_max_docs = 4
-    elif mode == "Chat":
+        rag_max_docs = 2
+    else:
         tot_visible = True
         web_visible = True
         file_visible = True
         rp_visible = False
         rag_max_docs = 6
-    else:
-        tot_visible = False
-        web_visible = False
-        file_visible = True
-        rp_visible = False
-        rag_max_docs = 4
     updates = [
         gr.update(visible=tot_visible),
         gr.update(visible=web_visible),
@@ -312,9 +274,39 @@ def update_dynamic_options(quality_model, loaded_files_state):
     rp_updates = [gr.update(visible=rp_visible) for _ in range(8)]  # Matches 8 RPG components
     return [rag_max_docs] + updates + rp_updates
 
-def toggle_model_rows(quality_model):
-    visible = quality_model != "Select_a_model..."
-    return [gr.update(visible=visible)] * 2
+def update_file_slot_ui(loaded_files, rag_max_docs):
+    from pathlib import Path
+    button_updates = []
+    for i in range(6):
+        if i < len(loaded_files):  # Show button only if a file is attached at this index
+            filename = Path(loaded_files[i]).name
+            short_name = (filename[:13] + ".." if len(filename) > 15 else filename)
+            label = f"{short_name}"
+            variant = "secondary"
+            visible = True
+        else:
+            label = ""
+            variant = "primary"
+            visible = False
+        button_updates.append(gr.update(value=label, visible=visible, variant=variant))
+    attach_files_visible = len(loaded_files) < rag_max_docs
+    return button_updates + [gr.update(visible=attach_files_visible)]
+
+def update_session_buttons():
+    sessions = utility.get_saved_sessions()
+    button_updates = []
+    for i in range(7):
+        if i < len(sessions):
+            session_path = Path(HISTORY_DIR) / sessions[i]
+            try:
+                label, _ = utility.load_session_history(session_path)
+                btn_label = f"{label}" if label else f"Session {i+1}"
+            except Exception:
+                btn_label = f"Session {i+1}"
+        else:
+            btn_label = "Empty History Slot"
+        button_updates.append(gr.update(value=btn_label, visible=True))
+    return button_updates
 
 def launch_interface():
     global demo
@@ -342,18 +334,17 @@ def launch_interface():
         with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
-                    with gr.Column(scale=1):
-                        start_new_session_btn = gr.Button("Start New Session", variant="primary")
-                        session_buttons = [gr.Button("Empty History Slot", visible=False, variant="primary") for _ in range(11)]
-                    with gr.Column(scale=20):
+                    with gr.Column(scale=30):
                         session_log = gr.Chatbot(label="Session Log", height=425, elem_classes=["scrollable"])
                         user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...")
                         with gr.Row():
-                            send_btn = gr.Button("Send Input", variant="primary")
+                            send_btn = gr.Button("Send Input", variant="primary", scale=20)
                             edit_previous_btn = gr.Button("Edit Last Input", variant="secondary")
                             copy_response_btn = gr.Button("Copy Last Output", variant="secondary")
                     with gr.Column(scale=1):
                         theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="No model loaded.")
+                        start_new_session_btn = gr.Button("Start New Session", variant="primary")
+                        session_buttons = [gr.Button("Empty History Slot", visible=False, variant="primary") for _ in range(7)]
                         web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
                         tot_checkbox = gr.Checkbox(label="Enable TOT", value=False, visible=False)
                         disable_think_switch = gr.Checkbox(label="Disable THINK", value=False, visible=False)
