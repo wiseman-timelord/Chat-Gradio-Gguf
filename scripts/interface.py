@@ -2,12 +2,8 @@
 
 # Imports...
 import gradio as gr
-import re
-import os
-import json
-import paperclip
-import yake
-import random
+from gradio import themes
+import re, os, json, paperclip, yake, random
 from pathlib import Path
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
@@ -322,31 +318,42 @@ def toggle_model_rows(quality_model):
     visible = quality_model != "Select_a_model..."
     return [gr.update(visible=visible)] * 2
 
-
 def launch_interface():
     global demo
     with gr.Blocks(title="Chat-Gradio-Gguf", css="""
         .scrollable { overflow-y: auto; }
-        .button-row { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 4px !important; margin-bottom: 4px !important; }
-        .button-row .gradio-button { flex: 1 !important; min-width: 100px !important; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+        .button-row { 
+            display: flex !important; 
+            flex-direction: row !important; 
+            flex-wrap: nowrap !important; 
+            gap: 4px !important; 
+            margin-bottom: 4px !important; 
+        }
+        .button-row .gradio-button { 
+            flex: 1 !important; 
+            min-width: 100px !important; 
+            text-overflow: ellipsis; 
+            overflow: hidden; 
+            white-space: nowrap; 
+        }
     """) as demo:
         loaded_files_state = gr.State(value=[])
         rag_max_docs_state = gr.State(value=4)
-        models_loaded_state = gr.State(value=False)  # State to track model loading
+        models_loaded_state = gr.State(value=False)
 
         with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        start_new_session_btn = gr.Button("Start New Session", variant="primary", visible=True)  # Always visible
-                        session_buttons = [gr.Button("Empty History Slot", visible=False) for _ in range(11)]
+                        start_new_session_btn = gr.Button("Start New Session", variant="primary")
+                        session_buttons = [gr.Button("Empty History Slot", visible=False, variant="primary") for _ in range(11)]
                     with gr.Column(scale=20):
                         session_log = gr.Chatbot(label="Session Log", height=425, elem_classes=["scrollable"])
                         user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...")
                         with gr.Row():
-                            send_btn = gr.Button("Send Input", variant="primary", scale=20)
-                            edit_previous_btn = gr.Button("Edit Last Input", scale=1)
-                            copy_response_btn = gr.Button("Copy Last Output", scale=1)
+                            send_btn = gr.Button("Send Input", variant="primary")
+                            edit_previous_btn = gr.Button("Edit Last Input", variant="secondary")
+                            copy_response_btn = gr.Button("Copy Last Output", variant="secondary")
                     with gr.Column(scale=1):
                         theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="No model loaded.")
                         web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
@@ -357,57 +364,61 @@ def launch_interface():
                         user_role = gr.Textbox(label="User Role", value=temporary.USER_ROLE, visible=False)
                         ai_npc1 = gr.Textbox(label="AI NPC 1", value=temporary.AI_NPC1, visible=False)
                         ai_npc2 = gr.Textbox(label="AI NPC 2", value=temporary.AI_NPC2, visible=False)
-                        delete_npc2_btn = gr.Button("Delete NPC 2", visible=False)
+                        delete_npc2_btn = gr.Button("Delete NPC 2", visible=False, variant="secondary")
                         ai_npc3 = gr.Textbox(label="AI NPC 3", value=temporary.AI_NPC3, visible=False)
-                        delete_npc3_btn = gr.Button("Delete NPC 3", visible=False)
+                        delete_npc3_btn = gr.Button("Delete NPC 3", visible=False, variant="secondary")
                         file_slot_buttons = []
-                        attach_files_btn = gr.UploadButton("Attach Files", visible=True, file_types=[f".{ext}" for ext in ALLOWED_EXTENSIONS], file_count="multiple")
+                        attach_files_btn = gr.UploadButton("Attach Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="primary")
                         for row in range(4):
                             with gr.Row(elem_classes=["button-row"]):
                                 for col in range(2):
-                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=False, variant="primary"))
+                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=False, variant="secondary"))
                 with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=20)
-                    shutdown_btn = gr.Button("Exit Program", variant="stop", scale=1)
+                    shutdown_btn = gr.Button("Exit Program", variant="stop")
 
             with gr.Tab("Configuration"):
                 with gr.Row():
-                    model_dir_text = gr.Textbox(label="Model Folder", value=MODEL_FOLDER, scale=20)
-                    browse_btn = gr.Button("Browse", scale=1)
-                    refresh_btn = gr.Button("Refresh", scale=1)
+                    gpu_dropdown = gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=None, scale=20)
+                with gr.Row():                
+                    vram_dropdown = gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE)
+                    mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)                
+                
+                
                 with gr.Row():
+                    model_dir_text = gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, scale=20)
+                    browse_btn = gr.Button("Browse", variant="primary")
+                    
+                with gr.Row():
+                    mode_text = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
                     model_dropdown = gr.Dropdown(
                         choices=get_available_models(),
                         label="Select Model",
-                        value=MODEL_NAME,
+                        value=temporary.MODEL_NAME,
                         allow_custom_value=True,
                         scale=20
                     )
-                    mode_text = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
-                    eject_model_btn = gr.Button("Eject Model", scale=1)
+                    
+                    refresh_btn = gr.Button("Refresh")
                 with gr.Row():
-                    n_ctx_dropdown = gr.Dropdown(choices=CTX_OPTIONS, label="Context (Focus)", value=N_CTX)
-                    batch_size_dropdown = gr.Dropdown(choices=BATCH_OPTIONS, label="Batch Size (Output)", value=N_BATCH)
-                    repeat_penalty_dropdown = gr.Dropdown(choices=REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=REPEAT_PENALTY, allow_custom_value=True)
+                    n_ctx_dropdown = gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context (Focus)", value=temporary.N_CTX)
+                    batch_size_dropdown = gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size (Output)", value=temporary.N_BATCH)
+                    repeat_penalty_dropdown = gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=temporary.REPEAT_PENALTY, allow_custom_value=True)
+
                 with gr.Row():
-                    gpu_dropdown = gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=None, scale=20)
-                    vram_dropdown = gr.Dropdown(choices=VRAM_OPTIONS, label="Assign Free VRam", value=VRAM_SIZE, scale=3)
-                    mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=MLOCK, scale=1)
+                    load_models_btn = gr.Button("Load Model", variant="primary")
+                    inspect_model_btn = gr.Button("Inspect Model")
+                    unload_btn = gr.Button("Unload Model")
                 with gr.Row():
-                    load_models_btn = gr.Button("Load Model", scale=1)
-                    inspect_model_btn = gr.Button("Inspect Model", scale=1)
-                    unload_btn = gr.Button("Unload Model", scale=1)
-                with gr.Row():
-                    erase_general_btn = gr.Button("Erase General Data")
-                    erase_rpg_btn = gr.Button("Erase RPG Data")
-                    erase_code_btn = gr.Button("Erase Code Data")
-                    erase_all_btn = gr.Button("Erase All Data")
-                gr.Markdown("Note: GPU layers auto-calculated from model details and VRam free. 0 layers = CPU-only.")
+                    erase_general_btn = gr.Button("Erase General Data", variant="secondary")
+                    erase_rpg_btn = gr.Button("Erase RPG Data", variant="secondary")
+                    erase_code_btn = gr.Button("Erase Code Data", variant="secondary")
+                    erase_all_btn = gr.Button("Erase All Data", variant="secondary")
                 with gr.Row():
                     status_text_settings = gr.Textbox(label="Status", interactive=False, scale=20)
-                    save_settings_btn = gr.Button("Save Settings", scale=1)
+                    save_settings_btn = gr.Button("Save Settings", variant="primary")
 
-        # Handler for dynamic Start New Session button
+        # Event Handlers
         def handle_start_session_click(models_loaded):
             from scripts import temporary
             if not models_loaded:
@@ -416,10 +427,9 @@ def launch_interface():
                 temporary.current_session_id = None
                 temporary.session_label = ""
                 temporary.SESSION_ACTIVE = True
-                context_injector.set_session_vectorstore(None)
+                temporary.context_injector.set_session_vectorstore(None)
                 return "Type input and click Send to begin...", models_loaded, [], "", gr.update(interactive=True), []
 
-        # Updated load_models for single model
         def load_models(model_name, vram_size):
             from scripts import temporary, models
             if model_name == "Select_a_model...":
@@ -427,7 +437,7 @@ def launch_interface():
             gpu_layers = models.calculate_gpu_layers([model_name], vram_size)
             temporary.N_GPU_LAYERS = gpu_layers.get(model_name, 0)
             model_path = Path(temporary.MODEL_FOLDER) / model_name
-            temporary.llm = Llama(
+            temporary.llm = temporary.Llama(
                 model_path=str(model_path),
                 n_ctx=temporary.N_CTX,
                 n_gpu_layers=temporary.N_GPU_LAYERS,
@@ -441,7 +451,6 @@ def launch_interface():
             status = f"Model loaded, layer distribution: VRAM={temporary.N_GPU_LAYERS}"
             return status, True
 
-        # Event Handlers
         edit_previous_btn.click(
             fn=lambda h, i: (h[:-2], h[-2][0]) if len(h) >= 2 else ([], h[0][0]) if len(h) == 1 else (h, ""),
             inputs=[session_log, user_input],
@@ -467,19 +476,19 @@ def launch_interface():
             fn=update_session_buttons, inputs=None, outputs=session_buttons
         )
         shutdown_btn.click(
-            fn=lambda: (unload_models(), demo.close(), os._exit(0), "Program terminated")[3],
+            fn=lambda: (temporary.unload_models(), demo.close(), os._exit(0), "Program terminated")[3],
             inputs=None,
             outputs=[status_text]
         )
         for i, btn in enumerate(file_slot_buttons):
             btn.click(
-                fn=lambda s, r, idx=i: handle_slot_click(idx, s, r),
+                fn=lambda s, r, idx=i: temporary.handle_slot_click(idx, s, r),
                 inputs=[loaded_files_state, rag_max_docs_state],
                 outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn]
             )
         for i, btn in enumerate(session_buttons):
             btn.click(
-                fn=lambda idx=i: load_session_by_index(idx),
+                fn=lambda idx=i: temporary.load_session_by_index(idx),
                 inputs=[],
                 outputs=[session_log, status_text]
             ).then(
@@ -490,7 +499,7 @@ def launch_interface():
             inputs=[model_dropdown],
             outputs=[theme_status]
         ).then(
-            fn=lambda mode: context_injector.set_mode(mode.lower()),
+            fn=lambda mode: temporary.context_injector.set_mode(mode.lower()),
             inputs=[theme_status],
             outputs=None
         ).then(
@@ -531,13 +540,9 @@ def launch_interface():
         ai_npc1.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
         ai_npc2.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
         ai_npc3.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
-        delete_npc2_btn.click(fn=lambda x, y, z: delete_npc(1, x, y, z), inputs=[ai_npc1, ai_npc2, ai_npc3], outputs=[ai_npc1, ai_npc2, ai_npc3])
-        delete_npc3_btn.click(fn=lambda x, y, z: delete_npc(2, x, y, z), inputs=[ai_npc1, ai_npc2, ai_npc3], outputs=[ai_npc1, ai_npc2, ai_npc3])
-        eject_model_btn.click(
-            fn=lambda: (unload_models(), gr.update(value="Select_a_model..."), "Model ejected", "No Model Selected"),
-            outputs=[model_dropdown, mode_text, status_text_settings]
-        )
-        refresh_btn.click(fn=lambda: gr.update(choices=get_available_models()), outputs=[model_dropdown])
+        delete_npc2_btn.click(fn=lambda x, y, z: temporary.delete_npc(1, x, y, z), inputs=[ai_npc1, ai_npc2, ai_npc3], outputs=[ai_npc1, ai_npc2, ai_npc3])
+        delete_npc3_btn.click(fn=lambda x, y, z: temporary.delete_npc(2, x, y, z), inputs=[ai_npc1, ai_npc2, ai_npc3], outputs=[ai_npc1, ai_npc2, ai_npc3])
+        refresh_btn.click(fn=lambda: gr.update(choices=temporary.get_available_models()), outputs=[model_dropdown])
         inspect_model_btn.click(
             fn=inspect_model,
             inputs=[model_dropdown],
