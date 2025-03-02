@@ -29,7 +29,7 @@ from scripts.utility import (
 )
 from scripts.models import (
     get_response, get_available_models, unload_models, get_model_settings,
-    context_injector
+    context_injector, inspect_model
 )
 from langchain_core.documents import Document
 
@@ -71,56 +71,79 @@ def save_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc
         json.dump(config, f, indent=2)
     return rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3
 
-def process_uploaded_files(files, loaded_files, rag_max_docs, operation_mode):
-    from scripts.utility import map_operation_mode_to_vectorstore_mode, load_and_chunk_documents, update_vectorstore
-    from langchain_core.documents import Document  # Correct import for Document class
+def process_uploaded_files(files, loaded_files, rag_max_docs, operation_mode, models_loaded):
+    from scripts.utility import map_operation_mode_to_vectorstore_mode, load_and_chunk_documents, create_session_vectorstore
     from pathlib import Path
 
-    mode = map_operation_mode_to_vectorstore_mode(operation_mode)
-    new_files = []
-    available_slots = rag_max_docs - len(loaded_files)
-    for file in files[:available_slots]:
-        with open(file.name, 'rb') as f:
-            content = f.read().decode('utf-8', errors='ignore')
-        doc = Document(page_content=content, metadata={"source": Path(file.name).name})
-        new_files.append(doc)
-    if new_files:
-        docs = load_and_chunk_documents(new_files)
-        update_vectorstore(docs, mode)
-        loaded_files.extend([f.metadata["source"] for f in new_files])  # Track filenames in-memory
-        return [loaded_files, f"Added {len(new_files)} files to {mode} vectorstore."]
-    return [loaded_files, "No files added."]
+    # Check if model is loaded
+    if not models_loaded:
+        button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+        return [loaded_files, "Load models first..."] + button_updates + [attach_files_update]
+
+    # Map operation mode to category and determine max files
+    mode = operation_mode.lower()
+    if "code" in mode:
+        max_files = 8
+        error_msg = "Too many attachments, Code = 8 files."
+    elif "rpg" in mode:
+        max_files = 4
+        error_msg = "Too many attachments, Rpg = 4 files."
+    else:
+        max_files = 6
+        error_msg = "Too many attachments, Chat = 6 files."
+
+    # Calculate total files after adding new ones
+    current_files_count = len(loaded_files)
+    new_files_count = len(files)
+    total_files = current_files_count + new_files_count
+
+    # Check if total exceeds mode-specific limit
+    if total_files > max_files:
+        button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+        return [loaded_files, error_msg] + button_updates + [attach_files_update]
+
+    # Process files if within limit
+    available_slots = max_files - current_files_count
+    new_file_paths = [file.name for file in files[:available_slots]]  # Full paths, limited to available slots
+    loaded_files.extend(new_file_paths)
+    session_vectorstore = create_session_vectorstore(loaded_files)
+    context_injector.set_session_vectorstore(session_vectorstore)
+    status_msg = f"Added {len(new_file_paths)} files to session vectorstore."
+
+    # Update UI
+    button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+    return [loaded_files, status_msg] + button_updates + [attach_files_update]
 
 def eject_file(loaded_files, slot_index, rag_max_docs):
+    from scripts.utility import create_session_vectorstore
+    from pathlib import Path
+
     if 0 <= slot_index < len(loaded_files):
+        removed_file = loaded_files.pop(slot_index)
         try:
-            removed_file = loaded_files.pop(slot_index)
             Path(removed_file).unlink()
-            docs = utility.load_and_chunk_documents(loaded_files)
-            utility.create_vectorstore(docs)
-            status_msg = f"Ejected {Path(removed_file).name}"
         except Exception as e:
-            status_msg = f"Error: {str(e)}"
+            print(f"Error unlinking file: {e}")
+        session_vectorstore = create_session_vectorstore(loaded_files)
+        context_injector.set_session_vectorstore(session_vectorstore)
+        status_msg = f"Ejected {Path(removed_file).name}"
     else:
         status_msg = "No file to eject"
     button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
     return [loaded_files, status_msg] + button_updates + [attach_files_update]
 
 def update_file_slot_ui(loaded_files, rag_max_docs):
+    from pathlib import Path
     button_updates = []
     for i in range(8):
-        if i < rag_max_docs:
-            if i < len(loaded_files):
-                filename = Path(loaded_files[i]).name
-                short_name = (filename[:13] + "..") if len(filename) > 15 else filename
-                label = f"{short_name}"
-                variant = "secondary"
-            else:
-                label = "File Slot Free"
-                variant = "primary"
+        if i < len(loaded_files):  # Show button only if a file is attached at this index
+            filename = Path(loaded_files[i]).name
+            short_name = (filename[:13] + ".." if len(filename) > 15 else filename)
+            label = f"{short_name}"
+            variant = "secondary"
             visible = True
         else:
-            label = "File Slot Free"
+            label = ""
             variant = "primary"
             visible = False
         button_updates.append(gr.update(value=label, visible=visible, variant=variant))
@@ -189,17 +212,14 @@ def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, dis
     if not user_input.strip():
         return session_log, "No input provided.", loaded_files_state
 
-    session_log.append((user_input, "Processing..."))
+    session_log.append((user_input, "Generating response..."))
     yield session_log, STATUS_TEXTS["generating_response"], loaded_files_state
 
-    # Session label generation using yake
+    # Session label generation (only set once, no intermediate message)
     if len(session_log) == 1:
         kw_extractor = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=1)
         keywords = kw_extractor.extract_keywords(user_input)
         temporary.session_label = keywords[0][0] if keywords else "Untitled"
-        session_log[-1] = (session_log[-1][0], "Session label generated.")
-        utility.save_session_history(session_log)
-        yield session_log, "Session label generated.", loaded_files_state
 
     # Main response generation
     settings = models.get_model_settings(MODEL_NAME)
@@ -207,7 +227,6 @@ def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, dis
     response = ""
 
     if tot_enabled and mode == "chat":
-        # Tree of Thoughts: Generate multiple responses and select the best
         tot_responses = []
         for variation in TOT_VARIATIONS:
             tot_prompt = f"{user_input}\nInstruction: {variation}"
@@ -217,11 +236,8 @@ def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, dis
                 tot_prompt += ". Include reasoning if applicable."
             tot_response = models.get_response(tot_prompt, disable_think=disable_think)
             tot_responses.append(tot_response)
-        
-        # Simple evaluation: pick the longest response (could be improved with model-based scoring)
         response = max(tot_responses, key=len, default="")
     else:
-        # Standard response generation
         prompt = user_input
         if mode == "rpg":
             rp_settings = {
@@ -278,25 +294,29 @@ def update_dynamic_options(quality_model, loaded_files_state):
     elif mode == "Rpg":
         tot_visible = False
         web_visible = False
-        file_visible = False
+        file_visible = True  # Enable file slots for RPG mode
         rp_visible = True
-        rag_max_docs = 0
+        rag_max_docs = 4
     elif mode == "Chat":
         tot_visible = True
         web_visible = True
         file_visible = True
         rp_visible = False
-        rag_max_docs = 4
+        rag_max_docs = 6
     else:
         tot_visible = False
         web_visible = False
         file_visible = True
         rp_visible = False
         rag_max_docs = 4
-    updates = [gr.update(visible=tot_visible), gr.update(visible=web_visible), gr.update(visible=think_visible), gr.update(value=mode)]
-    file_updates = [gr.update(visible=file_visible) for _ in range(8)]
-    rp_updates = [gr.update(visible=rp_visible) for _ in range(8)]
-    return [rag_max_docs] + updates + file_updates + rp_updates + [gr.update(visible=file_visible and len(loaded_files_state) < rag_max_docs)]
+    updates = [
+        gr.update(visible=tot_visible),
+        gr.update(visible=web_visible),
+        gr.update(visible=think_visible),
+        gr.update(value=mode)
+    ]
+    rp_updates = [gr.update(visible=rp_visible) for _ in range(8)]  # Matches 8 RPG components
+    return [rag_max_docs] + updates + rp_updates
 
 def toggle_model_rows(quality_model):
     visible = quality_model != "Select_a_model..."
@@ -328,7 +348,7 @@ def launch_interface():
                             edit_previous_btn = gr.Button("Edit Last Input", scale=1)
                             copy_response_btn = gr.Button("Copy Last Output", scale=1)
                     with gr.Column(scale=1):
-                        theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="Select model to enable mode detection.")
+                        theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="No model loaded.")
                         web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
                         tot_checkbox = gr.Checkbox(label="Enable TOT", value=False, visible=False)
                         disable_think_switch = gr.Checkbox(label="Disable THINK", value=False, visible=False)
@@ -345,7 +365,7 @@ def launch_interface():
                         for row in range(4):
                             with gr.Row(elem_classes=["button-row"]):
                                 for col in range(2):
-                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="primary"))
+                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=False, variant="primary"))
                 with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=20)
                     shutdown_btn = gr.Button("Exit Program", variant="stop", scale=1)
@@ -375,7 +395,7 @@ def launch_interface():
                     mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=MLOCK, scale=1)
                 with gr.Row():
                     load_models_btn = gr.Button("Load Model", scale=1)
-                    test_models_btn = gr.Button("Test Model", scale=1)
+                    inspect_model_btn = gr.Button("Inspect Model", scale=1)
                     unload_btn = gr.Button("Unload Model", scale=1)
                 with gr.Row():
                     erase_general_btn = gr.Button("Erase General Data")
@@ -389,13 +409,15 @@ def launch_interface():
 
         # Handler for dynamic Start New Session button
         def handle_start_session_click(models_loaded):
+            from scripts import temporary
             if not models_loaded:
-                return "Load model first on Configuration page...", models_loaded, [], "", gr.update(interactive=False)
+                return "Load model first on Configuration page...", models_loaded, [], "", gr.update(interactive=False), []
             else:
                 temporary.current_session_id = None
                 temporary.session_label = ""
                 temporary.SESSION_ACTIVE = True
-                return "Type input and click Send to begin...", models_loaded, [], "", gr.update(interactive=True)
+                context_injector.set_session_vectorstore(None)
+                return "Type input and click Send to begin...", models_loaded, [], "", gr.update(interactive=True), []
 
         # Updated load_models for single model
         def load_models(model_name, vram_size):
@@ -434,7 +456,7 @@ def launch_interface():
         )
         attach_files_btn.upload(
             fn=process_uploaded_files,
-            inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state, theme_status],
+            inputs=[attach_files_btn, loaded_files_state, rag_max_docs_state, theme_status, models_loaded_state],
             outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn]
         )
         start_new_session_btn.click(
@@ -474,7 +496,25 @@ def launch_interface():
         ).then(
             fn=update_dynamic_options,
             inputs=[model_dropdown, loaded_files_state],
-            outputs=[rag_max_docs_state, tot_checkbox, web_search_switch, disable_think_switch, theme_status] + file_slot_buttons + [rp_location, user_name, user_role, ai_npc1, ai_npc2, delete_npc2_btn, ai_npc3, delete_npc3_btn] + [attach_files_btn]
+            outputs=[
+                rag_max_docs_state,
+                tot_checkbox,
+                web_search_switch,
+                disable_think_switch,
+                theme_status,
+                rp_location,
+                user_name,
+                user_role,
+                ai_npc1,
+                ai_npc2,
+                delete_npc2_btn,
+                ai_npc3,
+                delete_npc3_btn
+            ]
+        ).then(
+            fn=update_file_slot_ui,
+            inputs=[loaded_files_state, rag_max_docs_state],
+            outputs=file_slot_buttons + [attach_files_btn]
         )
         erase_general_btn.click(fn=lambda: delete_vectorstore("general"), inputs=None, outputs=[status_text_settings])
         load_models_btn.click(
@@ -498,7 +538,11 @@ def launch_interface():
             outputs=[model_dropdown, mode_text, status_text_settings]
         )
         refresh_btn.click(fn=lambda: gr.update(choices=get_available_models()), outputs=[model_dropdown])
-        test_models_btn.click(fn=lambda: "Model testing not implemented", outputs=[status_text_settings])
+        inspect_model_btn.click(
+            fn=inspect_model,
+            inputs=[model_dropdown],
+            outputs=[status_text_settings]
+        )
         unload_btn.click(
             fn=lambda: (unload_models(), gr.update(interactive=False), "Model unloaded", False),
             outputs=[user_input, status_text_settings, models_loaded_state]

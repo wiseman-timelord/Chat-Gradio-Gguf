@@ -20,10 +20,10 @@ class ContextInjector:
         self.vectorstores = {}
         self.current_vectorstore = None
         self.current_mode = None
+        self.session_vectorstore = None  # Added for session-specific RAG
         self._load_default_vectorstores()
 
     def _load_default_vectorstores(self):
-        """Load all mode-specific vectorstores that exist."""
         modes = ["code", "rpg", "uncensored", "general"]
         for mode in modes:
             vs_path = Path("data/vectors") / mode / "knowledge"
@@ -37,7 +37,6 @@ class ContextInjector:
                 print(f"Loaded {mode} vectorstore.")
 
     def set_mode(self, mode: str):
-        """Set the current mode and select the corresponding vectorstore."""
         valid_modes = ["code", "rpg", "uncensored", "general"]
         if mode in valid_modes:
             if mode not in self.vectorstores:
@@ -53,7 +52,6 @@ class ContextInjector:
             print(f"Invalid mode: {mode}. Expected one of {valid_modes}")
 
     def load_vectorstore(self, mode: str):
-        """Load a specific vectorstore by mode."""
         vs_path = Path("data/vectors") / mode / "knowledge"
         if vs_path.exists():
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -66,13 +64,19 @@ class ContextInjector:
         else:
             print(f"Vectorstore not found for mode: {mode}")
 
+    def set_session_vectorstore(self, vectorstore):
+        self.session_vectorstore = vectorstore
+
     def inject_context(self, prompt: str) -> str:
-        """Inject context from the current mode's vectorstore into the prompt."""
-        if self.current_vectorstore is None:
+        if self.current_vectorstore is None and self.session_vectorstore is None:
             return prompt
         embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         query_embedding = embedding_model.encode([prompt])[0]
-        docs = self.current_vectorstore.similarity_search_by_vector(query_embedding, k=4)
+        docs = []
+        if self.current_vectorstore:
+            docs.extend(self.current_vectorstore.similarity_search_by_vector(query_embedding, k=2))
+        if self.session_vectorstore:
+            docs.extend(self.session_vectorstore.similarity_search_by_vector(query_embedding, k=2))
         context = "\n".join([doc.page_content for doc in docs])
         return f"Relevant information:\n{context}\n\nQuery: {prompt}"
 
@@ -163,6 +167,32 @@ def get_available_models():
     model_dir = Path(MODEL_FOLDER)
     return [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
 
+def inspect_model(model_name):
+    from .temporary import MODEL_FOLDER
+    from pathlib import Path
+    
+    if model_name == "Select_a_model...":
+        return "Select a model to inspect."
+    
+    model_path = Path(MODEL_FOLDER) / model_name
+    if not model_path.exists():
+        return f"Model file not found: {model_path}"
+    
+    try:
+        model_size_mb = get_model_size(str(model_path))
+        num_layers = get_model_layers(str(model_path))
+        settings = get_model_settings(model_name)
+        model_type = settings["category"].capitalize()
+        if num_layers > 0:
+            model_size_gb = model_size_mb / 1024
+            memory_per_layer_gb = (model_size_gb * 1.1875) / num_layers
+            memory_per_layer_str = f"{memory_per_layer_gb:.3f} GB"
+        else:
+            memory_per_layer_str = "N/A"
+        return f"Model: {model_name} | Type: {model_type} | Size: {model_size_mb:.2f} MB | Layers: {num_layers} | Memory/Layer: {memory_per_layer_str}"
+    except Exception as e:
+        return f"Error inspecting model: {str(e)}"
+
 def unload_models():
     from scripts.temporary import llm
     if llm is not None:
@@ -175,6 +205,8 @@ def get_response(prompt: str, disable_think: bool = False, rp_settings: dict = N
         USE_PYTHON_BINDINGS, REPEAT_PENALTY, N_CTX, N_BATCH, MMAP, MLOCK, 
         BACKEND_TYPE, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, prompt_templates, time
     )
+    import subprocess
+
     enhanced_prompt = context_injector.inject_context(prompt)
     settings = get_model_settings(MODEL_NAME)
     mode = settings["category"]
@@ -229,16 +261,13 @@ def get_response(prompt: str, disable_think: bool = False, rp_settings: dict = N
             "--ctx-size", str(N_CTX),
             "--batch-size", str(N_BATCH),
             "--n-predict", "2048",
-            "--log-disable"
         ]
+        if N_GPU_LAYERS > 0:
+            cmd += ["--n-gpu-layers", str(N_GPU_LAYERS)]
         if MMAP:
             cmd += ["--mmap"]
         if MLOCK:
             cmd += ["--mlock"]
-        if "vulkan" in BACKEND_TYPE.lower():
-            cmd += ["--vulkan", "--gpu-layers", str(N_GPU_LAYERS)]
-        elif "kompute" in BACKEND_TYPE.lower():
-            cmd += ["--kompute", "--gpu-layers", str(N_GPU_LAYERS)]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         thinking_output = ""
         if settings["is_reasoning"] and not disable_think:

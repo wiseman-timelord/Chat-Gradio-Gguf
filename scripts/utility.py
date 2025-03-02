@@ -128,6 +128,20 @@ def create_vectorstore(documents: list, mode: str) -> None:
     except Exception as e:
         print(f"Error creating vectorstore for {mode}: {e}")
 
+def create_session_vectorstore(loaded_files):
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_community.vectorstores import FAISS
+    if not loaded_files:
+        return None
+    docs = load_and_chunk_documents(loaded_files)
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    try:
+        vectorstore = FAISS.from_documents(docs, embeddings)
+        return vectorstore
+    except Exception as e:
+        print(f"Error creating session vectorstore: {e}")
+        return None
+
 def delete_vectorstore(mode: str) -> str:
     """Delete the vectorstore directory for a specific mode."""
     vs_dir = Path("data/vectors") / mode
