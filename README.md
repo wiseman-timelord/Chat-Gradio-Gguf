@@ -133,6 +133,7 @@ No vectorstore found for mode: chat
 ```
 ...when I select a model, not when I load it. It also shouldnt really be doing anything with the model until I click, load model or inspect model.
 - instad of dynamically showing, `History Slot Empry` and `Free File Slot`, or whatever, we would have dynamic fly-out menus. There would be the tabs, `Sessions Menu`, `Attachement Menu`, `Roleplay Menu`. The `Session Menu` button, will make visible, 1 `Start New Session` button and `9 history slot` and 1 `Hide History`, buttons. The `Attachments Menu` will make visible, 1 `Remove Attachments` and 8 `File Slot`buttons and 1 `Hide Attatchments` button, regardless of mode. The `Roleplay Menu`button, is only visible if mode is "RPG", clicking on it will make visible the parameters for roleplay, ie, `human_name: ` and `human_role: `, and also `Hide Roleplay` button, this will solve the issue with space on the right column of the "Chat" menu. We do not want only the filled slots to be showing, when I click on the menu button, I want all slots showing until i click to close the menu. The menu is essentially just buttons representing slots, where as the RPG one is actually boxes with editable valies.
+- put temperature back in with a default of `0.5`, people will want to be able to specify this, regardless of having "worked it all out".
 
 ## Far Development.
 - the next generation of the program will be 6 modes and dual model like this...
