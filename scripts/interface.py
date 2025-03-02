@@ -266,11 +266,9 @@ def determine_operation_mode(quality_model):
         return "Code"
     elif category == "rpg":  # Changed from "nsfw"
         if "rp" in quality_model.lower() or "roleplay" in quality_model.lower():
-            return "Chat-Rp"  # For roleplay-specific models
-        else:
-            return "Chat-Nsfw"  # For general mature content
+            return "Rpg"  # For roleplay-specific models
     elif category == "uncensored":
-        return "Chat-Uncensored"
+        return "Chat"
     return "Chat"
 
 def update_dynamic_options(quality_model, loaded_files_state):
@@ -381,14 +379,11 @@ def launch_interface():
                 with gr.Row():
                     gpu_dropdown = gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=None, scale=20)
                 with gr.Row():                
-                    vram_dropdown = gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE)
+                    vram_dropdown = gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, interactive=True)
                     mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)                
-                
-                
                 with gr.Row():
                     model_dir_text = gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, scale=20)
                     browse_btn = gr.Button("Browse", variant="primary")
-                    
                 with gr.Row():
                     mode_text = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
                     model_dropdown = gr.Dropdown(
@@ -398,13 +393,27 @@ def launch_interface():
                         allow_custom_value=True,
                         scale=20
                     )
-                    
                     refresh_btn = gr.Button("Refresh")
                 with gr.Row():
-                    n_ctx_dropdown = gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context (Focus)", value=temporary.N_CTX)
-                    batch_size_dropdown = gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size (Output)", value=temporary.N_BATCH)
-                    repeat_penalty_dropdown = gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=temporary.REPEAT_PENALTY, allow_custom_value=True)
-
+                    n_ctx_dropdown = gr.Dropdown(
+                        choices=temporary.CTX_OPTIONS, 
+                        label="Context (Focus)", 
+                        value=temporary.N_CTX, 
+                        interactive=True
+                    )
+                    batch_size_dropdown = gr.Dropdown(
+                        choices=temporary.BATCH_OPTIONS, 
+                        label="Batch Size (Output)", 
+                        value=temporary.N_BATCH, 
+                        interactive=True
+                    )
+                    repeat_penalty_dropdown = gr.Dropdown(
+                        choices=temporary.REPEAT_OPTIONS, 
+                        label="Repeat Penalty (Restraint)", 
+                        value=temporary.REPEAT_PENALTY, 
+                        allow_custom_value=True, 
+                        interactive=True
+                    )
                 with gr.Row():
                     load_models_btn = gr.Button("Load Model", variant="primary")
                     inspect_model_btn = gr.Button("Inspect Model")
@@ -427,15 +436,18 @@ def launch_interface():
                 temporary.current_session_id = None
                 temporary.session_label = ""
                 temporary.SESSION_ACTIVE = True
-                temporary.context_injector.set_session_vectorstore(None)
+                context_injector.set_session_vectorstore(None)  # Updated to use context_injector directly
                 return "Type input and click Send to begin...", models_loaded, [], "", gr.update(interactive=True), []
 
-        def load_models(model_name, vram_size):
+        def load_models(model_name, vram_size, n_ctx, n_batch, repeat_penalty):
             from scripts import temporary, models
             if model_name == "Select_a_model...":
                 return "Select a model to load.", False
             gpu_layers = models.calculate_gpu_layers([model_name], vram_size)
             temporary.N_GPU_LAYERS = gpu_layers.get(model_name, 0)
+            temporary.N_CTX = n_ctx  # Update from dropdown
+            temporary.N_BATCH = n_batch  # Update from dropdown
+            temporary.REPEAT_PENALTY = float(repeat_penalty)  # Update from dropdown, ensure float
             model_path = Path(temporary.MODEL_FOLDER) / model_name
             temporary.llm = temporary.Llama(
                 model_path=str(model_path),
@@ -499,7 +511,7 @@ def launch_interface():
             inputs=[model_dropdown],
             outputs=[theme_status]
         ).then(
-            fn=lambda mode: temporary.context_injector.set_mode(mode.lower()),
+            fn=lambda mode: context_injector.set_mode(mode.lower()),  # Updated to use context_injector directly
             inputs=[theme_status],
             outputs=None
         ).then(
@@ -528,7 +540,7 @@ def launch_interface():
         erase_general_btn.click(fn=lambda: delete_vectorstore("general"), inputs=None, outputs=[status_text_settings])
         load_models_btn.click(
             fn=load_models,
-            inputs=[model_dropdown, vram_dropdown],
+            inputs=[model_dropdown, vram_dropdown, n_ctx_dropdown, batch_size_dropdown, repeat_penalty_dropdown],
             outputs=[status_text_settings, models_loaded_state]
         )
         erase_rpg_btn.click(fn=lambda: delete_vectorstore("rpg"), inputs=None, outputs=[status_text_settings])
@@ -553,6 +565,22 @@ def launch_interface():
             outputs=[user_input, status_text_settings, models_loaded_state]
         )
         save_settings_btn.click(fn=utility.save_config, inputs=None, outputs=[status_text_settings])
+        # New event handlers for dropdown interactivity
+        n_ctx_dropdown.change(
+            fn=lambda x: (setattr(temporary, 'N_CTX', x), "Context updated")[1],
+            inputs=[n_ctx_dropdown],
+            outputs=[status_text_settings]
+        )
+        batch_size_dropdown.change(
+            fn=lambda x: (setattr(temporary, 'N_BATCH', x), "Batch size updated")[1],
+            inputs=[batch_size_dropdown],
+            outputs=[status_text_settings]
+        )
+        repeat_penalty_dropdown.change(
+            fn=lambda x: (setattr(temporary, 'REPEAT_PENALTY', float(x)), "Repeat penalty updated")[1],
+            inputs=[repeat_penalty_dropdown],
+            outputs=[status_text_settings]
+        )
         demo.load(fn=lambda: [gr.update(visible=False)] * 11, inputs=None, outputs=session_buttons)
 
     demo.launch()

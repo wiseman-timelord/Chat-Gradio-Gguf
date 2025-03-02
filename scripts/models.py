@@ -24,7 +24,7 @@ class ContextInjector:
         self._load_default_vectorstores()
 
     def _load_default_vectorstores(self):
-        modes = ["code", "rpg", "uncensored", "general"]
+        modes = ["code", "rpg", "chat"]
         for mode in modes:
             vs_path = Path("data/vectors") / mode / "knowledge"
             if vs_path.exists():
@@ -37,7 +37,7 @@ class ContextInjector:
                 print(f"Loaded {mode} vectorstore.")
 
     def set_mode(self, mode: str):
-        valid_modes = ["code", "rpg", "uncensored", "general"]
+        valid_modes = ["code", "rpg", "chat"]
         if mode in valid_modes:
             if mode not in self.vectorstores:
                 self.load_vectorstore(mode)
