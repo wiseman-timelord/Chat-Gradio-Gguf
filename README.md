@@ -12,10 +12,10 @@
 Status: Beta - Testing and bugfixing.
 
 ## Description
-A high-quality chat interface with 3 auto-detected modes of, operation and interface, for, Codeing, Rpg Simulator, Enhanced Chat, for GGUF models on windows 10 with any GPU.  With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or a far in that direction as Gradio will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and modern GGUF LLMs.
+A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with enhancements, for windows 10 with any GPU on GGUF models. Dynamic modes enabling correct, interface and prompts, for relating theme of sessions, With the latest advancements. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or a far in that direction as Gradio will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and modern GGUF LLMs.
 
 ### Features
-- **Mode Detection **: 3 modes of operation, `code`, `rpg`, `chat`, with, `Uncensored` and `reasoning`, enhancement, and with relating dynamic, prompts and interface. 
+- **Operation Modes **:  "Auto" (filename keywords), "Chat", "Chat-Reasoning", "Chat-Uncensored", "Chat-Uncensored-Reasoning", "Chat-TOT", "Chat-Uncensored-TOT", "Coder", "Coder-Instruct", "Rpg", "Rpg-NSFW".
 - **GPU Support**: Compatible with AMD/NVIDIA/Intel GPUs via Vulkan/Kompute/Cuda/Avx2, with GPU selection dropdown.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, and code formatting.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
