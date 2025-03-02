@@ -91,7 +91,7 @@ CONFIG_TEMPLATE = """{
     "vram_size": 8192,
     "selected_gpu": null,
     "mmap": true,
-    "mlock": false,
+    "mlock": true,
     "n_batch": 1024,
     "dynamic_gpu_layers": true
   },
