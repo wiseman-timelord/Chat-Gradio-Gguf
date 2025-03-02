@@ -2,7 +2,12 @@
 
 # Imports...
 import gradio as gr
-import re, os, json, paperclip
+import re
+import os
+import json
+import paperclip
+import yake
+import random
 from pathlib import Path
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
@@ -10,28 +15,25 @@ from pygments.formatters import HtmlFormatter
 import scripts.temporary as temporary
 from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
-    MODEL_LOADED, ALLOWED_EXTENSIONS, N_CTX, VRAM_SIZE, SELECTED_GPU,
+    ALLOWED_EXTENSIONS, N_CTX, VRAM_SIZE, SELECTED_GPU,
     current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS, REPEAT_OPTIONS,
     REPEAT_PENALTY, MLOCK, HISTORY_DIR, BATCH_OPTIONS, N_BATCH, MODEL_FOLDER,
-    QUALITY_MODEL_NAME, FAST_MODEL_NAME, STATUS_TEXTS, CTX_OPTIONS
+    MODEL_NAME, STATUS_TEXTS, CTX_OPTIONS, RP_LOCATION, USER_NAME, USER_ROLE,
+    AI_NPC1, AI_NPC2, AI_NPC3, SESSION_ACTIVE, TOT_VARIATIONS
 )
 from scripts import utility
-from scripts.utility import delete_vectorstore, delete_all_vectorstores  # New imports
-from scripts.models import (
-    get_streaming_response, get_response, get_available_models, reload_vectorstore,
-    unload_models, get_model_settings, context_injector  # Added context_injector
+from scripts.utility import (
+    delete_vectorstore, delete_all_vectorstores, web_search, get_saved_sessions,
+    load_session_history, save_session_history, load_and_chunk_documents,
+    create_vectorstore, get_available_gpus
 )
+from scripts.models import (
+    get_response, get_available_models, unload_models, get_model_settings,
+    context_injector
+)
+from langchain_core.documents import Document
 
 # Functions...
-def validate_model_themes(quality_model, fast_model):
-    if quality_model == "Select_a_model..." or fast_model == "Select_a_model...":
-        return "Select both models to validate themes."
-    quality_settings = get_model_settings(quality_model)
-    fast_settings = get_model_settings(fast_model)
-    if quality_settings["category"] != fast_settings["category"]:
-        return "Error: Models must be of the same theme (e.g., both 'code' or 'nsfw')."
-    return "Models are compatible."
-
 def format_response(output: str) -> str:
     formatted = []
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', output, re.DOTALL)
@@ -127,9 +129,17 @@ def update_file_slot_ui(loaded_files, rag_max_docs):
 
 def handle_slot_click(slot_index, loaded_files, rag_max_docs):
     if slot_index < len(loaded_files):
-        return eject_file(loaded_files, slot_index, rag_max_docs)
-    return [loaded_files, "Click 'Attach Files' to add files."] + update_file_slot_ui(loaded_files, rag_max_docs)
-
+        removed_file = loaded_files.pop(slot_index)
+        try:
+            Path(removed_file).unlink()
+        except Exception as e:
+            print(f"Error unlinking file: {e}")
+        docs = load_and_chunk_documents([Path(f) for f in loaded_files])
+        create_vectorstore(docs, "chat")  # Default mode, adjust as needed
+        status_msg = f"Ejected {Path(removed_file).name}"
+    else:
+        status_msg = "Click 'Attach Files' to add files."
+    return [loaded_files, status_msg] + update_file_slot_ui(loaded_files, rag_max_docs)
 def start_new_session():
     from scripts import temporary
     temporary.current_session_id = None
@@ -168,46 +178,11 @@ def copy_last_response(session_log):
         return "AI Response copied to clipboard."
     return "No response available to copy."
 
-def load_models(quality_model, fast_model, vram_size):
-    from scripts import temporary, models
-    global quality_llm, fast_llm
-    if quality_model == "Select_a_model...":
-        return "Select a primary model to load.", gr.update(visible=False)
-    models_to_load = [quality_model]
-    if fast_model != "Select_a_model...":
-        models_to_load.append(fast_model)
-    gpu_layers = models.calculate_gpu_layers(models_to_load, vram_size)
-    temporary.N_GPU_LAYERS_QUALITY = gpu_layers.get(quality_model, 0)
-    temporary.N_GPU_LAYERS_FAST = gpu_layers.get(fast_model, 0)
-    if quality_model != "Select_a_model...":
-        model_path = Path(temporary.MODEL_FOLDER) / quality_model
-        temporary.quality_llm = Llama(
-            model_path=str(model_path),
-            n_ctx=temporary.N_CTX,
-            n_gpu_layers=temporary.N_GPU_LAYERS_QUALITY,
-            n_batch=temporary.N_BATCH,
-            mmap=temporary.MMAP,
-            mlock=temporary.MLOCK,
-            verbose=False
-        )
-    if fast_model != "Select_a_model...":
-        model_path = Path(temporary.MODEL_FOLDER) / fast_model
-        temporary.fast_llm = Llama(
-            model_path=str(model_path),
-            n_ctx=temporary.N_CTX,
-            n_gpu_layers=temporary.N_GPU_LAYERS_FAST,
-            n_batch=temporary.N_BATCH,
-            mmap=temporary.MMAP,
-            mlock=temporary.MLOCK,
-            verbose=False
-        )
-    temporary.MODELS_LOADED = True
-    status = f"Model(s) loaded, layer distribution: Primary VRAM={temporary.N_GPU_LAYERS_QUALITY}, Fast VRAM={temporary.N_GPU_LAYERS_FAST}"
-    return status, gr.update(visible=True)            
-
 def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3):
     from scripts import temporary, utility, models
-    from scripts.temporary import STATUS_TEXTS, QUALITY_MODEL_NAME, FAST_MODEL_NAME, SESSION_ACTIVE
+    from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
+    import yake
+    import random
 
     if not SESSION_ACTIVE:
         return session_log, "Please start a new session first.", loaded_files_state
@@ -217,44 +192,55 @@ def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, dis
     session_log.append((user_input, "Processing..."))
     yield session_log, STATUS_TEXTS["generating_response"], loaded_files_state
 
-    # Session label generation using secondary model if available
+    # Session label generation using yake
     if len(session_log) == 1:
-        label_model_type = "fast" if FAST_MODEL_NAME != "Select_a_model..." else "quality"
-        model_name = FAST_MODEL_NAME if label_model_type == "fast" else QUALITY_MODEL_NAME
-        settings = models.get_model_settings(model_name)
-        summary_prompt = f"Generate a 3-word label for a conversation starting with: '{user_input}'"
-        if settings["is_uncensored"]:
-            summary_prompt = f"Provide an uncensored 3-word label for the conversation starting with: '{user_input}'"
-        if settings["is_reasoning"]:
-            summary_prompt += ". Respond directly without reasoning."
-        temporary.session_label = models.get_response(summary_prompt, label_model_type, disable_think=True).strip()
-        session_log[-1] = (user_log[-1][0], "Session label generated.")
+        kw_extractor = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=1)
+        keywords = kw_extractor.extract_keywords(user_input)
+        temporary.session_label = keywords[0][0] if keywords else "Untitled"
+        session_log[-1] = (session_log[-1][0], "Session label generated.")
         utility.save_session_history(session_log)
         yield session_log, "Session label generated.", loaded_files_state
 
-    # Main response using primary model only
-    model_type = "quality"
-    settings = models.get_model_settings(QUALITY_MODEL_NAME)
+    # Main response generation
+    settings = models.get_model_settings(MODEL_NAME)
     mode = settings["category"]
-    if mode == "rpg":
-        rp_settings = {
-            "rp_location": rp_location,
-            "user_name": user_name,
-            "user_role": user_role,
-            "ai_npc1": ai_npc1,
-            "ai_npc2": ai_npc2,
-            "ai_npc3": ai_npc3
-        }
-        session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
-        response = models.get_response(user_input, model_type, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history)
+    response = ""
+
+    if tot_enabled and mode == "chat":
+        # Tree of Thoughts: Generate multiple responses and select the best
+        tot_responses = []
+        for variation in TOT_VARIATIONS:
+            tot_prompt = f"{user_input}\nInstruction: {variation}"
+            if settings["is_uncensored"]:
+                tot_prompt = f"Provide an uncensored response: {tot_prompt}"
+            if settings["is_reasoning"] and not disable_think:
+                tot_prompt += ". Include reasoning if applicable."
+            tot_response = models.get_response(tot_prompt, disable_think=disable_think)
+            tot_responses.append(tot_response)
+        
+        # Simple evaluation: pick the longest response (could be improved with model-based scoring)
+        response = max(tot_responses, key=len, default="")
     else:
+        # Standard response generation
         prompt = user_input
-        if settings["is_uncensored"]:
-            prompt = f"Provide an uncensored response: {prompt}"
-        if settings["is_reasoning"] and not disable_think:
-            prompt += ". Include reasoning if applicable."
-        response = models.get_response(prompt, model_type, disable_think=disable_think or settings["is_reasoning"])
-    
+        if mode == "rpg":
+            rp_settings = {
+                "rp_location": rp_location,
+                "user_name": user_name,
+                "user_role": user_role,
+                "ai_npc1": ai_npc1,
+                "ai_npc2": ai_npc2,
+                "ai_npc3": ai_npc3
+            }
+            session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
+            response = models.get_response(prompt, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history)
+        else:
+            if settings["is_uncensored"]:
+                prompt = f"Provide an uncensored response: {prompt}"
+            if settings["is_reasoning"] and not disable_think:
+                prompt += ". Include reasoning if applicable."
+            response = models.get_response(prompt, disable_think=disable_think)
+
     session_log[-1] = (user_input, format_response(response))
     utility.save_session_history(session_log)
     yield session_log, STATUS_TEXTS["response_generated"], loaded_files_state
@@ -316,23 +302,6 @@ def toggle_model_rows(quality_model):
     visible = quality_model != "Select_a_model..."
     return [gr.update(visible=visible)] * 2
 
-def eject_quality_model():
-    from scripts.temporary import QUALITY_MODEL_NAME, quality_llm, FAST_MODEL_NAME, fast_llm
-    if quality_llm is not None:
-        del quality_llm
-        quality_llm = None
-    if fast_llm is not None:
-        del fast_llm
-        fast_llm = None
-    QUALITY_MODEL_NAME = "Select_a_model..."
-    FAST_MODEL_NAME = "Select_a_model..."
-    return (
-        gr.update(value="Select_a_model..."),
-        gr.update(value="No Model Selected"),
-        gr.update(value="Select_a_model..."),
-        gr.update(value="No Model Selected"),
-        "Quality and Fast models ejected"
-    )
 
 def launch_interface():
     global demo
@@ -343,7 +312,7 @@ def launch_interface():
     """) as demo:
         loaded_files_state = gr.State(value=[])
         rag_max_docs_state = gr.State(value=4)
-        models_loaded_state = gr.State(value=False)  # New state to track model loading
+        models_loaded_state = gr.State(value=False)  # State to track model loading
 
         with gr.Tabs():
             with gr.Tab("Conversation"):
@@ -359,7 +328,7 @@ def launch_interface():
                             edit_previous_btn = gr.Button("Edit Last Input", scale=1)
                             copy_response_btn = gr.Button("Copy Last Output", scale=1)
                     with gr.Column(scale=1):
-                        theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="Select models to enable mode detection.")
+                        theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="Select model to enable mode detection.")
                         web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
                         tot_checkbox = gr.Checkbox(label="Enable TOT", value=False, visible=False)
                         disable_think_switch = gr.Checkbox(label="Disable THINK", value=False, visible=False)
@@ -378,7 +347,7 @@ def launch_interface():
                                 for col in range(2):
                                     file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="primary"))
                 with gr.Row():
-                    status_text = gr.Textbox(label="Status", interactive=False, value="Select models on Configuration page.", scale=20)
+                    status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=20)
                     shutdown_btn = gr.Button("Exit Program", variant="stop", scale=1)
 
             with gr.Tab("Configuration"):
@@ -387,37 +356,15 @@ def launch_interface():
                     browse_btn = gr.Button("Browse", scale=1)
                     refresh_btn = gr.Button("Refresh", scale=1)
                 with gr.Row():
-                    quality_model_dropdown = gr.Dropdown(
+                    model_dropdown = gr.Dropdown(
                         choices=get_available_models(),
-                        label="Select Primary/Quality Model",
-                        value=QUALITY_MODEL_NAME,
+                        label="Select Model",
+                        value=MODEL_NAME,
                         allow_custom_value=True,
                         scale=20
                     )
-                    quality_mode = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
-                    eject_quality_btn = gr.Button("Eject Model", scale=1)
-                fast_row = gr.Row(visible=False)
-                with fast_row:
-                    fast_model_dropdown = gr.Dropdown(
-                        choices=get_available_models(),
-                        label="Select Secondary/Fast Model",
-                        value=FAST_MODEL_NAME,
-                        allow_custom_value=True,
-                        scale=20
-                    )
-                    fast_mode = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
-                    eject_fast_btn = gr.Button("Eject Model", scale=1)
-                code_row = gr.Row(visible=False)
-                with code_row:
-                    code_model_dropdown = gr.Dropdown(
-                        choices=get_available_models(),
-                        label="Select Code Model",
-                        value="Select_a_model...",
-                        allow_custom_value=True,
-                        scale=20
-                    )
-                    code_mode = gr.Textbox(label="Mode Detected", interactive=False, value="Code Model Only", scale=1)
-                    eject_code_btn = gr.Button("Eject Model", scale=1)
+                    mode_text = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
+                    eject_model_btn = gr.Button("Eject Model", scale=1)
                 with gr.Row():
                     n_ctx_dropdown = gr.Dropdown(choices=CTX_OPTIONS, label="Context (Focus)", value=N_CTX)
                     batch_size_dropdown = gr.Dropdown(choices=BATCH_OPTIONS, label="Batch Size (Output)", value=N_BATCH)
@@ -427,66 +374,50 @@ def launch_interface():
                     vram_dropdown = gr.Dropdown(choices=VRAM_OPTIONS, label="Assign Free VRam", value=VRAM_SIZE, scale=3)
                     mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=MLOCK, scale=1)
                 with gr.Row():
-                    load_models_btn = gr.Button("Load Models", scale=1)
-                    test_models_btn = gr.Button("Test Models", scale=1)
-                    unload_btn = gr.Button("Unload Models", scale=1)
+                    load_models_btn = gr.Button("Load Model", scale=1)
+                    test_models_btn = gr.Button("Test Model", scale=1)
+                    unload_btn = gr.Button("Unload Model", scale=1)
                 with gr.Row():
                     erase_general_btn = gr.Button("Erase General Data")
                     erase_rpg_btn = gr.Button("Erase RPG Data")
                     erase_code_btn = gr.Button("Erase Code Data")
                     erase_all_btn = gr.Button("Erase All Data")
-                gr.Markdown("Note: GPU layers auto-calculated from, model details and VRam free. 0 layers = CPU-only.")
+                gr.Markdown("Note: GPU layers auto-calculated from model details and VRam free. 0 layers = CPU-only.")
                 with gr.Row():
                     status_text_settings = gr.Textbox(label="Status", interactive=False, scale=20)
                     save_settings_btn = gr.Button("Save Settings", scale=1)
 
-        # New handler for dynamic Start New Session button
+        # Handler for dynamic Start New Session button
         def handle_start_session_click(models_loaded):
             if not models_loaded:
-                return "Load models first on Configuration page...", models_loaded, [], "", gr.update(interactive=False)
+                return "Load model first on Configuration page...", models_loaded, [], "", gr.update(interactive=False)
             else:
                 temporary.current_session_id = None
                 temporary.session_label = ""
                 temporary.SESSION_ACTIVE = True
                 return "Type input and click Send to begin...", models_loaded, [], "", gr.update(interactive=True)
 
-        # Updated load_models to set models_loaded_state
-        def load_models(quality_model, fast_model, vram_size):
+        # Updated load_models for single model
+        def load_models(model_name, vram_size):
             from scripts import temporary, models
-            global quality_llm, fast_llm
-            if quality_model == "Select_a_model...":
-                return "Select a primary model to load.", False
-            models_to_load = [quality_model]
-            if fast_model != "Select_a_model...":
-                models_to_load.append(fast_model)
-            gpu_layers = models.calculate_gpu_layers(models_to_load, vram_size)
-            temporary.N_GPU_LAYERS_QUALITY = gpu_layers.get(quality_model, 0)
-            temporary.N_GPU_LAYERS_FAST = gpu_layers.get(fast_model, 0)
-            if quality_model != "Select_a_model...":
-                model_path = Path(temporary.MODEL_FOLDER) / quality_model
-                temporary.quality_llm = Llama(
-                    model_path=str(model_path),
-                    n_ctx=temporary.N_CTX,
-                    n_gpu_layers=temporary.N_GPU_LAYERS_QUALITY,
-                    n_batch=temporary.N_BATCH,
-                    mmap=temporary.MMAP,
-                    mlock=temporary.MLOCK,
-                    verbose=False
-                )
-            if fast_model != "Select_a_model...":
-                model_path = Path(temporary.MODEL_FOLDER) / fast_model
-                temporary.fast_llm = Llama(
-                    model_path=str(model_path),
-                    n_ctx=temporary.N_CTX,
-                    n_gpu_layers=temporary.N_GPU_LAYERS_FAST,
-                    n_batch=temporary.N_BATCH,
-                    mmap=temporary.MMAP,
-                    mlock=temporary.MLOCK,
-                    verbose=False
-                )
+            if model_name == "Select_a_model...":
+                return "Select a model to load.", False
+            gpu_layers = models.calculate_gpu_layers([model_name], vram_size)
+            temporary.N_GPU_LAYERS = gpu_layers.get(model_name, 0)
+            model_path = Path(temporary.MODEL_FOLDER) / model_name
+            temporary.llm = Llama(
+                model_path=str(model_path),
+                n_ctx=temporary.N_CTX,
+                n_gpu_layers=temporary.N_GPU_LAYERS,
+                n_batch=temporary.N_BATCH,
+                mmap=temporary.MMAP,
+                mlock=temporary.MLOCK,
+                verbose=False
+            )
             temporary.MODELS_LOADED = True
-            status = f"Model(s) loaded, layer distribution: Primary VRAM={temporary.N_GPU_LAYERS_QUALITY}, Fast VRAM={temporary.N_GPU_LAYERS_FAST}"
-            return status, True  # Set models_loaded_state to True
+            temporary.MODEL_NAME = model_name
+            status = f"Model loaded, layer distribution: VRAM={temporary.N_GPU_LAYERS}"
+            return status, True
 
         # Event Handlers
         edit_previous_btn.click(
@@ -532,9 +463,9 @@ def launch_interface():
             ).then(
                 fn=update_session_buttons, inputs=None, outputs=session_buttons
             )
-        quality_model_dropdown.change(
+        model_dropdown.change(
             fn=determine_operation_mode,
-            inputs=[quality_model_dropdown],
+            inputs=[model_dropdown],
             outputs=[theme_status]
         ).then(
             fn=lambda mode: context_injector.set_mode(mode.lower()),
@@ -542,17 +473,13 @@ def launch_interface():
             outputs=None
         ).then(
             fn=update_dynamic_options,
-            inputs=[quality_model_dropdown, loaded_files_state],
+            inputs=[model_dropdown, loaded_files_state],
             outputs=[rag_max_docs_state, tot_checkbox, web_search_switch, disable_think_switch, theme_status] + file_slot_buttons + [rp_location, user_name, user_role, ai_npc1, ai_npc2, delete_npc2_btn, ai_npc3, delete_npc3_btn] + [attach_files_btn]
-        ).then(
-            fn=toggle_model_rows,
-            inputs=[quality_model_dropdown],
-            outputs=[fast_row, code_row]
         )
         erase_general_btn.click(fn=lambda: delete_vectorstore("general"), inputs=None, outputs=[status_text_settings])
         load_models_btn.click(
             fn=load_models,
-            inputs=[quality_model_dropdown, fast_model_dropdown, vram_dropdown],
+            inputs=[model_dropdown, vram_dropdown],
             outputs=[status_text_settings, models_loaded_state]
         )
         erase_rpg_btn.click(fn=lambda: delete_vectorstore("rpg"), inputs=None, outputs=[status_text_settings])
@@ -566,11 +493,14 @@ def launch_interface():
         ai_npc3.change(fn=save_rp_settings, inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3], outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3])
         delete_npc2_btn.click(fn=lambda x, y, z: delete_npc(1, x, y, z), inputs=[ai_npc1, ai_npc2, ai_npc3], outputs=[ai_npc1, ai_npc2, ai_npc3])
         delete_npc3_btn.click(fn=lambda x, y, z: delete_npc(2, x, y, z), inputs=[ai_npc1, ai_npc2, ai_npc3], outputs=[ai_npc1, ai_npc2, ai_npc3])
-        eject_quality_btn.click(fn=eject_quality_model, outputs=[quality_model_dropdown, quality_mode, fast_model_dropdown, fast_mode, status_text_settings]).then(fn=toggle_model_rows, inputs=[quality_model_dropdown], outputs=[fast_row, code_row])
-        refresh_btn.click(fn=lambda: [gr.update(choices=get_available_models()), gr.update(choices=get_available_models())], outputs=[quality_model_dropdown, fast_model_dropdown])
+        eject_model_btn.click(
+            fn=lambda: (unload_models(), gr.update(value="Select_a_model..."), "Model ejected", "No Model Selected"),
+            outputs=[model_dropdown, mode_text, status_text_settings]
+        )
+        refresh_btn.click(fn=lambda: gr.update(choices=get_available_models()), outputs=[model_dropdown])
         test_models_btn.click(fn=lambda: "Model testing not implemented", outputs=[status_text_settings])
         unload_btn.click(
-            fn=lambda: (unload_models(), gr.update(interactive=False), "Models unloaded", False),
+            fn=lambda: (unload_models(), gr.update(interactive=False), "Model unloaded", False),
             outputs=[user_input, status_text_settings, models_loaded_state]
         )
         save_settings_btn.click(fn=utility.save_config, inputs=None, outputs=[status_text_settings])

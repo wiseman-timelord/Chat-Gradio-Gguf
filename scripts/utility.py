@@ -1,14 +1,19 @@
 # Script: `.\scripts\utility.py`
 
 # Imports...
-import re, subprocess, json
+import re, subprocess, json, time, random
 from pathlib import Path
 from datetime import datetime
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import TextLoader
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from .models import context_injector
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
     ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER,
-    RAG_CHUNK_OVERLAP_DEVIDER
+    RAG_CHUNK_OVERLAP_DEVIDER, N_CTX
 )
 
 # Functions...
@@ -65,18 +70,29 @@ def load_session_history(file_path: str) -> tuple:
     return session_data["label"], session_data["history"]
 
 def web_search(query: str, num_results: int = 3) -> str:
-    """Perform a web search using DuckDuckGo API."""
+    from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+    import time
+    import random
+    
+    wrapper = DuckDuckGoSearchAPIWrapper()
     try:
-        import requests
-        url = "https://api.duckduckgo.com/"
-        params = {"q": query, "format": "json", "no_redirect": 1}
-        response = requests.get(url, params=params)
-        data = response.json()
-        results = data.get("RelatedTopics", [])[:num_results]
-        result_text = "\n".join([r["Text"] for r in results if "Text" in r]) if results else "No results found."
-        return result_text
+        results = wrapper.results(query, max_results=num_results * 2)  # Fetch extra to filter
+        snippets = []
+        progress = "Web Search Progress:\n"
+        
+        for i, result in enumerate(results[:num_results]):
+            url = result.get('link', 'unknown')
+            snippet = result.get('snippet', 'No snippet available.')
+            delay = random.uniform(2, 5)  # Random delay between 2-5 seconds
+            progress += f"Connecting to {url} in {delay:.1f}s\n"
+            time.sleep(delay)
+            progress += "█\n"
+            snippets.append(f"{url}:\n{snippet}")
+        
+        result_text = "\n\n".join(snippets)
+        return f"{progress}Results:\n{result_text}" if snippets else f"{progress}No results found."
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error during web search: {str(e)}"
 
 def load_and_chunk_documents(file_paths: list) -> list:
     """Load and chunk documents from a list of file paths for RAG."""

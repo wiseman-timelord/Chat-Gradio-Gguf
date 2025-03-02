@@ -10,7 +10,6 @@ TEMP_DIR = "data/temp"
 HISTORY_DIR = "data/history"
 VULKAN_DLL_PATH = "C:\\Windows\\SysWOW64\\vulkan-1.dll"
 SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"
-MODEL_LOADED = False
 rag_documents = []
 session_label = ""
 current_session_id = None
@@ -18,12 +17,10 @@ RAG_CHUNK_SIZE_DEVIDER = 4
 RAG_CHUNK_OVERLAP_DEVIDER = 32
 MODELS_LOADED = False
 SESSION_ACTIVE = False
-N_GPU_LAYERS_QUALITY = 0
-N_GPU_LAYERS_FAST = 0
+N_GPU_LAYERS = 0
 
 # Configurable Settings (Loaded from JSON)
-QUALITY_MODEL_NAME = "Select_a_model..."
-FAST_MODEL_NAME = "Select_a_model..."
+MODEL_NAME = "Select_a_model..."
 N_CTX = 8192
 VRAM_SIZE = 8192
 SELECTED_GPU = None
@@ -34,17 +31,12 @@ USE_PYTHON_BINDINGS = True
 LLAMA_CLI_PATH = ""
 BACKEND_TYPE = ""
 LLAMA_BIN_PATH = ""
-N_GPU_LAYERS = 0
 RAG_AUTO_LOAD = ["general_knowledge"]
 REPEAT_PENALTY = 1.0
 N_BATCH = 1024
 
-# TOT Settings
-TOT_VARIATIONS = [
-    "Please provide a detailed answer.",
-    "Be concise.",
-    "Think step by step."
-]
+# Global LLM instance
+llm = None
 
 # UI Constants
 USER_COLOR = "#ffffff"
@@ -64,10 +56,6 @@ VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096]
 
-# Global LLM instances
-quality_llm = None
-fast_llm = None
-
 # RPG Settings
 RP_LOCATION = "Public"
 USER_NAME = "Human"
@@ -75,6 +63,13 @@ USER_ROLE = "Lead Roleplayer"
 AI_NPC1 = "Randomer"
 AI_NPC2 = "Unused"
 AI_NPC3 = "Unused"
+
+# TOT Settings
+TOT_VARIATIONS = [
+    "Please provide a detailed answer.",
+    "Be concise.",
+    "Think step by step."
+]
 
 # Status text entries
 STATUS_TEXTS = {
@@ -96,7 +91,7 @@ STATUS_TEXTS = {
 category_keywords = {
     "code": ["code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell"],
     "rpg": ["nsfw", "adult", "mature", "explicit", "rp", "roleplay"],
-    "chat": []  # Fallback category for models without specific keywords
+    "chat": []  # Fallback category
 }
 
 # Handling Keywords for Special Model Behaviors
@@ -109,13 +104,11 @@ handling_keywords = {
 temperature_defaults = {
     "code": 0.33,
     "rpg": 0.66,
-    "chat": 0.5  # Middle value for general models
+    "chat": 0.5
 }
 
 # Reasoning enhancement keywords
 reasoning_keywords = ["reasoner", "r1", "reasoning", "reason"]
-
-
 
 # Prompt Templates per Category
 prompt_templates = {
