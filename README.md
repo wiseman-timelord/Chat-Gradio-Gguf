@@ -86,6 +86,7 @@ To create a public link, set `share=True` in `launch()`.
 - VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
 - We use `(ModelFileSize * 1.1875) / NumLayers = LayerSize`, then `TotalVRam / LayerSize = NumLayersOnGpu`.
 - Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section.
+- If you like using LLMs on your own hardware, then you will probably like my program [DownLord](https://github.com/wiseman-timelord/DownLord).
 
 ### Model label/name Keywords...
 1. Keywords for Operation mode...
@@ -111,7 +112,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - Complete Gen 1 of Chat-Gradio-Gguf.
 
 ### Far Development.
-- the next generation of the program will be like this...
+- the next generation of the program will be 6 modes and dual model like this...
 ```
 | **Mode**             | **Models**                     | **Features**                                      | **Implementation Notes**                                                                 |
 |-----------------------|--------------------------------|--------------------------------------------------|-----------------------------------------------------------------------------------------|
@@ -123,8 +124,8 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 | RPG Text + Images    | RPG + image model (Flux.1-schnell) | Text RPG + scene images                      | Trigger Flux via llama.cpp image fork, display in Gradio gallery (256x256 max)         |
 ```
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
-- Agentic workflows, potentially using purpose built fine tuned models, for, thinking, interaction, or code. Its not intended to be agentic, but it would be interesting if we could assign the fast model to, web-scrape, summarizing into sections then re-summarizing with main model instead of chunking and label generation. Review chunking, what would be better, to wait for a llm or do it programatically.  
 - Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
+- Color themes. Deepseek R1 AND Grok3Beta, found this extremely difficult, Deepseek was better. It needs to be re-attempted later, possibly with GPT4o1. Make it all shades of grey, then allow people to choose the primary button color in configuration, or something simple like that.
 
 ## Credits
 - [X](https://x.com/) - [Grok](https://x.com/i/grok), at the time Grok3Beta. For much of the complete updated functions that I implemented.
