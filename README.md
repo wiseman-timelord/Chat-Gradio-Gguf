@@ -110,31 +110,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Development
 Complete Gen 1 of Chat-Gradio-Gguf...
-- had to work on this section in `interface.py`, go fully over the keywords system, check it, also check the logic and sanity, ensure its all correct...
-```
-def determine_operation_mode(quality_model):
-    if quality_model == "Select_a_model...":
-        return "Select models to enable mode detection."
-    settings = get_model_settings(quality_model)
-    category = settings["category"]
-    if category == "code":
-        return "Code"
-    elif category == "rpg":  # Changed from "nsfw"
-        if "rp" in quality_model.lower() or "roleplay" in quality_model.lower():
-            return "Rpg"  # For roleplay-specific models
-    elif category == "uncensored":
-        return "Chat"
-    return "Chat"
-```
-- go over the full logic and sanity of the vector store, it was printing something like...
-```
-Vectorstore not found for mode: chat
-No vectorstore found for mode: chat
-```
-...when I select a model, not when I load it. It also shouldnt really be doing anything with the model until I click, load model or inspect model.
-- I want the model labels to continue to be searched for keywords for other enhancements, however, the mode being used in the Chat interface, should have a new mode `Auto`reset start off in either  
-- instad of dynamically showing, `History Slot Empry` and `Free File Slot`, or whatever, we would have dynamic menus of more buttons for those, that when clicked on will show the full details of relating buttons, with no dynamic code for visibility for how many are shown for usage. There would be the buttons, `Sessions Menu`, `Attachement Menu`, `Roleplay Menu`, working as tabs now, that would toggle between their relating buttons being visible or not. all buttons would be `variant="secondary", while if the user clicks on, `Sessions Menu`, `Attachement Menu`, `Roleplay Menu`, then relevantly, `Sessions Menu`, `Attachement Menu`, `Roleplay Menu`, would then be `variant="primary", in order to highlight that their contents of relating buttons is expanded. The `Session History` button, will make visible, 1 `Start New Session` button and `9 history slot`, buttons. The `File Attachments` button will make visible, 8 `File Slot`buttons and 1 `Remove All Files` button, regardless of mode. The `Game Options`button, is only visible if mode is "RPG", clicking on it will make visible the parameters for roleplay, ie, `human_name: ` and `human_role: `. this will solve the issue with space issues for the right column on `Conversation` page. To be clear we do not want only the filled slots to be showing, empty ones must show now when the relevant, histiry or attachments, buttons are made visible, obviously if given slots are used, then the text says that they are empty on them.
-- put temperature back in with a default of `0.5`, it would go, on the same row as and just before, repeat penalty. Just before people will want to be able to specify this, regardless of having "worked it all out". It will no longer be mode dependednt.
+- I want the model labels to continue to be searched for keywords for other enhancements, however, the operational mode box on `conversation` page needs to be replaced with a `Operation Mode` dropdown list with 8 positions, `Auto`, `Chat`, `Chat-Reasoning`, `Chat-Uncensored`, `Chat-Uncensored-Reasoning`, `Coder`, `Coder-Instruct`, `Rpg`, `Rpg-NSFW`, where the `Auto` mode would select whatever mode was found to be the case from the keywords, this will affect the mode of operation being used in the program appropriately. Each of these modes must have some different relating enhancement or display elements or prompts, as are appropriate to the mode, as is mostly implemented in the program already. For the modes with no specific relating enhancement, please produce the research, determine what relevant features are appropriate for the relating mode, given the current themes of contents in the program. To help you out a bit, here is my thoughts, I think the current prompts for RPG need a little detail adding for the NSFW version, if you research what is a good rp nsfw prompt, then adapt my current 3 promtps. The other prompts should also be assessed, each mode should have optimal prompts. Obviously, only, `Chat`, `Chat-Uncensored`, modes will have TOT button visible, and we do not want the button to turn reasoning off, because that is now selected in the `Operation Mode` dropdown. 
 
 ## Far Development.
 - the next generation of the program will be 6 modes and dual model like this...
