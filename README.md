@@ -12,7 +12,7 @@
 Status: Alpha - Early development.
 
 ## Description
-A high-quality chat interface with 3 auto-detected modes of, operation and interface, for, Codeing, Rpg Simulator, Enhanced Chat, for GGUF models on windows 10 with any GPU.  With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or in that direction. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and text based LLM(s).
+A high-quality chat interface with 3 auto-detected modes of, operation and interface, for, Codeing, Rpg Simulator, Enhanced Chat, for GGUF models on windows 10 with any GPU.  With the latest advancements in GGUF models, such as the models found in the `Links` section. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or a far in that direction as Gradio will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and modern GGUF LLMs.
 
 ### Features
 - **Mode Detection **: 3 modes of operation, `code`, `rpg`, `chat`, with, `Uncensored` and `reasoning`, enhancement, and with relating dynamic, prompts and interface. 
@@ -22,10 +22,8 @@ A high-quality chat interface with 3 auto-detected modes of, operation and inter
 - **Simplified File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml` files.
 - **Configurable Context Window**: Set `n_ctx` to 8192, 16384, 24576, or 32768 via dropdown.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
-- **Token Streaming**: Real-time token generation for seamless chat interactions.
-- **Model Selection**: Auto-populated dropdown lists in custom model folder location, auto-calculating Optimal layer distribution.
 - **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
-- **Dual-Model Operation**: Add an optional secondary smaller model for faster text processing tasks. 
+- **Session History Rotation**: 11 Session History slots on rotation, enabling load recent sessions, while not using excessive space. 
 
 ### Preview
 - The "Conversation" page, still a few things to work out, but mostly there...
@@ -89,7 +87,7 @@ To create a public link, set `share=True` in `launch()`.
 - We use `(ModelFileSize * 1.1875) / NumLayers = LayerSize`, then `TotalVRam / LayerSize = NumLayersOnGpu`.
 - Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section.
 
-### Model label Keywords...
+### Model label/name Keywords...
 1. Keywords for Operation mode...
 - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
 - `RPG Game` keywords - "nsfw", "adult", "mature", "explicit", "rp", "roleplay".
@@ -110,9 +108,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
 ## Development
-- Make it 1 model operation for now, simplify and get the complete program together...
-- Use Yake for generating 3 word labels for Session History Slots.
-- Check model loading/unloading in code, using 1 model now, is the code for mlock solid?
+- Complete Gen 1 of Chat-Gradio-Gguf.
 
 ### Far Development.
 - the next generation of the program will be like this...
