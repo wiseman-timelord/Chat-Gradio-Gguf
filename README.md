@@ -109,7 +109,30 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
 ## Development
-- Complete Gen 1 of Chat-Gradio-Gguf.
+Complete Gen 1 of Chat-Gradio-Gguf...
+- had to work on this section in `interface.py`, go fully over the keywords system, check it, also check the logic and sanity, ensure its all correct...
+```
+def determine_operation_mode(quality_model):
+    if quality_model == "Select_a_model...":
+        return "Select models to enable mode detection."
+    settings = get_model_settings(quality_model)
+    category = settings["category"]
+    if category == "code":
+        return "Code"
+    elif category == "rpg":  # Changed from "nsfw"
+        if "rp" in quality_model.lower() or "roleplay" in quality_model.lower():
+            return "Rpg"  # For roleplay-specific models
+    elif category == "uncensored":
+        return "Chat"
+    return "Chat"
+```
+- go over the full logic and sanity of the vector store, it was printing something like...
+```
+Vectorstore not found for mode: chat
+No vectorstore found for mode: chat
+```
+...when I select a model, not when I load it. It also shouldnt really be doing anything with the model until I click, load model or inspect model.
+
 
 ### Far Development.
 - the next generation of the program will be 6 modes and dual model like this...
