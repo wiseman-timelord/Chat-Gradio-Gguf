@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
 VULKAN_TARGET_VERSION = "1.4.304.1"
-LLAMACPP_TARGET_VERSION = "b4778"
+LLAMACPP_TARGET_VERSION = "b4798"
 BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
     "data", "scripts", "models",
@@ -35,6 +35,7 @@ REQUIREMENTS = [
     "requests==2.31.0",
     "tqdm==4.66.1",
     "paperclip",
+    "yake",
     "llama-cpp-python",
     "langchain-community==0.3.18",
     "pygments==2.17.2",

@@ -4,7 +4,7 @@
 print("Starting `launcher` Imports.")
 from pathlib import Path
 from scripts import temporary
-from scripts.utility import load_config, load_and_chunk_documents, create_vectorstore
+from scripts.utility import load_config
 from scripts.interface import launch_interface
 print("`launcher` Imports Complete.")
 
