@@ -109,14 +109,13 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested.
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
-
-
-
 ## Development
-- Test and work on 3 word label creation. Is there some library that comes with its own mini-model we can install in the installer, then we can do summarization into 3 word label, with that instead, thus freeing up the second model for, TOT, websearch, large text summarization into quality chunks of relevant information, etc. The issue I have is that, with limited VRam it would be better to just have 1 model and load more of that model on VRam, so removal of the secondary model option would streamline scripts a bit. The only real reasoning I would want 2 models would be for agentic workflow with coding models, but that would possibly have to be its own program, or come later. 
-- possibly the way to go is, `Chatbot - requiring only chat model, doing TOT and webresearch, on 1 model`, `Advanced Chatbot - Requiting Fast + Quality version of same model, for TOT on fast model, switch AUTO/FAST/QUALITY responses, webresearch through fast model`, `Coder - Requiting only Code model`, `Agentic Coder - Requiring, Code and Text, models appropriately`, `Rpg Text - Requiring only RPG model`, `RPG Text + Images - RPG and Image model (fluxschnellgguf), text RPG game with image enhancement`. 
-- Check model loading/unloading in code. Originally it was loading models on the fly and keeping them in memory until it needed to use the other one, then it would keep that one in memory, and so on. What we want instead is to ensure `mlock = on` will result in both models being loaded at once, while `mlock = off`, will only load each model as required, therein, for `mlock = on` we would need to calculate the optimal layers for the VRam as it currently does, and if off, then it will only be calculating the layers for the vram on a individual model basis, as they are individuall loaded and used, before being unloaded. in which case the mlock button should be replaced with `Load Both Models` and be by default `true/enabled`.
-- Make it 1 model operation for now, simplify and get the complete program together, the next generation of the program will be like this...
+- Make it 1 model operation for now, simplify and get the complete program together...
+- Use Yake for generating 3 word labels for Session History Slots.
+- Check model loading/unloading in code, using 1 model now, is the code for mlock solid?
+
+### Far Development.
+- the next generation of the program will be like this...
 ```
 | **Mode**             | **Models**                     | **Features**                                      | **Implementation Notes**                                                                 |
 |-----------------------|--------------------------------|--------------------------------------------------|-----------------------------------------------------------------------------------------|
@@ -127,9 +126,6 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 | RPG Text             | Single RPG model              | Narrative, character tracking, uncensored       | Parse entities with regex, save JSON states in .\data\history\                         |
 | RPG Text + Images    | RPG + image model (Flux.1-schnell) | Text RPG + scene images                      | Trigger Flux via llama.cpp image fork, display in Gradio gallery (256x256 max)         |
 ```
-
-### Far Development.
-
 - Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
 - Agentic workflows, potentially using purpose built fine tuned models, for, thinking, interaction, or code. Its not intended to be agentic, but it would be interesting if we could assign the fast model to, web-scrape, summarizing into sections then re-summarizing with main model instead of chunking and label generation. Review chunking, what would be better, to wait for a llm or do it programatically.  
 - Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
