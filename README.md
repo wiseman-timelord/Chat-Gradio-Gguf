@@ -1,4 +1,4 @@
-# Chat-Gradio-Gguf
+# Text-Gradio-Gguf
 ```
 =======================================================================================================================
 "                                  _________           ________          ________                                     "
@@ -35,10 +35,10 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 - The Terminal Display...
 ```
 =======================================================================================================================
-    Chat-Gradio-Gguf: Launcher
+    Text-Gradio-Gguf: Launcher
 =======================================================================================================================
 
-Starting Chat-Gradio-Gguf...
+Starting Text-Gradio-Gguf...
 Starting `launcher` Imports.
 `launcher` Imports Complete.
 Starting `launcher.main`.
@@ -69,13 +69,13 @@ To create a public link, set `share=True` in `launch()`.
 - Llm Model - You will need a Large Language Model in GGUF format, See below
 
 ### Instructions
-1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Chat-Gradio-Gguf` or `C:\Programs\Chat-Gradio-Gguf`. 
-2. Right click the file `Chat-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load.
+1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Text-Gradio-Gguf` or `C:\Programs\Text-Gradio-Gguf`. 
+2. Right click the file `Text-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load.
 3. Select `2` from the Batch Menu, to begin installation.
 4. you will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware.
 5. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder.
 6. After the install completes, check for any install issues, you may need to install again if there are.
-7. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`.
+7. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Text-Gradio-Gguf`.
 8. You will be greeted with the conversation page, but you will first be going to the configuration page.
 9. On the `Configuration` page you would configure appropriately, its all straight forwards.
 10. Go back to the `Conversation` page and begin interactions, ensuring to notice features available.
@@ -109,7 +109,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
 ## Development
-Complete Gen 1 of Chat-Gradio-Gguf...
+Complete Gen 1 of Text-Gradio-Gguf...
 - (in progress) I want the model labels to continue to be searched for keywords for other enhancements, however, the operational mode box on `conversation` page needs to be replaced with a `Operation Mode` dropdown list with 8 positions, `Auto`, `Chat`, `Chat-Reasoning`, `Chat-Uncensored`, `Chat-Uncensored-Reasoning`, `Coder`, `Coder-Instruct`, `Rpg`, `Rpg-NSFW`, where the `Auto` mode would select whatever mode was found to be the case from the keywords, this will affect the mode of operation being used in the program appropriately. Each of these modes must have some different relating enhancement or display elements or prompts, as are appropriate to the mode, as is mostly implemented in the program already. For the modes with no specific relating enhancement, please produce the research, determine what relevant features are appropriate for the relating mode, given the current themes of contents in the program. To help you out a bit, here is my thoughts, I think the current prompts for RPG need a little detail adding for the NSFW version, if you research what is a good rp nsfw prompt, then adapt my current 3 promtps. The other prompts should also be assessed, each mode should have optimal prompts. Obviously, only, `Chat`, `Chat-Uncensored`, modes will have TOT button visible, and we do not want the button to turn reasoning off, because that is now selected in the `Operation Mode` dropdown. 
 
 ## Far Development.
@@ -124,7 +124,7 @@ Complete Gen 1 of Chat-Gradio-Gguf...
 | RPG Text             | Single RPG model              | Narrative, character tracking, uncensored       | Parse entities with regex, save JSON states in .\data\history\                         |
 | RPG Text + Images    | RPG + image model (Flux.1-schnell) | Text RPG + scene images                      | Trigger Flux via llama.cpp image fork, display in Gradio gallery (256x256 max)         |
 ```
-- Introduction of `Chat-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
+- Introduction of `Text-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
 - Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
 - Color themes. Deepseek R1 AND Grok3Beta, found this extremely difficult, Deepseek was better. It needs to be re-attempted later, possibly with GPT4o1. Make it all shades of grey, then allow people to choose the primary button color in configuration, or something simple like that.
 - two new modes—Chat-Notate and Chat-Notate-Uncensored—to your Windows 10-based chatbot. These modes allow the AI to process uploaded PDFs into summarized notations, stored in .\data\notation, with two versions: a detailed summary (up to the model's context limit, minus a safety margin) and a concise summary (256 tokens). During chats, the AI selects the most relevant detailed notation based on user input to deliver informed responses. A Notation Library menu in the UI enables users to manage notations by indexing new PDFs or deleting existing ones. For reasoning models in these modes, the THINK phase is disabled (like in TOT mode), ensuring practical, notation-driven conversations. This feature is slated for a later development phase.
