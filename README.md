@@ -39,14 +39,18 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 =======================================================================================================================
 
 Starting Text-Gradio-Gguf...
+Success: Python libraries verified.
 Starting `launcher` Imports.
+No vectorstore found for code, skipping initialization.
+No vectorstore found for rpg, skipping initialization.
+No vectorstore found for chat, skipping initialization.
 `launcher` Imports Complete.
 Starting `launcher.main`.
-Running on local URL:  http://127.0.0.1:7860
+Warning: No valid vectorstores found. RAG features disabled.
+INFO: Could not find files for the given pattern(s).
+* Running on local URL:  http://127.0.0.1:7860
 
 To create a public link, set `share=True` in `launch()`.
-
-
 
 
 
