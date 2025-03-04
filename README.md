@@ -16,7 +16,7 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 
 ### Features
 - **Operation Modes **:  "Auto" (filename keywords), "Chat", "Chat-Reasoning", "Chat-Uncensored", "Chat-Uncensored-Reasoning", "Chat-TOT", "Chat-Uncensored-TOT", "Coder", "Coder-Instruct", "Rpg", "Rpg-NSFW".
-- **GPU Support**: Compatible with AMD/NVIDIA/Intel GPUs via Vulkan/Kompute/Cuda/Avx2/Avx512, with, as applicable, a GPU selection dropdown.
+- **Comprihensive CPU/GPU Support**: Compatible with, CPUs x64-CPU/Multi-CPU/AVX2/AVX512 and GPUs AMD/nVIDIA via Vulkan/Kompute/Cuda, with dynamic selection dropdown.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, and code formatting.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
