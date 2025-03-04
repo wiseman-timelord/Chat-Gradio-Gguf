@@ -386,26 +386,13 @@ def launch_interface():
                         with gr.Row():
                             start_new_session_btn = gr.Button("Start New Session...", variant="primary")
                             session_history_btn = gr.Button("Show Previous Sessions", variant="secondary")
-                        session_menu = gr.Column(visible=False)
+                        session_menu = gr.Column(visible=True)
                         with session_menu:
                             session_buttons = [gr.Button(f"Session Slot {i+1}", visible=False, variant="secondary") for i in range(7)]
-                        
-                        # File Attachments Section
-                        with gr.Row():
-                            attach_files_btn = gr.UploadButton("Attach New Files...", 
-                                                              file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], 
-                                                              file_count="multiple", 
-                                                              variant="primary")
-                            attachment_btn = gr.Button("Show Attached Files", variant="secondary")
-                        attachment_menu = gr.Column(visible=False)
-                        with attachment_menu:
-                            file_slot_buttons = []
-                            for row in range(6):
-                                with gr.Row(elem_classes=["button-row"]):
-                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=False, variant="secondary"))
+                       
                         
                         # RPG Section
-                        rpg_toggle = gr.Button("Show RPG Parameters", visible=False, variant="primary")
+                        rpg_toggle = gr.Button("Show RPG Parameters", visible=True, variant="primary")
                         rpg_menu = gr.Column(visible=False)
                         with rpg_menu:
                             rp_location = gr.Textbox(label="RP Location", value=temporary.RP_LOCATION)
@@ -426,11 +413,23 @@ def launch_interface():
                     # Right column (chat area)
                     with gr.Column(scale=30):
                         session_log = gr.Chatbot(label="Session Log", height=425, elem_classes=["scrollable"], type="messages")
-                        user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...")
+                        with gr.Row():
+
+                            file_slot_buttons = []
+                            for row in range(6):
+                                with gr.Row(elem_classes=["button-row"]):
+                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=False, variant="secondary"))                                                           
+                            attach_files_btn = gr.UploadButton("Attach New Files", 
+                                                              file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], 
+                                                              file_count="multiple", 
+                                                              variant="secondary")                                    
+                        with gr.Row():
+                            user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...")
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="primary", scale=20)
                             edit_previous_btn = gr.Button("Edit Last Input", variant="secondary")
                             copy_response_btn = gr.Button("Copy Last Output", variant="secondary")
+
 
                 with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=20)
@@ -499,16 +498,6 @@ def launch_interface():
             lambda v: gr.update(visible=v),
             inputs=session_menu_visible,
             outputs=session_menu
-        )
-
-        attachment_btn.click(
-            lambda v: not v,
-            inputs=attachment_menu_visible,
-            outputs=attachment_menu_visible
-        ).then(
-            lambda v: gr.update(visible=v),
-            inputs=attachment_menu_visible,
-            outputs=attachment_menu
         )
 
         rpg_toggle.click(
