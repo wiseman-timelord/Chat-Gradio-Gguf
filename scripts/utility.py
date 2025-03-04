@@ -197,9 +197,10 @@ def save_config():
     config = {
         "model_settings": {
             "model_dir": temporary.MODEL_FOLDER,
-            "quality_model": temporary.QUALITY_MODEL_NAME,
-            "fast_model": temporary.FAST_MODEL_NAME,
+            "quality_model": temporary.MODEL_NAME,  # Updated to use MODEL_NAME
+            "fast_model": "",  # Not used in current setup, keeping for compatibility
             "n_ctx": temporary.N_CTX,
+            "temperature": temporary.TEMPERATURE,  # Added
             "repeat_penalty": temporary.REPEAT_PENALTY,
             "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "llama_cli_path": temporary.LLAMA_CLI_PATH,
@@ -220,7 +221,8 @@ def save_config():
             "user_role": temporary.USER_PC_ROLE if hasattr(temporary, 'USER_PC_ROLE') else "Lead Roleplayer",
             "ai_npc1": temporary.AI_NPC1_NAME if hasattr(temporary, 'AI_NPC1_NAME') else "Robot",
             "ai_npc2": temporary.AI_NPC2_NAME if hasattr(temporary, 'AI_NPC2_NAME') else "Unused",
-            "ai_npc3": temporary.AI_NPC3_NAME if hasattr(temporary, 'AI_NPC3_NAME') else "Unused"
+            "ai_npc3": temporary.AI_NPC3_NAME if hasattr(temporary, 'AI_NPC3_NAME') else "Unused",
+            "ai_npcs_roles": temporary.AI_NPCS_ROLES if hasattr(temporary, 'AI_NPCS_ROLES') else "Randomers"
         }
     }
     with open(config_path, "w") as f:
@@ -282,20 +284,20 @@ def load_config():
             from scripts import temporary
             # Model settings
             temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", "models")
-            temporary.QUALITY_MODEL_NAME = config["model_settings"].get("quality_model", "Select_a_model...")
-            temporary.FAST_MODEL_NAME = config["model_settings"].get("fast_model", "Select_a_model...")
+            temporary.MODEL_NAME = config["model_settings"].get("quality_model", "Select_a_model...")  # Updated to use MODEL_NAME
             temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
+            temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))  # Added
             temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))
-            temporary.USE_PYTHON_BINDINGS = bool(config["model_settings"].get("use_python_bindings", False))
+            temporary.USE_PYTHON_BINDINGS = bool(config["model_settings"].get("use_python_bindings", True))
             temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "")
             temporary.VRAM_SIZE = int(config["model_settings"].get("vram_size", 8192))
             temporary.SELECTED_GPU = config["model_settings"].get("selected_gpu", None)
             temporary.MMAP = bool(config["model_settings"].get("mmap", True))
-            temporary.MLOCK = bool(config["model_settings"].get("mlock", False))
+            temporary.MLOCK = bool(config["model_settings"].get("mlock", True))
             temporary.N_BATCH = int(config["model_settings"].get("n_batch", 1024))
             temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
             # Backend config
-            temporary.BACKEND_TYPE = config["backend_config"].get("type", "GPU/CPU - Vulkan")
+            temporary.BACKEND_TYPE = config["backend_config"].get("type", "")
             temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")
             # RP settings
             temporary.RP_LOCATION = config["rp_settings"].get("rp_location", "Public")
@@ -304,3 +306,4 @@ def load_config():
             temporary.AI_NPC1_NAME = config["rp_settings"].get("ai_npc1", "Robot")
             temporary.AI_NPC2_NAME = config["rp_settings"].get("ai_npc2", "Unused")
             temporary.AI_NPC3_NAME = config["rp_settings"].get("ai_npc3", "Unused")
+            temporary.AI_NPCS_ROLES = config["rp_settings"].get("ai_npcs_roles", "Randomers")

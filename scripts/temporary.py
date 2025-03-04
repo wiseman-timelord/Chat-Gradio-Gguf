@@ -34,6 +34,7 @@ LLAMA_BIN_PATH = ""
 RAG_AUTO_LOAD = ["general_knowledge"]
 REPEAT_PENALTY = 1.0
 N_BATCH = 1024
+TEMPERATURE = 0.5
 
 # Global LLM instance
 llm = None
@@ -55,6 +56,7 @@ CTX_OPTIONS = [8192, 16384, 24576, 32768]
 VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768]
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096]
+TEMP_OPTIONS = [0.1, 0.33, 0.5, 0.66, 0.75, 1.0] 
 
 # RPG Settings
 RP_LOCATION = "Public"
@@ -101,13 +103,6 @@ handling_keywords = {
     "reasoning": ["reason", "r1", "think"]
 }
 
-# Temperature defaults per category
-temperature_defaults = {
-    "code": 0.33,
-    "rpg": 0.66,
-    "chat": 0.5
-}
-
 # Reasoning enhancement keywords
 reasoning_keywords = ["reasoner", "r1", "reasoning", "reason"]
 
@@ -123,6 +118,5 @@ prompt_templates = {
 
 current_model_settings = {
     "category": "chat",
-    "temperature": temperature_defaults["chat"],
     "prompt_template": prompt_templates["chat"]
 }

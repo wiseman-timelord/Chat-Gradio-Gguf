@@ -21,7 +21,7 @@ from scripts import utility
 from scripts.utility import (
     delete_vectorstore, delete_all_vectorstores, web_search, get_saved_sessions,
     load_session_history, save_session_history, load_and_chunk_documents,
-    create_vectorstore, get_available_gpus
+    create_vectorstore, get_available_gpus, create_session_vectorstore
 )
 from scripts.models import (
     get_response, get_available_models, unload_models, get_model_settings,
@@ -53,7 +53,7 @@ def delete_npc(npc_index, ai_npc1, ai_npc2, ai_npc3):
 
 def save_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles):
     from scripts import temporary
-    config_path = Path("data/persistent.json")  # Add this line to define config_path
+    config_path = Path("data/persistent.json")
     
     # Update temporary variables
     temporary.RP_LOCATION = rp_location
@@ -78,7 +78,7 @@ def save_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc
         }
         f.seek(0)
         json.dump(config, f, indent=2)
-        f.truncate()  # Ensure file is properly truncated
+        f.truncate()
     
     return rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles
 
@@ -136,6 +136,34 @@ def eject_file(loaded_files, slot_index, rag_max_docs):
         status_msg = "No file to eject"
     button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
     return [loaded_files, status_msg] + button_updates + [attach_files_update]
+
+def remove_all_attachments(loaded_files, rag_max_docs):
+    from scripts.utility import create_session_vectorstore
+    loaded_files = []
+    session_vectorstore = create_session_vectorstore(loaded_files)
+    context_injector.set_session_vectorstore(session_vectorstore)
+    status_msg = "All attachments removed."
+    button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
+    return [loaded_files, status_msg] + button_updates + [attach_files_update]
+
+def toggle_rpg_settings(mode, showing_rpg_right):
+    if mode != "Rpg":
+        # If not in RPG mode, button should be hidden, so return defaults (though click shouldn't occur)
+        return (
+            gr.update(visible=False),  # toggle_rpg_settings_btn
+            gr.update(visible=True),   # file_attachments_group
+            gr.update(visible=False),  # rpg_settings_group
+            False                      # showing_rpg_right
+        )
+    # Toggle the state
+    new_showing_rpg_right = not showing_rpg_right
+    toggle_label = "Show File Attachments" if new_showing_rpg_right else "Show RPG Settings"
+    return (
+        gr.update(visible=True, value=toggle_label),  # toggle_rpg_settings_btn
+        gr.update(visible=not new_showing_rpg_right), # file_attachments_group
+        gr.update(visible=new_showing_rpg_right),     # rpg_settings_group
+        new_showing_rpg_right                         # Update state
+    )
 
 def handle_slot_click(slot_index, loaded_files, rag_max_docs):
     if slot_index < len(loaded_files):
@@ -216,8 +244,7 @@ def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, dis
                 "user_role": user_role,
                 "ai_npc1": ai_npc1,
                 "ai_npc2": ai_npc2,
-                "ai_npc3": ai_npc3,
-                "ai_npcs_roles": ai_npcs_roles
+                "ai_npc3": ai_npc3
             }
             session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
             response = models.get_response(prompt, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history)
@@ -240,13 +267,12 @@ def determine_operation_mode(quality_model):
     if category == "code":
         return "Code"
     elif category == "rpg":
-        if "rp" in quality_model.lower() or "roleplay" in quality_model.lower():
-            return "Rpg"
+        return "Rpg"
     elif category == "uncensored":
         return "Chat"
     return "Chat"
 
-def update_dynamic_options(quality_model, loaded_files_state):
+def update_dynamic_options(quality_model, loaded_files_state, showing_rpg_right):
     if quality_model == "Select_a_model...":
         mode = "Select models"
         settings = {"is_reasoning": False}
@@ -255,9 +281,7 @@ def update_dynamic_options(quality_model, loaded_files_state):
         mode = settings["category"].capitalize()
     
     think_visible = settings["is_reasoning"]
-    rpg_visible = (mode == "Rpg")
     
-    # Set visibility based on mode
     if mode == "Code":
         tot_visible = False
         web_visible = False
@@ -271,19 +295,26 @@ def update_dynamic_options(quality_model, loaded_files_state):
         web_visible = True
         file_visible = True
 
+    # Right column visibility logic
+    toggle_visible = True  # Always visible for development
+    toggle_label = "Show File Attachments" if showing_rpg_right else "Show RPG Settings"
+    
     return [
         gr.update(visible=tot_visible),      # TOT checkbox
         gr.update(visible=web_visible),      # Web search
         gr.update(visible=think_visible),    # Think switch
         gr.update(value=mode),               # Theme status
-        gr.update(visible=rpg_visible),      # RPG toggle button
-        gr.update(visible=file_visible)      # File attachments
+        gr.update(visible=file_visible),     # attach_files_btn
+        gr.update(visible=toggle_visible, value=toggle_label),  # toggle_rpg_settings_btn
+        gr.update(visible=not showing_rpg_right),  # file_attachments_group
+        gr.update(visible=showing_rpg_right),      # rpg_settings_group
+        showing_rpg_right                          # Update the state
     ]
 
 def update_file_slot_ui(loaded_files, rag_max_docs):
     from pathlib import Path
     button_updates = []
-    for i in range(6):  # Updated to 8 to match file_slot_buttons
+    for i in range(6):
         if i < len(loaded_files):
             filename = Path(loaded_files[i]).name
             short_name = (filename[:13] + ".." if len(filename) > 15 else filename)
@@ -299,7 +330,6 @@ def update_file_slot_ui(loaded_files, rag_max_docs):
     return button_updates + [gr.update(visible=attach_files_visible)]
 
 def update_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles):
-    """Update temporary variables with RPG settings without saving to JSON."""
     temporary.RP_LOCATION = rp_location
     temporary.USER_PC_NAME = user_name
     temporary.USER_PC_ROLE = user_role
@@ -310,7 +340,6 @@ def update_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_n
     return rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles
 
 def save_rpg_settings_to_json():
-    """Save only the RPG settings to the persistent.json file."""
     config_path = Path("data/persistent.json")
     if config_path.exists():
         with open(config_path, "r+") as f:
@@ -334,7 +363,7 @@ def save_rpg_settings_to_json():
 def update_session_buttons():
     sessions = utility.get_saved_sessions()
     button_updates = []
-    for i in range(7):
+    for i in range(9):
         if i < len(sessions):
             session_path = Path(HISTORY_DIR) / sessions[i]
             try:
@@ -343,10 +372,16 @@ def update_session_buttons():
             except Exception:
                 btn_label = f"Session {i+1}"
         else:
-            btn_label = "Empty History Slot"
+            btn_label = "History Slot Empty"
         button_updates.append(gr.update(value=btn_label, visible=True))
     return button_updates
 
+def update_left_panel_visibility(mode, showing_rpg_settings):
+    is_rpg_mode = (mode.lower() == "rpg")
+    if is_rpg_mode and showing_rpg_settings:
+        return gr.update(visible=False), gr.update(visible=True)
+    else:
+        return gr.update(visible=True), gr.update(visible=False)
 def launch_interface():
     global demo
     with gr.Blocks(title="Chat-Gradio-Gguf", css="""
@@ -359,21 +394,21 @@ def launch_interface():
             margin-bottom: 4px !important; 
         }
         .button-row .gradio-button { 
-            flex: 1 !important; 
             min-width: 100px !important; 
             text-overflow: ellipsis; 
             overflow: hidden; 
             white-space: nowrap; 
         }
         .collapsible { margin-bottom: 10px; border: 1px solid #444; padding: 5px; border-radius: 5px; }
+        .gradio-button {
+            border: 1px solid #ccc;
+        }
     """) as demo:
         # State variables
         loaded_files_state = gr.State(value=[])
         rag_max_docs_state = gr.State(value=6)
         models_loaded_state = gr.State(value=False)
-        session_menu_visible = gr.State(False)
-        attachment_menu_visible = gr.State(False)
-        rpg_menu_visible = gr.State(False)
+        showing_rpg_right = gr.State(False)
 
         with gr.Tabs():
             with gr.Tab("Conversation"):
@@ -382,19 +417,13 @@ def launch_interface():
                     with gr.Column(scale=1):
                         theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="No model loaded.")
                         
-                        # Session History Section
-                        with gr.Row():
-                            start_new_session_btn = gr.Button("Start New Session...", variant="primary")
-                            session_history_btn = gr.Button("Show Previous Sessions", variant="secondary")
-                        session_menu = gr.Column(visible=True)
-                        with session_menu:
-                            session_buttons = [gr.Button(f"Session Slot {i+1}", visible=False, variant="secondary") for i in range(7)]
-                       
+                        with gr.Column(visible=True) as session_history_column:
+                            start_new_session_btn = gr.Button("Start New Session...", variant="secondary")
+                            session_buttons = [gr.Button(f"History Slot {i+1}", visible=True, variant="huggingface") for i in range(9)]
+                            delete_all_history_btn = gr.Button("Delete All History", variant="primary")
                         
-                        # RPG Section
-                        rpg_toggle = gr.Button("Show RPG Parameters", visible=True, variant="primary")
-                        rpg_menu = gr.Column(visible=False)
-                        with rpg_menu:
+                        with gr.Column(visible=False) as rpg_settings_column:
+                            show_session_history_btn = gr.Button("Show Session History")
                             rp_location = gr.Textbox(label="RP Location", value=temporary.RP_LOCATION)
                             user_name = gr.Textbox(label="User Name", value=temporary.USER_PC_NAME)
                             user_role = gr.Textbox(label="User Role", value=temporary.USER_PC_ROLE)
@@ -402,34 +431,48 @@ def launch_interface():
                             ai_npc2 = gr.Textbox(label="AI NPC 2", value=temporary.AI_NPC2_NAME)
                             ai_npc3 = gr.Textbox(label="AI NPC 3", value=temporary.AI_NPC3_NAME)
                             ai_npcs_roles = gr.Textbox(label="AI Roles", value=temporary.AI_NPCS_ROLES)
-                            save_rpg_btn = gr.Button("Save RPG Settings", variant="primary")
-                        
+                            save_rpg_btn = gr.Button("Save RPG Settings")
+
                         # Always-visible controls
                         with gr.Row():
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
                             tot_checkbox = gr.Checkbox(label="Enable TOT", value=False, visible=False)
                             disable_think_switch = gr.Checkbox(label="Disable THINK", value=False, visible=False)
 
-                    # Right column (chat area)
+                    # Middle column (chat area)
                     with gr.Column(scale=30):
-                        session_log = gr.Chatbot(label="Session Log", height=425, elem_classes=["scrollable"], type="messages")
-                        with gr.Row():
-
-                            file_slot_buttons = []
-                            for row in range(6):
-                                with gr.Row(elem_classes=["button-row"]):
-                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=False, variant="secondary"))                                                           
-                            attach_files_btn = gr.UploadButton("Attach New Files", 
-                                                              file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], 
-                                                              file_count="multiple", 
-                                                              variant="secondary")                                    
+                        session_log = gr.Chatbot(label="Session Log", height=475, elem_classes=["scrollable"], type="messages")             
                         with gr.Row():
                             user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...")
                         with gr.Row():
-                            send_btn = gr.Button("Send Input", variant="primary", scale=20)
-                            edit_previous_btn = gr.Button("Edit Last Input", variant="secondary")
-                            copy_response_btn = gr.Button("Copy Last Output", variant="secondary")
+                            send_btn = gr.Button("Send Input", variant="secondary", scale=20)
+                            edit_previous_btn = gr.Button("Edit Last Input", variant="huggingface")
+                            copy_response_btn = gr.Button("Copy Last Output", variant="huggingface")
 
+                    # Right column (file attachments and RPG settings)
+                    with gr.Column(scale=1):
+                        toggle_rpg_settings_btn = gr.Button("Show RPG Settings", visible=True, variant="secondary")
+                        
+                        with gr.Group(visible=True) as file_attachments_group:
+                            attach_files_btn = gr.UploadButton("Attach New Files", 
+                                                              file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], 
+                                                              file_count="multiple", 
+                                                              variant="secondary")
+                            file_slot_buttons = []
+                            for row in range(6):
+                                with gr.Row(elem_classes=["button-row"]):
+                                    file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="huggingface"))
+                            remove_all_attachments_btn = gr.Button("Remove All Attachments", variant="primary")
+                        
+                        with gr.Group(visible=False) as rpg_settings_group:
+                            rp_location_right = gr.Textbox(label="RP Location", value=temporary.RP_LOCATION)
+                            user_name_right = gr.Textbox(label="User Name", value=temporary.USER_PC_NAME)
+                            user_role_right = gr.Textbox(label="User Role", value=temporary.USER_PC_ROLE)
+                            ai_npc1_right = gr.Textbox(label="AI NPC 1", value=temporary.AI_NPC1_NAME)
+                            ai_npc2_right = gr.Textbox(label="AI NPC 2", value=temporary.AI_NPC2_NAME)
+                            ai_npc3_right = gr.Textbox(label="AI NPC 3", value=temporary.AI_NPC3_NAME)
+                            ai_npcs_roles_right = gr.Textbox(label="AI Roles", value=temporary.AI_NPCS_ROLES)
+                            save_rpg_right_btn = gr.Button("Save RPG Settings")
 
                 with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=20)
@@ -455,61 +498,116 @@ def launch_interface():
                         scale=20
                     )
                     refresh_btn = gr.Button("Refresh")
+                # Added row for Context Size, Batch Size, Temperature, Repeat Penalty
                 with gr.Row():
-                    n_ctx_dropdown = gr.Dropdown(
-                        choices=temporary.CTX_OPTIONS, 
-                        label="Context (Focus)", 
-                        value=temporary.N_CTX, 
+                    ctx_dropdown = gr.Dropdown(
+                        choices=temporary.CTX_OPTIONS,
+                        label="Context Size",
+                        value=temporary.N_CTX,
                         interactive=True
                     )
-                    batch_size_dropdown = gr.Dropdown(
-                        choices=temporary.BATCH_OPTIONS, 
-                        label="Batch Size (Output)", 
-                        value=temporary.N_BATCH, 
+                    batch_dropdown = gr.Dropdown(
+                        choices=temporary.BATCH_OPTIONS,
+                        label="Batch Size",
+                        value=temporary.N_BATCH,
                         interactive=True
                     )
-                    repeat_penalty_dropdown = gr.Dropdown(
-                        choices=temporary.REPEAT_OPTIONS, 
-                        label="Repeat Penalty (Restraint)", 
-                        value=temporary.REPEAT_PENALTY, 
-                        allow_custom_value=True, 
+                with gr.Row():
+                    temp_dropdown = gr.Dropdown(
+                        choices=temporary.TEMP_OPTIONS,
+                        label="Temperature",
+                        value=temporary.TEMPERATURE,
+                        interactive=True
+                    )
+                    repeat_dropdown = gr.Dropdown(
+                        choices=temporary.REPEAT_OPTIONS,
+                        label="Repeat Penalty",
+                        value=temporary.REPEAT_PENALTY,
                         interactive=True
                     )
                 with gr.Row():
                     load_models_btn = gr.Button("Load Model", variant="secondary")
                     inspect_model_btn = gr.Button("Inspect Model", variant="huggingface")
                     unload_btn = gr.Button("Unload Model")
+                # Added row for Erase buttons
                 with gr.Row():
-                    erase_general_btn = gr.Button("Erase General Data", variant="huggingface")
-                    erase_rpg_btn = gr.Button("Erase RPG Data", variant="huggingface")
-                    erase_code_btn = gr.Button("Erase Code Data", variant="huggingface")
-                    erase_all_btn = gr.Button("Erase All Data", variant="huggingface")
+                    erase_chat_btn = gr.Button("Erase Chat Data", variant="primary")
+                    erase_rpg_btn = gr.Button("Erase RPG Data", variant="primary")
+                    erase_code_btn = gr.Button("Erase Code Data", variant="primary")
+                    erase_all_btn = gr.Button("Erase All Data", variant="primary")
                 with gr.Row():
                     status_text_settings = gr.Textbox(label="Status", interactive=False, scale=20)
-                    save_settings_btn = gr.Button("Save Settings", variant="primary")
+                    save_settings_btn = gr.Button("Save Settings", variant="stop")
 
         # Event Handlers
-        ## Visibility Toggles
-        session_history_btn.click(
-            lambda v: not v,
-            inputs=session_menu_visible,
-            outputs=session_menu_visible
-        ).then(
-            lambda v: gr.update(visible=v),
-            inputs=session_menu_visible,
-            outputs=session_menu
-        )
+        def update_config_settings(ctx, batch, temp, repeat, vram, mlock, gpu, model_dir, model):
+            temporary.N_CTX = ctx
+            temporary.N_BATCH = batch
+            temporary.TEMPERATURE = temp  # Updates global TEMPERATURE
+            temporary.REPEAT_PENALTY = repeat
+            temporary.VRAM_SIZE = vram
+            temporary.MLOCK = mlock
+            temporary.SELECTED_GPU = gpu
+            temporary.MODEL_FOLDER = model_dir
+            temporary.MODEL_NAME = model
+            return "Settings updated in memory. Click 'Save Settings' to persist."
 
-        rpg_toggle.click(
-            lambda v: not v,
-            inputs=rpg_menu_visible,
-            outputs=rpg_menu_visible
-        ).then(
-            lambda v: gr.update(visible=v),
-            inputs=rpg_menu_visible,
-            outputs=rpg_menu
-        )
-        
+        def save_all_settings():
+            utility.save_config()
+            return "Settings saved to persistent.json"
+
+        def update_left_panel_visibility(theme_status):
+            is_rpg_mode = "rpg" in theme_status.lower()
+            return gr.update(visible=not is_rpg_mode), gr.update(visible=is_rpg_mode)
+
+        def update_dynamic_options(quality_model, loaded_files_state, showing_rpg_right):
+            if quality_model == "Select_a_model...":
+                mode = "Select models"
+                settings = {"is_reasoning": False}
+            else:
+                settings = get_model_settings(quality_model)
+                mode = settings["category"].capitalize()
+            
+            think_visible = settings["is_reasoning"]
+            
+            if mode == "Code":
+                tot_visible = False
+                web_visible = False
+                file_visible = True
+            elif mode == "Rpg":
+                tot_visible = False
+                web_visible = False
+                file_visible = True
+            else:  # Chat mode
+                tot_visible = True
+                web_visible = True
+                file_visible = True
+
+            toggle_visible = True
+            toggle_label = "Show File Attachments" if showing_rpg_right else "Show RPG Settings"
+            
+            return [
+                gr.update(visible=tot_visible),
+                gr.update(visible=web_visible),
+                gr.update(visible=think_visible),
+                gr.update(value=mode),
+                gr.update(visible=file_visible),
+                gr.update(visible=toggle_visible, value=toggle_label),
+                gr.update(visible=not showing_rpg_right),
+                gr.update(visible=showing_rpg_right),
+                showing_rpg_right
+            ]
+
+        def toggle_rpg_settings(showing_rpg_right):
+            showing_rpg_right = not showing_rpg_right
+            toggle_label = "Show File Attachments" if showing_rpg_right else "Show RPG Settings"
+            return (
+                gr.update(visible=not showing_rpg_right),
+                gr.update(visible=showing_rpg_right),
+                gr.update(value=toggle_label),
+                showing_rpg_right
+            )
+
         model_dropdown.change(
             fn=determine_operation_mode,
             inputs=[model_dropdown],
@@ -520,18 +618,78 @@ def launch_interface():
             outputs=None
         ).then(
             fn=update_dynamic_options,
-            inputs=[model_dropdown, loaded_files_state],
+            inputs=[model_dropdown, loaded_files_state, showing_rpg_right],
             outputs=[
                 tot_checkbox,
                 web_search_switch,
                 disable_think_switch,
                 theme_status,
-                rpg_toggle  # Only show RPG toggle in RPG mode
+                attach_files_btn,
+                toggle_rpg_settings_btn,
+                file_attachments_group,
+                rpg_settings_group,
+                showing_rpg_right
             ]
+        ).then(
+            fn=update_left_panel_visibility,
+            inputs=[theme_status],
+            outputs=[session_history_column, rpg_settings_column]
         ).then(
             fn=update_file_slot_ui,
             inputs=[loaded_files_state, rag_max_docs_state],
             outputs=file_slot_buttons + [attach_files_btn]
+        )
+
+        show_session_history_btn.click(
+            fn=update_left_panel_visibility,
+            inputs=[theme_status],
+            outputs=[session_history_column, rpg_settings_column]
+        )
+
+        delete_all_history_btn.click(
+            fn=lambda: ("All history deleted.", *update_session_buttons()),
+            inputs=None,
+            outputs=[status_text] + session_buttons
+        )
+
+        toggle_rpg_settings_btn.click(
+            fn=toggle_rpg_settings,
+            inputs=[showing_rpg_right],
+            outputs=[file_attachments_group, rpg_settings_group, toggle_rpg_settings_btn, showing_rpg_right]
+        )
+
+        # Synchronize RPG settings
+        for left, right in [
+            (rp_location, rp_location_right),
+            (user_name, user_name_right),
+            (user_role, user_role_right),
+            (ai_npc1, ai_npc1_right),
+            (ai_npc2, ai_npc2_right),
+            (ai_npc3, ai_npc3_right),
+            (ai_npcs_roles, ai_npcs_roles_right)
+        ]:
+            left.change(
+                fn=lambda x: gr.update(value=x),
+                inputs=[left],
+                outputs=[right]
+            )
+            right.change(
+                fn=lambda x: gr.update(value=x),
+                inputs=[right],
+                outputs=[left]
+            )
+
+        save_rpg_btn.click(
+            fn=save_rp_settings,
+            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
+            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
+        )
+
+        save_rpg_right_btn.click(
+            fn=save_rp_settings,
+            inputs=[rp_location_right, user_name_right, user_role_right, ai_npc1_right, ai_npc2_right, ai_npc3_right, ai_npcs_roles_right],
+            outputs=[rp_location_right, user_name_right, user_role_right, ai_npc1_right, ai_npc2_right, ai_npc3_right, ai_npcs_roles_right,
+                     rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
         )
 
         load_models_btn.click(
@@ -540,96 +698,117 @@ def launch_interface():
             outputs=[status_text_settings, models_loaded_state]
         )
 
-        inspect_model_btn.click(
-            fn=inspect_model,
+        # New event handlers for config inputs
+        ctx_dropdown.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        batch_dropdown.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        temp_dropdown.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        repeat_dropdown.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        vram_dropdown.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        mlock_checkbox.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        gpu_dropdown.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        model_dir_text.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        model_dropdown.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        ).then(
+            fn=determine_operation_mode,
             inputs=[model_dropdown],
-            outputs=[status_text_settings]
+            outputs=[theme_status]
+        ).then(
+            fn=lambda mode: context_injector.set_mode(mode.lower()),
+            inputs=[theme_status],
+            outputs=None
+        ).then(
+            fn=update_dynamic_options,
+            inputs=[model_dropdown, loaded_files_state, showing_rpg_right],
+            outputs=[
+                tot_checkbox,
+                web_search_switch,
+                disable_think_switch,
+                theme_status,
+                attach_files_btn,
+                toggle_rpg_settings_btn,
+                file_attachments_group,
+                rpg_settings_group,
+                showing_rpg_right
+            ]
+        ).then(
+            fn=update_left_panel_visibility,
+            inputs=[theme_status],
+            outputs=[session_history_column, rpg_settings_column]
+        ).then(
+            fn=update_file_slot_ui,
+            inputs=[loaded_files_state, rag_max_docs_state],
+            outputs=file_slot_buttons + [attach_files_btn]
         )
 
-        unload_btn.click(
-            fn=lambda: (unload_models(), gr.update(interactive=False), "Model unloaded", False),
-            outputs=[user_input, status_text_settings, models_loaded_state]
-        )
-
-        save_settings_btn.click(fn=utility.save_config, inputs=None, outputs=[status_text_settings])
-
-        erase_general_btn.click(fn=lambda: delete_vectorstore("general"), inputs=None, outputs=[status_text_settings])
-        erase_rpg_btn.click(fn=lambda: delete_vectorstore("rpg"), inputs=None, outputs=[status_text_settings])
-        erase_code_btn.click(fn=lambda: delete_vectorstore("code"), inputs=None, outputs=[status_text_settings])
-        erase_all_btn.click(fn=delete_all_vectorstores, inputs=None, outputs=[status_text_settings])
-
-        ## Rpg Event handlers
-        rp_location.change(
-            fn=update_rp_settings,
-            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
-            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
-        )
-        user_name.change(
-            fn=update_rp_settings,
-            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
-            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
-        )
-        user_role.change(
-            fn=update_rp_settings,
-            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
-            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
-        )
-        ai_npc1.change(
-            fn=update_rp_settings,
-            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
-            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
-        )
-        ai_npc2.change(
-            fn=update_rp_settings,
-            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
-            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
-        )
-        ai_npc3.change(
-            fn=update_rp_settings,
-            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
-            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
-        )
-        ai_npcs_roles.change(
-            fn=update_rp_settings,
-            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
-            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
-        )
-
-        # Save RPG settings to JSON when the button is clicked
-        save_rpg_btn.click(
-            fn=save_rpg_settings_to_json,
+        # Event handlers for erase buttons
+        erase_chat_btn.click(
+            fn=lambda: utility.delete_vectorstore("chat"),
             inputs=None,
-            outputs=[status_text]
+            outputs=[status_text_settings]
         )
-
-        refresh_btn.click(fn=lambda: gr.update(choices=get_available_models()), outputs=[model_dropdown])
-
-        n_ctx_dropdown.change(
-            fn=lambda x: (setattr(temporary, 'N_CTX', x), "Context updated")[1],
-            inputs=[n_ctx_dropdown],
+        erase_rpg_btn.click(
+            fn=lambda: utility.delete_vectorstore("rpg"),
+            inputs=None,
+            outputs=[status_text_settings]
+        )
+        erase_code_btn.click(
+            fn=lambda: utility.delete_vectorstore("code"),
+            inputs=None,
+            outputs=[status_text_settings]
+        )
+        erase_all_btn.click(
+            fn=utility.delete_all_vectorstores,
+            inputs=None,
             outputs=[status_text_settings]
         )
 
-        batch_size_dropdown.change(
-            fn=lambda x: (setattr(temporary, 'N_BATCH', x), "Batch size updated")[1],
-            inputs=[batch_size_dropdown],
+        save_settings_btn.click(
+            fn=save_all_settings,
+            inputs=None,
             outputs=[status_text_settings]
         )
 
-        repeat_penalty_dropdown.change(
-            fn=lambda x: (setattr(temporary, 'REPEAT_PENALTY', float(x)), "Repeat penalty updated")[1],
-            inputs=[repeat_penalty_dropdown],
-            outputs=[status_text_settings]
+        demo.launch(
+            server_name="127.0.0.1",
+            server_port=7860,
+            show_error=True,
+            show_api=False
         )
-
-        demo.load(fn=lambda: [gr.update(visible=False)] * 7, inputs=None, outputs=session_buttons)
-
-    demo.launch(
-        server_name="127.0.0.1",
-        server_port=7860,
-        show_error=True,
-        show_api=False
-    )
-
+        
 if __name__ == "__main__":
     launch_interface()
