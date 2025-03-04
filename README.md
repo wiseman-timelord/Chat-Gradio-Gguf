@@ -113,8 +113,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
 ## Development
-Complete Gen 1 of Text-Gradio-Gguf...
-- (in progress) I want the model labels to continue to be searched for keywords for other enhancements, however, the operational mode box on `conversation` page needs to be replaced with a `Operation Mode` dropdown list with 8 positions, `Auto`, `Chat`, `Chat-Reasoning`, `Chat-Uncensored`, `Chat-Uncensored-Reasoning`, `Coder`, `Coder-Instruct`, `Rpg`, `Rpg-NSFW`, where the `Auto` mode would select whatever mode was found to be the case from the keywords, this will affect the mode of operation being used in the program appropriately. Each of these modes must have some different relating enhancement or display elements or prompts, as are appropriate to the mode, as is mostly implemented in the program already. For the modes with no specific relating enhancement, please produce the research, determine what relevant features are appropriate for the relating mode, given the current themes of contents in the program. To help you out a bit, here is my thoughts, I think the current prompts for RPG need a little detail adding for the NSFW version, if you research what is a good rp nsfw prompt, then adapt my current 3 promtps. The other prompts should also be assessed, each mode should have optimal prompts. Obviously, only, `Chat`, `Chat-Uncensored`, modes will have TOT button visible, and we do not want the button to turn reasoning off, because that is now selected in the `Operation Mode` dropdown. 
+- UI and general design done, need to bugfix and complete now, est 90% done or more.
 
 ## Far Development.
 - the next generation of the program will be 6 modes and dual model like this...
