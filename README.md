@@ -19,11 +19,11 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 - **GPU Support**: Compatible with AMD/NVIDIA/Intel GPUs via Vulkan/Kompute/Cuda/Avx2/Avx512, with, as applicable, a GPU selection dropdown.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, and code formatting.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
-- **Simplified File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml` files.
+- **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
 - **Configurable Context Window**: Set `n_ctx` to 8192, 16384, 24576, or 32768 via dropdown.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
 - **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
-- **Session History Rotation**: 11 Session History slots on rotation, enabling load recent sessions, while not using excessive space. 
+- **Session History Rotation**: 9 Session History slots on rotation, enabling load recent sessions, while not using excessive space. 
 
 ### Preview
 - The "Conversation" page, now the right panel toggles to Rpg options...
