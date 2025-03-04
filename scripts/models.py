@@ -193,6 +193,29 @@ def inspect_model(model_name):
     except Exception as e:
         return f"Error inspecting model: {str(e)}"
 
+def load_models(quality_model, vram_size):
+    from scripts import temporary, models
+    global llm
+    if quality_model == "Select_a_model...":
+        return "Select a model to load.", gr.update(visible=False), False
+    models_to_load = [quality_model]
+    gpu_layers = models.calculate_gpu_layers(models_to_load, vram_size)
+    temporary.N_GPU_LAYERS = gpu_layers.get(quality_model, 0)
+    model_path = Path(temporary.MODEL_FOLDER) / quality_model
+    llm = Llama(
+        model_path=str(model_path),
+        n_ctx=temporary.N_CTX,
+        n_gpu_layers=temporary.N_GPU_LAYERS,
+        n_batch=temporary.N_BATCH,
+        mmap=temporary.MMAP,
+        mlock=temporary.MLOCK,
+        verbose=False
+    )
+    temporary.MODELS_LOADED = True
+    temporary.MODEL_NAME = quality_model
+    status = f"Model loaded, layer distribution: VRAM={temporary.N_GPU_LAYERS}"
+    return status, gr.update(visible=True), True
+
 def unload_models():
     from scripts.temporary import llm
     if llm is not None:
@@ -235,7 +258,7 @@ def get_response(prompt: str, disable_think: bool = False, rp_settings: dict = N
             "AI_NPC1_NAME": active_npcs[0],
             "AI_NPC2_NAME": active_npcs[1] if num_active >= 2 else "Unused",
             "AI_NPC3_NAME": active_npcs[2] if num_active == 3 else "Unused",
-            "AI_NPCS_ROLES": AI_NPCS_ROLES if AI_NPCS_ROLES else "Unknown",
+            "AI_NPCS_ROLES": temporary.AI_NPCS_ROLES,
             "RP_LOCATION": rp_settings.get("rp_location", "Public"),
             "human_name": rp_settings.get("user_name", "Human"),
             "human_role": rp_settings.get("user_role", "Lead Roleplayer"),

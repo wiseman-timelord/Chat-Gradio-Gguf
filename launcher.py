@@ -12,10 +12,10 @@ print("`launcher` Imports Complete.")
 def main():
     try:
         print("Starting `launcher.main`.")
-        load_config()  # Assuming this is defined elsewhere
+        load_config()
         
         # Launch the interface
-        launch_interface()  # Assuming this is defined
+        launch_interface()
     except Exception as e:
         print(f"Error: {str(e)}")
         raise

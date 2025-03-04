@@ -9,7 +9,7 @@ from langchain_community.document_loaders import TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-from .models import context_injector
+from .models import context_injector, load_models
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
     ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER,
@@ -190,43 +190,6 @@ def trim_session_history(max_sessions):
     while len(session_files) > max_sessions:
         oldest_file = session_files.pop()
         oldest_file.unlink()
-
-def load_models(quality_model, fast_model, vram_size):
-    from scripts import temporary, models
-    global quality_llm, fast_llm
-    if quality_model == "Select_a_model...":
-        return "Select a primary model to load.", gr.update(visible=False)
-    models_to_load = [quality_model]
-    if fast_model != "Select_a_model...":
-        models_to_load.append(fast_model)
-    gpu_layers = models.calculate_gpu_layers(models_to_load, vram_size)
-    temporary.N_GPU_LAYERS_QUALITY = gpu_layers.get(quality_model, 0)
-    temporary.N_GPU_LAYERS_FAST = gpu_layers.get(fast_model, 0)
-    if quality_model != "Select_a_model...":
-        model_path = Path(temporary.MODEL_FOLDER) / quality_model
-        temporary.quality_llm = Llama(
-            model_path=str(model_path),
-            n_ctx=temporary.N_CTX,
-            n_gpu_layers=temporary.N_GPU_LAYERS_QUALITY,
-            n_batch=temporary.N_BATCH,
-            mmap=temporary.MMAP,
-            mlock=temporary.MLOCK,
-            verbose=False
-        )
-    if fast_model != "Select_a_model...":
-        model_path = Path(temporary.MODEL_FOLDER) / fast_model
-        temporary.fast_llm = Llama(
-            model_path=str(model_path),
-            n_ctx=temporary.N_CTX,
-            n_gpu_layers=temporary.N_GPU_LAYERS_FAST,
-            n_batch=temporary.N_BATCH,
-            mmap=temporary.MMAP,
-            mlock=temporary.MLOCK,
-            verbose=False
-        )
-    temporary.MODELS_LOADED = True
-    status = f"Model(s) loaded, layer distribution: Primary VRAM={temporary.N_GPU_LAYERS_QUALITY}, Fast VRAM={temporary.N_GPU_LAYERS_FAST}"
-    return status, gr.update(visible=True)
 
 def save_config():
     config_path = Path("data/persistent.json")

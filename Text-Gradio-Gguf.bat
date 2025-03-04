@@ -41,12 +41,15 @@ goto :eof
 
 :DisplayTitle
 call :DisplaySeparatorThick
-echo "                                  _________           ________          ________                                     "
-echo "                                  \_   ___ \         /  _____/         /  _____/                                     "
-echo "                                  /    \  \/  ______/   \  ___  ______/   \  ___                                     "
-echo "                                  \     \____/_____/\    \_\  \/_____/\    \_\  \                                    "
-echo "                                   \______  /        \______  /        \______  /                                    "
-echo "                                          \/                \/                \/                                     "
+echo "                                  ___________      ________          ________                                        "
+echo "                                  \__    ___/     /  _____/         /  _____/                                        "
+echo "                                    |    | ______/   \  ___  ______/   \  ___                                        "
+echo "                                    |    |/_____/\    \_\  \/_____/\    \_\  \                                       "
+echo "                                    |____|        \______  /        \______  /                                       "
+echo "                                                         \/                \/                                        "
+call :DisplaySeparatorThin
+goto :eof
+
 call :DisplaySeparatorThin
 goto :eof
 
