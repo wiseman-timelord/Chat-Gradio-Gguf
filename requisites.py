@@ -23,10 +23,10 @@ LLAMACPP_TARGET_VERSION = "b4798"
 BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
     "data", "scripts", "models",
-    "data/vectorstores", "data/history", "data/temp",
-    "data/vectors/code/knowledge",
-    "data/vectors/rpg/knowledge",
-    "data/vectors/chat/knowledge"
+    "data/vectors", "data/history", "data/temp",
+    "data/vectors/code",
+    "data/vectors/rpg",
+    "data/vectors/chat"
 ]
 VULKAN_PATHS = [
     Path("C:/VulkanSDK"),
@@ -58,6 +58,12 @@ BACKEND_OPTIONS = {
         "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-avx2-x64.zip",
         "dest": "data/llama-avx2-bin",
         "cli_path": "data/llama-avx2-bin/llama-cli.exe",
+        "needs_python_bindings": True
+    },
+    "CPU Only - AVX512": {
+        "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-avx512-x64.zip",
+        "dest": "data/llama-avx512-bin",
+        "cli_path": "data/llama-avx512-bin/llama-cli.exe",
         "needs_python_bindings": True
     },
     "GPU/CPU - Vulkan": {
@@ -114,9 +120,10 @@ CONFIG_TEMPLATE = """{
     "rp_location": "Public",
     "user_name": "Human",
     "user_role": "Lead Roleplayer",
-    "ai_npc1": "Randomer",
+    "ai_npc1": "Robot",
     "ai_npc2": "Unused",
-    "ai_npc3": "Unused"
+    "ai_npc3": "Unused",
+    "ai_npcs_roles": "Randomer"
   }
 }"""
 
@@ -136,10 +143,10 @@ def print_status(message: str, success: bool = True) -> None:
 # Configuration
 def get_user_choice(prompt: str, options: list) -> str:
     print_header("Install Options")
-    print(f"\n\n\n\n\n {prompt}\n\b")
+    print(f"\n\n\n\n {prompt}\n\b")
     for i, option in enumerate(options, 1):
         print(f"    {i}. {option}\n")
-    print(f"\n\n\n\n\n{'='*120}")
+    print(f"\n\n\n\n{'='*120}")
     while True:
         choice = input(" Selection; Menu Options = 1-{}, Exit Installer = X: ".format(len(options))).strip().upper()
         if choice == "X":
@@ -430,6 +437,7 @@ def select_backend_type() -> None:
     global BACKEND_TYPE
     options = [
         "AVX2 - CPU Only - Must be compatible with AVX2 (slowest)",
+        "AVX512 - CPU Only - Must be compatible with AVX512 (okish)",
         "Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU fallback",
         "Kompute - GPU/CPU - Experimental Vulkan for AMD/nVidia/Intel",
         "CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback",
@@ -437,10 +445,11 @@ def select_backend_type() -> None:
     ]
     mapping = {
         options[0]: "CPU Only - AVX2",
-        options[1]: "GPU/CPU - Vulkan",
-        options[2]: "GPU/CPU - Kompute",
-        options[3]: "GPU/CPU - CUDA 11.7",
-        options[4]: "GPU/CPU - CUDA 12.4"
+        options[1]: "CPU Only - AVX2",
+        options[2]: "GPU/CPU - Vulkan",
+        options[3]: "GPU/CPU - Kompute",
+        options[4]: "GPU/CPU - CUDA 11.7",
+        options[5]: "GPU/CPU - CUDA 12.4"
     }
     choice = get_user_choice("Select the Llama.Cpp type:", options)
     BACKEND_TYPE = mapping[choice]

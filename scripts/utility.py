@@ -253,11 +253,11 @@ def save_config():
         },
         "rp_settings": {
             "rp_location": temporary.RP_LOCATION if hasattr(temporary, 'RP_LOCATION') else "Public",
-            "user_name": temporary.USER_NAME if hasattr(temporary, 'USER_NAME') else "Human",
-            "user_role": temporary.USER_ROLE if hasattr(temporary, 'USER_ROLE') else "Lead Roleplayer",
-            "ai_npc1": temporary.AI_NPC1 if hasattr(temporary, 'AI_NPC1') else "Randomer",
-            "ai_npc2": temporary.AI_NPC2 if hasattr(temporary, 'AI_NPC2') else "Unused",
-            "ai_npc3": temporary.AI_NPC3 if hasattr(temporary, 'AI_NPC3') else "Unused"
+            "user_name": temporary.USER_PC_NAME if hasattr(temporary, 'USER_PC_NAME') else "Human",
+            "user_role": temporary.USER_PC_ROLE if hasattr(temporary, 'USER_PC_ROLE') else "Lead Roleplayer",
+            "ai_npc1": temporary.AI_NPC1_NAME if hasattr(temporary, 'AI_NPC1_NAME') else "Robot",
+            "ai_npc2": temporary.AI_NPC2_NAME if hasattr(temporary, 'AI_NPC2_NAME') else "Unused",
+            "ai_npc3": temporary.AI_NPC3_NAME if hasattr(temporary, 'AI_NPC3_NAME') else "Unused"
         }
     }
     with open(config_path, "w") as f:
@@ -297,15 +297,15 @@ def update_setting(key, value):
     elif key == "rp_location":
         temporary.RP_LOCATION = str(value)
     elif key == "user_name":
-        temporary.USER_NAME = str(value)
+        temporary.USER_PC_NAME = str(value)
     elif key == "user_role":
-        temporary.USER_ROLE = str(value)
+        temporary.USER_PC_ROLE = str(value)
     elif key == "ai_npc1":
-        temporary.AI_NPC1 = str(value)
+        temporary.AI_NPC1_NAME = str(value)
     elif key == "ai_npc2":
-        temporary.AI_NPC2 = str(value)
+        temporary.AI_NPC2_NAME = str(value)
     elif key == "ai_npc3":
-        temporary.AI_NPC3 = str(value)
+        temporary.AI_NPC3_NAME = str(value)
 
     if reload_required:
         return change_model(temporary.MODEL_PATH.split('/')[-1])
@@ -336,10 +336,8 @@ def load_config():
             temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")
             # RP settings
             temporary.RP_LOCATION = config["rp_settings"].get("rp_location", "Public")
-            temporary.USER_NAME = config["rp_settings"].get("user_name", "Human")
-            temporary.USER_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
-            temporary.AI_NPC1 = config["rp_settings"].get("ai_npc1", "Randomer")
-            temporary.AI_NPC2 = config["rp_settings"].get("ai_npc2", "Unused")
-            temporary.AI_NPC3 = config["rp_settings"].get("ai_npc3", "Unused")    
-            
-            
+            temporary.USER_PC_NAME = config["rp_settings"].get("user_name", "Human")
+            temporary.USER_PC_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
+            temporary.AI_NPC1_NAME = config["rp_settings"].get("ai_npc1", "Robot")
+            temporary.AI_NPC2_NAME = config["rp_settings"].get("ai_npc2", "Unused")
+            temporary.AI_NPC3_NAME = config["rp_settings"].get("ai_npc3", "Unused")

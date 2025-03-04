@@ -203,27 +203,47 @@ def unload_models():
 def get_response(prompt: str, disable_think: bool = False, rp_settings: dict = None, session_history: str = "") -> str:
     from scripts.temporary import (
         USE_PYTHON_BINDINGS, REPEAT_PENALTY, N_CTX, N_BATCH, MMAP, MLOCK, 
-        BACKEND_TYPE, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, prompt_templates, time
+        BACKEND_TYPE, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, prompt_templates, time, AI_NPCS_ROLES
     )
-    import subprocess
+    import random
 
     enhanced_prompt = context_injector.inject_context(prompt)
     settings = get_model_settings(MODEL_NAME)
     mode = settings["category"]
     if mode == "rpg" and rp_settings:
-        used_npcs = [npc for npc in [rp_settings.get("ai_npc1", ""), rp_settings.get("ai_npc2", ""), rp_settings.get("ai_npc3", "")] if npc and npc != "Unused"]
-        num_npcs = max(1, len(used_npcs))
-        template_key = f"rpg_{num_npcs}"
-        formatted_prompt = prompt_templates[template_key].format(
-            agent_name_1=used_npcs[0] if used_npcs else "Randomer",
-            agent_name_2=used_npcs[1] if len(used_npcs) > 1 else "",
-            agent_name_3=used_npcs[2] if len(used_npcs) > 2 else "",
-            location_name=rp_settings.get("rp_location", "Public"),
-            human_name=rp_settings.get("user_name", "Human"),
-            human_role=rp_settings.get("user_role", "Lead Roleplayer"),
-            session_history=session_history,
-            human_input=enhanced_prompt
-        )
+        # Normalize blank names to "Unused"
+        npcs = [rp_settings.get("ai_npc1", "").strip() or "Unused",
+                rp_settings.get("ai_npc2", "").strip() or "Unused",
+                rp_settings.get("ai_npc3", "").strip() or "Unused"]
+        
+        # Filter active NPCs (not "Unused")
+        active_npcs = [npc for npc in npcs if npc != "Unused"]
+        
+        # Shuffle and pad active NPCs to ensure no gaps
+        random.shuffle(active_npcs)
+        if len(active_npcs) < 3:
+            active_npcs += ["Unused"] * (3 - len(active_npcs))
+        
+        # Count active NPCs (max 3)
+        num_active = min(len([npc for npc in active_npcs if npc != "Unused"]), 3)
+        
+        # Select prompt template
+        template_key = f"rpg_{num_active}"
+        
+        # Prepare format dictionary
+        format_dict = {
+            "AI_NPC1_NAME": active_npcs[0],
+            "AI_NPC2_NAME": active_npcs[1] if num_active >= 2 else "Unused",
+            "AI_NPC3_NAME": active_npcs[2] if num_active == 3 else "Unused",
+            "AI_NPCS_ROLES": AI_NPCS_ROLES if AI_NPCS_ROLES else "Unknown",
+            "RP_LOCATION": rp_settings.get("rp_location", "Public"),
+            "human_name": rp_settings.get("user_name", "Human"),
+            "human_role": rp_settings.get("user_role", "Lead Roleplayer"),
+            "session_history": session_history,
+            "human_input": enhanced_prompt
+        }
+        
+        formatted_prompt = prompt_templates[template_key].format(**format_dict)
     elif mode == "chat":
         template_key = "uncensored" if settings["is_uncensored"] else "chat"
         formatted_prompt = prompt_templates[template_key].format(user_input=enhanced_prompt)
