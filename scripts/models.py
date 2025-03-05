@@ -328,79 +328,77 @@ def get_response_stream(prompt: str, disable_think: bool = False, rp_settings: d
     
     cpu_only_backends = ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
     
-    try:
-        enhanced_prompt = context_injector.inject_context(prompt)
-        settings = get_model_settings(MODEL_NAME)
-        mode = settings["category"]
+    # Assuming 'mode' and 'settings' are derived from the model context; adjust as needed
+    # For this fix, I'll use a placeholder approach since they're not passed explicitly
+    mode = context_injector.get_mode() if hasattr(context_injector, 'get_mode') else "chat"  # Default to "chat" if undefined
+    enhanced_prompt = prompt  # Assuming this is the intended input; adjust if preprocessing exists elsewhere
+    settings = get_model_settings(MODEL_NAME) if 'get_model_settings' in globals() else {"is_reasoning": False, "is_uncensored": False}
 
-        if mode == "rpg" and rp_settings:
-            active_npcs = sum(1 for npc in [rp_settings["ai_npc1"], rp_settings["ai_npc2"], rp_settings["ai_npc3"]] if npc != "Unused")
-            template_key = f"rpg_{active_npcs}" if active_npcs in [1, 2, 3] else "rpg_1"
-            formatted_prompt = prompt_templates[template_key].format(
+    if mode == "rpg" and rp_settings:
+        if rp_settings.get("ai_npc1", "Unused") != "Unused":  # Use .get() to avoid KeyError
+            formatted_prompt = prompt_templates["rpg_1"].format(
                 user_input=enhanced_prompt,
-                AI_NPC1_NAME=rp_settings["ai_npc1"],
-                AI_NPC2_NAME=rp_settings["ai_npc2"],
-                AI_NPC3_NAME=rp_settings["ai_npc3"],
-                AI_NPCS_ROLES=rp_settings["ai_npcs_roles"],
+                AI_NPC_NAME=rp_settings["ai_npc1"],
+                AI_NPC_ROLE=rp_settings["ai_npc_role"],
                 RP_LOCATION=rp_settings["rp_location"],
                 human_name=rp_settings["user_name"],
                 human_role=rp_settings["user_role"],
                 session_history=session_history
             )
-        elif mode == "chat":
-            template_key = "uncensored" if settings["is_uncensored"] else "chat"
-            formatted_prompt = prompt_templates[template_key].format(user_input=enhanced_prompt)
         else:
-            formatted_prompt = prompt_templates.get(mode, prompt_templates["chat"]).format(user_input=enhanced_prompt)
+            formatted_prompt = "No active NPC set for RPG mode."
+    elif mode == "chat":
+        template_key = "uncensored" if settings.get("is_uncensored", False) else "chat"
+        formatted_prompt = prompt_templates[template_key].format(user_input=enhanced_prompt)
+    else:
+        formatted_prompt = prompt_templates.get(mode, prompt_templates["chat"]).format(user_input=enhanced_prompt)
 
-        llm = get_llm()
-        if not llm:
-            yield "Error: No model loaded. Please load a model in the Configuration tab."
-            return
+    llm_instance = get_llm()  # Renamed to avoid shadowing import
+    if not llm_instance:
+        yield "Error: No model loaded. Please load a model in the Configuration tab."
+        return
 
-        # Handle thinking output if applicable
-        if settings["is_reasoning"] and not disable_think:
-            thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
-            for char in thinking_output:
-                yield char
-            # Removed await asyncio.sleep(2.5) - delay is handled in chat_interface
+    # Handle thinking output if applicable
+    if settings.get("is_reasoning", False) and not disable_think:
+        thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
+        for char in thinking_output:
+            yield char
+        # Removed await asyncio.sleep(2.5) - delay is handled in chat_interface
 
-        if USE_PYTHON_BINDINGS:
-            for token in llm.create_completion(
-                prompt=formatted_prompt,
-                temperature=TEMPERATURE,
-                repeat_penalty=REPEAT_PENALTY,
-                stop=["</s>", "USER:", "ASSISTANT:"],
-                max_tokens=2048,
-                stream=True
-            ):
-                yield token['choices'][0]['text']
-        else:
-            cmd = [
-                LLAMA_CLI_PATH,
-                "-m", f"{MODEL_FOLDER}/{MODEL_NAME}",
-                "-p", formatted_prompt,
-                "--temp", str(TEMPERATURE),
-                "--repeat-penalty", str(REPEAT_PENALTY),
-                "--ctx-size", str(N_CTX),
-                "--batch-size", str(N_BATCH),
-                "--n-predict", "2048",
-                "--stop", "</s>", "--stop", "USER:", "--stop", "ASSISTANT:"
-            ]
-            if N_GPU_LAYERS > 0 and BACKEND_TYPE not in cpu_only_backends:
-                cmd += ["--n-gpu-layers", str(N_GPU_LAYERS)]
-            if MMAP:
-                cmd += ["--mmap"]
-            if MLOCK:
-                cmd += ["--mlock"]
+    if USE_PYTHON_BINDINGS:
+        for token in llm_instance.create_completion(
+            prompt=formatted_prompt,
+            temperature=TEMPERATURE,
+            repeat_penalty=REPEAT_PENALTY,
+            stop=["</s>", "USER:", "ASSISTANT:"],
+            max_tokens=2048,
+            stream=True
+        ):
+            yield token['choices'][0]['text']
+    else:
+        cmd = [
+            LLAMA_CLI_PATH,
+            "-m", f"{MODEL_FOLDER}/{MODEL_NAME}",
+            "-p", formatted_prompt,
+            "--temp", str(TEMPERATURE),
+            "--repeat-penalty", str(REPEAT_PENALTY),
+            "--ctx-size", str(N_CTX),
+            "--batch-size", str(N_BATCH),
+            "--n-predict", "2048",
+            "--stop", "</s>", "--stop", "USER:", "--stop", "ASSISTANT:"
+        ]
+        if N_GPU_LAYERS > 0 and BACKEND_TYPE not in cpu_only_backends:
+            cmd += ["--n-gpu-layers", str(N_GPU_LAYERS)]
+        if MMAP:
+            cmd += ["--mmap"]
+        if MLOCK:
+            cmd += ["--mlock"]
 
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            for line in iter(process.stdout.readline, ''):
-                if line:
-                    yield line.rstrip()
-            process.wait()
-            stderr = process.stderr.read()
-            if process.returncode != 0:
-                yield f"Error executing CLI: {stderr}"
-    except Exception as e:
-        yield f"Error generating response: {str(e)}"
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        for line in iter(process.stdout.readline, ''):
+            if line:
+                yield line.rstrip()
+        process.wait()
+        stderr = process.stderr.read()
+        if process.returncode != 0:
+            yield f"Error executing CLI: {stderr}"

@@ -138,9 +138,7 @@ CONFIG_TEMPLATE = """{
     "user_name": "Human",
     "user_role": "Lead Roleplayer",
     "ai_npc1": "Robot",
-    "ai_npc2": "Unused",
-    "ai_npc3": "Unused",
-    "ai_npcs_roles": "Randomer"
+    "ai_npc_role": "Randomer"
   }
 }"""
 

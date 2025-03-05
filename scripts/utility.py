@@ -275,10 +275,8 @@ def save_config():
             "rp_location": temporary.RP_LOCATION,
             "user_name": temporary.USER_PC_NAME,
             "user_role": temporary.USER_PC_ROLE,
-            "ai_npc1": temporary.AI_NPC1_NAME,
-            "ai_npc2": temporary.AI_NPC2_NAME,
-            "ai_npc3": temporary.AI_NPC3_NAME,
-            "ai_npcs_roles": temporary.AI_NPCS_ROLES
+            "ai_npc": temporary.AI_NPC_NAME,
+            "ai_npc_role": temporary.AI_NPC_ROLE
         }
     }
     with open(config_path, "w") as f:
@@ -333,12 +331,8 @@ def update_setting(key, value):
         temporary.USER_PC_NAME = str(value)
     elif key == "user_role":
         temporary.USER_PC_ROLE = str(value)
-    elif key == "ai_npc1":
-        temporary.AI_NPC1_NAME = str(value)
-    elif key == "ai_npc2":
-        temporary.AI_NPC2_NAME = str(value)
-    elif key == "ai_npc3":
-        temporary.AI_NPC3_NAME = str(value)
+    elif key == "ai_npc":
+        temporary.AI_NPC_NAME = str(value)
 
     if reload_required:
         return change_model(temporary.MODEL_NAME.split('/')[-1])  # Reload model if necessary
@@ -378,7 +372,5 @@ def load_config():
             temporary.RP_LOCATION = config["rp_settings"].get("rp_location", "Public")
             temporary.USER_PC_NAME = config["rp_settings"].get("user_name", "Human")
             temporary.USER_PC_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
-            temporary.AI_NPC1_NAME = config["rp_settings"].get("ai_npc1", "Robot")
-            temporary.AI_NPC2_NAME = config["rp_settings"].get("ai_npc2", "Unused")
-            temporary.AI_NPC3_NAME = config["rp_settings"].get("ai_npc3", "Unused")
-            temporary.AI_NPCS_ROLES = config["rp_settings"].get("ai_npcs_roles", "Randomers")
+            temporary.AI_NPC_NAME = config["rp_settings"].get("ai_npc", "Robot")
+            temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")

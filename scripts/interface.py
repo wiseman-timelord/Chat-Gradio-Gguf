@@ -15,7 +15,7 @@ from scripts.temporary import (
     current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS, REPEAT_OPTIONS,
     REPEAT_PENALTY, MLOCK, HISTORY_DIR, BATCH_OPTIONS, N_BATCH, MODEL_FOLDER,
     MODEL_NAME, STATUS_TEXTS, CTX_OPTIONS, RP_LOCATION, USER_PC_NAME, USER_PC_ROLE,
-    AI_NPC1_NAME, AI_NPC2_NAME, AI_NPC3_NAME, AI_NPCS_ROLES, SESSION_ACTIVE, TOT_VARIATIONS,
+    AI_NPC_NAME, AI_NPC_ROLE, SESSION_ACTIVE, TOT_VARIATIONS,
     MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, HISTORY_SLOT_OPTIONS, ATTACH_SLOT_OPTIONS,
     BACKEND_TYPE
 )
@@ -51,12 +51,7 @@ def web_search_trigger(query):
     except Exception as e:
         return f"Error: {str(e)}"
 
-def delete_npc(npc_index, ai_npc1, ai_npc2, ai_npc3):
-    npc_values = [ai_npc1, ai_npc2, ai_npc3]
-    npc_values[npc_index] = "Unused"
-    return npc_values[0], npc_values[1], npc_values[2]
-
-def save_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles):
+def save_rp_settings(rp_location, user_name, user_role, ai_npc, ai_npc_role):
     from scripts import temporary
     config_path = Path("data/persistent.json")
     
@@ -64,16 +59,14 @@ def save_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc
     temporary.RP_LOCATION = rp_location
     temporary.USER_PC_NAME = user_name
     temporary.USER_PC_ROLE = user_role
-    temporary.AI_NPC1_NAME = ai_npc1
-    temporary.AI_NPC2_NAME = ai_npc2
-    temporary.AI_NPC3_NAME = ai_npc3
-    temporary.AI_NPCS_ROLES = ai_npcs_roles
+    temporary.AI_NPC_NAME = ai_npc
+    temporary.AI_NPC_ROLE = ai_npc_role
     
     # Save to config file and return updated values
     utility.save_config()
     return (
-        rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles,
-        rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles  # Sync both sides
+        rp_location, user_name, user_role, ai_npc, ai_npc_role,
+        rp_location, user_name, user_role, ai_npc, ai_npc_role  # Sync both sides
     )
 
 def process_uploaded_files(files, loaded_files, operation_mode, models_loaded):
@@ -254,15 +247,13 @@ def update_file_slot_ui(loaded_files):
     attach_files_visible = len(loaded_files) < temporary.MAX_ATTACH_SLOTS
     return button_updates + [gr.update(visible=attach_files_visible)]
 
-def update_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles):
+def update_rp_settings(rp_location, user_name, user_role, ai_npc, ai_npc_role):
     temporary.RP_LOCATION = rp_location
     temporary.USER_PC_NAME = user_name
     temporary.USER_PC_ROLE = user_role
-    temporary.AI_NPC1_NAME = ai_npc1
-    temporary.AI_NPC2_NAME = ai_npc2
-    temporary.AI_NPC3_NAME = ai_npc3
-    temporary.AI_NPCS_ROLES = ai_npcs_roles
-    return rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles
+    temporary.AI_NPC_NAME = ai_npc
+    temporary.AI_NPC_ROLE = ai_npc_role
+    return rp_location, user_name, user_role, ai_npc, ai_npc_role
 
 def save_rpg_settings_to_json():
     config_path = Path("data/persistent.json")
@@ -273,10 +264,8 @@ def save_rpg_settings_to_json():
                 "rp_location": temporary.RP_LOCATION,
                 "user_name": temporary.USER_PC_NAME,
                 "user_role": temporary.USER_PC_ROLE,
-                "ai_npc1": temporary.AI_NPC1_NAME,
-                "ai_npc2": temporary.AI_NPC2_NAME,
-                "ai_npc3": temporary.AI_NPC3_NAME,
-                "ai_npcs_roles": temporary.AI_NPCS_ROLES
+                "ai_npc": temporary.AI_NPC_NAME,
+                "ai_npc_role": temporary.AI_NPC_ROLE
             }
             f.seek(0)
             json.dump(config, f, indent=2)
@@ -313,7 +302,7 @@ def update_left_panel_visibility(mode, showing_rpg_settings):
         return gr.update(visible=True), gr.update(visible=False)
 
 async def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, 
-                        rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, cancel_flag):
+                        rp_location, user_name, user_role, ai_npc, cancel_flag):
     from scripts import temporary, utility, models
     from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
     
@@ -369,10 +358,8 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                 "rp_location": rp_location,
                 "user_name": user_name,
                 "user_role": user_role,
-                "ai_npc1": ai_npc1,
-                "ai_npc2": ai_npc2,
-                "ai_npc3": ai_npc3,
-                "ai_npcs_roles": temporary.AI_NPCS_ROLES
+                "ai_npc": ai_npc,
+                "ai_npc_role": temporary.AI_NPC_ROLE
             }
             session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
             # Handle thinking output for RPG mode
@@ -437,9 +424,6 @@ def launch_interface():
         .double-height {
             height: 80px !important;  /* Double height */
         }
-        .cancel-button {
-            height: 80px !important;  /* Double height */
-        }
         .clean-elements {
             gap: 4px !important;
             margin-bottom: 4px !important;
@@ -466,17 +450,6 @@ def launch_interface():
                             start_new_session_btn = gr.Button("Start New Session...", variant="secondary")
                             session_buttons = [gr.Button(f"History Slot {i+1}", visible=True, variant="huggingface") for i in range(temporary.MAX_HISTORY_SLOTS)]
                             delete_all_history_btn = gr.Button("Delete All History", variant="primary")
-                        
-                        with gr.Column(visible=False, elem_classes=["clean-elements"]) as rpg_settings_column:
-                            show_session_history_btn = gr.Button("Show Session History")
-                            rp_location = gr.Textbox(label="RP Location", value=temporary.RP_LOCATION)
-                            user_name = gr.Textbox(label="User Name", value=temporary.USER_PC_NAME)
-                            user_role = gr.Textbox(label="User Role", value=temporary.USER_PC_ROLE)
-                            ai_npc1 = gr.Textbox(label="AI NPC 1", value=temporary.AI_NPC1_NAME)
-                            ai_npc2 = gr.Textbox(label="AI NPC 2", value=temporary.AI_NPC2_NAME)
-                            ai_npc3 = gr.Textbox(label="AI NPC 3", value=temporary.AI_NPC3_NAME)
-                            ai_npcs_roles = gr.Textbox(label="AI Roles", value=temporary.AI_NPCS_ROLES)
-                            save_rpg_btn = gr.Button("Save RPG Settings")
 
                         with gr.Row():
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
@@ -499,7 +472,7 @@ def launch_interface():
                         )
                         with gr.Row(elem_classes=["clean-elements"]):
                             send_btn = gr.Button("Send Input", variant="secondary", scale=20, elem_classes=["send-button"])
-                            cancel_btn = gr.Button("Cancel Input", variant="stop", scale=20, visible=False, elem_classes=["cancel-button"])
+                            cancel_btn = gr.Button("Cancel Input", variant="stop", scale=20, visible=False, elem_classes=["double-height"])
                             with gr.Column(scale=1, elem_classes=["clean-elements"]):
                                 edit_previous_btn = gr.Button("Edit Last Input", variant="huggingface")
                                 copy_response_btn = gr.Button("Copy Last Output", variant="huggingface")
@@ -526,11 +499,9 @@ def launch_interface():
                             rp_location_right = gr.Textbox(label="RP Location", value=temporary.RP_LOCATION)
                             user_name_right = gr.Textbox(label="User Name", value=temporary.USER_PC_NAME)
                             user_role_right = gr.Textbox(label="User Role", value=temporary.USER_PC_ROLE)
-                            ai_npc1_right = gr.Textbox(label="AI NPC 1", value=temporary.AI_NPC1_NAME)
-                            ai_npc2_right = gr.Textbox(label="AI NPC 2", value=temporary.AI_NPC2_NAME)
-                            ai_npc3_right = gr.Textbox(label="AI NPC 3", value=temporary.AI_NPC3_NAME)
-                            ai_npcs_roles_right = gr.Textbox(label="AI Roles", value=temporary.AI_NPCS_ROLES)
-                            save_rpg_right_btn = gr.Button("Save RPG Settings")
+                            ai_npc_right = gr.Textbox(label="AI NPC", value=temporary.AI_NPC_NAME)
+                            ai_npc_role_right = gr.Textbox(label="AI Role", value=temporary.AI_NPC_ROLE)
+                            save_rpg_right_btn = gr.Button("Save RPG Settings", value=primary)
 
                 with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=30)
@@ -679,8 +650,8 @@ def launch_interface():
             return "Settings saved to persistent.json"
 
         def update_left_panel_visibility(theme_status):
-            is_rpg_mode = "rpg" in theme_status.lower()
-            return gr.update(visible=not is_rpg_mode), gr.update(visible=is_rpg_mode)
+            # Always show session_history_column since rpg_settings_column is removed
+            return gr.update(visible=True)
 
         def update_dynamic_options(quality_model, loaded_files_state, showing_rpg_right):
             if quality_model == "Select_a_model...":
@@ -758,7 +729,7 @@ def launch_interface():
         send_btn.click(
             fn=chat_interface,
             inputs=[user_input, session_log, tot_checkbox, loaded_files_state, disable_think_switch, 
-                    rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, cancel_flag],
+                    rp_location_right, user_name_right, user_role_right, ai_npc_right, cancel_flag],
             outputs=[session_log, status_text, send_btn, cancel_btn, cancel_flag, loaded_files_state]
         )
         
@@ -818,17 +789,11 @@ def launch_interface():
         ).then(
             fn=update_left_panel_visibility,
             inputs=[theme_status],
-            outputs=[session_history_column, rpg_settings_column]
+            outputs=[session_history_column]
         ).then(
             fn=update_file_slot_ui,
             inputs=[loaded_files_state],
             outputs=file_slot_buttons + [attach_files_btn]
-        )
-
-        show_session_history_btn.click(
-            fn=update_left_panel_visibility,
-            inputs=[theme_status],
-            outputs=[session_history_column, rpg_settings_column]
         )
 
         delete_all_history_btn.click(
@@ -843,29 +808,10 @@ def launch_interface():
             outputs=[file_attachments_group, rpg_settings_group, toggle_rpg_settings_btn, showing_rpg_right]
         )
 
-        # Synchronize RPG settings
-        for left, right in [
-            (rp_location, rp_location_right),
-            (user_name, user_name_right),
-            (user_role, user_role_right),
-            (ai_npc1, ai_npc1_right),
-            (ai_npc2, ai_npc2_right),
-            (ai_npc3, ai_npc3_right),
-            (ai_npcs_roles, ai_npcs_roles_right)
-        ]:
-            left.change(fn=lambda x: gr.update(value=x), inputs=[left], outputs=[right])
-            right.change(fn=lambda x: gr.update(value=x), inputs=[right], outputs=[left])
-
-        save_rpg_btn.click(
-            fn=save_rp_settings,
-            inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
-            outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
-        )
         save_rpg_right_btn.click(
             fn=save_rp_settings,
-            inputs=[rp_location_right, user_name_right, user_role_right, ai_npc1_right, ai_npc2_right, ai_npc3_right, ai_npcs_roles_right],
-            outputs=[rp_location_right, user_name_right, user_role_right, ai_npc1_right, ai_npc2_right, ai_npc3_right, ai_npcs_roles_right,
-                     rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
+            inputs=[rp_location_right, user_name_right, user_role_right, ai_npc_right, ai_npc_role_right],
+            outputs=[rp_location_right, user_name_right, user_role_right, ai_npc_right, ai_npc_role_right]
         )
 
         load_models_btn.click(
@@ -943,7 +889,7 @@ def launch_interface():
         ).then(
             fn=update_left_panel_visibility,
             inputs=[theme_status],
-            outputs=[session_history_column, rpg_settings_column]
+            outputs=[session_history_column]
         ).then(
             fn=update_file_slot_ui,
             inputs=[loaded_files_state],
