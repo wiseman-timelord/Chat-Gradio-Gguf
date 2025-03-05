@@ -43,17 +43,17 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 
  Select the Llama.Cpp type:
 
-    1. AVX2 - CPU Only - Must be compatible with AVX2 (slowest)
+    1. AVX2 - CPU Only - Must be compatible with AVX2
 
-    2. AVX512 - CPU Only - Must be compatible with AVX512 (okish)
+    2. AVX512 - CPU Only - Must be compatible with AVX512
 
     3. NoAVX - CPU Only - For older CPUs without AVX support
 
     4. OpenBLAS - CPU Only - Optimized for linear algebra operations
 
-    5. Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU fallback
+    5. Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU
 
-    6. Kompute - GPU/CPU - Experimental Vulkan for AMD/nVidia/Intel
+    6. Kompute - GPU/CPU - Experimental Vulkan with with CPU fallback
 
     7. CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback
 
