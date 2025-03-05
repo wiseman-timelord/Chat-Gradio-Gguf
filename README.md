@@ -115,9 +115,28 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 ## Development
 - Figure out if the Vector Databases apply to, session or mode, they should be per specific per session, which removes the need for the Delete Database buttons on the configuration page. Its important for one sessions, interactions and/or attached files, to NOT mix with other sessions.
 - I want to be able to select the mode from the conversation page, `Chat`, `Coder`, `Rpg`, would display in the current `Operation Mode` box, and under it would be a slider with 3 positions. Thereabouts, removing code for detection of those 3 general modes.
+- Tot for Code mode, so as to make it visible during code...
+```
+            if mode == "Code":
+                tot_visible = True   # this line.
+                web_visible = False
+                file_visible = True
+            elif mode == "Rpg":
+                tot_visible = False
+                web_visible = False
+                file_visible = True
+            else:  # Chat mode
+                tot_visible = True
+                web_visible = True
+                file_visible = True
+```
+...if TOT is enable for code, then we would send the normal code prompt to the AI 3 times, then we would need a new prompt for assessment, as to which of the versions is the correct and best response, and it would judge all 3 of the generated responses, given criteria, among which are printing updates as complete updated functions without shortening of code, this would guarantee, that we would be able to tell the ai to create complete updated functions, but also the special prompt will also be doing debug etc to ensure it is correct with the context of the other scripts if they were attached, so some kind of ability to ensure to, be aware of and make use of the attached files.
+
 
 ## Far Development.
-- the next generation of the program will be 6 modes and dual model like this...
+the next generation of the program will be ...
+- attatched files should be able to be written to   
+- 6 modes and dual model like this...
 ```
 | **Mode**             | **Models**                     | **Features**                                      | **Implementation Notes**                                                                 |
 |-----------------------|--------------------------------|--------------------------------------------------|-----------------------------------------------------------------------------------------|
