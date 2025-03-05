@@ -116,10 +116,10 @@ def save_session_history(history: list) -> str:
     return f"Session saved to {file_path}"
 
 def manage_session_history():
-    """Limit saved sessions to MAX_SESSIONS."""
+    """Limit saved sessions to MAX_HISTORY_SLOTS."""
     history_dir = Path(HISTORY_DIR)
     session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
-    while len(session_files) > MAX_SESSIONS:
+    while len(session_files) > temporary.MAX_HISTORY_SLOTS:
         oldest_file = session_files.pop()
         oldest_file.unlink()
         print(f"Deleted oldest session: {oldest_file}")
@@ -261,7 +261,9 @@ def save_config():
             "mlock": temporary.MLOCK,
             "n_batch": temporary.N_BATCH,
             "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
-            "afterthought_time": temporary.AFTERTHOUGHT_TIME
+            "afterthought_time": temporary.AFTERTHOUGHT_TIME,
+            "max_history_slots": temporary.MAX_HISTORY_SLOTS,  # New setting
+            "max_attach_slots": temporary.MAX_ATTACH_SLOTS     # New setting
         },
         "backend_config": {
             "type": temporary.BACKEND_TYPE,
@@ -301,19 +303,23 @@ def update_setting(key, value):
         reload_required = True
     elif key == "selected_gpu":
         temporary.SELECTED_GPU = value
-    elif key == "selected_cpu":  # Added
+    elif key == "selected_cpu":
         temporary.SELECTED_CPU = value
     elif key == "repeat_penalty":
         temporary.REPEAT_PENALTY = float(value)
     elif key == "mlock":
         temporary.MLOCK = bool(value)
-    elif key == "AFTERTHOUGHT_TIME":
-        temporary.AFTERTHOUGHT_TIME = afterthought
+    elif key == "afterthought_time":  # Updated to match JSON key
+        temporary.AFTERTHOUGHT_TIME = bool(value)
     elif key == "n_batch":
         temporary.N_BATCH = int(value)
     elif key == "model_folder":
         temporary.MODEL_FOLDER = value
         reload_required = True
+    elif key == "max_history_slots":  # New setting for history slots
+        temporary.MAX_HISTORY_SLOTS = int(value)
+    elif key == "max_attach_slots":   # New setting for attach slots
+        temporary.MAX_ATTACH_SLOTS = int(value)
     # RPG settings
     elif key == "rp_location":
         temporary.RP_LOCATION = str(value)
@@ -329,7 +335,7 @@ def update_setting(key, value):
         temporary.AI_NPC3_NAME = str(value)
 
     if reload_required:
-        return change_model(temporary.MODEL_PATH.split('/')[-1])  # Note: MODEL_PATH may need adjustment
+        return change_model(temporary.MODEL_PATH.split('/')[-1])  # Reload model if necessary
     return None, None
     
 def load_config():
@@ -348,12 +354,15 @@ def load_config():
             temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "")
             temporary.VRAM_SIZE = int(config["model_settings"].get("vram_size", 8192))
             temporary.SELECTED_GPU = config["model_settings"].get("selected_gpu", None)
-            temporary.SELECTED_CPU = config["model_settings"].get("selected_cpu", None)  # Added
+            temporary.SELECTED_CPU = config["model_settings"].get("selected_cpu", None)
             temporary.MMAP = bool(config["model_settings"].get("mmap", True))
             temporary.MLOCK = bool(config["model_settings"].get("mlock", True))
             temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"].get("afterthought_time", True))
             temporary.N_BATCH = int(config["model_settings"].get("n_batch", 1024))
             temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
+            # New settings
+            temporary.MAX_HISTORY_SLOTS = int(config["model_settings"].get("max_history_slots", 10))
+            temporary.MAX_ATTACH_SLOTS = int(config["model_settings"].get("max_attach_slots", 6))
             # Backend config
             temporary.BACKEND_TYPE = config["backend_config"].get("type", "")
             temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")

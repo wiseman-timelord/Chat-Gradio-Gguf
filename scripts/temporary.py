@@ -18,8 +18,8 @@ RAG_CHUNK_OVERLAP_DEVIDER = 32
 MODELS_LOADED = False
 SESSION_ACTIVE = False
 N_GPU_LAYERS = 0
-MAX_SESSIONS = 9  # Maximum number of saved sessions
-RAG_MAX_DOCS = 6  # Maximum documents, always 6
+MAX_HISTORY_SLOTS = 10 # Maximum number of saved sessions (replaces MAX_SESSIONS)
+MAX_ATTACH_SLOTS = 6 # Maximum number of attachable files (replaces RAG_MAX_DOCS)
 last_save_time = 0 
 AFTERTHOUGHT_TIME = True
 MODEL_NAME = "Select_a_model..."
@@ -60,6 +60,8 @@ VRAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096]
 TEMP_OPTIONS = [0.1, 0.33, 0.5, 0.66, 0.75, 1.0] 
+HISTORY_SLOT_OPTIONS = [6, 8, 10, 12, 14] # New options for Max History Slots
+ATTACH_SLOT_OPTIONS = [2, 4, 6, 8, 12] # New options for Max Attach Slots
 
 # RPG Settings
 RP_LOCATION = "Public"

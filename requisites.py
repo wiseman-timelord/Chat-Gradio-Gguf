@@ -109,27 +109,29 @@ BACKEND_OPTIONS = {
     }
 }
 CONFIG_TEMPLATE = """{
-  "model_settings": {
-    "model_dir": "models",
-    "quality_model": "",
-    "fast_model": "",
-    "n_ctx": 8192,
-    "temperature": 0.75,
-    "repeat_penalty": 1.0,
-    "use_python_bindings": false,
-    "llama_cli_path": "",
-    "vram_size": 8192,
-    "selected_gpu": null,
-    "selected_cpu": "null", 
-    "mmap": true,
-    "mlock": true,
-    "n_batch": 1024,
-    "dynamic_gpu_layers": true,
-    "afterthought_time": true
-  },
+	"model_settings": {
+	  "model_dir": "models",
+	  "quality_model": "",
+	  "fast_model": "",
+	  "n_ctx": 8192,
+	  "temperature": 0.75,
+	  "repeat_penalty": 1.0,
+	  "use_python_bindings": false,
+	  "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
+	  "vram_size": 8192,
+	  "selected_gpu": null,
+	  "selected_cpu": "null",
+	  "mmap": true,
+	  "mlock": true,
+	  "n_batch": 1024,
+	  "dynamic_gpu_layers": true,
+	  "afterthought_time": true,
+	  "max_history_slots": 10,
+	  "max_attach_slots": 6
+	},
   "backend_config": {
-    "type": "",
-    "llama_bin_path": ""
+    "type": "GPU/CPU - Vulkan",
+    "llama_bin_path": "data/llama-vulkan-bin"
   },
   "rp_settings": {
     "rp_location": "Public",
