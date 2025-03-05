@@ -540,11 +540,7 @@ def launch_interface():
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
                     # Backend Type Selection
-                    backend_type_dropdown = gr.Dropdown(
-                        choices=["GPU", "GPU/CPU - Vulkan", "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"],
-                        label="Select Backend Type",
-                        value=temporary.BACKEND_TYPE
-                    )
+
                     
                     # GPU Configuration Row
                     with gr.Row(elem_classes=["clean-elements"], visible=(temporary.BACKEND_TYPE not in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"])) as gpu_row:
@@ -552,6 +548,12 @@ def launch_interface():
                             choices=utility.get_available_gpus(),
                             label="Select GPU",
                             value=temporary.SELECTED_GPU,
+                            scale=20
+                        )
+                        backend_type_dropdown = gr.Dropdown(
+                            choices=["GPU", "GPU/CPU - Vulkan", "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"],
+                            label="Select Backend Type",
+                            value=temporary.BACKEND_TYPE,
                             scale=20
                         )
                         vram_dropdown = gr.Dropdown(
@@ -564,14 +566,24 @@ def launch_interface():
                     
                     # CPU Configuration Row
                     with gr.Row(elem_classes=["clean-elements"], visible=(temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"])) as cpu_row:
+                        cpu_dropdown = gr.Dropdown(
+                            choices=["GPU", "GPU/CPU - Vulkan", "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"],
+                            label="Select Backend Type",
+                            value=temporary.BACKEND_TYPE
+                        )
                         cpu_info = utility.get_cpu_info()
                         cpu_choices = [cpu["label"] for cpu in cpu_info]
-                        cpu_dropdown = gr.Dropdown(
-                            choices=cpu_choices,
-                            label="Select CPU",
-                            value=(temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices 
-                                   else cpu_choices[0] if cpu_choices else None),
+                        backend_type_dropdown = gr.Dropdown(
+                            choices=["GPU", "GPU/CPU - Vulkan", "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"],
+                            label="Select Backend Type",
+                            value=temporary.BACKEND_TYPE,
                             scale=20
+                        )
+                        vram_dropdown = gr.Dropdown(
+                            choices=temporary.VRAM_OPTIONS,
+                            label="Assign Free VRam",
+                            value=temporary.VRAM_SIZE,
+                            interactive=True
                         )
                         mlock_checkbox_cpu = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)
 
