@@ -444,7 +444,7 @@ def launch_interface():
                 with gr.Row():
                     # Left column (controls)
                     with gr.Column(scale=1):
-                        theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="No model loaded.")
+
                         
                         with gr.Column(visible=True, elem_classes=["clean-elements"]) as session_history_column:
                             start_new_session_btn = gr.Button("Start New Session...", variant="secondary")
@@ -479,6 +479,7 @@ def launch_interface():
 
                     # Right column (file attachments and RPG settings)
                     with gr.Column(scale=1):
+                        theme_status = gr.Textbox(label="Operation Mode", interactive=False, value="No model loaded.")
                         toggle_rpg_settings_btn = gr.Button("Show RPG Settings", visible=True, variant="secondary")
                         
                         with gr.Group(visible=True, elem_classes=["clean-elements"]) as file_attachments_group:
@@ -501,7 +502,7 @@ def launch_interface():
                             user_role_right = gr.Textbox(label="User Role", value=temporary.USER_PC_ROLE)
                             ai_npc_right = gr.Textbox(label="AI NPC", value=temporary.AI_NPC_NAME)
                             ai_npc_role_right = gr.Textbox(label="AI Role", value=temporary.AI_NPC_ROLE)
-                            save_rpg_right_btn = gr.Button("Save RPG Settings", value=primary)
+                            save_rpg_right_btn = gr.Button("Save RPG Settings", variant="primary") 
 
                 with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=30)
