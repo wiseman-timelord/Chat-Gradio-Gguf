@@ -113,7 +113,13 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
 ## Development
-- Figure out if the Vector Databases apply to, session or mode, they should be per specific per session, which removes the need for the Delete Database buttons on the configuration page. Its important for one sessions, interactions and/or attached files, to NOT mix with other sessions.
+- Figure out if the Vector Databases apply to, session or mode, they should be per specific per session, which removes the need for the Delete Database buttons on the configuration page. Its important for one sessions, interactions and/or attached files, to NOT mix with other sessions...
+```
+                        erase_chat_btn = gr.Button("Erase Chat Data", variant="primary")
+                        erase_rpg_btn = gr.Button("Erase RPG Data", variant="primary")
+                        erase_code_btn = gr.Button("Erase Code Data", variant="primary")
+                        erase_all_btn = gr.Button("Erase All Data", variant="primary")
+```
 - I want to be able to select the mode from the conversation page, `Chat`, `Coder`, `Rpg`, would display in the current `Operation Mode` box, and under it would be a slider with 3 positions. Thereabouts, removing code for detection of those 3 general modes.
 - Tot for Code mode, so as to make it visible during code...
 ```
