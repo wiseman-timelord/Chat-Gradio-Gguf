@@ -533,9 +533,8 @@ def launch_interface():
                             save_rpg_right_btn = gr.Button("Save RPG Settings")
 
                 with gr.Row():
-                    status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=20)
-                    with gr.Column(scale=1):
-                        shutdown_btn = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
+                    status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=30)
+                    shutdown_btn = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
 
             # Configuration Tab
             with gr.Tab("Configuration"):
