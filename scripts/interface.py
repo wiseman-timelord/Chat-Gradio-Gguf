@@ -16,7 +16,8 @@ from scripts.temporary import (
     REPEAT_PENALTY, MLOCK, HISTORY_DIR, BATCH_OPTIONS, N_BATCH, MODEL_FOLDER,
     MODEL_NAME, STATUS_TEXTS, CTX_OPTIONS, RP_LOCATION, USER_PC_NAME, USER_PC_ROLE,
     AI_NPC1_NAME, AI_NPC2_NAME, AI_NPC3_NAME, AI_NPCS_ROLES, SESSION_ACTIVE, TOT_VARIATIONS,
-    MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, HISTORY_SLOT_OPTIONS, ATTACH_SLOT_OPTIONS
+    MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, HISTORY_SLOT_OPTIONS, ATTACH_SLOT_OPTIONS,
+    BACKEND_TYPE
 )
 from scripts import utility
 from scripts.utility import (
@@ -539,22 +540,20 @@ def launch_interface():
             # Configuration Tab
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
-                    # Backend Type Selection
 
-                    
                     # GPU Configuration Row
                     with gr.Row(elem_classes=["clean-elements"], visible=(temporary.BACKEND_TYPE not in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"])) as gpu_row:
                         gpu_dropdown = gr.Dropdown(
                             choices=utility.get_available_gpus(),
                             label="Select GPU",
                             value=temporary.SELECTED_GPU,
-                            scale=20
+                            scale=10
                         )
-                        backend_type_dropdown = gr.Dropdown(
-                            choices=["GPU", "GPU/CPU - Vulkan", "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"],
-                            label="Select Backend Type",
+                        backend_type_text = gr.Textbox(
+                            label="Installed Backend",
                             value=temporary.BACKEND_TYPE,
-                            scale=20
+                            interactive=False,
+                            scale=10
                         )
                         vram_dropdown = gr.Dropdown(
                             choices=temporary.VRAM_OPTIONS,
@@ -566,24 +565,20 @@ def launch_interface():
                     
                     # CPU Configuration Row
                     with gr.Row(elem_classes=["clean-elements"], visible=(temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"])) as cpu_row:
-                        cpu_dropdown = gr.Dropdown(
-                            choices=["GPU", "GPU/CPU - Vulkan", "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"],
-                            label="Select Backend Type",
-                            value=temporary.BACKEND_TYPE
-                        )
                         cpu_info = utility.get_cpu_info()
                         cpu_choices = [cpu["label"] for cpu in cpu_info]
-                        backend_type_dropdown = gr.Dropdown(
-                            choices=["GPU", "GPU/CPU - Vulkan", "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"],
-                            label="Select Backend Type",
+                        backend_type_text = gr.Textbox(
+                            label="Backend Type",
                             value=temporary.BACKEND_TYPE,
-                            scale=20
+                            interactive=False,
+                            scale=10
                         )
-                        vram_dropdown = gr.Dropdown(
-                            choices=temporary.VRAM_OPTIONS,
-                            label="Assign Free VRam",
-                            value=temporary.VRAM_SIZE,
-                            interactive=True
+                        cpu_dropdown = gr.Dropdown(
+                            choices=cpu_choices,
+                            label="Select CPU",
+                            value=(temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices 
+                                   else cpu_choices[0] if cpu_choices else None),
+                            scale=10
                         )
                         mlock_checkbox_cpu = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)
 
@@ -641,7 +636,6 @@ def launch_interface():
             temporary.TEMPERATURE = temp
             temporary.REPEAT_PENALTY = repeat
             temporary.VRAM_SIZE = vram
-            # MLOCK is updated separately via update_mlock
             temporary.AFTERTHOUGHT_TIME = afterthought
             temporary.SELECTED_GPU = gpu if gpu else temporary.SELECTED_GPU
             temporary.SELECTED_CPU = cpu if cpu else temporary.SELECTED_CPU
@@ -711,11 +705,6 @@ def launch_interface():
 
         def cancel_input():
             return True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."
-
-        def update_row_visibility(backend_type):
-            temporary.BACKEND_TYPE = backend_type  # Update the global variable
-            is_cpu = backend_type in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
-            return gr.update(visible=not is_cpu), gr.update(visible=is_cpu)
 
         # Event Handlers (defined after all functions)
         start_new_session_btn.click(
@@ -942,17 +931,6 @@ def launch_interface():
             fn=update_file_slot_ui,
             inputs=[loaded_files_state],
             outputs=file_slot_buttons + [attach_files_btn]
-        )
-
-        # Backend Type Dropdown Event Handler
-        backend_type_dropdown.change(
-            fn=update_row_visibility,
-            inputs=[backend_type_dropdown],
-            outputs=[gpu_row, cpu_row]
-        ).then(
-            fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
-            outputs=[status_text_settings]
         )
 
         # MLock Checkboxes Event Handlers
