@@ -539,16 +539,31 @@ def launch_interface():
             # Configuration Tab
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
-                    with gr.Row(elem_classes=["clean-elements"]):
+                    # Backend Type Selection
+                    backend_type_dropdown = gr.Dropdown(
+                        choices=["GPU", "GPU/CPU - Vulkan", "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"],
+                        label="Select Backend Type",
+                        value=temporary.BACKEND_TYPE
+                    )
+                    
+                    # GPU Configuration Row
+                    with gr.Row(elem_classes=["clean-elements"], visible=(temporary.BACKEND_TYPE not in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"])) as gpu_row:
                         gpu_dropdown = gr.Dropdown(
                             choices=utility.get_available_gpus(),
                             label="Select GPU",
                             value=temporary.SELECTED_GPU,
-                            visible=not (temporary.BACKEND_TYPE in [
-                                "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"
-                            ]),
                             scale=20
                         )
+                        vram_dropdown = gr.Dropdown(
+                            choices=temporary.VRAM_OPTIONS,
+                            label="Assign Free VRam",
+                            value=temporary.VRAM_SIZE,
+                            interactive=True
+                        )
+                        mlock_checkbox_gpu = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)
+                    
+                    # CPU Configuration Row
+                    with gr.Row(elem_classes=["clean-elements"], visible=(temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"])) as cpu_row:
                         cpu_info = utility.get_cpu_info()
                         cpu_choices = [cpu["label"] for cpu in cpu_info]
                         cpu_dropdown = gr.Dropdown(
@@ -556,14 +571,10 @@ def launch_interface():
                             label="Select CPU",
                             value=(temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices 
                                    else cpu_choices[0] if cpu_choices else None),
-                            visible=temporary.BACKEND_TYPE in [
-                                "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"
-                            ],
                             scale=20
                         )
-                    with gr.Row(elem_classes=["clean-elements-normbot"]):                
-                        vram_dropdown = gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, interactive=True)
-                        mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)
+                        mlock_checkbox_cpu = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)
+
                     with gr.Row(elem_classes=["clean-elements"]):
                         model_dir_text = gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, scale=20)
                         browse_btn = gr.Button("Browse", variant="secondary", elem_classes=["double-height"])
@@ -611,14 +622,14 @@ def launch_interface():
                         status_text_settings = gr.Textbox(label="Status", interactive=False, scale=20)
                         shutdown_btn = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
 
-        # Event Handlers
-        def update_config_settings(ctx, batch, temp, repeat, vram, mlock, afterthought, gpu, cpu, model_dir, model, max_history, max_attach):
+        # Define all helper functions before event handlers
+        def update_config_settings(ctx, batch, temp, repeat, vram, afterthought, gpu, cpu, model_dir, model, max_history, max_attach):
             temporary.N_CTX = ctx
             temporary.N_BATCH = batch
             temporary.TEMPERATURE = temp
             temporary.REPEAT_PENALTY = repeat
             temporary.VRAM_SIZE = vram
-            temporary.MLOCK = mlock
+            # MLOCK is updated separately via update_mlock
             temporary.AFTERTHOUGHT_TIME = afterthought
             temporary.SELECTED_GPU = gpu if gpu else temporary.SELECTED_GPU
             temporary.SELECTED_CPU = cpu if cpu else temporary.SELECTED_CPU
@@ -627,6 +638,10 @@ def launch_interface():
             temporary.MAX_HISTORY_SLOTS = max_history
             temporary.MAX_ATTACH_SLOTS = max_attach
             return "Settings updated in memory. Click 'Save Settings' to persist."
+
+        def update_mlock(mlock):
+            temporary.MLOCK = mlock
+            return "MLock updated."
 
         def save_all_settings():
             utility.save_config()
@@ -685,7 +700,12 @@ def launch_interface():
         def cancel_input():
             return True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."
 
-        # Event handlers for UI interactions
+        def update_row_visibility(backend_type):
+            temporary.BACKEND_TYPE = backend_type  # Update the global variable
+            is_cpu = backend_type in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
+            return gr.update(visible=not is_cpu), gr.update(visible=is_cpu)
+
+        # Event Handlers (defined after all functions)
         start_new_session_btn.click(
             fn=start_new_session,
             inputs=None,
@@ -815,54 +835,50 @@ def launch_interface():
             outputs=[status_text_settings, models_loaded_state]
         )
 
+        # Update event handlers to exclude mlock_checkbox
         ctx_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         )
         batch_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         )
         temp_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         )
         repeat_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         )
         vram_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
-            outputs=[status_text_settings]
-        )
-        mlock_checkbox.change(
-            fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         )
         afterthought_checkbox.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         )
         gpu_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         )
         cpu_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         )
         model_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         ).then(
             fn=determine_operation_mode,
@@ -898,7 +914,7 @@ def launch_interface():
 
         max_history_slots.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         ).then(
             fn=update_session_buttons,
@@ -908,12 +924,36 @@ def launch_interface():
 
         max_attach_slots.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
             outputs=[status_text_settings]
         ).then(
             fn=update_file_slot_ui,
             inputs=[loaded_files_state],
             outputs=file_slot_buttons + [attach_files_btn]
+        )
+
+        # Backend Type Dropdown Event Handler
+        backend_type_dropdown.change(
+            fn=update_row_visibility,
+            inputs=[backend_type_dropdown],
+            outputs=[gpu_row, cpu_row]
+        ).then(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            outputs=[status_text_settings]
+        )
+
+        # MLock Checkboxes Event Handlers
+        mlock_checkbox_gpu.change(
+            fn=update_mlock,
+            inputs=[mlock_checkbox_gpu],
+            outputs=[status_text_settings]
+        )
+
+        mlock_checkbox_cpu.change(
+            fn=update_mlock,
+            inputs=[mlock_checkbox_cpu],
+            outputs=[status_text_settings]
         )
 
         # Erase button event handlers
