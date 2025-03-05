@@ -113,7 +113,8 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
 ## Development
-- UI and general design done, need to bugfix and complete now, est 90% done or more.
+- Figure out if the Vector Databases apply to, session or mode, they should be per specific per session, which removes the need for the Delete Database buttons on the configuration page. Its important for one sessions, interactions and/or attached files, to NOT mix with other sessions.
+- I want to be able to select the mode from the conversation page, `Chat`, `Coder`, `Rpg`, would display in the current `Operation Mode` box, and under it would be a slider with 3 positions. Thereabouts, removing code for detection of those 3 general modes.
 
 ## Far Development.
 - the next generation of the program will be 6 modes and dual model like this...
@@ -127,6 +128,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 | RPG Text             | Single RPG model              | Narrative, character tracking, uncensored       | Parse entities with regex, save JSON states in .\data\history\                         |
 | RPG Text + Images    | RPG + image model (Flux.1-schnell) | Text RPG + scene images                      | Trigger Flux via llama.cpp image fork, display in Gradio gallery (256x256 max)         |
 ```
+- Ideas for introduce a, `Chat-Persistent` and `Rpg-Persistent`, mode, where under that mode then it is not specific to the session, and by creating/loading a session, then it would look this up. This could be like lighter version of RPG with 1 AI character, and be like, `Counsellor` or `Girlfriend`, then someone could persistently chat, they cant because its on rotation, to there is a point to it.
 - Introduction of `Text-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
 - Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
 - Color themes. Deepseek R1 AND Grok3Beta, found this extremely difficult, Deepseek was better. It needs to be re-attempted later, possibly with GPT4o1. Make it all shades of grey, then allow people to choose the primary button color in configuration, or something simple like that.
