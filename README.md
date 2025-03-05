@@ -90,7 +90,7 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 - VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
 - We use `(ModelFileSize * 1.1875) / NumLayers = LayerSize`, then `TotalVRam / LayerSize = NumLayersOnGpu`.
 - Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section.
-- If you like using LLMs on your own hardware, then you will probably like my program [DownLord](https://github.com/wiseman-timelord/DownLord), my prefernce to lfs.
+- For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 
 ### Model label/name Keywords...
 1. Keywords for Operation mode...
