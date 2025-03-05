@@ -65,6 +65,38 @@ To create a public link, set `share=True` in `launch()`.
 
 
 ```
+- Wide Llama.Cpp support in the installer...
+```
+========================================================================================================================
+    Text-Gradio-Gguf: Install Options
+========================================================================================================================
+
+
+
+ Select the Llama.Cpp type:
+
+    1. AVX2 - CPU Only - Must be compatible with AVX2 (slowest)
+
+    2. AVX512 - CPU Only - Must be compatible with AVX512 (okish)
+
+    3. NoAVX - CPU Only - For older CPUs without AVX support
+
+    4. OpenBLAS - CPU Only - Optimized for linear algebra operations
+
+    5. Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU fallback
+
+    6. Kompute - GPU/CPU - Experimental Vulkan for AMD/nVidia/Intel
+
+    7. CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback
+
+    8. CUDA 12.4 - GPU/CPU - For CUDA 12.4 GPUs with CPU fallback
+
+
+
+========================================================================================================================
+ Selection; Menu Options = 1-8, Exit Installer = X:
+
+```
 
 ## Requirements
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
