@@ -262,8 +262,10 @@ def save_config():
             "n_batch": temporary.N_BATCH,
             "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
             "afterthought_time": temporary.AFTERTHOUGHT_TIME,
-            "max_history_slots": temporary.MAX_HISTORY_SLOTS,  # New setting
-            "max_attach_slots": temporary.MAX_ATTACH_SLOTS     # New setting
+            "max_history_slots": temporary.MAX_HISTORY_SLOTS,
+            "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
+            "session_log_height": temporary.SESSION_LOG_HEIGHT,
+            "input_lines": temporary.INPUT_LINES
         },
         "backend_config": {
             "type": temporary.BACKEND_TYPE,
@@ -316,10 +318,14 @@ def update_setting(key, value):
     elif key == "model_folder":
         temporary.MODEL_FOLDER = value
         reload_required = True
-    elif key == "max_history_slots":  # New setting for history slots
+    elif key == "max_history_slots":  # Setting for history slots
         temporary.MAX_HISTORY_SLOTS = int(value)
-    elif key == "max_attach_slots":   # New setting for attach slots
+    elif key == "max_attach_slots":   # Setting for attach slots
         temporary.MAX_ATTACH_SLOTS = int(value)
+    elif key == "session_log_height":  # New setting for session log height
+        temporary.SESSION_LOG_HEIGHT = int(value)
+    elif key == "input_lines":         # New setting for input lines
+        temporary.INPUT_LINES = int(value)
     # RPG settings
     elif key == "rp_location":
         temporary.RP_LOCATION = str(value)
@@ -335,7 +341,7 @@ def update_setting(key, value):
         temporary.AI_NPC3_NAME = str(value)
 
     if reload_required:
-        return change_model(temporary.MODEL_PATH.split('/')[-1])  # Reload model if necessary
+        return change_model(temporary.MODEL_NAME.split('/')[-1])  # Reload model if necessary
     return None, None
     
 def load_config():
@@ -360,9 +366,11 @@ def load_config():
             temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"].get("afterthought_time", True))
             temporary.N_BATCH = int(config["model_settings"].get("n_batch", 1024))
             temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
-            # New settings
             temporary.MAX_HISTORY_SLOTS = int(config["model_settings"].get("max_history_slots", 10))
             temporary.MAX_ATTACH_SLOTS = int(config["model_settings"].get("max_attach_slots", 6))
+            # New settings
+            temporary.SESSION_LOG_HEIGHT = int(config["model_settings"].get("session_log_height", 450))
+            temporary.INPUT_LINES = int(config["model_settings"].get("input_lines", 5))
             # Backend config
             temporary.BACKEND_TYPE = config["backend_config"].get("type", "")
             temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")

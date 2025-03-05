@@ -464,7 +464,7 @@ def launch_interface():
                         
                         with gr.Column(visible=True, elem_classes=["clean-elements"]) as session_history_column:
                             start_new_session_btn = gr.Button("Start New Session...", variant="secondary")
-                            session_buttons = [gr.Button(f"History Slot {i+1}", visible=True, variant="huggingface") for i in range(MAX_HISTORY_SLOTS)]
+                            session_buttons = [gr.Button(f"History Slot {i+1}", visible=True, variant="huggingface") for i in range(temporary.MAX_HISTORY_SLOTS)]
                             delete_all_history_btn = gr.Button("Delete All History", variant="primary")
                         
                         with gr.Column(visible=False, elem_classes=["clean-elements"]) as rpg_settings_column:
@@ -487,13 +487,13 @@ def launch_interface():
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
                         session_log = gr.Chatbot(
                             label="Session Log",
-                            height=425,
+                            height=temporary.SESSION_LOG_HEIGHT,
                             elem_classes=["scrollable"],
                             type="messages"
                         )
                         user_input = gr.Textbox(
                             label="User Input",
-                            lines=4,
+                            lines=temporary.INPUT_LINES,
                             interactive=False,
                             placeholder="Enter text here..."
                         )
@@ -516,7 +516,7 @@ def launch_interface():
                                 variant="secondary"
                             )
                             file_slot_buttons = []
-                            for row in range(MAX_ATTACH_SLOTS):
+                            for row in range(temporary.MAX_ATTACH_SLOTS):
                                 with gr.Row(elem_classes=["clean-elements"]):
                                     file_slot_buttons.append(gr.Button("File Slot Free", visible=True, variant="huggingface"))
                             with gr.Row(elem_classes=["clean-elements"]):
@@ -540,7 +540,6 @@ def launch_interface():
             # Configuration Tab
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
-
                     # GPU Configuration Row
                     with gr.Row(elem_classes=["clean-elements"], visible=(temporary.BACKEND_TYPE not in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"])) as gpu_row:
                         gpu_dropdown = gr.Dropdown(
@@ -598,51 +597,78 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         ctx_dropdown = gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX, interactive=True)
                         batch_dropdown = gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH, interactive=True)
+                    with gr.Row(elem_classes=["clean-elements"]):
                         temp_dropdown = gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE, interactive=True)
                         repeat_dropdown = gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY, interactive=True)
                     with gr.Row(elem_classes=["clean-elements-normbot"]):
                         load_models_btn = gr.Button("Load Model", variant="secondary")
                         inspect_model_btn = gr.Button("Inspect Model", variant="huggingface")
                         unload_btn = gr.Button("Unload Model")
-                    with gr.Row(elem_classes=["clean-elements-normbot"]):
-                        afterthought_checkbox = gr.Checkbox(label="Afterthought Time", value=temporary.AFTERTHOUGHT_TIME)
+                    with gr.Row(elem_classes=["clean-elements"]):    
+                        save_settings_btn = gr.Button("Save Settings", variant="primary")
+                    with gr.Row(): 
+                        status_text_settings = gr.Textbox(label="Status", interactive=False, scale=20)
+                        shutdown_btn = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
+
+            # Customisation Tab
+            with gr.Tab("Customisation"):
+                with gr.Column():
+                    with gr.Row():
                         max_history_slots = gr.Dropdown(
-                            choices=[6, 8, 10, 12, 14],  # Options for history slots
+                            choices=temporary.HISTORY_SLOT_OPTIONS,
                             label="Max History Slots",
                             value=temporary.MAX_HISTORY_SLOTS,
                             interactive=True
                         )
                         max_attach_slots = gr.Dropdown(
-                            choices=[2, 4, 6, 8, 12],  # Options for attach slots
+                            choices=temporary.ATTACH_SLOT_OPTIONS,
                             label="Max Attach Slots",
                             value=temporary.MAX_ATTACH_SLOTS,
                             interactive=True
                         )
-                    with gr.Row(elem_classes=["clean-elements"]):    
-                        save_settings_btn = gr.Button("Save Settings", variant="primary")
-                    with gr.Row(elem_classes=["clean-elements-normbot"]):
+                    with gr.Row():
+                        session_log_height = gr.Dropdown(
+                            choices=temporary.SESSION_LOG_HEIGHT_OPTIONS,
+                            label="Session Log Height",
+                            value=temporary.SESSION_LOG_HEIGHT,
+                            interactive=True
+                        )
+                        input_lines = gr.Dropdown(
+                            choices=temporary.INPUT_LINES_OPTIONS,
+                            label="Input Lines",
+                            value=temporary.INPUT_LINES,
+                            interactive=True
+                        )
+
+                    with gr.Row():
+                        afterthought_time = gr.Checkbox(
+                            label="After-Thought Time",
+                            value=temporary.AFTERTHOUGHT_TIME
+                        )
+                    gr.Markdown("Note: Changes to Max History Slots and Max Attach Slots require restarting the application to take effect.")
+
+                    save_customisation_btn = gr.Button("Save Settings", variant="primary")
+                    with gr.Row():
                         erase_chat_btn = gr.Button("Erase Chat Data", variant="primary")
                         erase_rpg_btn = gr.Button("Erase RPG Data", variant="primary")
                         erase_code_btn = gr.Button("Erase Code Data", variant="primary")
                         erase_all_btn = gr.Button("Erase All Data", variant="primary")
+                    
                     with gr.Row(): 
-                        status_text_settings = gr.Textbox(label="Status", interactive=False, scale=20)
+                        status_text_customisation = gr.Textbox(label="Status", interactive=False, scale=20)
                         shutdown_btn = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
 
         # Define all helper functions before event handlers
-        def update_config_settings(ctx, batch, temp, repeat, vram, afterthought, gpu, cpu, model_dir, model, max_history, max_attach):
+        def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model_dir, model):
             temporary.N_CTX = ctx
             temporary.N_BATCH = batch
             temporary.TEMPERATURE = temp
             temporary.REPEAT_PENALTY = repeat
             temporary.VRAM_SIZE = vram
-            temporary.AFTERTHOUGHT_TIME = afterthought
             temporary.SELECTED_GPU = gpu if gpu else temporary.SELECTED_GPU
             temporary.SELECTED_CPU = cpu if cpu else temporary.SELECTED_CPU
             temporary.MODEL_FOLDER = model_dir
             temporary.MODEL_NAME = model
-            temporary.MAX_HISTORY_SLOTS = max_history
-            temporary.MAX_ATTACH_SLOTS = max_attach
             return "Settings updated in memory. Click 'Save Settings' to persist."
 
         def update_mlock(mlock):
@@ -705,6 +731,23 @@ def launch_interface():
 
         def cancel_input():
             return True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."
+
+        def update_session_log_height(height):
+            temporary.SESSION_LOG_HEIGHT = height
+            return gr.update(height=height)
+
+        def update_input_lines(lines):
+            temporary.INPUT_LINES = lines
+            return gr.update(lines=lines)
+
+        def update_max_history_slots(slots):
+            temporary.MAX_HISTORY_SLOTS = slots
+
+        def update_max_attach_slots(slots):
+            temporary.MAX_ATTACH_SLOTS = slots
+
+        def update_afterthought_time(value):
+            temporary.AFTERTHOUGHT_TIME = value
 
         # Event Handlers (defined after all functions)
         start_new_session_btn.click(
@@ -836,50 +879,45 @@ def launch_interface():
             outputs=[status_text_settings, models_loaded_state]
         )
 
-        # Update event handlers to exclude mlock_checkbox
+        # Configuration tab event handlers
         ctx_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         batch_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         temp_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         repeat_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         vram_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
-            outputs=[status_text_settings]
-        )
-        afterthought_checkbox.change(
-            fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         gpu_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         cpu_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         model_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         ).then(
             fn=determine_operation_mode,
@@ -913,33 +951,12 @@ def launch_interface():
             outputs=file_slot_buttons + [attach_files_btn]
         )
 
-        max_history_slots.change(
-            fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
-            outputs=[status_text_settings]
-        ).then(
-            fn=update_session_buttons,
-            inputs=None,
-            outputs=session_buttons
-        )
-
-        max_attach_slots.change(
-            fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown, max_history_slots, max_attach_slots],
-            outputs=[status_text_settings]
-        ).then(
-            fn=update_file_slot_ui,
-            inputs=[loaded_files_state],
-            outputs=file_slot_buttons + [attach_files_btn]
-        )
-
         # MLock Checkboxes Event Handlers
         mlock_checkbox_gpu.change(
             fn=update_mlock,
             inputs=[mlock_checkbox_gpu],
             outputs=[status_text_settings]
         )
-
         mlock_checkbox_cpu.change(
             fn=update_mlock,
             inputs=[mlock_checkbox_cpu],
@@ -953,6 +970,46 @@ def launch_interface():
         erase_all_btn.click(fn=utility.delete_all_vectorstores, inputs=None, outputs=[status_text_settings])
 
         save_settings_btn.click(fn=save_all_settings, inputs=None, outputs=[status_text_settings])
+
+        # Customisation tab event handlers
+        session_log_height.change(
+            fn=update_session_log_height,
+            inputs=[session_log_height],
+            outputs=[session_log]
+        )
+        input_lines.change(
+            fn=update_input_lines,
+            inputs=[input_lines],
+            outputs=[user_input]
+        )
+        max_history_slots.change(
+            fn=update_max_history_slots,
+            inputs=[max_history_slots],
+            outputs=[],
+        ).then(
+            fn=update_session_buttons,
+            inputs=None,
+            outputs=session_buttons
+        )
+        max_attach_slots.change(
+            fn=update_max_attach_slots,
+            inputs=[max_attach_slots],
+            outputs=[],
+        ).then(
+            fn=update_file_slot_ui,
+            inputs=[loaded_files_state],
+            outputs=file_slot_buttons + [attach_files_btn]
+        )
+        afterthought_time.change(
+            fn=update_afterthought_time,
+            inputs=[afterthought_time],
+            outputs=[]
+        )
+        save_customisation_btn.click(
+            fn=save_all_settings,
+            inputs=[],
+            outputs=[status_text_customisation]
+        )
 
         demo.launch(
             server_name="127.0.0.1",

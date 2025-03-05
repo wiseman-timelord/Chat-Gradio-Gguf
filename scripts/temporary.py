@@ -38,6 +38,8 @@ RAG_AUTO_LOAD = ["general_knowledge"]
 REPEAT_PENALTY = 1.0
 N_BATCH = 1024
 TEMPERATURE = 0.5
+SESSION_LOG_HEIGHT = 450
+INPUT_LINES = 5
 
 # Global LLM instance
 llm = None
@@ -62,6 +64,8 @@ BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096]
 TEMP_OPTIONS = [0.1, 0.33, 0.5, 0.66, 0.75, 1.0] 
 HISTORY_SLOT_OPTIONS = [6, 8, 10, 12, 14] # New options for Max History Slots
 ATTACH_SLOT_OPTIONS = [2, 4, 6, 8, 12] # New options for Max Attach Slots
+SESSION_LOG_HEIGHT_OPTIONS = [400, 425, 450, 475, 500]
+INPUT_LINES_OPTIONS = [3, 4, 5, 6, 7]
 
 # RPG Settings
 RP_LOCATION = "Public"
