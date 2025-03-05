@@ -1,7 +1,7 @@
 # Script: `.\scripts\utility.py`
 
 # Imports...
-import re, subprocess, json, time, random
+import re, subprocess, json, time, random, psutil
 from pathlib import Path
 from datetime import datetime
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -13,18 +13,49 @@ from .models import context_injector, load_models
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
     ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER,
-    RAG_CHUNK_OVERLAP_DEVIDER, N_CTX
+    RAG_CHUNK_OVERLAP_DEVIDER, N_CTX, last_save_time
 )
 
 # Functions...
+def get_cpu_info():
+    """
+    Retrieve information about available CPUs and their cores.
+    Returns a list of dictionaries with CPU labels and core ranges.
+    """
+    try:
+        # Use wmic to get CPU names
+        output = subprocess.check_output("wmic cpu get name", shell=True).decode()
+        cpu_names = [line.strip() for line in output.split('\n') if line.strip() and 'Name' not in line]
+        cpus = []
+        for i, name in enumerate(cpu_names):
+            cpus.append({
+                "label": f"CPU {i}: {name}",
+                "core_range": list(range(psutil.cpu_count(logical=True)))  # All logical cores
+            })
+        return cpus
+    except Exception as e:
+        print(f"Error getting CPU info: {e}")
+        # Fallback to a default CPU entry
+        return [{"label": "CPU 0", "core_range": list(range(psutil.cpu_count(logical=True)))}]
+    
 def get_available_gpus():
-    """Detect available GPUs on Windows for Vulkan/Kompute compatibility."""
+    """Detect available GPUs with fallback using dxdiag."""
     try:
         output = subprocess.check_output("wmic path win32_VideoController get name", shell=True).decode()
         gpus = [line.strip() for line in output.split('\n') if line.strip() and 'Name' not in line]
         return gpus if gpus else ["CPU Only"]
     except Exception:
-        return ["CPU Only"]
+        try:
+            # Fallback to dxdiag
+            temp_file = Path(TEMP_DIR) / "dxdiag.txt"
+            subprocess.run(f"dxdiag /t {temp_file}", shell=True, check=True)
+            time.sleep(2)  # Wait for dxdiag to write
+            with open(temp_file, 'r') as f:
+                content = f.read()
+                gpu = re.search(r"Card name: (.+)", content)
+                return [gpu.group(1).strip()] if gpu else ["CPU Only"]
+        except Exception:
+            return ["CPU Only"]
 
 def process_file(file_path: Path) -> dict:
     """Process a file and return its metadata."""
@@ -39,6 +70,33 @@ def process_file(file_path: Path) -> dict:
 def strip_html(text: str) -> str:
     """Remove HTML tags from text."""
     return re.sub(r'<[^>]+>', '', text)
+
+def save_session_history(history: list, force_save: bool = False) -> str:
+    """Save chat history with time-based logic."""
+    global last_save_time, current_session_id
+    current_time = time.time()
+    history_dir = Path(HISTORY_DIR)
+    history_dir.mkdir(exist_ok=True)
+
+    if not force_save and (current_time - last_save_time < 60):
+        return "Session not saved yet (waiting for interval)."
+
+    if current_session_id is None:
+        current_session_id = datetime.now().strftime(SESSION_FILE_FORMAT)
+    file_path = history_dir / f"session_{current_session_id}.json"
+    label = session_label if session_label else "Untitled"
+    session_data = {
+        "label": label,
+        "history": history
+    }
+    try:
+        with open(file_path, "w") as f:
+            json.dump(session_data, f, indent=2)
+        manage_session_history()
+        last_save_time = current_time
+        return f"Session saved to {file_path}"
+    except Exception as e:
+        return f"Error saving session: {str(e)}"
 
 def save_session_history(history: list) -> str:
     """Save chat history using current_session_id, overwriting the existing file."""
@@ -58,39 +116,26 @@ def save_session_history(history: list) -> str:
     return f"Session saved to {file_path}"
 
 def manage_session_history():
+    """Limit saved sessions to MAX_SESSIONS."""
     history_dir = Path(HISTORY_DIR)
     session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
     while len(session_files) > MAX_SESSIONS:
         oldest_file = session_files.pop()
         oldest_file.unlink()
-
+        print(f"Deleted oldest session: {oldest_file}")
+        
 def load_session_history(file_path: str) -> tuple:
     with open(file_path, "r") as f:
         session_data = json.load(f)
     return session_data["label"], session_data["history"]
 
 def web_search(query: str, num_results: int = 3) -> str:
-    from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-    import time
-    import random
-    
+    """Perform a web search using DuckDuckGo without artificial delays."""
     wrapper = DuckDuckGoSearchAPIWrapper()
     try:
-        results = wrapper.results(query, max_results=num_results * 2)  # Fetch extra to filter
-        snippets = []
-        progress = "Web Search Progress:\n"
-        
-        for i, result in enumerate(results[:num_results]):
-            url = result.get('link', 'unknown')
-            snippet = result.get('snippet', 'No snippet available.')
-            delay = random.uniform(2, 5)  # Random delay between 2-5 seconds
-            progress += f"Connecting to {url} in {delay:.1f}s\n"
-            time.sleep(delay)
-            progress += "█\n"
-            snippets.append(f"{url}:\n{snippet}")
-        
-        result_text = "\n\n".join(snippets)
-        return f"{progress}Results:\n{result_text}" if snippets else f"{progress}No results found."
+        results = wrapper.results(query, max_results=num_results)
+        snippets = [f"{result.get('link', 'unknown')}:\n{result.get('snippet', 'No snippet available.')}" for result in results]
+        return f"Results:\n{'nn'.join(snippets)}" if snippets else "No results found."
     except Exception as e:
         return f"Error during web search: {str(e)}"
 
@@ -129,6 +174,7 @@ def create_vectorstore(documents: list, mode: str) -> None:
         print(f"Error creating vectorstore for {mode}: {e}")
 
 def create_session_vectorstore(loaded_files):
+    """Create and save a session-specific FAISS vector store."""
     from langchain_huggingface import HuggingFaceEmbeddings
     from langchain_community.vectorstores import FAISS
     if not loaded_files:
@@ -137,6 +183,10 @@ def create_session_vectorstore(loaded_files):
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     try:
         vectorstore = FAISS.from_documents(docs, embeddings)
+        save_dir = Path("data/vectors/session") / f"session_{current_session_id}"
+        save_dir.parent.mkdir(parents=True, exist_ok=True)
+        vectorstore.save_local(str(save_dir))
+        print(f"Saved session vectorstore to {save_dir}")
         return vectorstore
     except Exception as e:
         print(f"Error creating session vectorstore: {e}")
@@ -197,32 +247,34 @@ def save_config():
     config = {
         "model_settings": {
             "model_dir": temporary.MODEL_FOLDER,
-            "quality_model": temporary.MODEL_NAME,  # Updated to use MODEL_NAME
-            "fast_model": "",  # Not used in current setup, keeping for compatibility
+            "quality_model": temporary.MODEL_NAME,
+            "fast_model": "",
             "n_ctx": temporary.N_CTX,
-            "temperature": temporary.TEMPERATURE,  # Added
+            "temperature": temporary.TEMPERATURE,
             "repeat_penalty": temporary.REPEAT_PENALTY,
             "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "llama_cli_path": temporary.LLAMA_CLI_PATH,
             "vram_size": temporary.VRAM_SIZE,
             "selected_gpu": temporary.SELECTED_GPU,
+            "selected_cpu": temporary.SELECTED_CPU,
             "mmap": temporary.MMAP,
             "mlock": temporary.MLOCK,
             "n_batch": temporary.N_BATCH,
-            "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS
+            "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
+            "afterthought_time": temporary.AFTERTHOUGHT_TIME
         },
         "backend_config": {
             "type": temporary.BACKEND_TYPE,
             "llama_bin_path": temporary.LLAMA_BIN_PATH
         },
         "rp_settings": {
-            "rp_location": temporary.RP_LOCATION if hasattr(temporary, 'RP_LOCATION') else "Public",
-            "user_name": temporary.USER_PC_NAME if hasattr(temporary, 'USER_PC_NAME') else "Human",
-            "user_role": temporary.USER_PC_ROLE if hasattr(temporary, 'USER_PC_ROLE') else "Lead Roleplayer",
-            "ai_npc1": temporary.AI_NPC1_NAME if hasattr(temporary, 'AI_NPC1_NAME') else "Robot",
-            "ai_npc2": temporary.AI_NPC2_NAME if hasattr(temporary, 'AI_NPC2_NAME') else "Unused",
-            "ai_npc3": temporary.AI_NPC3_NAME if hasattr(temporary, 'AI_NPC3_NAME') else "Unused",
-            "ai_npcs_roles": temporary.AI_NPCS_ROLES if hasattr(temporary, 'AI_NPCS_ROLES') else "Randomers"
+            "rp_location": temporary.RP_LOCATION,
+            "user_name": temporary.USER_PC_NAME,
+            "user_role": temporary.USER_PC_ROLE,
+            "ai_npc1": temporary.AI_NPC1_NAME,
+            "ai_npc2": temporary.AI_NPC2_NAME,
+            "ai_npc3": temporary.AI_NPC3_NAME,
+            "ai_npcs_roles": temporary.AI_NPCS_ROLES
         }
     }
     with open(config_path, "w") as f:
@@ -249,10 +301,14 @@ def update_setting(key, value):
         reload_required = True
     elif key == "selected_gpu":
         temporary.SELECTED_GPU = value
+    elif key == "selected_cpu":  # Added
+        temporary.SELECTED_CPU = value
     elif key == "repeat_penalty":
         temporary.REPEAT_PENALTY = float(value)
     elif key == "mlock":
         temporary.MLOCK = bool(value)
+    elif key == "AFTERTHOUGHT_TIME":
+        temporary.AFTERTHOUGHT_TIME = afterthought
     elif key == "n_batch":
         temporary.N_BATCH = int(value)
     elif key == "model_folder":
@@ -273,7 +329,7 @@ def update_setting(key, value):
         temporary.AI_NPC3_NAME = str(value)
 
     if reload_required:
-        return change_model(temporary.MODEL_PATH.split('/')[-1])
+        return change_model(temporary.MODEL_PATH.split('/')[-1])  # Note: MODEL_PATH may need adjustment
     return None, None
     
 def load_config():
@@ -284,16 +340,18 @@ def load_config():
             from scripts import temporary
             # Model settings
             temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", "models")
-            temporary.MODEL_NAME = config["model_settings"].get("quality_model", "Select_a_model...")  # Updated to use MODEL_NAME
+            temporary.MODEL_NAME = config["model_settings"].get("quality_model", "Select_a_model...")
             temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
-            temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))  # Added
+            temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
             temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))
             temporary.USE_PYTHON_BINDINGS = bool(config["model_settings"].get("use_python_bindings", True))
             temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "")
             temporary.VRAM_SIZE = int(config["model_settings"].get("vram_size", 8192))
             temporary.SELECTED_GPU = config["model_settings"].get("selected_gpu", None)
+            temporary.SELECTED_CPU = config["model_settings"].get("selected_cpu", None)  # Added
             temporary.MMAP = bool(config["model_settings"].get("mmap", True))
             temporary.MLOCK = bool(config["model_settings"].get("mlock", True))
+            temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"].get("afterthought_time", True))
             temporary.N_BATCH = int(config["model_settings"].get("n_batch", 1024))
             temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
             # Backend config

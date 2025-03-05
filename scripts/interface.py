@@ -3,7 +3,7 @@
 # Imports...
 import gradio as gr
 from gradio import themes
-import re, os, json, pyperclip, yake, random
+import re, os, json, pyperclip, yake, random, asyncio
 from pathlib import Path
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
@@ -11,25 +11,28 @@ from pygments.formatters import HtmlFormatter
 import scripts.temporary as temporary
 from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
-    ALLOWED_EXTENSIONS, N_CTX, VRAM_SIZE, SELECTED_GPU,
+    ALLOWED_EXTENSIONS, N_CTX, VRAM_SIZE, SELECTED_GPU, SELECTED_CPU,
     current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS, REPEAT_OPTIONS,
     REPEAT_PENALTY, MLOCK, HISTORY_DIR, BATCH_OPTIONS, N_BATCH, MODEL_FOLDER,
     MODEL_NAME, STATUS_TEXTS, CTX_OPTIONS, RP_LOCATION, USER_PC_NAME, USER_PC_ROLE,
-    AI_NPC1_NAME, AI_NPC2_NAME, AI_NPC3_NAME, AI_NPCS_ROLES, SESSION_ACTIVE, TOT_VARIATIONS
+    AI_NPC1_NAME, AI_NPC2_NAME, AI_NPC3_NAME, AI_NPCS_ROLES, SESSION_ACTIVE, TOT_VARIATIONS, RAG_MAX_DOCS
 )
 from scripts import utility
 from scripts.utility import (
     delete_vectorstore, delete_all_vectorstores, web_search, get_saved_sessions,
     load_session_history, save_session_history, load_and_chunk_documents,
-    create_vectorstore, get_available_gpus, create_session_vectorstore
+    create_vectorstore, get_available_gpus, create_session_vectorstore, save_config
 )
 from scripts.models import (
-    get_response, get_available_models, unload_models, get_model_settings,
+    get_response_stream, get_available_models, unload_models, get_model_settings,
     context_injector, inspect_model, load_models
 )
 from langchain_core.documents import Document
 
 # Functions...
+def set_loading_status():
+    return "Loading model..."
+
 def format_response(output: str) -> str:
     formatted = []
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', output, re.DOTALL)
@@ -64,60 +67,34 @@ def save_rp_settings(rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc
     temporary.AI_NPC3_NAME = ai_npc3
     temporary.AI_NPCS_ROLES = ai_npcs_roles
     
-    # Save to config file
-    with open(config_path, "r+") as f:
-        config = json.load(f)
-        config["rp_settings"] = {
-            "rp_location": rp_location,
-            "user_name": user_name,
-            "user_role": user_role,
-            "ai_npc1": ai_npc1,
-            "ai_npc2": ai_npc2,
-            "ai_npc3": ai_npc3,
-            "ai_npcs_roles": ai_npcs_roles
-        }
-        f.seek(0)
-        json.dump(config, f, indent=2)
-        f.truncate()
-    
-    return rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles
+    # Save to config file and return updated values
+    utility.save_config()
+    return (
+        rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles,
+        rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles  # Sync both sides
+    )
 
-def process_uploaded_files(files, loaded_files, rag_max_docs, operation_mode, models_loaded):
-    from scripts.utility import load_and_chunk_documents, create_session_vectorstore
-    from pathlib import Path
-
+def process_uploaded_files(files, loaded_files, operation_mode, models_loaded):
+    """
+    Process uploaded files for RAG integration and update session vector store.
+    """
+    from scripts.utility import create_session_vectorstore
     if not models_loaded:
-        button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-        return [loaded_files, "Load models first..."] + button_updates + [attach_files_update]
-
-    mode = operation_mode.lower()
-    if "code" in mode:
-        max_files = 8
-        error_msg = "Too many attachments, Code = 8 files."
-    elif "rpg" in mode:
-        max_files = 4
-        error_msg = "Too many attachments, Rpg = 4 files."
-    else:
-        max_files = 6
-        error_msg = "Too many attachments, Chat = 6 files."
-
-    current_files_count = len(loaded_files)
-    new_files_count = len(files)
-    total_files = current_files_count + new_files_count
-
-    if total_files > max_files:
-        button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-        return [loaded_files, error_msg] + button_updates + [attach_files_update]
-
-    available_slots = max_files - current_files_count
-    new_file_paths = [file.name for file in files[:available_slots]]
-    loaded_files.extend(new_file_paths)
+        return "Error: Load a model first.", loaded_files
+    
+    max_files = RAG_MAX_DOCS  # Always 6
+    if len(loaded_files) >= max_files:
+        return f"Max files ({max_files}) reached.", loaded_files
+    
+    new_files = [f for f in files if f not in loaded_files]
+    available_slots = max_files - len(loaded_files)
+    loaded_files.extend(new_files[:available_slots])
+    
+    # Update session vector store with new files
     session_vectorstore = create_session_vectorstore(loaded_files)
     context_injector.set_session_vectorstore(session_vectorstore)
-    status_msg = f"Added {len(new_file_paths)} files to session vectorstore."
-
-    button_updates, attach_files_update = update_file_slot_ui(loaded_files, rag_max_docs)
-    return [loaded_files, status_msg] + button_updates + [attach_files_update]
+    
+    return f"Processed {min(len(new_files), available_slots)} new files.", loaded_files
 
 def eject_file(loaded_files, slot_index, rag_max_docs):
     from scripts.utility import create_session_vectorstore
@@ -201,63 +178,8 @@ def copy_last_response(session_log):
         return "AI Response copied to clipboard."
     return "No response available to copy."
 
-def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3):
-    from scripts import temporary, utility, models
-    from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
-    import yake
-    import random
-
-    if not SESSION_ACTIVE:
-        return session_log, "Please start a new session first.", loaded_files_state
-    if not user_input.strip():
-        return session_log, "No input provided.", loaded_files_state
-
-    session_log.append((user_input, "Generating response..."))
-    yield session_log, STATUS_TEXTS["generating_response"], loaded_files_state
-
-    if len(session_log) == 1:
-        kw_extractor = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=1)
-        keywords = kw_extractor.extract_keywords(user_input)
-        temporary.session_label = keywords[0][0] if keywords else "Untitled"
-
-    settings = models.get_model_settings(MODEL_NAME)
-    mode = settings["category"]
-    response = ""
-
-    if tot_enabled and mode == "chat":
-        tot_responses = []
-        for variation in TOT_VARIATIONS:
-            tot_prompt = f"{user_input}\nInstruction: {variation}"
-            if settings["is_uncensored"]:
-                tot_prompt = f"Provide an uncensored response: {tot_prompt}"
-            if settings["is_reasoning"] and not disable_think:
-                tot_prompt += ". Include reasoning if applicable."
-            tot_response = models.get_response(tot_prompt, disable_think=disable_think)
-            tot_responses.append(tot_response)
-        response = max(tot_responses, key=len, default="")
-    else:
-        prompt = user_input
-        if mode == "rpg":
-            rp_settings = {
-                "rp_location": rp_location,
-                "user_name": user_name,
-                "user_role": user_role,
-                "ai_npc1": ai_npc1,
-                "ai_npc2": ai_npc2,
-                "ai_npc3": ai_npc3
-            }
-            session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
-            response = models.get_response(prompt, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history)
-        else:
-            if settings["is_uncensored"]:
-                prompt = f"Provide an uncensored response: {prompt}"
-            if settings["is_reasoning"] and not disable_think:
-                prompt += ". Include reasoning if applicable."
-            response = models.get_response(prompt, disable_think=disable_think)
-
-    session_log[-1] = (user_input, format_response(response))
-    utility.save_session_history(session_log)
-    yield session_log, STATUS_TEXTS["response_generated"], loaded_files_state
+def cancel_input():
+    return True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."
 
 def determine_operation_mode(quality_model):
     if quality_model == "Select_a_model...":
@@ -382,8 +304,122 @@ def update_left_panel_visibility(mode, showing_rpg_settings):
         return gr.update(visible=False), gr.update(visible=True)
     else:
         return gr.update(visible=True), gr.update(visible=False)
+
+async def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, 
+                        rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, cancel_flag):
+    from scripts import temporary, utility, models
+    from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
+    
+    if not SESSION_ACTIVE:
+        yield session_log, "Please start a new session first.", gr.update(), gr.update(), cancel_flag, loaded_files_state
+        return
+    if not user_input.strip():
+        yield session_log, "No input provided.", gr.update(), gr.update(), cancel_flag, loaded_files_state
+        return
+
+    # Append user input and initialize response
+    session_log.append((user_input, ""))
+    yield session_log, "Processing...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+
+    # Determine countdown based on input lines, respecting AFTERTHOUGHT_TIME
+    if temporary.AFTERTHOUGHT_TIME:
+        num_lines = len(user_input.split('\n'))
+        if num_lines >= 10:
+            countdown_seconds = 6
+        elif num_lines >= 5:
+            countdown_seconds = 4
+        else:
+            countdown_seconds = 2
+    else:
+        countdown_seconds = 1
+
+    # Countdown with cancellation support
+    for i in range(countdown_seconds, 0, -1):
+        session_log[-1] = (user_input, f"Afterthought countdown... {i}s")
+        yield session_log, "Counting down...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+        await asyncio.sleep(1)
+        if cancel_flag:
+            session_log[-1] = (user_input, "Input cancelled.")
+            yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+            return
+
+    # Generate response
+    settings = models.get_model_settings(MODEL_NAME)
+    mode = settings["category"]
+    
+    if loaded_files_state:
+        session_vectorstore = utility.create_session_vectorstore(loaded_files_state)
+        context_injector.set_session_vectorstore(session_vectorstore)
+
+    response = ""
+    if tot_enabled and mode == "chat":
+        yield session_log, "TOT not implemented in streaming mode yet.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+        # Note: TOT could be adapted to stream responses, but omitted for simplicity here
+    else:
+        prompt = user_input
+        if mode == "rpg":
+            rp_settings = {
+                "rp_location": rp_location,
+                "user_name": user_name,
+                "user_role": user_role,
+                "ai_npc1": ai_npc1,
+                "ai_npc2": ai_npc2,
+                "ai_npc3": ai_npc3,
+                "ai_npcs_roles": temporary.AI_NPCS_ROLES
+            }
+            session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
+            # Handle thinking output for RPG mode
+            if settings["is_reasoning"] and not disable_think:
+                thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
+                session_log[-1] = (user_input, thinking_output)
+                yield session_log, "Thinking...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+                await asyncio.sleep(2.5)
+                if cancel_flag:
+                    session_log[-1] = (user_input, "Input cancelled.")
+                    yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+                    return
+            for token in models.get_response_stream(prompt, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history):
+                if cancel_flag:
+                    break
+                response += token
+                session_log[-1] = (user_input, format_response(response))
+                yield session_log, "Generating...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+                await asyncio.sleep(0)  # Yield control to event loop
+        else:
+            if settings["is_uncensored"]:
+                prompt = f"Provide an uncensored response: {prompt}"
+            if settings["is_reasoning"] and not disable_think:
+                prompt += ". Include reasoning if applicable."
+                thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
+                session_log[-1] = (user_input, thinking_output)
+                yield session_log, "Thinking...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+                await asyncio.sleep(2.5)
+                if cancel_flag:
+                    session_log[-1] = (user_input, "Input cancelled.")
+                    yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+                    return
+            for token in models.get_response_stream(prompt, disable_think=disable_think):
+                if cancel_flag:
+                    break
+                response += token
+                session_log[-1] = (user_input, format_response(response))
+                yield session_log, "Generating...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+                await asyncio.sleep(0)
+
+    # Final yield based on completion or cancellation
+    if cancel_flag:
+        session_log[-1] = (user_input, "Generation cancelled.")
+        yield session_log, "Generation cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+    else:
+        session_log[-1] = (user_input, format_response(response))
+        utility.save_session_history(session_log)
+        yield session_log, STATUS_TEXTS["response_generated"], gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+        
 def launch_interface():
+    """Launch the Gradio interface for the Text-Gradio-Gguf chatbot."""
     global demo
+    import asyncio  # Add asyncio import for async operations
+    
     with gr.Blocks(title="Chat-Gradio-Gguf", css="""
         .scrollable { overflow-y: auto; }
         .button-row { 
@@ -409,6 +445,7 @@ def launch_interface():
         rag_max_docs_state = gr.State(value=6)
         models_loaded_state = gr.State(value=False)
         showing_rpg_right = gr.State(False)
+        cancel_flag = gr.State(False)  # New state for cancellation tracking
 
         with gr.Tabs():
             with gr.Tab("Conversation"):
@@ -433,7 +470,6 @@ def launch_interface():
                             ai_npcs_roles = gr.Textbox(label="AI Roles", value=temporary.AI_NPCS_ROLES)
                             save_rpg_btn = gr.Button("Save RPG Settings")
 
-                        # Always-visible controls
                         with gr.Row():
                             web_search_switch = gr.Checkbox(label="Web-Search", value=False, visible=False)
                             tot_checkbox = gr.Checkbox(label="Enable TOT", value=False, visible=False)
@@ -446,6 +482,7 @@ def launch_interface():
                             user_input = gr.Textbox(label="User Input", lines=5, interactive=False, placeholder="Enter text here...")
                         with gr.Row():
                             send_btn = gr.Button("Send Input", variant="secondary", scale=20)
+                            cancel_btn = gr.Button("Cancel Input", variant="stop", visible=False)  # New Cancel button
                             edit_previous_btn = gr.Button("Edit Last Input", variant="huggingface")
                             copy_response_btn = gr.Button("Copy Last Output", variant="huggingface")
 
@@ -481,10 +518,30 @@ def launch_interface():
             # Configuration Tab
             with gr.Tab("Configuration"):
                 with gr.Row():
-                    gpu_dropdown = gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=None, scale=20)
+                    gpu_dropdown = gr.Dropdown(
+                        choices=utility.get_available_gpus(),
+                        label="Select GPU",
+                        value=temporary.SELECTED_GPU,
+                        visible=not (temporary.BACKEND_TYPE in [
+                            "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"
+                        ]),
+                        scale=20
+                    )
+                    cpu_info = utility.get_cpu_info()
+                    cpu_choices = [cpu["label"] for cpu in cpu_info]
+                    cpu_dropdown = gr.Dropdown(
+                        choices=cpu_choices,
+                        label="Select CPU",
+                        value=(temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices 
+                               else cpu_choices[0] if cpu_choices else None),
+                        visible=temporary.BACKEND_TYPE in [
+                            "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"
+                        ],
+                        scale=20
+                    )
                 with gr.Row():                
                     vram_dropdown = gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, interactive=True)
-                    mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)                
+                    mlock_checkbox = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)
                 with gr.Row():
                     model_dir_text = gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, scale=20)
                     browse_btn = gr.Button("Browse", variant="secondary")
@@ -498,38 +555,17 @@ def launch_interface():
                         scale=20
                     )
                     refresh_btn = gr.Button("Refresh")
-                # Added row for Context Size, Batch Size, Temperature, Repeat Penalty
                 with gr.Row():
-                    ctx_dropdown = gr.Dropdown(
-                        choices=temporary.CTX_OPTIONS,
-                        label="Context Size",
-                        value=temporary.N_CTX,
-                        interactive=True
-                    )
-                    batch_dropdown = gr.Dropdown(
-                        choices=temporary.BATCH_OPTIONS,
-                        label="Batch Size",
-                        value=temporary.N_BATCH,
-                        interactive=True
-                    )
-                with gr.Row():
-                    temp_dropdown = gr.Dropdown(
-                        choices=temporary.TEMP_OPTIONS,
-                        label="Temperature",
-                        value=temporary.TEMPERATURE,
-                        interactive=True
-                    )
-                    repeat_dropdown = gr.Dropdown(
-                        choices=temporary.REPEAT_OPTIONS,
-                        label="Repeat Penalty",
-                        value=temporary.REPEAT_PENALTY,
-                        interactive=True
-                    )
+                    ctx_dropdown = gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX, interactive=True)
+                    batch_dropdown = gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH, interactive=True)
+                    temp_dropdown = gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE, interactive=True)
+                    repeat_dropdown = gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY, interactive=True)
                 with gr.Row():
                     load_models_btn = gr.Button("Load Model", variant="secondary")
                     inspect_model_btn = gr.Button("Inspect Model", variant="huggingface")
                     unload_btn = gr.Button("Unload Model")
-                # Added row for Erase buttons
+                with gr.Row():
+                    afterthought_checkbox = gr.Checkbox(label="Afterthought Time", value=temporary.AFTERTHOUGHT_TIME)  # New checkbox
                 with gr.Row():
                     erase_chat_btn = gr.Button("Erase Chat Data", variant="primary")
                     erase_rpg_btn = gr.Button("Erase RPG Data", variant="primary")
@@ -540,14 +576,16 @@ def launch_interface():
                     save_settings_btn = gr.Button("Save Settings", variant="stop")
 
         # Event Handlers
-        def update_config_settings(ctx, batch, temp, repeat, vram, mlock, gpu, model_dir, model):
+        def update_config_settings(ctx, batch, temp, repeat, vram, mlock, afterthought, gpu, cpu, model_dir, model):
             temporary.N_CTX = ctx
             temporary.N_BATCH = batch
-            temporary.TEMPERATURE = temp  # Updates global TEMPERATURE
+            temporary.TEMPERATURE = temp
             temporary.REPEAT_PENALTY = repeat
             temporary.VRAM_SIZE = vram
             temporary.MLOCK = mlock
-            temporary.SELECTED_GPU = gpu
+            temporary.AFTERTHOUGHT_TIME = afterthought  # Update temporary variable
+            temporary.SELECTED_GPU = gpu if gpu else temporary.SELECTED_GPU
+            temporary.SELECTED_CPU = cpu if cpu else temporary.SELECTED_CPU
             temporary.MODEL_FOLDER = model_dir
             temporary.MODEL_NAME = model
             return "Settings updated in memory. Click 'Save Settings' to persist."
@@ -569,7 +607,6 @@ def launch_interface():
                 mode = settings["category"].capitalize()
             
             think_visible = settings["is_reasoning"]
-            
             if mode == "Code":
                 tot_visible = False
                 web_visible = False
@@ -585,7 +622,6 @@ def launch_interface():
 
             toggle_visible = True
             toggle_label = "Show File Attachments" if showing_rpg_right else "Show RPG Settings"
-            
             return [
                 gr.update(visible=tot_visible),
                 gr.update(visible=web_visible),
@@ -606,6 +642,55 @@ def launch_interface():
                 gr.update(visible=showing_rpg_right),
                 gr.update(value=toggle_label),
                 showing_rpg_right
+            )
+
+        # New cancel function
+        def cancel_input():
+            return True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."
+
+        # Event handlers for UI interactions
+        start_new_session_btn.click(
+            fn=start_new_session,
+            inputs=None,
+            outputs=[session_log, status_text, user_input]
+        )
+        
+        send_btn.click(
+            fn=chat_interface,
+            inputs=[user_input, session_log, tot_checkbox, loaded_files_state, disable_think_switch, 
+                    rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, cancel_flag],
+            outputs=[session_log, status_text, send_btn, cancel_btn, cancel_flag, loaded_files_state]
+        )
+        
+        cancel_btn.click(
+            fn=cancel_input,
+            inputs=None,
+            outputs=[cancel_flag, send_btn, cancel_btn, status_text]
+        )
+        
+        copy_response_btn.click(
+            fn=copy_last_response,
+            inputs=[session_log],
+            outputs=[status_text]
+        )
+        
+        attach_files_btn.upload(
+            fn=process_uploaded_files,
+            inputs=[attach_files_btn, loaded_files_state, theme_status, models_loaded_state],
+            outputs=[status_text, loaded_files_state]
+        )
+        
+        remove_all_attachments_btn.click(
+            fn=remove_all_attachments,
+            inputs=[loaded_files_state, rag_max_docs_state],
+            outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn]
+        )
+        
+        for i, btn in enumerate(file_slot_buttons):
+            btn.click(
+                fn=eject_file,
+                inputs=[loaded_files_state, gr.State(value=i), rag_max_docs_state],
+                outputs=[loaded_files_state, status_text] + file_slot_buttons + [attach_files_btn]
             )
 
         model_dropdown.change(
@@ -668,23 +753,14 @@ def launch_interface():
             (ai_npc3, ai_npc3_right),
             (ai_npcs_roles, ai_npcs_roles_right)
         ]:
-            left.change(
-                fn=lambda x: gr.update(value=x),
-                inputs=[left],
-                outputs=[right]
-            )
-            right.change(
-                fn=lambda x: gr.update(value=x),
-                inputs=[right],
-                outputs=[left]
-            )
+            left.change(fn=lambda x: gr.update(value=x), inputs=[left], outputs=[right])
+            right.change(fn=lambda x: gr.update(value=x), inputs=[right], outputs=[left])
 
         save_rpg_btn.click(
             fn=save_rp_settings,
             inputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles],
             outputs=[rp_location, user_name, user_role, ai_npc1, ai_npc2, ai_npc3, ai_npcs_roles]
         )
-
         save_rpg_right_btn.click(
             fn=save_rp_settings,
             inputs=[rp_location_right, user_name_right, user_role_right, ai_npc1_right, ai_npc2_right, ai_npc3_right, ai_npcs_roles_right],
@@ -693,55 +769,68 @@ def launch_interface():
         )
 
         load_models_btn.click(
+            fn=set_loading_status,
+            inputs=None,
+            outputs=[status_text_settings]
+        ).then(
             fn=load_models,
             inputs=[model_dropdown, vram_dropdown],
             outputs=[status_text_settings, models_loaded_state]
         )
 
-        # New event handlers for config inputs
+        # Config input event handlers - updated to include afterthought_checkbox
         ctx_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         batch_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         temp_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         repeat_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         vram_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         mlock_checkbox.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        )
+        afterthought_checkbox.change(
+            fn=update_config_settings,
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
         gpu_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         )
-        model_dir_text.change(
+        cpu_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
+            outputs=[status_text_settings]
+        ).then(
+            fn=save_all_settings,
+            inputs=None,
             outputs=[status_text_settings]
         )
         model_dropdown.change(
             fn=update_config_settings,
-            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, gpu_dropdown, model_dir_text, model_dropdown],
+            inputs=[ctx_dropdown, batch_dropdown, temp_dropdown, repeat_dropdown, vram_dropdown, mlock_checkbox, afterthought_checkbox, gpu_dropdown, cpu_dropdown, model_dir_text, model_dropdown],
             outputs=[status_text_settings]
         ).then(
             fn=determine_operation_mode,
@@ -775,33 +864,13 @@ def launch_interface():
             outputs=file_slot_buttons + [attach_files_btn]
         )
 
-        # Event handlers for erase buttons
-        erase_chat_btn.click(
-            fn=lambda: utility.delete_vectorstore("chat"),
-            inputs=None,
-            outputs=[status_text_settings]
-        )
-        erase_rpg_btn.click(
-            fn=lambda: utility.delete_vectorstore("rpg"),
-            inputs=None,
-            outputs=[status_text_settings]
-        )
-        erase_code_btn.click(
-            fn=lambda: utility.delete_vectorstore("code"),
-            inputs=None,
-            outputs=[status_text_settings]
-        )
-        erase_all_btn.click(
-            fn=utility.delete_all_vectorstores,
-            inputs=None,
-            outputs=[status_text_settings]
-        )
+        # Erase button event handlers
+        erase_chat_btn.click(fn=lambda: utility.delete_vectorstore("chat"), inputs=None, outputs=[status_text_settings])
+        erase_rpg_btn.click(fn=lambda: utility.delete_vectorstore("rpg"), inputs=None, outputs=[status_text_settings])
+        erase_code_btn.click(fn=lambda: utility.delete_vectorstore("code"), inputs=None, outputs=[status_text_settings])
+        erase_all_btn.click(fn=utility.delete_all_vectorstores, inputs=None, outputs=[status_text_settings])
 
-        save_settings_btn.click(
-            fn=save_all_settings,
-            inputs=None,
-            outputs=[status_text_settings]
-        )
+        save_settings_btn.click(fn=save_all_settings, inputs=None, outputs=[status_text_settings])
 
         demo.launch(
             server_name="127.0.0.1",

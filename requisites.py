@@ -47,6 +47,7 @@ REQUIREMENTS = [
     "tqdm==4.66.1",
     "pyperclip",
     "yake",
+    "psutil",
     "llama-cpp-python",
     "langchain-community==0.3.18",
     "pygments==2.17.2",
@@ -64,6 +65,18 @@ BACKEND_OPTIONS = {
         "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-avx512-x64.zip",
         "dest": "data/llama-avx512-bin",
         "cli_path": "data/llama-avx512-bin/llama-cli.exe",
+        "needs_python_bindings": True
+    },
+    "CPU Only - NoAVX": {
+        "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-noavx-x64.zip",
+        "dest": "data/llama-noavx-bin",
+        "cli_path": "data/llama-noavx-bin/llama-cli.exe",
+        "needs_python_bindings": True
+    },
+    "CPU Only - OpenBLAS": {
+        "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-openblas-x64.zip",
+        "dest": "data/llama-openblas-bin",
+        "cli_path": "data/llama-openblas-bin/llama-cli.exe",
         "needs_python_bindings": True
     },
     "GPU/CPU - Vulkan": {
@@ -107,10 +120,12 @@ CONFIG_TEMPLATE = """{
     "llama_cli_path": "",
     "vram_size": 8192,
     "selected_gpu": null,
+    "selected_cpu": "null", 
     "mmap": true,
     "mlock": true,
     "n_batch": 1024,
-    "dynamic_gpu_layers": true
+    "dynamic_gpu_layers": true,
+    "afterthought_time": true
   },
   "backend_config": {
     "type": "",
@@ -143,10 +158,10 @@ def print_status(message: str, success: bool = True) -> None:
 # Configuration
 def get_user_choice(prompt: str, options: list) -> str:
     print_header("Install Options")
-    print(f"\n\n\n\n {prompt}\n\b")
+    print(f"\n\n {prompt}\n\b")
     for i, option in enumerate(options, 1):
         print(f"    {i}. {option}\n")
-    print(f"\n\n\n\n{'='*120}")
+    print(f"\n\n{'='*120}")
     while True:
         choice = input(" Selection; Menu Options = 1-{}, Exit Installer = X: ".format(len(options))).strip().upper()
         if choice == "X":
@@ -246,14 +261,12 @@ def create_config(backend: str) -> None:
     config["backend_config"]["llama_bin_path"] = backend_info["dest"]
     config["model_settings"]["llama_cli_path"] = backend_info["cli_path"]
     config["model_settings"]["use_python_bindings"] = backend_info["needs_python_bindings"]
+    # Save the config to file
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=2)
-        if config_path.exists():
-            print_status("Configuration file over-written")
-        else:
-            print_status("Configuration file created")
+        print_status("Configuration file created or updated")
     except Exception as e:
         print_status(f"Failed to create config: {str(e)}", False)
 
@@ -438,6 +451,8 @@ def select_backend_type() -> None:
     options = [
         "AVX2 - CPU Only - Must be compatible with AVX2 (slowest)",
         "AVX512 - CPU Only - Must be compatible with AVX512 (okish)",
+        "NoAVX - CPU Only - For older CPUs without AVX support",
+        "OpenBLAS - CPU Only - Optimized for linear algebra operations",
         "Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU fallback",
         "Kompute - GPU/CPU - Experimental Vulkan for AMD/nVidia/Intel",
         "CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback",
@@ -445,11 +460,13 @@ def select_backend_type() -> None:
     ]
     mapping = {
         options[0]: "CPU Only - AVX2",
-        options[1]: "CPU Only - AVX2",
-        options[2]: "GPU/CPU - Vulkan",
-        options[3]: "GPU/CPU - Kompute",
-        options[4]: "GPU/CPU - CUDA 11.7",
-        options[5]: "GPU/CPU - CUDA 12.4"
+        options[1]: "CPU Only - AVX512",
+        options[2]: "CPU Only - NoAVX",
+        options[3]: "CPU Only - OpenBLAS",
+        options[4]: "GPU/CPU - Vulkan",
+        options[5]: "GPU/CPU - Kompute",
+        options[6]: "GPU/CPU - CUDA 11.7",
+        options[7]: "GPU/CPU - CUDA 12.4"
     }
     choice = get_user_choice("Select the Llama.Cpp type:", options)
     BACKEND_TYPE = mapping[choice]

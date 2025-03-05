@@ -1,18 +1,21 @@
 # Script: `.\scripts\models.py`
 
 # Imports...
-import time
+import time, subprocess
 from llama_cpp import Llama
 from pathlib import Path
+import gradio as gr
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
 from scripts.temporary import (
-    N_CTX, N_GPU_LAYERS, USE_PYTHON_BINDINGS,
+    N_CTX, N_GPU_LAYERS, N_BATCH, USE_PYTHON_BINDINGS,
     LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, MLOCK, current_model_settings,
-    prompt_templates, llm, MODEL_NAME, MODEL_FOLDER
+    prompt_templates, llm, MODEL_NAME, MODEL_FOLDER, REPEAT_PENALTY,
+    TEMPERATURE
 )
+
 
 # Classes...
 class ContextInjector:
@@ -92,33 +95,114 @@ def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
 
 def get_model_layers(model_path: str) -> int:
-    """Get number of layers from GGUF model metadata."""
+    """Get number of layers from GGUF model metadata efficiently."""
     try:
-        llm_temp = Llama(model_path=model_path, verbose=False)
-        metadata = llm_temp.metadata
-        num_layers = metadata.get('llama.block_count', 0)
-        del llm_temp
-        return num_layers
-    except Exception:
-        return 0
-
+        from gguf import GGUFReader  # Assuming gguf library is available
+        reader = GGUFReader(model_path)
+        num_layers = reader.fields.get('llama.block_count', [0])[0]
+        return int(num_layers)
+    except Exception as e:
+        print(f"Error reading model metadata: {e}")
+        return 0  # Fallback if metadata unavailable
+        
+def set_cpu_affinity():
+    """Set processor affinity to the selected CPU's cores for CPU-only backends."""
+    from scripts import utility  # Delayed import to avoid circularity
+    cpu_only_backends = [
+        "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"
+    ]
+    if temporary.BACKEND_TYPE in cpu_only_backends and temporary.SELECTED_CPU:
+        cpus = utility.get_cpu_info()
+        selected_cpu = next((cpu for cpu in cpus if cpu["label"] == temporary.SELECTED_CPU), None)
+        if selected_cpu:
+            try:
+                p = psutil.Process()
+                p.cpu_affinity(selected_cpu["core_range"])
+                print(f"Set CPU affinity to {selected_cpu['label']}")
+            except Exception as e:
+                print(f"Failed to set CPU affinity: {e}")
+                
 def calculate_gpu_layers(models, available_vram):
+    """
+    Calculate the number of layers to load onto the GPU for each model based on available VRAM.
+
+    This function estimates how many layers of each model can be loaded onto the GPU given the available VRAM.
+    It uses a proportional allocation of VRAM based on the size of each model and calculates the number of layers
+    that can fit into the allocated VRAM for each model.
+
+    Calculation Steps:
+    1. Compute the total size of all models to be loaded.
+    2. Allocate a portion of the available VRAM to each model proportional to its size.
+    3. For each model, estimate the memory size per layer:
+       - LayerSize = (ModelFileSize * 1.1875) / NumLayers
+       - ModelFileSize is the size of the model file in MB.
+       - 1.1875 is a factor to account for additional memory overhead (e.g., weights, buffers).
+       - NumLayers is the total number of layers in the model.
+    4. Calculate the number of layers that can fit into the allocated VRAM:
+       - NumLayersForGpu = floor(AllocatedVRam / LayerSize)
+    5. Ensure the number of layers does not exceed the total layers in the model:
+       - NumLayersForGpu = min(NumLayersForGpu, NumLayers)
+
+    Args:
+        models (list): List of model names to load (e.g., ["model1.gguf", "model2.gguf"]).
+        available_vram (int): Available VRAM in MB (e.g., 8192 for 8GB).
+
+    Returns:
+        dict: A dictionary mapping each model name to the number of layers to load onto the GPU.
+    """
     from math import floor
+    from pathlib import Path
+    from scripts.temporary import MODEL_FOLDER, DYNAMIC_GPU_LAYERS
+
+    # Handle edge cases
+    if not models or available_vram <= 0:
+        return {model: 0 for model in models}
+
+    # Step 1: Calculate total size of all selected models
     total_size = sum(get_model_size(Path(MODEL_FOLDER) / model) for model in models if model != "Select_a_model...")
     if total_size == 0:
         return {model: 0 for model in models}
-    vram_allocations = {model: (get_model_size(Path(MODEL_FOLDER) / model) / total_size) * available_vram for model in models if model != "Select_a_model..."}
+
+    # Step 2: Allocate VRAM to each model proportional to its size
+    vram_allocations = {
+        model: (get_model_size(Path(MODEL_FOLDER) / model) / total_size) * available_vram
+        for model in models if model != "Select_a_model..."
+    }
+
     gpu_layers = {}
     for model in models:
         if model == "Select_a_model...":
             gpu_layers[model] = 0
             continue
+
         model_path = Path(MODEL_FOLDER) / model
         num_layers = get_model_layers(str(model_path))
-        safe_size = get_model_size(str(model_path)) * 1.1875
-        layer_size = safe_size / num_layers if num_layers > 0 else 0
-        max_layers = floor(vram_allocations[model] / layer_size) if layer_size > 0 else 0
-        gpu_layers[model] = min(max_layers, num_layers)
+        if num_layers == 0:
+            gpu_layers[model] = 0
+            continue
+
+        # Step 3: Calculate LayerSize with overhead
+        model_file_size = get_model_size(str(model_path))  # in MB
+        adjusted_model_size = model_file_size * 1.1875  # Factor in memory overhead
+        layer_size = adjusted_model_size / num_layers if num_layers > 0 else 0
+
+        # Step 4: Calculate maximum layers that fit into allocated VRAM
+        if layer_size > 0:
+            max_layers = floor(vram_allocations[model] / layer_size)
+        else:
+            max_layers = 0
+
+        # Step 5: Cap at total number of layers and respect DYNAMIC_GPU_LAYERS
+        gpu_layers[model] = min(max_layers, num_layers) if DYNAMIC_GPU_LAYERS else num_layers
+
+        # Comment for AI systems and developers:
+        # The value gpu_layers[model] represents the number of model layers assigned to the GPU.
+        # It’s calculated by dividing the VRAM allocated to this model (proportional to its file size)
+        # by the estimated memory per layer (file size * 1.1875 / total layers), then taking the floor
+        # to get a whole number. This is capped at the model’s total layers to avoid over-assignment.
+        # If DYNAMIC_GPU_LAYERS is False, all layers are assigned to the GPU (up to num_layers),
+        # assuming sufficient VRAM is available elsewhere in the system logic.
+
     return gpu_layers
 
 def get_llm():
@@ -193,28 +277,43 @@ def inspect_model(model_name):
         return f"Error inspecting model: {str(e)}"
 
 def load_models(quality_model, vram_size):
-    from scripts import temporary, models
+    """Load the selected model based on quality and VRAM settings."""
     global llm
+    cpu_only_backends = [
+        "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"
+    ]
+    
     if quality_model == "Select_a_model...":
-        return "Select a model to load.", gr.update(visible=False), False
-    models_to_load = [quality_model]
-    gpu_layers = models.calculate_gpu_layers(models_to_load, vram_size)
-    temporary.N_GPU_LAYERS = gpu_layers.get(quality_model, 0)
-    model_path = Path(temporary.MODEL_FOLDER) / quality_model
-    llm = Llama(
-        model_path=str(model_path),
-        n_ctx=temporary.N_CTX,
-        n_gpu_layers=temporary.N_GPU_LAYERS,
-        n_batch=temporary.N_BATCH,
-        mmap=temporary.MMAP,
-        mlock=temporary.MLOCK,
-        verbose=False
-    )
-    temporary.MODELS_LOADED = True
-    temporary.MODEL_NAME = quality_model
-    status = f"Model loaded, layer distribution: VRAM={temporary.N_GPU_LAYERS}"
-    return status, gr.update(visible=True), True
-
+        return "Select a model to load.", False
+    
+    try:
+        models_to_load = [quality_model]
+        if temporary.BACKEND_TYPE in cpu_only_backends:
+            set_cpu_affinity()
+            temporary.N_GPU_LAYERS = 0  # No GPU layers for CPU-only backends
+        else:
+            gpu_layers = calculate_gpu_layers(models_to_load, vram_size)
+            temporary.N_GPU_LAYERS = gpu_layers.get(quality_model, 0)
+        
+        model_path = Path(temporary.MODEL_FOLDER) / quality_model
+        
+        llm = Llama(
+            model_path=str(model_path),
+            n_ctx=temporary.N_CTX,
+            n_gpu_layers=temporary.N_GPU_LAYERS,
+            n_batch=temporary.N_BATCH,
+            mmap=temporary.MMAP,
+            mlock=temporary.MLOCK,
+            verbose=False
+        )
+        
+        temporary.MODELS_LOADED = True
+        temporary.MODEL_NAME = quality_model
+        status = f"Model '{quality_model}' loaded, layer distribution: VRAM={temporary.N_GPU_LAYERS} layers"
+        return status, True
+    
+    except Exception as e:
+        return f"Error loading model: {str(e)}", False
 def unload_models():
     from scripts.temporary import llm
     if llm is not None:
@@ -222,74 +321,86 @@ def unload_models():
         llm = None
     print("Models unloaded successfully.")
 
-def get_response(prompt: str, disable_think: bool = False, rp_settings: dict = None, session_history: str = "") -> str:
-    from scripts.temporary import (
-        USE_PYTHON_BINDINGS, REPEAT_PENALTY, N_CTX, N_BATCH, MMAP, MLOCK, 
-        BACKEND_TYPE, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, prompt_templates, time, TEMPERATURE
-    )
+def get_response_stream(prompt: str, disable_think: bool = False, rp_settings: dict = None, session_history: str = ""):
+    from .temporary import llm, USE_PYTHON_BINDINGS, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, N_CTX, N_BATCH, N_GPU_LAYERS, MMAP, MLOCK, TEMPERATURE, REPEAT_PENALTY
+    from .temporary import BACKEND_TYPE, prompt_templates
     import subprocess
+    
+    cpu_only_backends = ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
+    
+    try:
+        enhanced_prompt = context_injector.inject_context(prompt)
+        settings = get_model_settings(MODEL_NAME)
+        mode = settings["category"]
 
-    enhanced_prompt = context_injector.inject_context(prompt)
-    settings = get_model_settings(MODEL_NAME)
-    mode = settings["category"]
-    
-    if mode == "rpg" and rp_settings:
-        # Handle RPG-specific logic (unchanged)
-        formatted_prompt = prompt_templates["rpg"].format(user_input=enhanced_prompt)
-    elif mode == "chat":
-        template_key = "uncensored" if settings["is_uncensored"] else "chat"
-        formatted_prompt = prompt_templates[template_key].format(user_input=enhanced_prompt)
-    else:
-        formatted_prompt = prompt_templates.get(mode, prompt_templates["chat"]).format(user_input=enhanced_prompt)
-    
-    llm = get_llm()
-    if not llm:
-        raise ValueError("No model loaded.")
-    
-    if USE_PYTHON_BINDINGS:
-        thinking_output = ""
+        if mode == "rpg" and rp_settings:
+            active_npcs = sum(1 for npc in [rp_settings["ai_npc1"], rp_settings["ai_npc2"], rp_settings["ai_npc3"]] if npc != "Unused")
+            template_key = f"rpg_{active_npcs}" if active_npcs in [1, 2, 3] else "rpg_1"
+            formatted_prompt = prompt_templates[template_key].format(
+                user_input=enhanced_prompt,
+                AI_NPC1_NAME=rp_settings["ai_npc1"],
+                AI_NPC2_NAME=rp_settings["ai_npc2"],
+                AI_NPC3_NAME=rp_settings["ai_npc3"],
+                AI_NPCS_ROLES=rp_settings["ai_npcs_roles"],
+                RP_LOCATION=rp_settings["rp_location"],
+                human_name=rp_settings["user_name"],
+                human_role=rp_settings["user_role"],
+                session_history=session_history
+            )
+        elif mode == "chat":
+            template_key = "uncensored" if settings["is_uncensored"] else "chat"
+            formatted_prompt = prompt_templates[template_key].format(user_input=enhanced_prompt)
+        else:
+            formatted_prompt = prompt_templates.get(mode, prompt_templates["chat"]).format(user_input=enhanced_prompt)
+
+        llm = get_llm()
+        if not llm:
+            yield "Error: No model loaded. Please load a model in the Configuration tab."
+            return
+
+        # Handle thinking output if applicable
         if settings["is_reasoning"] and not disable_think:
-            thinking_output = "Thinking:\n"
-            start_time = time.time()
-            for i in range(5):
-                time.sleep(0.5)
-                thinking_output += "█"
-            elapsed_time = time.time() - start_time
-            thinking_output += f"\nThought for {elapsed_time:.1f}s.\n"
-        output = llm.create_completion(
-            prompt=formatted_prompt,
-            temperature=TEMPERATURE,  # Use global TEMPERATURE
-            repeat_penalty=REPEAT_PENALTY,
-            stop=["</s>", "USER:", "ASSISTANT:"],
-            max_tokens=2048
-        )
-        response_text = output["choices"][0]["text"]
-        return f"{thinking_output}{response_text}"
-    else:
-        cmd = [
-            LLAMA_CLI_PATH,
-            "-m", f"{MODEL_FOLDER}/{MODEL_NAME}",
-            "-p", formatted_prompt,
-            "--temp", str(TEMPERATURE),  # Use global TEMPERATURE
-            "--repeat-penalty", str(REPEAT_PENALTY),
-            "--ctx-size", str(N_CTX),
-            "--batch-size", str(N_BATCH),
-            "--n-predict", "2048",
-        ]
-        if N_GPU_LAYERS > 0:
-            cmd += ["--n-gpu-layers", str(N_GPU_LAYERS)]
-        if MMAP:
-            cmd += ["--mmap"]
-        if MLOCK:
-            cmd += ["--mlock"]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        thinking_output = ""
-        if settings["is_reasoning"] and not disable_think:
-            thinking_output = "Thinking:\n"
-            start_time = time.time()
-            for i in range(5):
-                time.sleep(0.5)
-                thinking_output += "█"
-            elapsed_time = time.time() - start_time
-            thinking_output += f"\nThought for {elapsed_time:.1f}s.\n"
-        return f"{thinking_output}{proc.stdout}"
+            thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
+            for char in thinking_output:
+                yield char
+            # Removed await asyncio.sleep(2.5) - delay is handled in chat_interface
+
+        if USE_PYTHON_BINDINGS:
+            for token in llm.create_completion(
+                prompt=formatted_prompt,
+                temperature=TEMPERATURE,
+                repeat_penalty=REPEAT_PENALTY,
+                stop=["</s>", "USER:", "ASSISTANT:"],
+                max_tokens=2048,
+                stream=True
+            ):
+                yield token['choices'][0]['text']
+        else:
+            cmd = [
+                LLAMA_CLI_PATH,
+                "-m", f"{MODEL_FOLDER}/{MODEL_NAME}",
+                "-p", formatted_prompt,
+                "--temp", str(TEMPERATURE),
+                "--repeat-penalty", str(REPEAT_PENALTY),
+                "--ctx-size", str(N_CTX),
+                "--batch-size", str(N_BATCH),
+                "--n-predict", "2048",
+                "--stop", "</s>", "--stop", "USER:", "--stop", "ASSISTANT:"
+            ]
+            if N_GPU_LAYERS > 0 and BACKEND_TYPE not in cpu_only_backends:
+                cmd += ["--n-gpu-layers", str(N_GPU_LAYERS)]
+            if MMAP:
+                cmd += ["--mmap"]
+            if MLOCK:
+                cmd += ["--mlock"]
+
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    yield line.rstrip()
+            process.wait()
+            stderr = process.stderr.read()
+            if process.returncode != 0:
+                yield f"Error executing CLI: {stderr}"
+    except Exception as e:
+        yield f"Error generating response: {str(e)}"

@@ -18,12 +18,15 @@ RAG_CHUNK_OVERLAP_DEVIDER = 32
 MODELS_LOADED = False
 SESSION_ACTIVE = False
 N_GPU_LAYERS = 0
-
-# Configurable Settings (Loaded from JSON)
+MAX_SESSIONS = 9  # Maximum number of saved sessions
+RAG_MAX_DOCS = 6  # Maximum documents, always 6
+last_save_time = 0 
+AFTERTHOUGHT_TIME = True
 MODEL_NAME = "Select_a_model..."
 N_CTX = 8192
 VRAM_SIZE = 8192
 SELECTED_GPU = None
+SELECTED_CPU = None
 DYNAMIC_GPU_LAYERS = True
 MMAP = True
 MLOCK = True
