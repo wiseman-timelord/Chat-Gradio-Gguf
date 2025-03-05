@@ -34,7 +34,7 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 ![preview_image](media/configuration_page.jpg)
 
 - The new "Customization" page - configuration of, UI and Program, elements, such as, history, databases, etc...
-![preview_image](media/configuration_page.jpg)
+![preview_image](media/customization_page.jpg)
 
 - Wide Llama.Cpp support in the installer, thanks to latest ~128k ai systems, no longer having to streamline such things...
 ```
