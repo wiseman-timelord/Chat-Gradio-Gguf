@@ -17,13 +17,13 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 ### Features
 - **Operation Modes **:  "Auto" (filename keywords), "Chat", "Chat-Reasoning", "Chat-Uncensored", "Chat-Uncensored-Reasoning", "Chat-TOT", "Chat-Uncensored-TOT", "Coder", "Coder-Instruct", "Rpg", "Rpg-NSFW".
 - **Comprihensive CPU/GPU Support**: CPUs x64-CPU/AVX2/AVX512 and GPUs AMD/nVIDIA/Intel, with dropdown list selection supporting multi CPU/GPU setup.
-- **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, and code formatting.
+- **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, and code formatting, and with configurable 2-12 file attachments. 
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
 - **Configurable Context Window**: Set `n_ctx` to 8192, 16384, 24576, or 32768 via dropdown.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
 - **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
-- **Session History Rotation**: 9 Session History slots on rotation, enabling load recent sessions, while not using excessive space. 
+- **Session History Rotation**: Configurable 6-14 Session History slots on rotation, enabling load recent sessions, while not using excessive space. 
 - **Afterthought Countdown**: If, =>10 lines then 5s or 5-10 lines then 3s or <5 lines then 1s, wait for you to cancel send and return to edit, saving on mis-prompts and waits.
 
 ### Preview
