@@ -517,21 +517,22 @@ def launch_interface():
                             choices=utility.get_available_gpus(),
                             label="Select GPU",
                             value=temporary.SELECTED_GPU,
-                            scale=10
+                            scale=5
                         )
                         backend_type_text = gr.Textbox(
                             label="Installed Backend",
                             value=temporary.BACKEND_TYPE,
                             interactive=False,
-                            scale=10
+                            scale=5
                         )
                         vram_dropdown = gr.Dropdown(
                             choices=temporary.VRAM_OPTIONS,
                             label="Assign Free VRam",
                             value=temporary.VRAM_SIZE,
-                            interactive=True
+                            interactive=True,
+                            scale=3
                         )
-                        mlock_checkbox_gpu = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)
+                        mlock_checkbox_gpu = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
                     
                     # CPU Configuration Row
                     with gr.Row(elem_classes=["clean-elements"], visible=(temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"])) as cpu_row:
@@ -541,28 +542,28 @@ def launch_interface():
                             label="Backend Type",
                             value=temporary.BACKEND_TYPE,
                             interactive=False,
-                            scale=10
+                            scale=5
                         )
                         cpu_dropdown = gr.Dropdown(
                             choices=cpu_choices,
                             label="Select CPU",
                             value=(temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices 
                                    else cpu_choices[0] if cpu_choices else None),
-                            scale=10
+                            scale=5
                         )
-                        mlock_checkbox_cpu = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK)
+                        mlock_checkbox_cpu = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
 
                     with gr.Row(elem_classes=["clean-elements"]):
                         model_dir_text = gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, scale=20)
                         browse_btn = gr.Button("Browse", variant="secondary", elem_classes=["double-height"])
                     with gr.Row(elem_classes=["clean-elements"]):
-                        mode_text = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=1)
+                        mode_text = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=3)
                         model_dropdown = gr.Dropdown(
                             choices=get_available_models(),
                             label="Select Model",
                             value=temporary.MODEL_NAME,
                             allow_custom_value=True,
-                            scale=20
+                            scale=10
                         )
                         refresh_btn = gr.Button("Refresh", elem_classes=["double-height"])
                     with gr.Row(elem_classes=["clean-elements"]):
