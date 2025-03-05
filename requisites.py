@@ -1,4 +1,4 @@
-# Script: `.\requisites.py`
+# Script: `.\requisites.py` (Dual purpose script, installer or validation)
 
 # Imports
 import os
@@ -451,11 +451,11 @@ def install_python_deps(backend: str) -> bool:
 def select_backend_type() -> None:
     global BACKEND_TYPE
     options = [
-        "AVX2 - CPU Only - Must be compatible with AVX2 (slowest)",
-        "AVX512 - CPU Only - Must be compatible with AVX512 (okish)",
+        "AVX2 - CPU Only - Must be compatible with AVX2",
+        "AVX512 - CPU Only - Must be compatible with AVX512",
         "NoAVX - CPU Only - For older CPUs without AVX support",
         "OpenBLAS - CPU Only - Optimized for linear algebra operations",
-        "Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU fallback",
+        "Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU",
         "Kompute - GPU/CPU - Experimental Vulkan for AMD/nVidia/Intel",
         "CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback",
         "CUDA 12.4 - GPU/CPU - For CUDA 12.4 GPUs with CPU fallback"
