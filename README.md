@@ -32,39 +32,6 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 - The, refined and improved, "Configuration" page, with all the options known to have an effect...
 ![preview_image](media/configuration_page.jpg)
 
-- The Terminal displaying loading up to the Gradio server...
-```
-=======================================================================================================================
-    Text-Gradio-Gguf: Launcher
-=======================================================================================================================
-
-Starting Text-Gradio-Gguf...
-Success: Python libraries verified.
-Starting `launcher` Imports.
-No vectorstore found for code, skipping initialization.
-No vectorstore found for rpg, skipping initialization.
-No vectorstore found for chat, skipping initialization.
-`launcher` Imports Complete.
-Starting `launcher.main`.
-Warning: No valid vectorstores found. RAG features disabled.
-INFO: Could not find files for the given pattern(s).
-* Running on local URL:  http://127.0.0.1:7860
-
-To create a public link, set `share=True` in `launch()`.
-
-
-
-
-
-
-
-
-
-
-
-
-
-```
 - Wide Llama.Cpp support in the installer...
 ```
 ========================================================================================================================
