@@ -191,10 +191,10 @@ def copy_last_response(session_log):
 def cancel_input():
     return True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."
 
-def determine_operation_mode(quality_model):
-    if quality_model == "Select_a_model...":
+def determine_operation_mode(model_name):
+    if model_name == "Select_a_model...":
         return "Select models to enable mode detection."
-    settings = get_model_settings(quality_model)
+    settings = get_model_settings(model_name)
     category = settings["category"]
     if category == "code":
         return "Code"
@@ -204,12 +204,12 @@ def determine_operation_mode(quality_model):
         return "Chat"
     return "Chat"
 
-def update_dynamic_options(quality_model, loaded_files_state, showing_rpg_right):
-    if quality_model == "Select_a_model...":
+def update_dynamic_options(model_name, loaded_files_state, showing_rpg_right):
+    if model_name == "Select_a_model...":
         mode = "Select models"
         settings = {"is_reasoning": False}
     else:
-        settings = get_model_settings(quality_model)
+        settings = get_model_settings(model_name)
         mode = settings["category"].capitalize()
     
     think_visible = settings["is_reasoning"]
@@ -532,7 +532,7 @@ def launch_interface():
                     
                     # Model location row
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["model_dir"] = gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, interactive=True, scale=20)
+                        config_components["model_dir"] = gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=20)
                         config_components["browse"] = gr.Button("Browse", variant="secondary", elem_classes=["double-height"])
                     
                     # Model selection row
@@ -554,13 +554,15 @@ def launch_interface():
                         config_components["temp"] = gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE)
                         config_components["repeat"] = gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY)
                     
+                    with gr.Row(elem_classes=["clean-elements"]):                        
+                        config_components["save_settings"] = gr.Button("Save Settings", variant="primary")
+
                     # Action buttons row
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["load_models"] = gr.Button("Load Model", variant="secondary")
                         config_components["inspect_model"] = gr.Button("Inspect Model", variant="huggingface")
                         config_components["unload"] = gr.Button("Unload Model")
-                        config_components["save_settings"] = gr.Button("Save Settings", variant="primary")
-                    
+                        
                     # Status row
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["status_settings"] = gr.Textbox(label="Status", interactive=False, scale=20)
@@ -677,10 +679,30 @@ def launch_interface():
             return gr.update(choices=available_models, value=default_value)
 
         def update_config_settings(*args):
-            keys = ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model_dir", "model"]
+            keys = ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model", "model_dir"]
+            attr_map = {
+                "ctx": "N_CTX",
+                "batch": "N_BATCH",
+                "temp": "TEMPERATURE",
+                "repeat": "REPEAT_PENALTY",
+                "vram": "VRAM_SIZE",
+                "gpu": "SELECTED_GPU",
+                "cpu": "SELECTED_CPU",
+                "model": "MODEL_NAME",
+                "model_dir": "MODEL_FOLDER"
+            }
             for key, value in zip(keys, args):
-                setattr(temporary, {"model_dir": "MODEL_FOLDER", "model": "MODEL_NAME"}.get(key, key.upper()), value)
-            return "Settings updated in memory. Click 'Save Settings' to persist."
+                if key in attr_map:
+                    attr_name = attr_map[key]
+                    # Convert value to appropriate type if necessary
+                    if attr_name in ["N_CTX", "N_BATCH", "VRAM_SIZE"]:
+                        value = int(value)
+                    elif attr_name in ["TEMPERATURE", "REPEAT_PENALTY"]:
+                        value = float(value)
+                    setattr(temporary, attr_name, value)
+                else:
+                    print(f"Warning: Unknown key {key}")
+            return "Settings updated in memory. Click 'Save Settings' to commit."
 
         def update_mlock(mlock):
             temporary.MLOCK = mlock

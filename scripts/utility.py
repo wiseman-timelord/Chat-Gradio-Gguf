@@ -244,11 +244,11 @@ def trim_session_history(max_sessions):
 
 def save_config():
     config_path = Path("data/persistent.json")
+    config_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure the 'data' directory exists
     config = {
         "model_settings": {
-            "model_dir": temporary.MODEL_FOLDER,  # Save as is (relative or absolute)
-            "quality_model": temporary.MODEL_NAME,
-            "fast_model": "",
+            "model_dir": temporary.MODEL_FOLDER,
+            "model_name": temporary.MODEL_NAME,
             "n_ctx": temporary.N_CTX,
             "temperature": temporary.TEMPERATURE,
             "repeat_penalty": temporary.REPEAT_PENALTY,
@@ -279,8 +279,8 @@ def save_config():
             "ai_npc_role": temporary.AI_NPC_ROLE
         }
     }
-    with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=4)
     return "Settings saved to persistent.json"
 
 def update_setting(key, value):
@@ -313,6 +313,9 @@ def update_setting(key, value):
     elif key == "model_folder":
         temporary.MODEL_FOLDER = value
         reload_required = True
+    elif key == "model_name":
+        temporary.MODEL_NAME = value
+        reload_required = True
     elif key == "max_history_slots":
         temporary.MAX_HISTORY_SLOTS = int(value)
     elif key == "max_attach_slots":
@@ -342,7 +345,7 @@ def load_config():
             config = json.load(f)
             # Model settings
             temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", ".\models")
-            temporary.MODEL_NAME = config["model_settings"].get("quality_model", "Select_a_model...")
+            temporary.MODEL_NAME = config["model_settings"].get("model_name", "Select_a_model...")
             temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
             temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
             temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))

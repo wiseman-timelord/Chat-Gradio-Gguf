@@ -40,6 +40,7 @@ N_BATCH = 1024
 TEMPERATURE = 0.5
 SESSION_LOG_HEIGHT = 450
 INPUT_LINES = 5
+selected_gpu = None  # Initialize at module level
 
 # Global LLM instance
 llm = None

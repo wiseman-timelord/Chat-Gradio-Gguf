@@ -8,12 +8,13 @@ import gradio as gr
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
+from . import temporary
 from scripts.temporary import (
     N_CTX, N_GPU_LAYERS, N_BATCH, USE_PYTHON_BINDINGS,
     LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, MLOCK, current_model_settings,
     prompt_templates, llm, MODEL_NAME, MODEL_FOLDER, REPEAT_PENALTY,
-    TEMPERATURE
+    TEMPERATURE, MODELS_LOADED
 )
 
 
@@ -239,10 +240,10 @@ def get_model_settings(model_name):
     }
     return settings
 
-def determine_operation_mode(quality_model):
-    if quality_model == "Select_a_model...":
+def determine_operation_mode(model_name):
+    if model_name == "Select_a_model...":
         return "Select models to enable mode detection.", "Select models to enable mode detection."
-    settings = get_model_settings(quality_model)
+    settings = get_model_settings(model_name)
     mode = settings["category"].capitalize()
     return mode, mode
 
@@ -277,44 +278,63 @@ def inspect_model(model_name):
     except Exception as e:
         return f"Error inspecting model: {str(e)}"
 
-def load_models(quality_model, vram_size):
+def load_models(model_name, vram_size):
     """Load the selected model based on quality and VRAM settings."""
     global llm
     cpu_only_backends = [
         "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"
     ]
     
-    if quality_model == "Select_a_model...":
+    if model_name == "Select_a_model...":
         return "Select a model to load.", False
     
     try:
-        models_to_load = [quality_model]
-        if temporary.BACKEND_TYPE in cpu_only_backends:
-            set_cpu_affinity()
-            temporary.N_GPU_LAYERS = 0  # No GPU layers for CPU-only backends
-        else:
-            gpu_layers = calculate_gpu_layers(models_to_load, vram_size)
-            temporary.N_GPU_LAYERS = gpu_layers.get(quality_model, 0)
+        # Validate MODEL_FOLDER is a directory
+        model_dir = Path(temporary.MODEL_FOLDER)
+        if not model_dir.is_dir():
+            return f"Error: Model folder '{model_dir}' is not a valid directory.", False
         
-        model_path = Path(temporary.MODEL_FOLDER) / quality_model
+        # Construct and verify model path
+        model_path = model_dir / model_name
+        print(f"Debug: Attempting to load model from: {model_path}")  # Debug log
+        if not model_path.exists():
+            return f"Error: Model file '{model_path}' not found.", False
         
-        llm = Llama(
-            model_path=str(model_path),
-            n_ctx=temporary.N_CTX,
-            n_gpu_layers=temporary.N_GPU_LAYERS,
-            n_batch=temporary.N_BATCH,
-            mmap=temporary.MMAP,
-            mlock=temporary.MLOCK,
-            verbose=False
-        )
+        # Check file size and permissions
+        file_size = model_path.stat().st_size / (1024 * 1024)  # Size in MB
+        print(f"Debug: Model file size: {file_size:.2f} MB")  # Debug log
+        try:
+            with open(model_path, 'rb') as f:
+                print("Debug: File is readable.")  # Confirm read access
+        except PermissionError:
+            return f"Error: Permission denied accessing '{model_path}'.", False
+        except Exception as e:
+            return f"Error: Failed to open file '{model_path}': {str(e)}", False
+        
+        # Attempt to load the model with detailed error handling
+        print(f"Debug: Loading model with n_ctx={temporary.N_CTX}, n_gpu_layers={temporary.N_GPU_LAYERS}, n_batch={temporary.N_BATCH}, mmap={temporary.MMAP}, mlock={temporary.MLOCK}")
+        try:
+            llm = Llama(
+                model_path=str(model_path),
+                n_ctx=temporary.N_CTX,
+                n_gpu_layers=temporary.N_GPU_LAYERS,
+                n_batch=temporary.N_BATCH,
+                mmap=temporary.MMAP,
+                mlock=temporary.MLOCK,
+                verbose=True  # Enable verbose output from llama_cpp
+            )
+        except Exception as load_error:
+            return f"Error loading model: {str(load_error)}", False
         
         temporary.MODELS_LOADED = True
-        temporary.MODEL_NAME = quality_model
-        status = f"Model '{quality_model}' loaded, layer distribution: VRAM={temporary.N_GPU_LAYERS} layers"
+        temporary.MODEL_NAME = model_name
+        status = f"Model '{model_name}' loaded, layer distribution: VRAM={temporary.N_GPU_LAYERS} layers"
+        print(f"Debug: {status}")  # Debug log
         return status, True
     
     except Exception as e:
         return f"Error loading model: {str(e)}", False
+        
 def unload_models():
     from scripts.temporary import llm
     if llm is not None:
