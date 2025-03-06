@@ -241,9 +241,10 @@ def get_model_settings(model_name):
 
 def determine_operation_mode(quality_model):
     if quality_model == "Select_a_model...":
-        return "Select models to enable mode detection."
+        return "Select models to enable mode detection.", "Select models to enable mode detection."
     settings = get_model_settings(quality_model)
-    return settings["category"].capitalize()
+    mode = settings["category"].capitalize()
+    return mode, mode
 
 def get_available_models():
     from .temporary import MODEL_FOLDER

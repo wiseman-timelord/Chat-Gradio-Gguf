@@ -15,6 +15,7 @@ from .temporary import (
     ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER,
     RAG_CHUNK_OVERLAP_DEVIDER, N_CTX, last_save_time
 )
+from . import temporary
 
 # Functions...
 def get_cpu_info():
@@ -243,10 +244,9 @@ def trim_session_history(max_sessions):
 
 def save_config():
     config_path = Path("data/persistent.json")
-    from scripts import temporary
     config = {
         "model_settings": {
-            "model_dir": temporary.MODEL_FOLDER,
+            "model_dir": temporary.MODEL_FOLDER,  # Save as is (relative or absolute)
             "quality_model": temporary.MODEL_NAME,
             "fast_model": "",
             "n_ctx": temporary.N_CTX,
@@ -285,9 +285,6 @@ def save_config():
 
 def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary."""
-    from scripts import temporary
-    from .interface import change_model
-
     reload_required = False
     # Model settings
     if key == "temperature":
@@ -309,20 +306,20 @@ def update_setting(key, value):
         temporary.REPEAT_PENALTY = float(value)
     elif key == "mlock":
         temporary.MLOCK = bool(value)
-    elif key == "afterthought_time":  # Updated to match JSON key
+    elif key == "afterthought_time":
         temporary.AFTERTHOUGHT_TIME = bool(value)
     elif key == "n_batch":
         temporary.N_BATCH = int(value)
     elif key == "model_folder":
         temporary.MODEL_FOLDER = value
         reload_required = True
-    elif key == "max_history_slots":  # Setting for history slots
+    elif key == "max_history_slots":
         temporary.MAX_HISTORY_SLOTS = int(value)
-    elif key == "max_attach_slots":   # Setting for attach slots
+    elif key == "max_attach_slots":
         temporary.MAX_ATTACH_SLOTS = int(value)
-    elif key == "session_log_height":  # New setting for session log height
+    elif key == "session_log_height":
         temporary.SESSION_LOG_HEIGHT = int(value)
-    elif key == "input_lines":         # New setting for input lines
+    elif key == "input_lines":
         temporary.INPUT_LINES = int(value)
     # RPG settings
     elif key == "rp_location":
@@ -343,9 +340,8 @@ def load_config():
     if config_path.exists():
         with open(config_path) as f:
             config = json.load(f)
-            from scripts import temporary
             # Model settings
-            temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", "models")
+            temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", ".\models")
             temporary.MODEL_NAME = config["model_settings"].get("quality_model", "Select_a_model...")
             temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
             temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
@@ -374,3 +370,6 @@ def load_config():
             temporary.USER_PC_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
             temporary.AI_NPC_NAME = config["rp_settings"].get("ai_npc", "Robot")
             temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")
+    else:
+        # Default to ".\models" if no config exists
+        temporary.MODEL_FOLDER = ".\models"        
