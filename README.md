@@ -140,7 +140,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
                 file_visible = True
 ```
 ...if TOT is enable for code, then we would send the normal code prompt to the AI 3 times, then we would need a new prompt for assessment, as to which of the versions is the correct and best response, and it would judge all 3 of the generated responses, given criteria, among which are printing updates as complete updated functions without shortening of code, this would guarantee, that we would be able to tell the ai to create complete updated functions, but also the special prompt will also be doing debug etc to ensure it is correct with the context of the other scripts if they were attached, so some kind of ability to ensure to, be aware of and make use of the attached files.
-
+- There are a lot of globals, ensure all globals are safe_three_word labels, so as, to not so much have a chance to interfere with other programs using the same globals.
 
 ## Far Development.
 the next generation of the program will be ...
