@@ -622,8 +622,9 @@ def launch_interface():
             root.attributes("-topmost", True)  # Ensure dialog appears on top
             
             # Determine the initial directory
-            initial_dir = temporary.MODEL_FOLDER
-            if not os.path.exists(initial_dir):
+            initial_dir = getattr(temporary, "MODEL_FOLDER", None)
+            # Make sure initial_dir is not None and exists
+            if initial_dir is None or not os.path.exists(initial_dir):
                 initial_dir = os.path.expanduser("~")  # Fallback to home directory
             
             print(f"Initial directory: {initial_dir}")
@@ -645,9 +646,10 @@ def launch_interface():
                 temporary.MODEL_FOLDER = folder_selected
                 return folder_selected
             
-            # If no folder was selected, return the current folder
-            print("No folder selected, returning current MODEL_FOLDER")
-            return temporary.MODEL_FOLDER
+            # If no folder was selected, return the current folder or default
+            current_folder = getattr(temporary, "MODEL_FOLDER", os.path.expanduser("~"))
+            print(f"No folder selected, returning current MODEL_FOLDER: {current_folder}")
+            return current_folder
 
         def update_model_list(folder_path):
             """
