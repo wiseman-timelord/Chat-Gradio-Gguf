@@ -72,7 +72,7 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 ## Requirements
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
-- Python => 3.8 - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
+- Python => 3.8 (tested on 3.11.0) - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 - Llm Model - You will need a Large Language Model in GGUF format, See below
 
 ### Instructions
