@@ -18,7 +18,7 @@ RAG_CHUNK_OVERLAP_DEVIDER = 32
 MODELS_LOADED = False
 SESSION_ACTIVE = False
 N_GPU_LAYERS = 0
-MAX_HISTORY_SLOTS = 10 # Maximum number of saved sessions (replaces MAX_SESSIONS)
+MAX_HISTORY_SLOTS = 15 # Maximum number of saved sessions (replaces MAX_SESSIONS)
 MAX_ATTACH_SLOTS = 6 # Maximum number of attachable files (replaces RAG_MAX_DOCS)
 last_save_time = 0 
 AFTERTHOUGHT_TIME = True
@@ -64,9 +64,9 @@ REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096]
 TEMP_OPTIONS = [0.1, 0.33, 0.5, 0.66, 0.75, 1.0] 
 HISTORY_SLOT_OPTIONS = [10, 13, 15, 17, 20] # New options for Max History Slots
-ATTACH_SLOT_OPTIONS = [1, 4, 6, 8, 11] # New options for Max Attach Slots
-SESSION_LOG_HEIGHT_OPTIONS = [400, 425, 450, 475, 500]
-INPUT_LINES_OPTIONS = [3, 4, 5, 6, 7]
+ATTACH_SLOT_OPTIONS = [2, 4, 6, 8, 10] # New options for Max Attach Slots
+SESSION_LOG_HEIGHT_OPTIONS = [400, 450, 475, 500, 550]
+INPUT_LINES_OPTIONS = [2, 4, 5, 6, 8]
 
 # RPG Settings
 RP_LOCATION = "Public"
