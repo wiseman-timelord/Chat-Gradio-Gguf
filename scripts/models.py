@@ -21,67 +21,44 @@ from scripts.temporary import (
 # Classes...
 class ContextInjector:
     def __init__(self):
-        self.vectorstores = {}
+        self.vectorstores = {}  # Retain for potential future use, but not mode-specific by default
         self.current_vectorstore = None
         self.current_mode = None
-        self.session_vectorstore = None  # Added for session-specific RAG
-        self._load_default_vectorstores()
+        self.session_vectorstore = None  # Primary vectorstore for session-specific RAG
+        print("ContextInjector initialized with session-specific vectorstore support.")
 
-    def _load_default_vectorstores(self):
-        modes = ["code", "rpg", "chat"]
-        for mode in modes:
-            vs_path = Path("data/vectors") / mode / "knowledge"
-            if vs_path.exists():
-                embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-                self.vectorstores[mode] = FAISS.load_local(
-                    str(vs_path),
-                    embeddings=embeddings,
-                    allow_dangerous_deserialization=True
-                )
-                print(f"Loaded {mode} vectorstore.")
-
-    def set_mode(self, mode: str):
-        valid_modes = ["code", "rpg", "chat"]
-        if mode in valid_modes:
-            if mode not in self.vectorstores:
-                self.load_vectorstore(mode)
-            if mode in self.vectorstores:
-                self.current_vectorstore = self.vectorstores[mode]
-                self.current_mode = mode
-            else:
-                self.current_vectorstore = None
-                self.current_mode = None
-                print(f"No vectorstore found for mode: {mode}")
+    def set_session_vectorstore(self, vectorstore):
+        self.session_vectorstore = vectorstore
+        if vectorstore:
+            print("Session-specific vectorstore set successfully.")
         else:
-            print(f"Invalid mode: {mode}. Expected one of {valid_modes}")
+            print("Session-specific vectorstore cleared.")
 
-    def load_vectorstore(self, mode: str):
-        vs_path = Path("data/vectors") / mode / "knowledge"
+    def load_session_vectorstore(self, session_id):
+        """Load a session-specific vectorstore based on session_id."""
+        vs_path = Path("data/vectors/session") / f"session_{session_id}"
         if vs_path.exists():
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-            self.vectorstores[mode] = FAISS.load_local(
+            self.session_vectorstore = FAISS.load_local(
                 str(vs_path),
                 embeddings=embeddings,
                 allow_dangerous_deserialization=True
             )
-            print(f"Loaded {mode} vectorstore.")
+            print(f"Loaded session vectorstore for session {session_id} from {vs_path}.")
         else:
-            print(f"Vectorstore not found for mode: {mode}")
-
-    def set_session_vectorstore(self, vectorstore):
-        self.session_vectorstore = vectorstore
+            self.session_vectorstore = None
+            print(f"No session vectorstore found for session {session_id} at {vs_path}.")
 
     def inject_context(self, prompt: str) -> str:
-        if self.current_vectorstore is None and self.session_vectorstore is None:
+        """Inject context from session-specific vectorstore only."""
+        if self.session_vectorstore is None:
+            print("No session vectorstore available; returning prompt unchanged.")
             return prompt
         embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         query_embedding = embedding_model.encode([prompt])[0]
-        docs = []
-        if self.current_vectorstore:
-            docs.extend(self.current_vectorstore.similarity_search_by_vector(query_embedding, k=2))
-        if self.session_vectorstore:
-            docs.extend(self.session_vectorstore.similarity_search_by_vector(query_embedding, k=2))
+        docs = self.session_vectorstore.similarity_search_by_vector(query_embedding, k=2)
         context = "\n".join([doc.page_content for doc in docs])
+        print(f"Injected context from session vectorstore: {context[:50]}...")
         return f"Relevant information:\n{context}\n\nQuery: {prompt}"
 
 context_injector = ContextInjector()

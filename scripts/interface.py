@@ -24,9 +24,9 @@ from scripts.temporary import (
 )
 from scripts import utility
 from scripts.utility import (
-    delete_vectorstore, delete_all_vectorstores, web_search, get_saved_sessions,
+    delete_all_session_vectorstores, create_session_vectorstore, web_search, get_saved_sessions,
     load_session_history, save_session_history, load_and_chunk_documents,
-    create_vectorstore, get_available_gpus, create_session_vectorstore, save_config
+    get_available_gpus, create_session_vectorstore, save_config
 )
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings,
@@ -511,7 +511,7 @@ def launch_interface():
                     with gr.Column(scale=1):
                         right_panel = {
                             "theme_status": gr.Textbox(label="Operation Mode", interactive=False, value="No model loaded."),
-                            "toggle_rpg_settings": gr.Button("Show RPG Settings", variant="secondary"),
+                            "toggle_rpg_settings": gr.Button("Show RPG Settings", variant="secondary", elem_classes=["double-height"]),
                             "file_attachments": gr.Group(visible=True, elem_classes=["clean-elements"]),
                             "rpg_settings": gr.Group(visible=False)
                         }
@@ -584,14 +584,12 @@ def launch_interface():
                         config_components["temp"] = gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE)
                         config_components["repeat"] = gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY)
                     
-                    with gr.Row(elem_classes=["clean-elements"]):                        
-                        config_components["save_settings"] = gr.Button("Save Settings", variant="primary")
-
                     # Action buttons row
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["load_models"] = gr.Button("Load Model", variant="secondary")
-                        config_components["inspect_model"] = gr.Button("Inspect Model", variant="huggingface")
-                        config_components["unload"] = gr.Button("Unload Model")
+                        config_components["load_models"] = gr.Button("Load Model", variant="secondary", elem_classes=["double-height"])
+                        config_components["inspect_model"] = gr.Button("Inspect Model", variant="huggingface", elem_classes=["double-height"])
+                        config_components["unload"] = gr.Button("Unload Model", elem_classes=["double-height"])
+                        config_components["save_settings"] = gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
                         
                     # Status row
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -619,17 +617,9 @@ def launch_interface():
 
                     # Save settings row
                     with gr.Row(elem_classes=["clean-elements"]):
-                        custom_components["save_customisation"] = gr.Button("Save Settings", variant="primary")
-                    
-                    # Data management rows
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        custom_components["erase_chat"] = gr.Button("Erase Chat Data", variant="primary")
-                        custom_components["erase_rpg"] = gr.Button("Erase RPG Data", variant="primary")
-                        custom_components["erase_code"] = gr.Button("Erase Code Data", variant="primary")
-                        custom_components["erase_all"] = gr.Button("Erase All Data", variant="primary")
+                        custom_components["save_customisation"] = gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
+                        custom_components["delete_all_vectorstores"] = gr.Button("Delete All VectorStores", variant="stop", elem_classes=["double-height"])
 
-
-                    
                     # Status row
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components["status_customisation"] = gr.Textbox(label="Status", interactive=False, scale=20)
@@ -819,8 +809,10 @@ def launch_interface():
         buttons["delete_all_history"].click(fn=lambda: ("All history deleted.", *[gr.update() for _ in buttons["session"]]), outputs=[status_text] + buttons["session"])
         right_panel["toggle_rpg_settings"].click(fn=toggle_rpg_settings, inputs=[states["showing_rpg_right"]], outputs=[right_panel["file_attachments"], right_panel["rpg_settings"], right_panel["toggle_rpg_settings"], states["showing_rpg_right"]])
         rpg_fields["save_rpg"].click(fn=save_rp_settings, inputs=list(rpg_fields.values())[:-1], outputs=list(rpg_fields.values())[:-1])
-        for key, fn in [("erase_chat", lambda: utility.delete_vectorstore("chat")), ("erase_rpg", lambda: utility.delete_vectorstore("rpg")), ("erase_code", lambda: utility.delete_vectorstore("code")), ("erase_all", utility.delete_all_vectorstores)]:
-            custom_components[key].click(fn=fn, outputs=[custom_components["status_customisation"]])
+        custom_components["delete_all_vectorstores"].click(
+            fn=utility.delete_all_session_vectorstores,
+            outputs=[custom_components["status_customisation"]]
+        )
         custom_components["session_log_height"].change(fn=lambda h: gr.update(height=h), inputs=[custom_components["session_log_height"]], outputs=[chat_components["session_log"]])
         custom_components["input_lines"].change(fn=lambda l: gr.update(lines=l), inputs=[custom_components["input_lines"]], outputs=[chat_components["user_input"]])
         custom_components["max_history_slots"].change(fn=lambda s: setattr(temporary, "MAX_HISTORY_SLOTS", s) or None, inputs=[custom_components["max_history_slots"]]).then(fn=update_session_buttons, outputs=buttons["session"])

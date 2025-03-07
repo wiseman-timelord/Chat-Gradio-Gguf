@@ -1,7 +1,7 @@
 # Script: `.\scripts\utility.py`
 
 # Imports...
-import re, subprocess, json, time, random, psutil
+import re, subprocess, json, time, random, psutil, shutil  # Ensure shutil is included
 from pathlib import Path
 from datetime import datetime
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -72,49 +72,49 @@ def strip_html(text: str) -> str:
     """Remove HTML tags from text."""
     return re.sub(r'<[^>]+>', '', text)
 
-def save_session_history(history: list, force_save: bool = False) -> str:
-    """Save chat history with time-based logic."""
+def save_session_history(history: list, loaded_files: list, force_save: bool = False) -> str:
+    """Save chat history and attached files with time-based logic."""
     global last_save_time, current_session_id
     current_time = time.time()
     history_dir = Path(HISTORY_DIR)
     history_dir.mkdir(exist_ok=True)
 
     if not force_save and (current_time - last_save_time < 60):
+        print("Session not saved yet (waiting for 60s interval).")
         return "Session not saved yet (waiting for interval)."
 
     if current_session_id is None:
         current_session_id = datetime.now().strftime(SESSION_FILE_FORMAT)
+        print(f"Generated new session_id: {current_session_id}")
     file_path = history_dir / f"session_{current_session_id}.json"
     label = session_label if session_label else "Untitled"
     session_data = {
+        "session_id": current_session_id,
         "label": label,
-        "history": history
+        "history": history,
+        "attached_files": loaded_files
     }
     try:
         with open(file_path, "w") as f:
             json.dump(session_data, f, indent=2)
         manage_session_history()
         last_save_time = current_time
+        print(f"Session saved to {file_path} with {len(loaded_files)} attached files.")
         return f"Session saved to {file_path}"
     except Exception as e:
+        print(f"Error saving session: {str(e)}")
         return f"Error saving session: {str(e)}"
-
-def save_session_history(history: list) -> str:
-    """Save chat history using current_session_id, overwriting the existing file."""
-    history_dir = Path(HISTORY_DIR)
-    history_dir.mkdir(exist_ok=True)
-    if current_session_id is None:
-        current_session_id = datetime.now().strftime(SESSION_FILE_FORMAT)
-    file_path = history_dir / f"session_{current_session_id}.json"
-    label = session_label if session_label else "Untitled"
-    session_data = {
-        "label": label,
-        "history": history
-    }
-    with open(file_path, "w") as f:
-        json.dump(session_data, f)
-    manage_session_history()
-    return f"Session saved to {file_path}"
+        
+def load_session_history(file_path: str) -> tuple:
+    """Load session history, label, and attached files."""
+    with open(file_path, "r") as f:
+        session_data = json.load(f)
+    session_id = session_data.get("session_id", None)
+    label = session_data.get("label", "Untitled")
+    history = session_data.get("history", [])
+    attached_files = session_data.get("attached_files", [])
+    print(f"Loaded session {session_id} from {file_path} with label '{label}' and {len(attached_files)} files.")
+    return session_id, label, history, attached_files
 
 def manage_session_history():
     """Limit saved sessions to MAX_HISTORY_SLOTS."""
@@ -160,25 +160,12 @@ def load_and_chunk_documents(file_paths: list) -> list:
         print(f"Error loading documents: {e}")
     return documents
 
-def create_vectorstore(documents: list, mode: str) -> None:
-    """Create and save a FAISS vector store from documents for a specific mode."""
-    try:
-        from langchain_huggingface import HuggingFaceEmbeddings
-        from langchain_community.vectorstores import FAISS
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        vectorstore = FAISS.from_documents(documents, embeddings)
-        save_dir = Path("data/vectors") / mode / "knowledge"
-        save_dir.parent.mkdir(parents=True, exist_ok=True)
-        vectorstore.save_local(str(save_dir))
-        print(f"Saved {mode} vectorstore to {save_dir}")
-    except Exception as e:
-        print(f"Error creating vectorstore for {mode}: {e}")
-
 def create_session_vectorstore(loaded_files):
     """Create and save a session-specific FAISS vector store."""
     from langchain_huggingface import HuggingFaceEmbeddings
     from langchain_community.vectorstores import FAISS
     if not loaded_files:
+        print("No files provided for session vectorstore creation.")
         return None
     docs = load_and_chunk_documents(loaded_files)
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -187,47 +174,24 @@ def create_session_vectorstore(loaded_files):
         save_dir = Path("data/vectors/session") / f"session_{current_session_id}"
         save_dir.parent.mkdir(parents=True, exist_ok=True)
         vectorstore.save_local(str(save_dir))
-        print(f"Saved session vectorstore to {save_dir}")
+        print(f"Saved session vectorstore to {save_dir} with {len(docs)} documents.")
         return vectorstore
     except Exception as e:
         print(f"Error creating session vectorstore: {e}")
         return None
 
-def delete_vectorstore(mode: str) -> str:
-    """Delete the vectorstore directory for a specific mode."""
-    vs_dir = Path("data/vectors") / mode
-    if vs_dir.exists():
+def delete_all_session_vectorstores() -> str:
+    """Delete all session-specific vectorstore directories."""
+    session_vs_dir = Path("data/vectors/session")
+    if session_vs_dir.exists():
         import shutil
-        shutil.rmtree(vs_dir)
-        print(f"Deleted vectorstore directory: {vs_dir}")
-        if mode in context_injector.vectorstores:  # Assuming context_injector is global
-            del context_injector.vectorstores[mode]
-            if context_injector.current_mode == mode:
-                context_injector.current_vectorstore = None
-                context_injector.current_mode = None
-        return f"Deleted {mode} knowledge base."
+        for vs_dir in session_vs_dir.iterdir():
+            if vs_dir.is_dir() and vs_dir.name.startswith("session_"):
+                shutil.rmtree(vs_dir)
+                print(f"Deleted session vectorstore: {vs_dir}")
+        return "All session vectorstores deleted."
     else:
-        return f"No {mode} knowledge base found."
-
-
-def delete_all_vectorstores() -> str:
-    """Delete all mode-specific vectorstore directories."""
-    modes = ["code", "rpg", "chat"]  # Updated to new modes
-    deleted = []
-    for mode in modes:
-        vs_dir = Path("data/vectors") / mode
-        if vs_dir.exists():
-            import shutil
-            shutil.rmtree(vs_dir)
-            deleted.append(mode)
-            if mode in context_injector.vectorstores:
-                del context_injector.vectorstores[mode]
-    if deleted:
-        context_injector.current_vectorstore = None
-        context_injector.current_mode = None
-        return f"Deleted knowledge bases: {', '.join(deleted)}."
-    else:
-        return "No knowledge bases found to delete."
+        return "No session vectorstores found to delete."
 
 def get_saved_sessions():
     """Get list of saved session files sorted by modification time."""
