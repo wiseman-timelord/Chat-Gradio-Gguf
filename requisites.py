@@ -24,9 +24,7 @@ BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
     "data", "scripts", "models",
     "data/vectors", "data/history", "data/temp",
-    "data/vectors/code",
-    "data/vectors/rpg",
-    "data/vectors/chat"
+    "data/vectors/session"
 ]
 VULKAN_PATHS = [
     Path("C:/VulkanSDK"),
