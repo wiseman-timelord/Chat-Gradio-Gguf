@@ -127,6 +127,8 @@ CONFIG_TEMPLATE = """{
 	  "afterthought_time": true,
 	  "max_history_slots": 14,
 	  "max_attach_slots": 6
+      "session_log_height": 475,
+      "input_lines": 5
 	},
   "backend_config": {
     "type": "GPU/CPU - Vulkan",
