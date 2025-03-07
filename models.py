@@ -298,9 +298,83 @@ def get_model_layers(model_path: str) -> int:
         print(f"Debug: Error reading model metadata with llama_cpp: {e}")
         return 0
 
-def inspect_model(model_name):
-    from .temporary import MODEL_FOLDER
+def get_model_metadata(model_path: str) -> dict:
+    """
+    Extract metadata from a GGUF model using llama_cpp.
+    
+    Args:
+        model_path (str): Path to the GGUF model file.
+        
+    Returns:
+        dict: A dictionary containing the model's metadata.
+    """
+    try:
+        import re
+        import io
+        from contextlib import redirect_stdout, redirect_stderr
+        from llama_cpp import Llama
+        
+        # Capture verbose output
+        output_buffer = io.StringIO()
+        with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
+            model = Llama(
+                model_path=model_path,
+                verbose=True,
+                n_ctx=8,
+                n_batch=1,
+                n_gpu_layers=0
+            )
+            del model  # Free memory
+        
+        output = output_buffer.getvalue()
+        
+        # Parse metadata
+        metadata = {}
+        for line in output.splitlines():
+            if line.startswith("llama_model_loader: - kv"):
+                match = re.search(r'llama_model_loader: - kv\s+\d+:\s+([\w\.]+)\s+(\w+(?:\[.*?\])?)\s+=\s+(.*)', line)
+                if match:
+                    key = match.group(1)
+                    type_str = match.group(2).split('[')[0]  # Handle array types by taking base type
+                    value_str = match.group(3).strip()
+                    if type_str == 'u32':
+                        value = int(value_str)
+                    elif type_str == 'f32':
+                        value = float(value_str)
+                    elif type_str == 'str':
+                        value = value_str
+                    elif type_str == 'bool':
+                        value = value_str.lower() == 'true'
+                    else:
+                        value = value_str  # Fallback for unhandled types like arrays
+                    metadata[key] = value
+        return metadata
+    except ImportError:
+        print("Debug: llama_cpp not installed. Cannot retrieve metadata.")
+        return {}
+    except Exception as e:
+        print(f"Debug: Error reading model metadata: {e}")
+        return {}
+
+def inspect_model(model_name, vram_size):
+    """
+    Inspect a GGUF model and return its details with metadata key sources.
+    
+    Args:
+        model_name (str): Name of the model file.
+        vram_size (float): Available VRAM in MB.
+    
+    Returns:
+        str: Formatted string with model details and metadata sources.
+    """
+    from .temporary import MODEL_FOLDER, DYNAMIC_GPU_LAYERS
+    from scripts.utility import save_config
     from pathlib import Path
+    from .models import calculate_single_model_gpu_layers_with_layers, get_model_size
+    
+    # Save config first
+    save_config()
+    print("Debug: Configuration saved to persistent.json before inspecting model.")
     
     if model_name == "Select_a_model...":
         return "Select a model to inspect."
@@ -310,28 +384,87 @@ def inspect_model(model_name):
         return "Model file not found."
     
     try:
-        model_size_mb = get_model_size(str(model_path))  # Size in MB
-        num_layers = get_model_layers(str(model_path))   # Layers from metadata
-        settings = get_model_settings(model_name)
-        model_type = settings["category"].capitalize()
+        metadata = get_model_metadata(str(model_path))
+        if not metadata:
+            return "Could not retrieve model metadata."
         
-        if num_layers > 0:
-            model_size_gb = model_size_mb / 1024
-            memory_per_layer_gb = (model_size_gb * 1.1875) / num_layers
-            memory_per_layer_str = f"{memory_per_layer_gb:.3f} GB"
+        # Extract architecture
+        architecture = metadata.get('general.architecture', 'unknown')
+        
+        # Extract parameters
+        params_str = metadata.get('general.size_label', 'Unknown')
+        params_source = 'general.size_label' if 'general.size_label' in metadata else 'estimated'
+        
+        # Extract layers
+        layers_key = f'{architecture}.block_count'
+        layers = metadata.get(layers_key, 'Unknown')
+        layers_source = layers_key if layers_key in metadata else 'unknown'
+        
+        # Extract context length
+        ctx_key = f'{architecture}.context_length'
+        max_ctx = metadata.get(ctx_key, 'Unknown')
+        ctx_source = ctx_key if ctx_key in metadata else 'unknown'
+        
+        # Extract embedding length
+        embed_key = f'{architecture}.embedding_length'
+        embed = metadata.get(embed_key, 'Unknown')
+        embed_source = embed_key if embed_key in metadata else 'unknown'
+        
+        # Get file size
+        model_size_mb = get_model_size(str(model_path))
+        model_size_gb = model_size_mb / 1024
+        size_source = 'file size'
+        
+        # Calculate Fit/Layers
+        if isinstance(layers, int) and layers > 0:
+            fit_layers = calculate_single_model_gpu_layers_with_layers(
+                str(model_path), vram_size, layers, DYNAMIC_GPU_LAYERS
+            )
+            fit_source = 'calculated'
         else:
-            memory_per_layer_str = "N/A"
+            fit_layers = "Unknown"
+            fit_source = 'unknown'
         
-        # Concise output: "Chat | 6996.77 MB | Layers: 48 | Mem/Layer: 0.173 GB"
-        return f"{model_type} | {model_size_mb:.2f} MB | Layers: {num_layers} | Mem/Layer: {memory_per_layer_str}"
+        # Determine finetuner/quantizer
+        finetuner = "Unknown"
+        finetuner_source = 'unknown'
+        for key, value in metadata.items():
+            if key.endswith('.finetuned_by'):
+                finetuner = f"finetuned by {value}"
+                finetuner_source = key
+                break
+            elif key.endswith('.quantized_by'):
+                finetuner = f"quantized by {value}"
+                finetuner_source = key
+                break
+        if finetuner == "Unknown" and 'general.organization' in metadata:
+            finetuner = metadata['general.organization']
+            finetuner_source = 'general.organization'
+        
+        # Format the result with sources
+        result = (
+            f"Results: Params = {params_str}, "
+            f"Fit/Layers = {fit_layers}/{layers}, "
+            f"Size = {model_size_gb:.2f}GB, "
+            f"Max Ctx = {max_ctx}, "
+            f"Embed = {embed}, "
+            f"Author = {finetuner}"
+        )
+        return result
+    
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error inspecting model: {str(e)}"
 
 def load_models(model_name, vram_size):
     global llm, MODELS_LOADED, MODEL_NAME
     from scripts.temporary import N_CTX, N_BATCH, MMAP, MLOCK, DYNAMIC_GPU_LAYERS
+    from scripts.utility import save_config  # Import save_config
     from pathlib import Path
     from llama_cpp import Llama
+    
+    # Step 0: Save the current configuration to persistent.json
+    save_config()
+    print("Debug: Configuration saved to persistent.json before loading model.")
     
     if model_name == "Select_a_model...":
         return "Select a model to load.", False
@@ -409,7 +542,7 @@ def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vra
     return result
 
 def unload_models():
-    global llm, MODELS_LOADED
+    global llm, MODELS_LOADED, MODEL_NAME
     import gc
     
     if MODELS_LOADED:
@@ -417,7 +550,10 @@ def unload_models():
         del llm
         gc.collect()
         MODELS_LOADED = False
+        print(f"the model {MODEL_NAME} was unloaded.") 
         return "Model unloaded successfully."
+    
+    print(f"Warning: Unload a model when no model was loaded.") 
     return "No model loaded to unload."
 
 def get_response_stream(prompt: str, disable_think: bool = False, rp_settings: dict = None, session_history: str = ""):
