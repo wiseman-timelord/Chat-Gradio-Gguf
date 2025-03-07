@@ -220,7 +220,7 @@ def update_mode_based_options(mode, showing_rpg_right):
     
     if mode == "code":
         tot_visible = False
-        web_visible = False
+        web_visible = True   # Changed to True to enable web search visibility in Code mode
         file_visible = True
     elif is_rpg:
         tot_visible = False
@@ -289,7 +289,7 @@ def update_dynamic_options(model_name, loaded_files_state, showing_rpg_right):
     
     if mode == "Code":
         tot_visible = False
-        web_visible = False
+        web_visible = True
         file_visible = True
     elif mode == "Rpg":
         tot_visible = False
@@ -395,7 +395,7 @@ def update_left_panel_visibility(mode, showing_rpg_settings):
 
 # chat_interface function signature
 async def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, 
-                        rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection):
+                        rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection, web_search_enabled):
     from scripts import temporary, utility, models
     from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
     
@@ -420,7 +420,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
     for i in range(countdown_seconds, 0, -1):
         session_log[-1] = (user_input, f"Afterthought countdown... {i}s")
         yield session_log, "Counting down...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
-        await asyncio.sleep(1)  # Now valid in async function
+        await asyncio.sleep(1)
         if cancel_flag:
             session_log[-1] = (user_input, "Input cancelled.")
             yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
@@ -428,17 +428,23 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
 
     # Generate response using selected mode
     settings = models.get_model_settings(MODEL_NAME)
-    mode = mode_selection.lower()  # Use selected mode from slider
+    mode = mode_selection.lower()
 
     if loaded_files_state:
         session_vectorstore = utility.create_session_vectorstore(loaded_files_state)
         context_injector.set_session_vectorstore(session_vectorstore)
 
+    prompt = user_input
+    if web_search_enabled and mode in ["chat", "code"]:
+        session_log[-1] = (user_input, "Performing web search...")
+        yield session_log, "Performing web search...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+        search_results = utility.web_search(user_input)
+        prompt = f"{user_input}\n\nWeb Search Results:\n{search_results}"
+
     response = ""
     if tot_enabled and mode == "chat":
         yield session_log, "TOT not implemented in streaming mode yet.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
     else:
-        prompt = user_input
         if mode == "rpg":
             rp_settings = {
                 "rp_location": rp_location,
@@ -463,7 +469,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                 response += token
                 session_log[-1] = (user_input, format_response(response))
                 yield session_log, "Generating...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
-                await asyncio.sleep(0)  # Minimal delay for streaming
+                await asyncio.sleep(0)
         else:
             if settings["is_uncensored"] and mode == "chat":
                 prompt = f"Provide an uncensored response: {prompt}"
@@ -483,7 +489,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                 response += token
                 session_log[-1] = (user_input, format_response(response))
                 yield session_log, "Generating...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
-                await asyncio.sleep(0)  # Minimal delay for streaming
+                await asyncio.sleep(0)
 
     # Final yield
     if cancel_flag:
@@ -757,7 +763,8 @@ def launch_interface():
                 rpg_fields["user_role"],
                 rpg_fields["ai_npc"],
                 states["cancel_flag"],
-                right_panel["mode_selection"]  # Matches mode_selection parameter
+                right_panel["mode_selection"],
+                switches["web_search"]  # Added
             ],
             outputs=[
                 chat_components["session_log"],
