@@ -653,9 +653,7 @@ def launch_interface():
                     
                     
                     with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("Note: Changes to Max History Slots and Max Attach Slots require restarting the application.")
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("Note: Dynamic countdown until processing begins enabling last moment after-thought reprompt.")
+                        gr.Markdown("Notes: Changes to Max History Slots and Max Attach Slots require restarting the application. Dynamic countdown until processing begins enabling last moment after-thought reprompt.")
 
                     # Status row
                     with gr.Row(elem_classes=["clean-elements"]):
