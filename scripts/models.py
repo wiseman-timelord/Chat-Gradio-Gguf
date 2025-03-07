@@ -95,17 +95,6 @@ def get_model_size(model_path: str) -> float:
     """Get model file size in MB."""
     return Path(model_path).stat().st_size / (1024 * 1024)
 
-def get_model_layers(model_path: str) -> int:
-    """Get number of layers from GGUF model metadata efficiently."""
-    try:
-        from gguf import GGUFReader  # Assuming gguf library is available
-        reader = GGUFReader(model_path)
-        num_layers = reader.fields.get('llama.block_count', [0])[0]
-        return int(num_layers)
-    except Exception as e:
-        print(f"Error reading model metadata: {e}")
-        return 0  # Fallback if metadata unavailable
-        
 def set_cpu_affinity():
     """Set processor affinity to the selected CPU's cores for CPU-only backends."""
     from scripts import utility  # Delayed import to avoid circularity
@@ -123,6 +112,53 @@ def set_cpu_affinity():
             except Exception as e:
                 print(f"Failed to set CPU affinity: {e}")
                 
+
+def get_llm():
+    from scripts.temporary import llm, MODEL_NAME, MODEL_FOLDER, N_CTX, N_GPU_LAYERS, N_BATCH, MMAP, MLOCK
+    if MODEL_NAME != "Select_a_model...":
+        if llm is None:
+            model_path = Path(MODEL_FOLDER) / MODEL_NAME
+            llm = Llama(
+                model_path=str(model_path),
+                n_ctx=N_CTX,
+                n_gpu_layers=N_GPU_LAYERS,
+                n_batch=N_BATCH,
+                mmap=MMAP,
+                mlock=MLOCK,
+                verbose=False
+            )
+        return llm
+    return None
+
+def get_available_models():
+    from .temporary import MODEL_FOLDER
+    model_dir = Path(MODEL_FOLDER)
+    return [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
+
+def get_model_settings(model_name):
+    from .temporary import category_keywords, handling_keywords
+    model_name_lower = model_name.lower()
+    category = "chat"  # Default category
+    is_uncensored = any(keyword in model_name_lower for keyword in handling_keywords["uncensored"])
+    is_reasoning = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
+    for cat, keywords in category_keywords.items():
+        if any(keyword in model_name_lower for keyword in keywords):
+            category = cat
+            break
+    settings = {
+        "category": category,
+        "is_uncensored": is_uncensored,
+        "is_reasoning": is_reasoning,
+    }
+    return settings
+
+def determine_operation_mode(model_name):
+    if model_name == "Select_a_model...":
+        return "Select models to enable mode detection.", "Select models to enable mode detection."
+    settings = get_model_settings(model_name)
+    mode = settings["category"].capitalize()
+    return mode, mode
+
 def calculate_gpu_layers(models, available_vram):
     """
     Calculate the number of layers to load onto the GPU for each model based on available VRAM.
@@ -206,51 +242,61 @@ def calculate_gpu_layers(models, available_vram):
 
     return gpu_layers
 
-def get_llm():
-    from scripts.temporary import llm, MODEL_NAME, MODEL_FOLDER, N_CTX, N_GPU_LAYERS, N_BATCH, MMAP, MLOCK
-    if MODEL_NAME != "Select_a_model...":
-        if llm is None:
-            model_path = Path(MODEL_FOLDER) / MODEL_NAME
-            llm = Llama(
-                model_path=str(model_path),
-                n_ctx=N_CTX,
-                n_gpu_layers=N_GPU_LAYERS,
-                n_batch=N_BATCH,
-                mmap=MMAP,
-                mlock=MLOCK,
-                verbose=False
+def get_model_layers(model_path: str) -> int:
+    """
+    Extract the correct number of layers from a GGUF model using llama_cpp.
+
+    Args:
+        model_path (str): Path to the GGUF model file.
+
+    Returns:
+        int: Number of layers in the model, or 0 if it cannot be determined.
+    """
+    try:
+        from llama_cpp import Llama
+        import re
+        import io
+        from contextlib import redirect_stdout, redirect_stderr
+        
+        # Use a buffer to capture the verbose output
+        output_buffer = io.StringIO()
+        with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
+            # Load the model with minimal settings to get metadata
+            model = Llama(
+                model_path=model_path,
+                verbose=True,
+                n_ctx=8,         # Minimal context size to reduce memory usage
+                n_batch=1,
+                n_gpu_layers=0   # No GPU layers to save VRAM
             )
-        return llm
-    return None
-
-def get_model_settings(model_name):
-    from .temporary import category_keywords, handling_keywords
-    model_name_lower = model_name.lower()
-    category = "chat"  # Default category
-    is_uncensored = any(keyword in model_name_lower for keyword in handling_keywords["uncensored"])
-    is_reasoning = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
-    for cat, keywords in category_keywords.items():
-        if any(keyword in model_name_lower for keyword in keywords):
-            category = cat
-            break
-    settings = {
-        "category": category,
-        "is_uncensored": is_uncensored,
-        "is_reasoning": is_reasoning,
-    }
-    return settings
-
-def determine_operation_mode(model_name):
-    if model_name == "Select_a_model...":
-        return "Select models to enable mode detection.", "Select models to enable mode detection."
-    settings = get_model_settings(model_name)
-    mode = settings["category"].capitalize()
-    return mode, mode
-
-def get_available_models():
-    from .temporary import MODEL_FOLDER
-    model_dir = Path(MODEL_FOLDER)
-    return [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
+            del model  # Free memory immediately after loading
+        
+        # Get the captured output
+        output = output_buffer.getvalue()
+        
+        # Patterns to find the layer count in the output
+        patterns = [
+            r'block_count\s*=\s*(\d+)',  # e.g., block_count = 48
+            r'n_layer\s*=\s*(\d+)',      # e.g., n_layer = 48
+            r'- kv\s+\d+:\s+.*\.block_count\s+u\d+\s+=\s+(\d+)'  # e.g., - kv 17: qwen2.block_count u32 = 48
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, output)
+            if match:
+                num_layers = int(match.group(1))
+                print(f"Debug: Found layers with pattern '{pattern}': {num_layers}")
+                return num_layers
+        
+        print("Debug: Could not determine layer count from llama_cpp output")
+        return 0
+        
+    except ImportError:
+        print("Debug: llama_cpp not installed. Cannot retrieve layer count.")
+        return 0
+    except Exception as e:
+        print(f"Debug: Error reading model metadata with llama_cpp: {e}")
+        return 0
 
 def inspect_model(model_name):
     from .temporary import MODEL_FOLDER
@@ -261,86 +307,114 @@ def inspect_model(model_name):
     
     model_path = Path(MODEL_FOLDER) / model_name
     if not model_path.exists():
-        return f"Model file not found: {model_path}"
+        return "Model file not found."
     
     try:
-        model_size_mb = get_model_size(str(model_path))
-        num_layers = get_model_layers(str(model_path))
+        model_size_mb = get_model_size(str(model_path))  # Size in MB
+        num_layers = get_model_layers(str(model_path))   # Layers from metadata
         settings = get_model_settings(model_name)
         model_type = settings["category"].capitalize()
+        
         if num_layers > 0:
             model_size_gb = model_size_mb / 1024
             memory_per_layer_gb = (model_size_gb * 1.1875) / num_layers
             memory_per_layer_str = f"{memory_per_layer_gb:.3f} GB"
         else:
             memory_per_layer_str = "N/A"
-        return f"Model: {model_name} | Type: {model_type} | Size: {model_size_mb:.2f} MB | Layers: {num_layers} | Memory/Layer: {memory_per_layer_str}"
+        
+        # Concise output: "Chat | 6996.77 MB | Layers: 48 | Mem/Layer: 0.173 GB"
+        return f"{model_type} | {model_size_mb:.2f} MB | Layers: {num_layers} | Mem/Layer: {memory_per_layer_str}"
     except Exception as e:
-        return f"Error inspecting model: {str(e)}"
+        return f"Error: {str(e)}"
 
 def load_models(model_name, vram_size):
-    """Load the selected model based on quality and VRAM settings."""
     global llm
-    cpu_only_backends = [
-        "CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"
-    ]
+    from scripts.temporary import N_CTX, N_BATCH, MMAP, MLOCK, MODELS_LOADED, MODEL_NAME, N_GPU_LAYERS, DYNAMIC_GPU_LAYERS
     
     if model_name == "Select_a_model...":
         return "Select a model to load.", False
     
     try:
-        # Validate MODEL_FOLDER is a directory
         model_dir = Path(temporary.MODEL_FOLDER)
         if not model_dir.is_dir():
             return f"Error: Model folder '{model_dir}' is not a valid directory.", False
         
-        # Construct and verify model path
         model_path = model_dir / model_name
-        print(f"Debug: Attempting to load model from: {model_path}")  # Debug log
+        print(f"Debug: Attempting to load model from: {model_path}")
         if not model_path.exists():
             return f"Error: Model file '{model_path}' not found.", False
         
-        # Check file size and permissions
         file_size = model_path.stat().st_size / (1024 * 1024)  # Size in MB
-        print(f"Debug: Model file size: {file_size:.2f} MB")  # Debug log
-        try:
-            with open(model_path, 'rb') as f:
-                print("Debug: File is readable.")  # Confirm read access
-        except PermissionError:
-            return f"Error: Permission denied accessing '{model_path}'.", False
-        except Exception as e:
-            return f"Error: Failed to open file '{model_path}': {str(e)}", False
+        print(f"Debug: Model file size: {file_size:.2f} MB")
         
-        # Attempt to load the model with detailed error handling
-        print(f"Debug: Loading model with n_ctx={temporary.N_CTX}, n_gpu_layers={temporary.N_GPU_LAYERS}, n_batch={temporary.N_BATCH}, mmap={temporary.MMAP}, mlock={temporary.MLOCK}")
-        try:
-            llm = Llama(
-                model_path=str(model_path),
-                n_ctx=temporary.N_CTX,
-                n_gpu_layers=temporary.N_GPU_LAYERS,
-                n_batch=temporary.N_BATCH,
-                mmap=temporary.MMAP,
-                mlock=temporary.MLOCK,
-                verbose=True  # Enable verbose output from llama_cpp
-            )
-        except Exception as load_error:
-            return f"Error loading model: {str(load_error)}", False
+        # Step 1: Extract accurate layer information from model
+        num_layers = get_model_layers(str(model_path))
+        print(f"Debug: Retrieved number of layers: {num_layers}")
         
-        temporary.MODELS_LOADED = True
-        temporary.MODEL_NAME = model_name
-        status = f"Model '{model_name}' loaded, layer distribution: VRAM={temporary.N_GPU_LAYERS} layers"
-        print(f"Debug: {status}")  # Debug log
+        # Step 2: Validate layer count
+        if num_layers <= 0:
+            return f"Error: Could not determine layer count for model {model_name}. Loading aborted.", False
+        
+        # Step 3: Calculate GPU layers based on VRAM and model size
+        temporary.N_GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
+            str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
+        )
+        print(f"Debug: Calculated N_GPU_LAYERS = {temporary.N_GPU_LAYERS} based on VRAM={vram_size} MB")
+        
+        # Step 4: Load the model with calculated GPU layers
+        print(f"Debug: Loading model with n_gpu_layers={temporary.N_GPU_LAYERS}")
+        llm = Llama(
+            model_path=str(model_path),
+            n_ctx=N_CTX,
+            n_gpu_layers=temporary.N_GPU_LAYERS,
+            n_batch=N_BATCH,
+            mmap=MMAP,
+            mlock=MLOCK,
+            verbose=True
+        )
+        
+        # Step 5: Update global state
+        MODELS_LOADED = True
+        MODEL_NAME = model_name
+        status = f"Model '{model_name}' loaded successfully. GPU layers: {temporary.N_GPU_LAYERS}/{num_layers}"
+        print(f"Debug: {status}")
         return status, True
     
     except Exception as e:
         return f"Error loading model: {str(e)}", False
-        
+
+
+def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vram: int, num_layers: int, dynamic_gpu_layers: bool = True) -> int:
+    from math import floor
+    
+    if num_layers <= 0 or available_vram <= 0:
+        print("Debug: Invalid input (layers or VRAM), returning 0 layers")
+        return 0
+    
+    model_file_size = get_model_size(model_path)
+    print(f"Debug: Model size = {model_file_size:.2f} MB, Layers = {num_layers}, VRAM = {available_vram} MB")
+    
+    memory_factor = 1.1875
+    adjusted_model_size = model_file_size * memory_factor
+    layer_size = adjusted_model_size / num_layers
+    
+    print(f"Debug: Adjusted size = {adjusted_model_size:.2f} MB, Layer size = {layer_size:.2f} MB")
+    
+    max_layers = floor(available_vram / layer_size)
+    result = min(max_layers, num_layers) if dynamic_gpu_layers else num_layers
+    
+    print(f"Debug: Max layers with VRAM = {max_layers}, Final result = {result}")
+    return result
+
 def unload_models():
-    from scripts.temporary import llm
+    from scripts.temporary import llm, MODELS_LOADED, MODEL_NAME
     if llm is not None:
         del llm
         llm = None
-    print("Models unloaded successfully.")
+        MODELS_LOADED = False
+        MODEL_NAME = "Select_a_model..."
+        return "Model unloaded successfully."
+    return "No model loaded to unload."
 
 def get_response_stream(prompt: str, disable_think: bool = False, rp_settings: dict = None, session_history: str = ""):
     from .temporary import llm, USE_PYTHON_BINDINGS, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, N_CTX, N_BATCH, N_GPU_LAYERS, MMAP, MLOCK, TEMPERATURE, REPEAT_PENALTY

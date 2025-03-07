@@ -770,7 +770,13 @@ def launch_interface():
 
         for chk in [config_components.get("mlock_gpu"), config_components.get("mlock_cpu")]:
             if chk: chk.change(fn=update_mlock, inputs=[chk], outputs=[config_components["status_settings"]])
-                
+        config_components["unload"].click(
+            fn=unload_models,
+            outputs=[config_components["status_settings"]]
+        ).then(
+            fn=lambda: False,  # Reset models_loaded state
+            outputs=[states["models_loaded"]]
+        )              
         config_components["load_models"].click(fn=set_loading_status, outputs=[config_components["status_settings"]]).then(fn=load_models, inputs=[config_components["model"], config_components["vram"]], outputs=[config_components["status_settings"], states["models_loaded"]])
         config_components["save_settings"].click(fn=save_all_settings, outputs=[config_components["status_settings"]])
         buttons["delete_all_history"].click(fn=lambda: ("All history deleted.", *[gr.update() for _ in buttons["session"]]), outputs=[status_text] + buttons["session"])
