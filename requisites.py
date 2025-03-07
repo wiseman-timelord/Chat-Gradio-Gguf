@@ -124,7 +124,7 @@ CONFIG_TEMPLATE = """{
 	  "dynamic_gpu_layers": true,
 	  "afterthought_time": true,
 	  "max_history_slots": 14,
-	  "max_attach_slots": 6
+	  "max_attach_slots": 6,
       "session_log_height": 475,
       "input_lines": 5
 	},
