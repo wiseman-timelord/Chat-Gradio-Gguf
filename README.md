@@ -27,7 +27,7 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 - **Afterthought Countdown**: If, =>10 lines then 5s or 5-10 lines then 3s or <5 lines then 1s, wait for you to cancel send and return to edit, saving on mis-prompts and waits.
 
 ### Preview
-- The "Conversation" page, now the right panel toggles to Rpg options, if you are using Rpg mode...
+- The "Conversation" page, the session rotation, log and input, toggle between attachments or Rpg options...
 ![preview_image](media/conversation_page.jpg)
 
 - The "Configuration" page - for configuration of, models and hardware, and relevant components...
@@ -117,9 +117,10 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Development
 With regards to the current version of the program...
-- double height buttons all round, removes click hazards. 
-- doing a full test and bugfix.
-- there is some issue with the detection of operational mode. solution is to make detection based on label to be relevant to indication of compatible mode while on the `configuration` page, but the mode of operation is selected via a 3 position slider under the `Operation Mode` box on `Conversation` page.
+- Done. double height buttons all round, removes click hazards. 
+- Done. Mode of operation is selected via a 3 position slider under the `Operation Mode` box on `Conversation` page.
+- Ensure dynamic interface options also switch with the applicable modes its allowed for.
+- Ongoing full test and bugfix.
 
 
 ## Far Development.
