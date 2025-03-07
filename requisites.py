@@ -109,37 +109,37 @@ BACKEND_OPTIONS = {
     }
 }
 CONFIG_TEMPLATE = """{
-    "model_settings": {
-        "model_dir": "E:/Models/qwen2.5-7b-cabs-v0.4-GGUF",
-        "model_name": "qwen2.5-7b-cabs-v0.4.Q3_K_M.gguf",
-        "n_ctx": 24576,
-        "temperature": 0.75,
-        "repeat_penalty": 1.0,
-        "use_python_bindings": false,
-        "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
-        "vram_size": 8192,
-        "selected_gpu": "Radeon (TM) RX 470 Graphics",
-        "selected_cpu": "CPU 0: AMD Ryzen 9 3900X 12-Core Processor",
-        "mmap": true,
-        "mlock": true,
-        "n_batch": 4096,
-        "dynamic_gpu_layers": true,
-        "afterthought_time": true,
-        "max_history_slots": 15,
-        "max_attach_slots": 6,
-        "session_log_height": 475,
-        "input_lines": 5
-    },
-    "backend_config": {
-        "type": "GPU/CPU - Vulkan",
-        "llama_bin_path": "data/llama-vulkan-bin"
-    },
-    "rp_settings": {
-        "rp_location": "Most of the way to the top of the large hill",
-        "user_name": "Human",
-        "user_role": "Hiker",
-        "ai_npc": "Llama",
-        "ai_npc_role": "A wise llama"
+	"model_settings": {
+	  "model_dir": "models",
+	  "model_name": "",
+	  "n_ctx": 8192,
+	  "temperature": 0.75,
+	  "repeat_penalty": 1.0,
+	  "use_python_bindings": false,
+	  "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
+	  "vram_size": 8192,
+	  "selected_gpu": null,
+	  "selected_cpu": "null",
+	  "mmap": true,
+	  "mlock": true,
+	  "n_batch": 1024,
+	  "dynamic_gpu_layers": true,
+	  "afterthought_time": true,
+	  "max_history_slots": 14,
+	  "max_attach_slots": 6
+      "session_log_height": 475,
+      "input_lines": 5
+	},
+  "backend_config": {
+    "type": "GPU/CPU - Vulkan",
+    "llama_bin_path": "data/llama-vulkan-bin"
+  },
+  "rp_settings": {
+      "rp_location": "Public",
+      "user_name": "Human",
+      "user_role": "Lead Roleplayer",
+      "ai_npc": "Robot",
+      "ai_npc_role": "Randomer"
     }
 }"""
 
