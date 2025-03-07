@@ -115,11 +115,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Development
 With regards to the current version of the program...
-- Done. double height buttons all round, removes click hazards. 
-- Done. Mode of operation is selected via a 3 position slider under the `Operation Mode` box on `Conversation` page.
-- Ensure dynamic interface options also switch with the applicable modes its allowed for.
 - Ongoing full test and bugfix.
-
 
 ## Far Development.
 With regards to the next generation of the program will be ...
