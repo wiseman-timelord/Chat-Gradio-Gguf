@@ -541,7 +541,7 @@ def launch_interface():
                             "user_input": gr.Textbox(label="User Input", lines=temporary.INPUT_LINES, interactive=False, placeholder="Enter text here...")
                         }
                         with gr.Row(elem_classes=["clean-elements"]):
-                            action_buttons = {}  # Initialize the dictionary for buttons
+                            action_buttons = {}
                             with gr.Column(elem_classes=["clean-elements"]):
                                 action_buttons["send"] = gr.Button("Send Input", variant="secondary", scale=20, elem_classes=["send-button"])
                                 action_buttons["cancel"] = gr.Button("Cancel Input", variant="stop", scale=20, visible=False, elem_classes=["double-height"])
@@ -580,7 +580,7 @@ def launch_interface():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=30)
                     shutdown_btn = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
                     shutdown_btn.click(fn=shutdown_program, inputs=[states["models_loaded"]])
-                    
+
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
                     is_cpu_only = temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
@@ -629,44 +629,39 @@ def launch_interface():
                         config_components["batch"] = gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH)
                         config_components["temp"] = gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE)
                         config_components["repeat"] = gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY)
-                    
+
                     # Action buttons row
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["load_models"] = gr.Button("Load Model", variant="secondary", elem_classes=["double-height"])
                         config_components["inspect_model"] = gr.Button("Inspect Model", variant="huggingface", elem_classes=["double-height"])
                         config_components["unload"] = gr.Button("Unload Model", elem_classes=["double-height"])
-                        config_components["save_settings"] = gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
                     
-                    # Status row
+                    # Customization settings
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["status_settings"] = gr.Textbox(label="Status", interactive=False, scale=20)
-                        config_components["shutdown"] = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
-                        config_components["shutdown"].click(fn=shutdown_program, inputs=[states["models_loaded"]])
-
-            with gr.Tab("Customisation"):
-                with gr.Column():
-                    with gr.Row():
                         custom_components = {}
                         custom_components["max_history_slots"] = gr.Dropdown(choices=temporary.HISTORY_SLOT_OPTIONS, label="Max History Slots", value=temporary.MAX_HISTORY_SLOTS)
                         custom_components["session_log_height"] = gr.Dropdown(choices=temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Session Log Height", value=temporary.SESSION_LOG_HEIGHT)
                         custom_components["input_lines"] = gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES)
                         custom_components["max_attach_slots"] = gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS)
-                    with gr.Row():
-                        gr.Markdown("Note: Changes to Max History Slots and Max Attach Slots require restarting the application.")
                     
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components["afterthought_time"] = gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
+                    
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        config_components["save_settings"] = gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
+                        custom_components["delete_all_vectorstores"] = gr.Button("Delete All VectorStores", variant="stop", elem_classes=["double-height"])
+                    
+                    
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("Note: Changes to Max History Slots and Max Attach Slots require restarting the application.")
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Note: Dynamic countdown until processing begins enabling last moment after-thought reprompt.")
 
+                    # Status row
                     with gr.Row(elem_classes=["clean-elements"]):
-                        custom_components["save_customisation"] = gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
-                        custom_components["delete_all_vectorstores"] = gr.Button("Delete All VectorStores", variant="stop", elem_classes=["double-height"])
-
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        custom_components["status_customisation"] = gr.Textbox(label="Status", interactive=False, scale=20)
-                        custom_components["shutdown"] = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
-                        custom_components["shutdown"].click(fn=shutdown_program, inputs=[states["models_loaded"]])
+                        config_components["status_settings"] = gr.Textbox(label="Status", interactive=False, scale=20)
+                        config_components["shutdown"] = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
+                        config_components["shutdown"].click(fn=shutdown_program, inputs=[states["models_loaded"]])
 
         # Helper Functions
         def select_model_folder():
@@ -764,7 +759,7 @@ def launch_interface():
                 rpg_fields["ai_npc"],
                 states["cancel_flag"],
                 right_panel["mode_selection"],
-                switches["web_search"]  # Added
+                switches["web_search"]
             ],
             outputs=[
                 chat_components["session_log"],
@@ -857,14 +852,14 @@ def launch_interface():
             outputs=[status_text] + buttons["session"]
         )
         right_panel["toggle_rpg_settings"].click(
-         fn=toggle_rpg_settings,
-         inputs=[states["showing_rpg_right"]],
-         outputs=[
-         right_panel["toggle_rpg_settings"],
-         right_panel["file_attachments"],
-         right_panel["rpg_settings"],
-         states["showing_rpg_right"]
-         ]
+            fn=toggle_rpg_settings,
+            inputs=[states["showing_rpg_right"]],
+            outputs=[
+                right_panel["toggle_rpg_settings"],
+                right_panel["file_attachments"],
+                right_panel["rpg_settings"],
+                states["showing_rpg_right"]
+            ]
         )
         rpg_fields["save_rpg"].click(
             fn=save_rp_settings,
@@ -873,7 +868,7 @@ def launch_interface():
         )
         custom_components["delete_all_vectorstores"].click(
             fn=utility.delete_all_session_vectorstores,
-            outputs=[custom_components["status_customisation"]]
+            outputs=[config_components["status_settings"]]
         )
         custom_components["session_log_height"].change(
             fn=lambda h: gr.update(height=h),
@@ -902,11 +897,8 @@ def launch_interface():
         )
         custom_components["afterthought_time"].change(
             fn=lambda v: setattr(temporary, "AFTERTHOUGHT_TIME", v),
-            inputs=[custom_components["afterthought_time"]]
-        )
-        custom_components["save_customisation"].click(
-            fn=save_all_settings,
-            outputs=[custom_components["status_customisation"]]
+            inputs=[custom_components["afterthought_time"]],
+            outputs=[config_components["status_settings"]]  # Optional: show status update
         )
         config_components["model"].change(
             fn=update_model_based_options,
