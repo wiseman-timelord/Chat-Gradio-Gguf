@@ -191,6 +191,35 @@ def copy_last_response(session_log):
 def cancel_input():
     return True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."
 
+def shutdown_program(models_loaded):
+    import time
+    import sys
+    
+    if models_loaded:
+        print("Shutting Down...")
+        print("Unloading model...")
+        unload_models()
+        print("Model unloaded.")
+    
+    print("Closing Gradio server...")
+    demo.close()
+    print("Gradio server closed.")
+    
+    print()
+    print()
+    print("A program by Wiseman-Timelord")
+    print()
+    print("GitHub: github.com/wiseman-timelord")
+    print("Website: wisetime.rf.gd")
+    print()
+    print()
+    
+    for i in range(5, 0, -1):
+        print(f"\rExiting program in...{i}s", end='', flush=True)
+        time.sleep(1)
+    print()  # Adds a newline after the countdown for clean termination
+    os._exit(0)
+
 def determine_operation_mode(model_name):
     if model_name == "Select_a_model...":
         return "Select models to enable mode detection."
@@ -502,6 +531,7 @@ def launch_interface():
                 with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=30)
                     shutdown_btn = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
+                    shutdown_btn.click(fn=shutdown_program, inputs=[states["models_loaded"]])
 
             # Fixed Configuration Tab
             with gr.Tab("Configuration"):
@@ -567,6 +597,7 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["status_settings"] = gr.Textbox(label="Status", interactive=False, scale=20)
                         config_components["shutdown"] = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
+                        config_components["shutdown"].click(fn=shutdown_program, inputs=[states["models_loaded"]])
 
             # Fixed Customization Tab
             with gr.Tab("Customisation"):
@@ -603,6 +634,7 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components["status_customisation"] = gr.Textbox(label="Status", interactive=False, scale=20)
                         custom_components["shutdown"] = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
+                        custom_components["shutdown"].click(fn=shutdown_program, inputs=[states["models_loaded"]])
 
         # Helper Functions
         def select_model_folder():
@@ -776,7 +808,12 @@ def launch_interface():
         ).then(
             fn=lambda: False,  # Reset models_loaded state
             outputs=[states["models_loaded"]]
-        )              
+        )
+        config_components["inspect_model"].click(
+            fn=inspect_model,
+            inputs=[config_components["model"], config_components["vram"]],
+            outputs=[config_components["status_settings"]]
+        )       
         config_components["load_models"].click(fn=set_loading_status, outputs=[config_components["status_settings"]]).then(fn=load_models, inputs=[config_components["model"], config_components["vram"]], outputs=[config_components["status_settings"], states["models_loaded"]])
         config_components["save_settings"].click(fn=save_all_settings, outputs=[config_components["status_settings"]])
         buttons["delete_all_history"].click(fn=lambda: ("All history deleted.", *[gr.update() for _ in buttons["session"]]), outputs=[status_text] + buttons["session"])
