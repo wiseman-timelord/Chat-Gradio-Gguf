@@ -116,7 +116,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
 ## Development
-- Currently doing a full test and bugfix, but the things below seem important too.
+Currently doing a full test and bugfix, but the things below seem important too...
 - Figure out if the Vector Databases apply to, session or mode, they should be per specific per session, which removes the need for the Delete Database buttons on the configuration page. Its important for one sessions, interactions and/or attached files, to NOT mix with other sessions...
 ```
                         erase_chat_btn = gr.Button("Erase Chat Data", variant="primary")
