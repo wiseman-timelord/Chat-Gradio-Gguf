@@ -151,7 +151,7 @@ With regards to the next generation of the program will be ...
 - [X](https://x.com/) - [Grok](https://x.com/i/grok), at the time Grok3Beta. For much of the complete updated functions that I implemented.
 - [Deepseek](https://www.deepseek.com/) - at the time, 3 and R1. For re-attempting the things Grok3Beta was having difficulty with.
 - [Claude_Sonnet](https://claude.ai) - for a smaller amount of the work on this project, useually when there was issue with the other 2 above.
-- [Perplexity](https://www.perplexity.ai) - For research to look at more sites than normal, also notice its agentic now, quite impressed.
+- [Perplexity](https://www.perplexity.ai) - For research to look at more sites than normal, also notice its agentic now, good work team.
 
 
 
