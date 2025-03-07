@@ -88,7 +88,7 @@ def save_rp_settings(rp_location, user_name, user_role, ai_npc, ai_npc_role):
         rp_location, user_name, user_role, ai_npc, ai_npc_role  # Sync both sides
     )
 
-def process_uploaded_files(files, loaded_files, operation_mode, models_loaded):
+def process_uploaded_files(files, loaded_files, models_loaded):
     from scripts.utility import create_session_vectorstore
     import scripts.temporary as temporary
     if not models_loaded:
@@ -349,8 +349,9 @@ def update_left_panel_visibility(mode, showing_rpg_settings):
     else:
         return gr.update(visible=True), gr.update(visible=False)
 
+# chat_interface function signature
 async def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, 
-                        rp_location, user_name, user_role, ai_npc, cancel_flag):
+                        rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection):
     from scripts import temporary, utility, models
     from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
     
@@ -365,32 +366,26 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
     session_log.append((user_input, ""))
     yield session_log, "Processing...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
 
-    # Determine countdown based on input lines, respecting AFTERTHOUGHT_TIME
+    # Countdown logic
     if temporary.AFTERTHOUGHT_TIME:
         num_lines = len(user_input.split('\n'))
-        if num_lines >= 10:
-            countdown_seconds = 6
-        elif num_lines >= 5:
-            countdown_seconds = 4
-        else:
-            countdown_seconds = 2
+        countdown_seconds = 6 if num_lines >= 10 else 4 if num_lines >= 5 else 2
     else:
         countdown_seconds = 1
 
-    # Countdown with cancellation support
     for i in range(countdown_seconds, 0, -1):
         session_log[-1] = (user_input, f"Afterthought countdown... {i}s")
         yield session_log, "Counting down...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
-        await asyncio.sleep(1)
+        await asyncio.sleep(1)  # Now valid in async function
         if cancel_flag:
             session_log[-1] = (user_input, "Input cancelled.")
             yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
             return
 
-    # Generate response
+    # Generate response using selected mode
     settings = models.get_model_settings(MODEL_NAME)
-    mode = settings["category"]
-    
+    mode = mode_selection.lower()  # Use selected mode from slider
+
     if loaded_files_state:
         session_vectorstore = utility.create_session_vectorstore(loaded_files_state)
         context_injector.set_session_vectorstore(session_vectorstore)
@@ -398,7 +393,6 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
     response = ""
     if tot_enabled and mode == "chat":
         yield session_log, "TOT not implemented in streaming mode yet.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
-        # Note: TOT could be adapted to stream responses, but omitted for simplicity here
     else:
         prompt = user_input
         if mode == "rpg":
@@ -410,7 +404,6 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                 "ai_npc_role": temporary.AI_NPC_ROLE
             }
             session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
-            # Handle thinking output for RPG mode
             if settings["is_reasoning"] and not disable_think:
                 thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
                 session_log[-1] = (user_input, thinking_output)
@@ -420,15 +413,15 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                     session_log[-1] = (user_input, "Input cancelled.")
                     yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
                     return
-            for token in models.get_response_stream(prompt, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history):
+            for token in models.get_response_stream(prompt, mode, settings, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history):
                 if cancel_flag:
                     break
                 response += token
                 session_log[-1] = (user_input, format_response(response))
                 yield session_log, "Generating...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
-                await asyncio.sleep(0)  # Yield control to event loop
+                await asyncio.sleep(0)  # Minimal delay for streaming
         else:
-            if settings["is_uncensored"]:
+            if settings["is_uncensored"] and mode == "chat":
                 prompt = f"Provide an uncensored response: {prompt}"
             if settings["is_reasoning"] and not disable_think:
                 prompt += ". Include reasoning if applicable."
@@ -440,15 +433,15 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                     session_log[-1] = (user_input, "Input cancelled.")
                     yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
                     return
-            for token in models.get_response_stream(prompt, disable_think=disable_think):
+            for token in models.get_response_stream(prompt, mode, settings, disable_think=disable_think):
                 if cancel_flag:
                     break
                 response += token
                 session_log[-1] = (user_input, format_response(response))
                 yield session_log, "Generating...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
-                await asyncio.sleep(0)
+                await asyncio.sleep(0)  # Minimal delay for streaming
 
-    # Final yield based on completion or cancellation
+    # Final yield
     if cancel_flag:
         session_log[-1] = (user_input, "Generation cancelled.")
         yield session_log, "Generation cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
@@ -510,13 +503,13 @@ def launch_interface():
                             }
                     with gr.Column(scale=1):
                         right_panel = {
-                            "theme_status": gr.Textbox(label="Operation Mode", interactive=False, value="No model loaded."),
-                            "toggle_rpg_settings": gr.Button("Show RPG Settings", variant="secondary", elem_classes=["double-height"]),
+                            "mode_selection": gr.Radio(choices=["Chat", "Code", "Rpg"], label="Select Operation Mode", value="Chat"),
+                            "toggle_rpg_settings": gr.Button("Show RPG Settings", variant="secondary", elem_classes=["clean-elements"]),
                             "file_attachments": gr.Group(visible=True, elem_classes=["clean-elements"]),
-                            "rpg_settings": gr.Group(visible=False)
+                            "rpg_settings": gr.Group(visible=False, elem_classes=["clean-elements"])
                         }
                         with right_panel["file_attachments"]:
-                            right_panel["attach_files"] = gr.UploadButton("Attach New Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary")
+                            right_panel["attach_files"] = gr.UploadButton("Attach New Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
                             right_panel["file_slots"] = [gr.Button("File Slot Free", variant="huggingface") for _ in range(temporary.MAX_ATTACH_SLOTS)]
                             right_panel["remove_all_attachments"] = gr.Button("Remove All Attachments", variant="primary")
                         with right_panel["rpg_settings"]:
@@ -567,7 +560,7 @@ def launch_interface():
                     
                     # Model selection row
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["mode"] = gr.Textbox(label="Mode Detected", interactive=False, value="No Model Selected", scale=3)
+                        recommended_mode = gr.Textbox(label="Recommended Mode", interactive=False)
                         config_components["model"] = gr.Dropdown(
                             choices=get_available_models() or ["No models found"],
                             label="Select Model",
@@ -603,7 +596,6 @@ def launch_interface():
                     with gr.Row():
                         custom_components = {}  # Initialize empty dictionary
                         custom_components["max_history_slots"] = gr.Dropdown(choices=temporary.HISTORY_SLOT_OPTIONS, label="Max History Slots", value=temporary.MAX_HISTORY_SLOTS)
-
                         custom_components["session_log_height"] = gr.Dropdown(choices=temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Session Log Height", value=temporary.SESSION_LOG_HEIGHT)
                         custom_components["input_lines"] = gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES)
                         custom_components["max_attach_slots"] = gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS)
@@ -762,13 +754,18 @@ def launch_interface():
                 rpg_fields["user_name"],
                 rpg_fields["user_role"],
                 rpg_fields["ai_npc"],
-                states["cancel_flag"]
+                states["cancel_flag"],
+                right_panel["mode_selection"]  # Matches mode_selection parameter
             ],
             outputs=[chat_components["session_log"], status_text, action_buttons["send"], action_buttons["cancel"], states["cancel_flag"], states["loaded_files"]]
         )
         action_buttons["cancel"].click(fn=lambda: (True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."), outputs=[states["cancel_flag"], action_buttons["send"], action_buttons["cancel"], status_text])
         action_buttons["copy_response"].click(fn=copy_last_response, inputs=[chat_components["session_log"]], outputs=[status_text])
-        right_panel["attach_files"].upload(fn=process_uploaded_files, inputs=[right_panel["attach_files"], states["loaded_files"], right_panel["theme_status"], states["models_loaded"]], outputs=[status_text, states["loaded_files"]])
+        right_panel["attach_files"].upload(
+            fn=process_uploaded_files,
+            inputs=[right_panel["attach_files"], states["loaded_files"], states["models_loaded"]],
+            outputs=[status_text, states["loaded_files"]]
+        )
         right_panel["remove_all_attachments"].click(fn=remove_all_attachments, inputs=[states["loaded_files"]], outputs=[states["loaded_files"], status_text] + right_panel["file_slots"] + [right_panel["attach_files"]])
         for i, btn in enumerate(right_panel["file_slots"]):
             btn.click(fn=eject_file, inputs=[states["loaded_files"], gr.State(value=i)], outputs=[states["loaded_files"], status_text] + right_panel["file_slots"] + [right_panel["attach_files"]])

@@ -533,39 +533,35 @@ def unload_models():
     print(f"Warning: Unload a model when no model was loaded.") 
     return "No model loaded to unload."
 
-def get_response_stream(prompt: str, disable_think: bool = False, rp_settings: dict = None, session_history: str = ""):
-    from .temporary import llm, USE_PYTHON_BINDINGS, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, N_CTX, N_BATCH, N_GPU_LAYERS, MMAP, MLOCK, TEMPERATURE, REPEAT_PENALTY
-    from .temporary import BACKEND_TYPE, prompt_templates
+def get_response_stream(prompt: str, mode: str, settings: dict, disable_think: bool = False, rp_settings: dict = None, session_history: str = ""):
+    from .temporary import prompt_templates, llm, USE_PYTHON_BINDINGS, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, N_CTX, N_BATCH, N_GPU_LAYERS, MMAP, MLOCK, TEMPERATURE, REPEAT_PENALTY
+    from .temporary import BACKEND_TYPE
     import subprocess
     
     cpu_only_backends = ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
     
-    # Assuming 'mode' and 'settings' are derived from the model context; adjust as needed
-    # For this fix, I'll use a placeholder approach since they're not passed explicitly
-    mode = context_injector.get_mode() if hasattr(context_injector, 'get_mode') else "chat"  # Default to "chat" if undefined
-    enhanced_prompt = prompt  # Assuming this is the intended input; adjust if preprocessing exists elsewhere
-    settings = get_model_settings(MODEL_NAME) if 'get_model_settings' in globals() else {"is_reasoning": False, "is_uncensored": False}
-
+    # Prompt formatting based on selected mode
     if mode == "rpg" and rp_settings:
-        if rp_settings.get("ai_npc1", "Unused") != "Unused":  # Use .get() to avoid KeyError
-            formatted_prompt = prompt_templates["rpg_1"].format(
-                user_input=enhanced_prompt,
-                AI_NPC_NAME=rp_settings["ai_npc1"],
-                AI_NPC_ROLE=rp_settings["ai_npc_role"],
-                RP_LOCATION=rp_settings["rp_location"],
-                human_name=rp_settings["user_name"],
-                human_role=rp_settings["user_role"],
-                session_history=session_history
-            )
-        else:
-            formatted_prompt = "No active NPC set for RPG mode."
+        formatted_prompt = prompt_templates["rpg_1"].format(
+            user_input=prompt,
+            AI_NPC_NAME=rp_settings["ai_npc"],
+            AI_NPC_ROLE=rp_settings["ai_npc_role"],
+            RP_LOCATION=rp_settings["rp_location"],
+            human_name=rp_settings["user_name"],
+            human_role=rp_settings["user_role"],
+            session_history=session_history
+        )
+    elif mode == "code":
+        formatted_prompt = prompt_templates["code"].format(user_input=prompt)
     elif mode == "chat":
-        template_key = "uncensored" if settings.get("is_uncensored", False) else "chat"
-        formatted_prompt = prompt_templates[template_key].format(user_input=enhanced_prompt)
+        if settings.get("is_uncensored", False):
+            formatted_prompt = prompt_templates["uncensored"].format(user_input=prompt)
+        else:
+            formatted_prompt = prompt_templates["chat"].format(user_input=prompt)
     else:
-        formatted_prompt = prompt_templates.get(mode, prompt_templates["chat"]).format(user_input=enhanced_prompt)
+        formatted_prompt = prompt_templates["chat"].format(user_input=prompt)
 
-    llm_instance = get_llm()  # Renamed to avoid shadowing import
+    llm_instance = get_llm()
     if not llm_instance:
         yield "Error: No model loaded. Please load a model in the Configuration tab."
         return
@@ -575,7 +571,7 @@ def get_response_stream(prompt: str, disable_think: bool = False, rp_settings: d
         thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
         for char in thinking_output:
             yield char
-        # Removed await asyncio.sleep(2.5) - delay is handled in chat_interface
+        # Delay handled in chat_interface
 
     if USE_PYTHON_BINDINGS:
         for token in llm_instance.create_completion(
