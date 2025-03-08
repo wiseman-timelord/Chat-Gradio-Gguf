@@ -211,7 +211,7 @@ def calculate_gpu_layers(models, available_vram):
 
         # Step 3: Calculate LayerSize with overhead
         model_file_size = get_model_size(str(model_path))  # in MB
-        adjusted_model_size = model_file_size * 1.1875  # Factor in memory overhead
+        adjusted_model_size = model_file_size * 1.1 # Factor in memory overhead
         layer_size = adjusted_model_size / num_layers if num_layers > 0 else 0
 
         # Step 4: Calculate maximum layers that fit into allocated VRAM
@@ -562,12 +562,18 @@ def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings
         session_history (str, optional): Session history for context.
     
     Yields:
-        str: Tokens from the CLI output stream.
+        str: Tokens from the CLI output stream (or full response if STREAM_OUTPUT is False).
     """
+    # Construct full model path
+    model_path = str(Path(temporary.MODEL_FOLDER) / temporary.MODEL_NAME)
+    if not Path(model_path).exists():
+        yield f"Error: Model file not found at {model_path}"
+        return
+    
     # Base command setup
     command = [
         temporary.LLAMA_CLI_PATH,
-        "--model", temporary.MODEL_NAME,
+        "--model", model_path,
         "--prompt", prompt,
         "--ctx-size", str(temporary.N_CTX),
         "--batch-size", str(temporary.N_BATCH),
@@ -575,16 +581,16 @@ def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings
         "--repeat-penalty", str(temporary.REPEAT_PENALTY),
     ]
 
-    # Add GPU selection (disabled for default behavior testing)
+    # Add GPU selection (optional)
     available_gpus = get_available_gpus()
     if temporary.SELECTED_GPU in available_gpus:
         gpu_index = available_gpus.index(temporary.SELECTED_GPU)
-        # command.extend(["--vulkan-device", str(gpu_index)])  # Commented out to use default device
+        # command.extend(["--vulkan-device", str(gpu_index)])  # Uncomment if needed
         print(f"Selected GPU: {temporary.SELECTED_GPU} (index {gpu_index}), using default device selection.")
     else:
         print(f"Warning: Selected GPU '{temporary.SELECTED_GPU}' not found. Default GPU may be used.")
 
-    # Handle mode-specific adjustments
+    # Mode-specific adjustments
     if mode == "rpg" and rp_settings:
         rp_context = (
             f"Location: {rp_settings['rp_location']}\n"
@@ -594,42 +600,51 @@ def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings
         )
         command.extend(["--prompt", f"{rp_context}\n{prompt}"])
 
-    # Optionally add reasoning if not disabled
     if settings.get("is_reasoning") and not disable_think:
-        command.append("--verbose")  # Assuming verbose mode includes reasoning; adjust as needed
+        command.append("--verbose")
 
-    # Note: --stop is omitted unless a stop sequence is explicitly required
-    # If your CLI tool supports stop sequences and you need them, uncomment and adjust:
-    # stop_sequence = "some_stop_token"  # Define as needed
-    # if stop_sequence:
-    #     command.extend(["--stop", stop_sequence])
-
-    # Log the full command for debugging
+    # Log the command
     print(f"Executing CLI command: {' '.join(command)}")
 
-    # Execute the command and stream output
     try:
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1  # Line-buffered
+            bufsize=1
         )
 
-        # Stream stdout
-        for line in process.stdout:
-            yield line.strip()
+        if temporary.STREAM_OUTPUT:
+            # Stream output with timeout check
+            start_time = time.time()
+            timeout = 30  # 30 seconds timeout
+            while True:
+                line = process.stdout.readline()
+                if line:
+                    yield line.strip()
+                elif process.poll() is not None:  # Process has ended
+                    break
+                elif time.time() - start_time > timeout:
+                    process.terminate()
+                    yield "Error: CLI response timed out after 30 seconds."
+                    break
+        else:
+            # Non-streaming: collect full output
+            output, stderr = process.communicate(timeout=30)
+            if stderr:
+                raise RuntimeError(f"CLI Error: {stderr}")
+            if process.returncode != 0:
+                raise RuntimeError(f"CLI process exited with code {process.returncode}")
+            yield output.strip()
 
-        # Check for errors in stderr
+        # Check for errors
         stderr_output = process.stderr.read()
         if stderr_output:
             raise RuntimeError(f"CLI Error: {stderr_output}")
 
-        process.wait()
-        if process.returncode != 0:
-            raise RuntimeError(f"CLI process exited with code {process.returncode}")
-
+    except subprocess.TimeoutExpired:
+        process.terminate()
+        yield "Error: CLI execution timed out after 30 seconds."
     except Exception as e:
         yield f"Error executing CLI: {str(e)}"
-        return

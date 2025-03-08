@@ -333,7 +333,6 @@ def load_config():
             temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
             temporary.MAX_HISTORY_SLOTS = int(config["model_settings"].get("max_history_slots", 10))
             temporary.MAX_ATTACH_SLOTS = int(config["model_settings"].get("max_attach_slots", 6))
-            # New settings
             temporary.SESSION_LOG_HEIGHT = int(config["model_settings"].get("session_log_height", 450))
             temporary.INPUT_LINES = int(config["model_settings"].get("input_lines", 5))
             # Backend config
@@ -347,4 +346,7 @@ def load_config():
             temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")
     else:
         # Default to ".\models" if no config exists
-        temporary.MODEL_FOLDER = ".\models"        
+        temporary.MODEL_FOLDER = ".\models"
+    
+    # Resolve MODEL_FOLDER to an absolute path
+    temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())      

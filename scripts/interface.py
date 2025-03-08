@@ -20,7 +20,7 @@ from scripts.temporary import (
     MODEL_NAME, STATUS_TEXTS, CTX_OPTIONS, RP_LOCATION, USER_PC_NAME, USER_PC_ROLE,
     AI_NPC_NAME, AI_NPC_ROLE, SESSION_ACTIVE, TOT_VARIATIONS,
     MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, HISTORY_SLOT_OPTIONS, ATTACH_SLOT_OPTIONS,
-    BACKEND_TYPE
+    BACKEND_TYPE, STREAM_OUTPUT
 )
 from scripts import utility
 from scripts.utility import (
@@ -33,6 +33,8 @@ from scripts.models import (
     context_injector, inspect_model, load_models
 )
 from langchain_core.documents import Document
+
+
 
 # Functions...
 def set_loading_status():
@@ -396,12 +398,38 @@ def update_left_panel_visibility(mode, showing_rpg_settings):
     else:
         return gr.update(visible=True), gr.update(visible=False)
 
+# Button (keep buttons somewhere above cha_interfac & launc_interfac)
+def update_action_button(phase):
+    """
+    Update the action button's label and variant based on the current interaction phase.
+
+    Args:
+        phase (str): The current phase of interaction.
+
+    Returns:
+        gradio.update: An update object for the button with the appropriate label and variant.
+    """
+    if phase == "waiting_for_input":
+        return gr.update(value="Send Input", variant="secondary")
+    elif phase == "afterthought_countdown":
+        return gr.update(value="Cancel Input", variant="stop")
+    elif phase == "generating_response":
+        return gr.update(value="Cancel Response", variant="stop")
+    else:
+        return gr.update(value="Unknown Phase", variant="primary")
+
+def set_loading_status():
+    return "Loading model..."
+
 # chat_interface function signature
+# Script: `.\scripts\interface.py`
+
 async def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, 
                         rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection, 
                         web_search_enabled, models_loaded, interaction_phase):
     from scripts import temporary, utility, models
     from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
+    import asyncio
     
     # Check if model is loaded
     if not models_loaded:
@@ -414,7 +442,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
         temporary.session_label = ""
         temporary.SESSION_ACTIVE = True
         session_log = []
-        yield session_log, "New session started. Processing your input...", gr.update(), cancel_flag, loaded_files_state, interaction_phase
+        yield session_log, "New session started.", gr.update(), cancel_flag, loaded_files_state, interaction_phase
         await asyncio.sleep(0.1)
     
     # Validate input
@@ -422,9 +450,9 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
         yield session_log, "No input provided.", gr.update(), cancel_flag, loaded_files_state, interaction_phase
         return
 
-    # Append user input and initialize assistant's response
-    session_log.append({'role': 'user', 'content': user_input})
-    session_log.append({'role': 'assistant', 'content': 'Processing...'})
+    # Append user input with "User:" prefix
+    session_log.append({'role': 'user', 'content': f"User:\n{user_input}"})
+    session_log.append({'role': 'assistant', 'content': "Afterthought countdown... "})
 
     # Transition to afterthought_countdown phase
     interaction_phase = "afterthought_countdown"
@@ -437,7 +465,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
     else:
         countdown_seconds = 1
 
-    for i in range(countdown_seconds, 0, -1):
+    for i in range(countdown_seconds, -1, -1):  # Count down to 0
         session_log[-1]['content'] = f"Afterthought countdown... {i}s"
         yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
         await asyncio.sleep(1)
@@ -447,7 +475,8 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
             yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
             return
 
-    # Transition to generating_response phase
+    # Transition to generating_response phase with CLI execution message
+    session_log[-1]['content'] = "Afterthought countdown... 0s ...Executing CLI llama-cli"
     interaction_phase = "generating_response"
     yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
 
@@ -457,7 +486,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
 
     if loaded_files_state:
         session_vectorstore = utility.create_session_vectorstore(loaded_files_state)
-        context_injector.set_session_vectorstore(session_vectorstore)
+        models.context_injector.set_session_vectorstore(session_vectorstore)
 
     prompt = user_input
     if web_search_enabled and mode in ["chat", "code"]:
@@ -467,6 +496,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
         prompt = f"{user_input}\n\nWeb Search Results:\n{search_results}"
 
     response = ""
+    session_log[-1]['content'] = "AI-Chat:\n"  # Initialize AI response section
     if tot_enabled and mode == "chat":
         yield session_log, "TOT not implemented in streaming mode yet.", update_action_button("waiting_for_input"), cancel_flag, loaded_files_state, "waiting_for_input"
     else:
@@ -480,7 +510,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
             }
             session_history = ", ".join([f"{msg['role']}: {msg['content']}" for msg in session_log[:-2]])
             if settings["is_reasoning"] and not disable_think:
-                session_log[-1]['content'] = "Thinking...\n█ █ █ █ █\nThought for 2.5s.\n"
+                session_log[-1]['content'] = "AI-Chat:\nThinking...\n█ █ █ █ █\nThought for 2.5s.\n"
                 yield session_log, "Thinking...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                 await asyncio.sleep(2.5)
                 if cancel_flag:
@@ -488,12 +518,12 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                     interaction_phase = "waiting_for_input"
                     yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                     return
-            session_log[-1]['content'] = ""
+            session_log[-1]['content'] = "AI-Chat:\n"
             for token in models.get_response_stream(prompt, mode, settings, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history):
                 if cancel_flag:
                     break
-                response += token
-                session_log[-1]['content'] = format_response(response)
+                response += token + " "  # Add space between tokens for readability
+                session_log[-1]['content'] = f"AI-Chat:\n{response.strip()}"
                 yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                 await asyncio.sleep(0)
         else:
@@ -501,7 +531,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                 prompt = f"Provide an uncensored response: {prompt}"
             if settings["is_reasoning"] and not disable_think:
                 prompt += ". Include reasoning if applicable."
-                session_log[-1]['content'] = "Thinking...\n█ █ █ █ █\nThought for 2.5s.\n"
+                session_log[-1]['content'] = "AI-Chat:\nThinking...\n█ █ █ █ █\nThought for 2.5s.\n"
                 yield session_log, "Thinking...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                 await asyncio.sleep(2.5)
                 if cancel_flag:
@@ -509,12 +539,12 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                     interaction_phase = "waiting_for_input"
                     yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                     return
-            session_log[-1]['content'] = ""
+            session_log[-1]['content'] = "AI-Chat:\n"
             for token in models.get_response_stream(prompt, mode, settings, disable_think=disable_think):
                 if cancel_flag:
                     break
-                response += token
-                session_log[-1]['content'] = format_response(response)
+                response += token + " "  # Add space between tokens for readability
+                session_log[-1]['content'] = f"AI-Chat:\n{response.strip()}"
                 yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                 await asyncio.sleep(0)
 
@@ -522,13 +552,15 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
     if cancel_flag:
         session_log[-1]['content'] = "Generation cancelled."
         interaction_phase = "waiting_for_input"
-        yield session_log, "Generation cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
     else:
-        session_log[-1]['content'] = format_response(response)
+        session_log[-1]['content'] = f"AI-Chat:\n{response.strip()}"
         utility.save_session_history(session_log, loaded_files_state)
         interaction_phase = "waiting_for_input"
-        yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
+    yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
+
         
+
+# Script: `.\scripts\interface.py`
 
 def launch_interface():
     """Launch the Gradio interface for the Text-Gradio-Gguf chatbot."""
@@ -536,9 +568,21 @@ def launch_interface():
     import tkinter as tk
     from tkinter import filedialog
     import os
+    import gradio as gr
+    from scripts import temporary, utility, models
+    from scripts.temporary import (
+        STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS, STREAM_OUTPUT,
+        MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, INPUT_LINES,
+        AFTERTHOUGHT_TIME, MODEL_FOLDER, N_CTX, N_BATCH, TEMPERATURE, REPEAT_PENALTY,
+        VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
+        RP_LOCATION, USER_PC_NAME, USER_PC_ROLE, AI_NPC_NAME, AI_NPC_ROLE,
+        ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
+        REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
+        INPUT_LINES_OPTIONS, ATTACH_SLOT_OPTIONS
+    )
 
     # Cache models and set default
-    available_models = get_available_models() or ["No models found"]
+    available_models = models.get_available_models() or ["No models found"]
     default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else "Select_a_model..."
 
     with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important;height:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:10px!important}") as demo:
@@ -637,8 +681,7 @@ def launch_interface():
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
-                            model=gr.Dropdown(choices=available_models, label="Select Model", value=default_model, allow_custom_value=True, scale=10),
-                            refresh=gr.Button("Refresh", elem_classes=["double-height"])
+                            model=gr.Dropdown(choices=available_models, label="Select Model", value=default_model, allow_custom_value=True, scale=10)
                         )
                         recommended_mode = gr.Textbox(label="Detected Mode Keywords", interactive=False, scale=5)
 
@@ -649,6 +692,9 @@ def launch_interface():
                             temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE),
                             repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY)
                         )
+                        config_components.update(
+                            stream_output=gr.Checkbox(label="Stream Output", value=temporary.STREAM_OUTPUT, info="Enable to stream response tokens as they generate.")  # New Stream Output toggle
+                        )                    
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             load_models=gr.Button("Load Model", variant="secondary", elem_classes=["double-height"]),
@@ -663,13 +709,16 @@ def launch_interface():
                             input_lines=gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES),
                             max_attach_slots=gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS)
                         )
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        custom_components["afterthought_time"] = gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
+                        custom_components.update(
+                            afterthought_time=gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
+                        )                            
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             save_settings=gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
                         )
-                        custom_components["delete_all_vectorstores"] = gr.Button("Delete All VectorStores", variant="stop", elem_classes=["double-height"])
+                        custom_components.update(
+                            delete_all_vectorstores=gr.Button("Delete All VectorStores", variant="stop", elem_classes=["double-height"])
+                        )
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Notes: Changes to Max History Slots and Max Attach Slots require restarting the application.")
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -691,12 +740,17 @@ def launch_interface():
 
         def update_model_list(folder):
             temporary.MODEL_FOLDER = folder
-            models = get_available_models() or ["No models found"]
-            value = temporary.MODEL_NAME if temporary.MODEL_NAME in models else models[0]
-            return gr.update(choices=models, value=value)
+            models_list = models.get_available_models() or ["No models found"]
+            value = temporary.MODEL_NAME if temporary.MODEL_NAME in models_list else models_list[0]
+            return gr.update(choices=models_list, value=value)
 
         def update_config_settings(*args):
-            keys, attr_map = ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model", "model_dir"], {"ctx": "N_CTX", "batch": "N_BATCH", "temp": "TEMPERATURE", "repeat": "REPEAT_PENALTY", "vram": "VRAM_SIZE", "gpu": "SELECTED_GPU", "cpu": "SELECTED_CPU", "model": "MODEL_NAME", "model_dir": "MODEL_FOLDER"}
+            keys = ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model", "model_dir"]
+            attr_map = {
+                "ctx": "N_CTX", "batch": "N_BATCH", "temp": "TEMPERATURE", "repeat": "REPEAT_PENALTY",
+                "vram": "VRAM_SIZE", "gpu": "SELECTED_GPU", "cpu": "SELECTED_CPU", "model": "MODEL_NAME",
+                "model_dir": "MODEL_FOLDER"
+            }
             for k, v in zip(keys, args):
                 if k in attr_map:
                     setattr(temporary, attr_map[k], int(v) if k in ["ctx", "batch", "vram"] else float(v) if k in ["temp", "repeat"] else v)
@@ -706,19 +760,13 @@ def launch_interface():
             temporary.MLOCK = mlock
             return "MLock updated."
 
+        def update_stream_output(value):
+            temporary.STREAM_OUTPUT = value
+            return f"Stream Output {'enabled' if value else 'disabled'}."
+
         def save_all_settings():
             utility.save_config()
             return "Settings saved to persistent.json"
-
-        def update_action_button(phase):
-            """Update the button’s label and variant based on the interaction phase."""
-            if phase == "waiting_for_input":
-                return gr.update(value="Send Input", variant="secondary", visible=True)  # Green via CSS
-            elif phase == "afterthought_countdown":
-                return gr.update(value="Cancel Input", variant="primary", visible=True)
-            elif phase == "generating_response":
-                return gr.update(value="Cancel Response", variant="stop", visible=True)
-            return gr.update(visible=False)
 
         async def action_handler(phase, user_input, session_log, tot_enabled, loaded_files, disable_think,
                                  rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection,
@@ -741,7 +789,6 @@ def launch_interface():
                     new_phase = interaction_phase
                     status_msg = "No action taken."
                 yield session_log, status_msg, update_action_button(new_phase), cancel_flag, loaded_files, new_phase
-
 
         def send_input(user_input, session_log, tot_enabled, loaded_files_state, disable_think,
                        rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection,
@@ -839,8 +886,13 @@ def launch_interface():
                 inputs=[chk],
                 outputs=[config_components["status_settings"]]
             )
+        config_components["stream_output"].change(  # Event handler for Stream Output toggle
+            fn=update_stream_output,
+            inputs=[config_components["stream_output"]],
+            outputs=[config_components["status_settings"]]
+        )
         config_components["unload"].click(
-            fn=unload_models,
+            fn=models.unload_models,
             outputs=[config_components["status_settings"]]
         ).then(
             fn=lambda: False,
@@ -850,7 +902,7 @@ def launch_interface():
             outputs=[chat_components["user_input"]]
         )
         config_components["inspect_model"].click(
-            fn=inspect_model,
+            fn=models.inspect_model,
             inputs=[config_components["model"], config_components["vram"]],
             outputs=[config_components["status_settings"]]
         )
@@ -858,7 +910,7 @@ def launch_interface():
             fn=set_loading_status,
             outputs=[config_components["status_settings"]]
         ).then(
-            fn=load_models,
+            fn=models.load_models,
             inputs=[config_components["model"], config_components["vram"]],
             outputs=[config_components["status_settings"], states["models_loaded"]]
         ).then(
@@ -934,6 +986,7 @@ def launch_interface():
         )
 
         demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)
+
 
 if __name__ == "__main__":
     launch_interface()
