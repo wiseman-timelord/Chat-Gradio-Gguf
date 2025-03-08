@@ -116,7 +116,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Development
 With regards to the current version of the program...
-- History files are being created, eg `Session saved to data\history\session_20250308_112411.json with 0 attached files.`, but these are not being shown on the slots on the left, and possibly not being handled how I intend, so need put history slots on low, and re-test.
+- History files are being created, eg `Session saved to data\history\session_20250308_112411.json with 0 attached files.`, but these are not being shown on the slots on the left, and possibly not being handled how I intend. They should be detailed in order of which one was modified most recently at the top. When, a new session is produced or an existing session updated, then all the other `history slots`, should be below it in the left column, rotating the other slots down by 1 as required. like a notmal history slot feature works on a chatbot, but obviously in our case there is a specified number of maximum slots, where the most oldes modified one is removed when the concurrent sessions goes over that number.
 - Debugging Input/Response mechanisms.
 - Need THINK option to be visible when using reasoning model with any modes. THINK option should obviously not be visible if not a reasoning model. `Enable THINK`, enabled by default, but I think there is something special to put into the prompt or the argument when its a reasoning model and you do not want it to use the THINK phase.  
 - 5 main scripts need to be optimized soon.
