@@ -106,13 +106,21 @@ def save_session_history(history: list, loaded_files: list, force_save: bool = F
         return f"Error saving session: {str(e)}"
         
 def load_session_history(file_path: str) -> tuple:
-    """Load session history, label, and attached files."""
     with open(file_path, "r") as f:
         session_data = json.load(f)
     session_id = session_data.get("session_id", None)
     label = session_data.get("label", "Untitled")
     history = session_data.get("history", [])
     attached_files = session_data.get("attached_files", [])
+    
+    # Convert old tuple format to new dictionary format if necessary
+    if history and isinstance(history[0], list) and len(history[0]) == 2:
+        new_history = []
+        for user_msg, ai_msg in history:
+            new_history.append({'role': 'user', 'content': user_msg})
+            new_history.append({'role': 'assistant', 'content': ai_msg})
+        history = new_history
+    
     print(f"Loaded session {session_id} from {file_path} with label '{label}' and {len(attached_files)} files.")
     return session_id, label, history, attached_files
 

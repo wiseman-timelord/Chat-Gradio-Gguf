@@ -110,22 +110,36 @@ def get_llm():
 def get_available_models():
     from .temporary import MODEL_FOLDER
     model_dir = Path(MODEL_FOLDER)
-    return [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
+    models = [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
+    print(f"Available models in {MODEL_FOLDER}: {models}")
+    return models
 
 def get_model_settings(model_name):
     from .temporary import category_keywords, handling_keywords
+    print(f"Category keywords: {category_keywords}")
+    print(f"Handling keywords: {handling_keywords}")
     model_name_lower = model_name.lower()
+    detected_keywords = []
     category = "chat"  # Default category
-    is_uncensored = any(keyword in model_name_lower for keyword in handling_keywords["uncensored"])
-    is_reasoning = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
+    # Check category keywords
     for cat, keywords in category_keywords.items():
-        if any(keyword in model_name_lower for keyword in keywords):
-            category = cat
-            break
+        for keyword in keywords:
+            if keyword in model_name_lower:
+                detected_keywords.append(keyword)
+                category = cat
+                break  # Assuming one category per model
+    # Check handling keywords
+    is_uncensored = any(keyword in model_name_lower for keyword in handling_keywords["uncensored"])
+    if is_uncensored:
+        detected_keywords.append("uncensored")
+    is_reasoning = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
+    if is_reasoning:
+        detected_keywords.append("reasoning")
     settings = {
         "category": category,
         "is_uncensored": is_uncensored,
         "is_reasoning": is_reasoning,
+        "detected_keywords": detected_keywords
     }
     return settings
 
@@ -533,80 +547,89 @@ def unload_models():
     print(f"Warning: Unload a model when no model was loaded.") 
     return "No model loaded to unload."
 
-def get_response_stream(prompt: str, mode: str, settings: dict, disable_think: bool = False, rp_settings: dict = None, session_history: str = ""):
-    from .temporary import prompt_templates, llm, USE_PYTHON_BINDINGS, LLAMA_CLI_PATH, MODEL_FOLDER, MODEL_NAME, N_CTX, N_BATCH, N_GPU_LAYERS, MMAP, MLOCK, TEMPERATURE, REPEAT_PENALTY
-    from .temporary import BACKEND_TYPE
-    import subprocess
+
+def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings=None, session_history=None):
+    from scripts.utility import get_available_gpus
+    """
+    Generate a response stream by executing the CLI tool with appropriate arguments.
     
-    cpu_only_backends = ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
+    Args:
+        prompt (str): The input prompt for the model.
+        mode (str): The operation mode (e.g., "chat", "rpg", "code").
+        settings (dict): Model settings from get_model_settings.
+        disable_think (bool): Whether to disable reasoning/thinking steps.
+        rp_settings (dict, optional): RPG settings for RPG mode.
+        session_history (str, optional): Session history for context.
     
-    # Prompt formatting based on selected mode
+    Yields:
+        str: Tokens from the CLI output stream.
+    """
+    # Base command setup
+    command = [
+        temporary.LLAMA_CLI_PATH,
+        "--model", temporary.MODEL_NAME,
+        "--prompt", prompt,
+        "--ctx-size", str(temporary.N_CTX),
+        "--batch-size", str(temporary.N_BATCH),
+        "--temp", str(temporary.TEMPERATURE),
+        "--repeat-penalty", str(temporary.REPEAT_PENALTY),
+    ]
+
+    # Add GPU selection (disabled for default behavior testing)
+    available_gpus = get_available_gpus()
+    if temporary.SELECTED_GPU in available_gpus:
+        gpu_index = available_gpus.index(temporary.SELECTED_GPU)
+        # command.extend(["--vulkan-device", str(gpu_index)])  # Commented out to use default device
+        print(f"Selected GPU: {temporary.SELECTED_GPU} (index {gpu_index}), using default device selection.")
+    else:
+        print(f"Warning: Selected GPU '{temporary.SELECTED_GPU}' not found. Default GPU may be used.")
+
+    # Handle mode-specific adjustments
     if mode == "rpg" and rp_settings:
-        formatted_prompt = prompt_templates["rpg_1"].format(
-            user_input=prompt,
-            AI_NPC_NAME=rp_settings["ai_npc"],
-            AI_NPC_ROLE=rp_settings["ai_npc_role"],
-            RP_LOCATION=rp_settings["rp_location"],
-            human_name=rp_settings["user_name"],
-            human_role=rp_settings["user_role"],
-            session_history=session_history
+        rp_context = (
+            f"Location: {rp_settings['rp_location']}\n"
+            f"User: {rp_settings['user_name']} ({rp_settings['user_role']})\n"
+            f"AI: {rp_settings['ai_npc']} ({rp_settings['ai_npc_role']})\n"
+            f"History: {session_history}"
         )
-    elif mode == "code":
-        formatted_prompt = prompt_templates["code"].format(user_input=prompt)
-    elif mode == "chat":
-        if settings.get("is_uncensored", False):
-            formatted_prompt = prompt_templates["uncensored"].format(user_input=prompt)
-        else:
-            formatted_prompt = prompt_templates["chat"].format(user_input=prompt)
-    else:
-        formatted_prompt = prompt_templates["chat"].format(user_input=prompt)
+        command.extend(["--prompt", f"{rp_context}\n{prompt}"])
 
-    llm_instance = get_llm()
-    if not llm_instance:
-        yield "Error: No model loaded. Please load a model in the Configuration tab."
-        return
+    # Optionally add reasoning if not disabled
+    if settings.get("is_reasoning") and not disable_think:
+        command.append("--verbose")  # Assuming verbose mode includes reasoning; adjust as needed
 
-    # Handle thinking output if applicable
-    if settings.get("is_reasoning", False) and not disable_think:
-        thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
-        for char in thinking_output:
-            yield char
-        # Delay handled in chat_interface
+    # Note: --stop is omitted unless a stop sequence is explicitly required
+    # If your CLI tool supports stop sequences and you need them, uncomment and adjust:
+    # stop_sequence = "some_stop_token"  # Define as needed
+    # if stop_sequence:
+    #     command.extend(["--stop", stop_sequence])
 
-    if USE_PYTHON_BINDINGS:
-        for token in llm_instance.create_completion(
-            prompt=formatted_prompt,
-            temperature=TEMPERATURE,
-            repeat_penalty=REPEAT_PENALTY,
-            stop=["</s>", "USER:", "ASSISTANT:"],
-            max_tokens=2048,
-            stream=True
-        ):
-            yield token['choices'][0]['text']
-    else:
-        cmd = [
-            LLAMA_CLI_PATH,
-            "-m", f"{MODEL_FOLDER}/{MODEL_NAME}",
-            "-p", formatted_prompt,
-            "--temp", str(TEMPERATURE),
-            "--repeat-penalty", str(REPEAT_PENALTY),
-            "--ctx-size", str(N_CTX),
-            "--batch-size", str(N_BATCH),
-            "--n-predict", "2048",
-            "--stop", "</s>", "--stop", "USER:", "--stop", "ASSISTANT:"
-        ]
-        if N_GPU_LAYERS > 0 and BACKEND_TYPE not in cpu_only_backends:
-            cmd += ["--n-gpu-layers", str(N_GPU_LAYERS)]
-        if MMAP:
-            cmd += ["--mmap"]
-        if MLOCK:
-            cmd += ["--mlock"]
+    # Log the full command for debugging
+    print(f"Executing CLI command: {' '.join(command)}")
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        for line in iter(process.stdout.readline, ''):
-            if line:
-                yield line.rstrip()
+    # Execute the command and stream output
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1  # Line-buffered
+        )
+
+        # Stream stdout
+        for line in process.stdout:
+            yield line.strip()
+
+        # Check for errors in stderr
+        stderr_output = process.stderr.read()
+        if stderr_output:
+            raise RuntimeError(f"CLI Error: {stderr_output}")
+
         process.wait()
-        stderr = process.stderr.read()
         if process.returncode != 0:
-            yield f"Error executing CLI: {stderr}"
+            raise RuntimeError(f"CLI process exited with code {process.returncode}")
+
+    except Exception as e:
+        yield f"Error executing CLI: {str(e)}"
+        return

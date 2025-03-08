@@ -172,8 +172,8 @@ def load_session_by_index(index):
     return [], "No session to load"
 
 def copy_last_response(session_log):
-    if session_log and session_log[-1][1]:
-        response = session_log[-1][1]
+    if session_log and session_log[-1]['role'] == 'assistant':
+        response = session_log[-1]['content']
         clean_response = re.sub(r'<[^>]+>', '', response)
         pyperclip.copy(clean_response)
         return "AI Response copied to clipboard."
@@ -261,8 +261,12 @@ def determine_operation_mode(model_name):
     return "Chat"
 
 def update_model_based_options(model_name):
-    if model_name == "Select_a_model...":
-        mode = "Chat"  # Default to Chat when no model is selected
+    """
+    Update UI options based on the selected model.
+    Handles cases where no model is selected or no models are found.
+    """
+    if model_name is None or model_name in ["Select_a_model...", "No models found"]:
+        mode = "Chat"  # Default to Chat when no valid model is selected
         think_visible = False
         recommended = "Select a model"
     else:
@@ -270,7 +274,6 @@ def update_model_based_options(model_name):
         mode = settings["category"].capitalize()
         think_visible = settings["is_reasoning"]
         recommended = mode
-    
     return [
         gr.update(value=mode),      # Set radio button to model’s category
         gr.update(visible=think_visible),  # Set Think Switch visibility
@@ -395,20 +398,37 @@ def update_left_panel_visibility(mode, showing_rpg_settings):
 
 # chat_interface function signature
 async def chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think, 
-                        rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection, web_search_enabled):
+                        rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection, 
+                        web_search_enabled, models_loaded, interaction_phase):
     from scripts import temporary, utility, models
     from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
     
-    if not SESSION_ACTIVE:
-        yield session_log, "Please start a new session first.", gr.update(), gr.update(), cancel_flag, loaded_files_state
+    # Check if model is loaded
+    if not models_loaded:
+        yield session_log, "Please load a model first.", gr.update(), cancel_flag, loaded_files_state, interaction_phase
         return
+    
+    # Automatically start a new session if none is active
+    if not temporary.SESSION_ACTIVE:
+        temporary.current_session_id = None
+        temporary.session_label = ""
+        temporary.SESSION_ACTIVE = True
+        session_log = []
+        yield session_log, "New session started. Processing your input...", gr.update(), cancel_flag, loaded_files_state, interaction_phase
+        await asyncio.sleep(0.1)
+    
+    # Validate input
     if not user_input.strip():
-        yield session_log, "No input provided.", gr.update(), gr.update(), cancel_flag, loaded_files_state
+        yield session_log, "No input provided.", gr.update(), cancel_flag, loaded_files_state, interaction_phase
         return
 
-    # Append user input and initialize response
-    session_log.append((user_input, ""))
-    yield session_log, "Processing...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+    # Append user input and initialize assistant's response
+    session_log.append({'role': 'user', 'content': user_input})
+    session_log.append({'role': 'assistant', 'content': 'Processing...'})
+
+    # Transition to afterthought_countdown phase
+    interaction_phase = "afterthought_countdown"
+    yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
 
     # Countdown logic
     if temporary.AFTERTHOUGHT_TIME:
@@ -418,15 +438,20 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
         countdown_seconds = 1
 
     for i in range(countdown_seconds, 0, -1):
-        session_log[-1] = (user_input, f"Afterthought countdown... {i}s")
-        yield session_log, "Counting down...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+        session_log[-1]['content'] = f"Afterthought countdown... {i}s"
+        yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
         await asyncio.sleep(1)
         if cancel_flag:
-            session_log[-1] = (user_input, "Input cancelled.")
-            yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+            session_log[-1]['content'] = "Input cancelled."
+            interaction_phase = "waiting_for_input"
+            yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
             return
 
-    # Generate response using selected mode
+    # Transition to generating_response phase
+    interaction_phase = "generating_response"
+    yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
+
+    # Generate response
     settings = models.get_model_settings(MODEL_NAME)
     mode = mode_selection.lower()
 
@@ -436,14 +461,14 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
 
     prompt = user_input
     if web_search_enabled and mode in ["chat", "code"]:
-        session_log[-1] = (user_input, "Performing web search...")
-        yield session_log, "Performing web search...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+        session_log[-1]['content'] = "Performing web search..."
+        yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
         search_results = utility.web_search(user_input)
         prompt = f"{user_input}\n\nWeb Search Results:\n{search_results}"
 
     response = ""
     if tot_enabled and mode == "chat":
-        yield session_log, "TOT not implemented in streaming mode yet.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+        yield session_log, "TOT not implemented in streaming mode yet.", update_action_button("waiting_for_input"), cancel_flag, loaded_files_state, "waiting_for_input"
     else:
         if mode == "rpg":
             rp_settings = {
@@ -453,281 +478,228 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files_stat
                 "ai_npc": ai_npc,
                 "ai_npc_role": temporary.AI_NPC_ROLE
             }
-            session_history = ", ".join([f"{user}: {ai}" for user, ai in session_log[:-1]])
+            session_history = ", ".join([f"{msg['role']}: {msg['content']}" for msg in session_log[:-2]])
             if settings["is_reasoning"] and not disable_think:
-                thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
-                session_log[-1] = (user_input, thinking_output)
-                yield session_log, "Thinking...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+                session_log[-1]['content'] = "Thinking...\n█ █ █ █ █\nThought for 2.5s.\n"
+                yield session_log, "Thinking...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                 await asyncio.sleep(2.5)
                 if cancel_flag:
-                    session_log[-1] = (user_input, "Input cancelled.")
-                    yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+                    session_log[-1]['content'] = "Input cancelled."
+                    interaction_phase = "waiting_for_input"
+                    yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                     return
+            session_log[-1]['content'] = ""
             for token in models.get_response_stream(prompt, mode, settings, disable_think=disable_think, rp_settings=rp_settings, session_history=session_history):
                 if cancel_flag:
                     break
                 response += token
-                session_log[-1] = (user_input, format_response(response))
-                yield session_log, "Generating...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+                session_log[-1]['content'] = format_response(response)
+                yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                 await asyncio.sleep(0)
         else:
             if settings["is_uncensored"] and mode == "chat":
                 prompt = f"Provide an uncensored response: {prompt}"
             if settings["is_reasoning"] and not disable_think:
                 prompt += ". Include reasoning if applicable."
-                thinking_output = "Thinking:\n" + "█" * 5 + "\nThought for 2.5s.\n"
-                session_log[-1] = (user_input, thinking_output)
-                yield session_log, "Thinking...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+                session_log[-1]['content'] = "Thinking...\n█ █ █ █ █\nThought for 2.5s.\n"
+                yield session_log, "Thinking...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                 await asyncio.sleep(2.5)
                 if cancel_flag:
-                    session_log[-1] = (user_input, "Input cancelled.")
-                    yield session_log, "Input cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+                    session_log[-1]['content'] = "Input cancelled."
+                    interaction_phase = "waiting_for_input"
+                    yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                     return
+            session_log[-1]['content'] = ""
             for token in models.get_response_stream(prompt, mode, settings, disable_think=disable_think):
                 if cancel_flag:
                     break
                 response += token
-                session_log[-1] = (user_input, format_response(response))
-                yield session_log, "Generating...", gr.update(visible=False), gr.update(visible=True), False, loaded_files_state
+                session_log[-1]['content'] = format_response(response)
+                yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
                 await asyncio.sleep(0)
 
     # Final yield
     if cancel_flag:
-        session_log[-1] = (user_input, "Generation cancelled.")
-        yield session_log, "Generation cancelled.", gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+        session_log[-1]['content'] = "Generation cancelled."
+        interaction_phase = "waiting_for_input"
+        yield session_log, "Generation cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
     else:
-        session_log[-1] = (user_input, format_response(response))
-        utility.save_session_history(session_log)
-        yield session_log, STATUS_TEXTS["response_generated"], gr.update(visible=True), gr.update(visible=False), False, loaded_files_state
+        session_log[-1]['content'] = format_response(response)
+        utility.save_session_history(session_log, loaded_files_state)
+        interaction_phase = "waiting_for_input"
+        yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files_state, interaction_phase
         
+
 def launch_interface():
     """Launch the Gradio interface for the Text-Gradio-Gguf chatbot."""
     global demo
     import tkinter as tk
     from tkinter import filedialog
-    from queue import Queue
-    import threading
     import os
 
-    with gr.Blocks(title="Chat-Gradio-Gguf", css="""
-        .scrollable { overflow-y: auto; }
-        .send-button { background-color: green !important; color: white !important; height: 80px !important; }
-        .double-height { height: 80px !important; }
-        .clean-elements { gap: 4px !important; margin-bottom: 4px !important; }
-        .clean-elements-normbot { gap: 4px !important; margin-bottom: 10px !important; }
-    """) as demo:
-        # State variables
-        states = {
-            "loaded_files": gr.State(value=[]),
-            "models_loaded": gr.State(value=False),
-            "showing_rpg_right": gr.State(False),
-            "cancel_flag": gr.State(False)
-        }
+    # Cache models and set default
+    available_models = get_available_models() or ["No models found"]
+    default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else "Select_a_model..."
+
+    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important;height:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:10px!important}") as demo:
+        # States
+        states = dict(
+            loaded_files=gr.State([]),
+            models_loaded=gr.State(False),
+            showing_rpg_right=gr.State(False),
+            cancel_flag=gr.State(False),
+            interaction_phase=gr.State("waiting_for_input")  # New state to track button phase
+        )
 
         with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        with gr.Column(visible=True, elem_classes=["clean-elements"]) as session_history_column:
-                            buttons = {
-                                "start_new_session": gr.Button("Start New Session...", variant="secondary"),
-                                "session": [gr.Button(f"History Slot {i+1}", variant="huggingface") for i in range(temporary.MAX_HISTORY_SLOTS)],
-                                "delete_all_history": gr.Button("Delete All History", variant="primary")
-                            }
-                    
+                        with gr.Column(visible=True, elem_classes=["clean-elements"]):
+                            buttons = dict(
+                                start_new_session=gr.Button("Start New Session...", variant="secondary"),
+                                session=[gr.Button(f"History Slot {i+1}", variant="huggingface") for i in range(temporary.MAX_HISTORY_SLOTS)],
+                                delete_all_history=gr.Button("Delete All History", variant="primary")
+                            )
+
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
-                        chat_components = {
-                            "session_log": gr.Chatbot(label="Session Log", height=temporary.SESSION_LOG_HEIGHT, elem_classes=["scrollable"], type="messages"),
-                            "user_input": gr.Textbox(label="User Input", lines=temporary.INPUT_LINES, interactive=False, placeholder="Enter text here...")
-                        }
+                        chat_components = dict(
+                            session_log=gr.Chatbot(label="Session Log", height=temporary.SESSION_LOG_HEIGHT, elem_classes=["scrollable"], type="messages"),
+                            user_input=gr.Textbox(label="User Input", lines=temporary.INPUT_LINES, interactive=False, placeholder="Enter text here...")
+                        )
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons = {}
                             with gr.Column(elem_classes=["clean-elements"]):
-                                action_buttons["send"] = gr.Button("Send Input", variant="secondary", scale=20, elem_classes=["send-button"])
-                                action_buttons["cancel"] = gr.Button("Cancel Input", variant="stop", scale=20, visible=False, elem_classes=["double-height"])
+                                action_buttons.update(
+                                    action=gr.Button("Send Input", variant="secondary", scale=20, elem_classes=["send-button"])
+                                )
                             with gr.Column(elem_classes=["clean-elements"]):
                                 with gr.Row(elem_classes=["clean-elements"]):
-                                    action_buttons["edit_previous"] = gr.Button("Edit Last Input", variant="huggingface")
-                                    action_buttons["copy_response"] = gr.Button("Copy Last Output", variant="huggingface")
+                                    action_buttons.update(
+                                        edit_previous=gr.Button("Edit Last Input", variant="huggingface"),
+                                        copy_response=gr.Button("Copy Last Output", variant="huggingface")
+                                    )
                                 with gr.Row(elem_classes=["clean-elements"]):
-                                    switches = {
-                                        "web_search": gr.Checkbox(label="Web-Search", value=False, visible=True),
-                                        "tot": gr.Checkbox(label="Enable TOT", value=False, visible=True),
-                                        "disable_think": gr.Checkbox(label="Disable THINK", value=False, visible=False)
-                                    }
-                    
+                                    switches = dict(
+                                        web_search=gr.Checkbox(label="Web-Search", value=False, visible=True),
+                                        tot=gr.Checkbox(label="Enable TOT", value=False, visible=True),
+                                        disable_think=gr.Checkbox(label="Disable THINK", value=False, visible=False)
+                                    )
+
                     with gr.Column(scale=1):
-                        right_panel = {
-                            "mode_selection": gr.Radio(choices=["Chat", "Code", "Rpg"], label="Select Operation Mode", value="Chat"),
-                            "toggle_rpg_settings": gr.Button("Show RPG Settings", variant="secondary", elem_classes=["clean-elements"], visible=False),
-                            "file_attachments": gr.Group(visible=True, elem_classes=["clean-elements"]),
-                            "rpg_settings": gr.Group(visible=False, elem_classes=["clean-elements"])
-                        }
+                        right_panel = dict(
+                            mode_selection=gr.Radio(choices=["Chat", "Code", "Rpg"], label="Select Operation Mode", value="Chat"),
+                            toggle_rpg_settings=gr.Button("Show RPG Settings", variant="secondary", elem_classes=["clean-elements"], visible=False),
+                            file_attachments=gr.Group(visible=True, elem_classes=["clean-elements"]),
+                            rpg_settings=gr.Group(visible=False, elem_classes=["clean-elements"])
+                        )
                         with right_panel["file_attachments"]:
-                            right_panel["attach_files"] = gr.UploadButton("Attach New Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
-                            right_panel["file_slots"] = [gr.Button("File Slot Free", variant="huggingface") for _ in range(temporary.MAX_ATTACH_SLOTS)]
-                            right_panel["remove_all_attachments"] = gr.Button("Remove All Attachments", variant="primary")
+                            right_panel.update(
+                                attach_files=gr.UploadButton("Attach New Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"]),
+                                file_slots=[gr.Button("File Slot Free", variant="huggingface") for _ in range(temporary.MAX_ATTACH_SLOTS)],
+                                remove_all_attachments=gr.Button("Remove All Attachments", variant="primary")
+                            )
                         with right_panel["rpg_settings"]:
-                            rpg_fields = {
-                                "rp_location": gr.Textbox(label="RP Location", value=temporary.RP_LOCATION),
-                                "user_name": gr.Textbox(label="User Name", value=temporary.USER_PC_NAME),
-                                "user_role": gr.Textbox(label="User Role", value=temporary.USER_PC_ROLE),
-                                "ai_npc": gr.Textbox(label="AI NPC", value=temporary.AI_NPC_NAME),
-                                "ai_npc_role": gr.Textbox(label="AI Role", value=temporary.AI_NPC_ROLE),
-                                "save_rpg": gr.Button("Save RPG Settings", variant="primary")
-                            }
+                            rpg_fields = dict(
+                                rp_location=gr.Textbox(label="RP Location", value=temporary.RP_LOCATION),
+                                user_name=gr.Textbox(label="User Name", value=temporary.USER_PC_NAME),
+                                user_role=gr.Textbox(label="User Role", value=temporary.USER_PC_ROLE),
+                                ai_npc=gr.Textbox(label="AI NPC", value=temporary.AI_NPC_NAME),
+                                ai_npc_role=gr.Textbox(label="AI Role", value=temporary.AI_NPC_ROLE),
+                                save_rpg=gr.Button("Save RPG Settings", variant="primary")
+                            )
                 with gr.Row():
                     status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=30)
-                    shutdown_btn = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
-                    shutdown_btn.click(fn=shutdown_program, inputs=[states["models_loaded"]])
+                    gr.Button("Exit Program", variant="stop", elem_classes=["double-height"]).click(fn=shutdown_program, inputs=[states["models_loaded"]])
 
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
                     is_cpu_only = temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
-                    
-                    # GPU settings row
-                    with gr.Row(visible=not is_cpu_only, elem_classes=["clean-elements"]) as gpu_row:
-                        config_components = {}
-                        config_components["gpu"] = gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=temporary.SELECTED_GPU, scale=5)
-                        config_components["backend_type"] = gr.Textbox(label="Installed Backend", value=temporary.BACKEND_TYPE, interactive=False, scale=5)
-                        config_components["vram"] = gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=3)
-                        config_components["mlock_gpu"] = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
-                    
-                    # CPU settings row
-                    with gr.Row(visible=is_cpu_only, elem_classes=["clean-elements"]) as cpu_row:
-                        cpu_info = utility.get_cpu_info()
-                        cpu_choices = [cpu["label"] for cpu in cpu_info] or ["Default CPU"]
-                        config_components["backend_type"] = gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=5)
-                        config_components["cpu"] = gr.Dropdown(
-                            choices=cpu_choices,
-                            label="Select CPU",
-                            value=temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices else cpu_choices[0],
-                            scale=5
+                    config_components = {}
+                    with gr.Row(visible=not is_cpu_only, elem_classes=["clean-elements"]):
+                        config_components.update(
+                            gpu=gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=temporary.SELECTED_GPU, scale=5),
+                            backend_type=gr.Textbox(label="Installed Backend", value=temporary.BACKEND_TYPE, interactive=False, scale=5),
+                            vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=3),
+                            mlock_gpu=gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
                         )
-                        config_components["mlock_cpu"] = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
-                    
-                    # Model location row
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["model_dir"] = gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=20)
-                        config_components["browse"] = gr.Button("Browse", variant="secondary", elem_classes=["double-height"])
-                    
-                    # Model selection row
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["model"] = gr.Dropdown(
-                            choices=get_available_models() or ["No models found"],
-                            label="Select Model",
-                            value=temporary.MODEL_NAME if temporary.MODEL_NAME in get_available_models() else "Select_a_model...",
-                            allow_custom_value=True,
-                            scale=10
+                    with gr.Row(visible=is_cpu_only, elem_classes=["clean-elements"]):
+                        cpu_choices = [cpu["label"] for cpu in utility.get_cpu_info()] or ["Default CPU"]
+                        config_components.update(
+                            backend_type=gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=5),
+                            cpu=gr.Dropdown(choices=cpu_choices, label="Select CPU", value=temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices else cpu_choices[0], scale=5),
+                            mlock_cpu=gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
                         )
-                        recommended_mode = gr.Textbox(label="Recommended Mode", interactive=False)
-                        config_components["refresh"] = gr.Button("Refresh", elem_classes=["double-height"])
-                    
-                    # Model parameters row
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["ctx"] = gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX)
-                        config_components["batch"] = gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH)
-                        config_components["temp"] = gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE)
-                        config_components["repeat"] = gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY)
+                        config_components.update(
+                            model_dir=gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=20),
+                            browse=gr.Button("Browse", variant="secondary", elem_classes=["double-height"])
+                        )
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        config_components.update(
+                            model=gr.Dropdown(choices=available_models, label="Select Model", value=default_model, allow_custom_value=True, scale=10),
+                            refresh=gr.Button("Refresh", elem_classes=["double-height"])
+                        )
+                        recommended_mode = gr.Textbox(label="Detected Mode Keywords", interactive=False, scale=5)
 
-                    # Action buttons row
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["load_models"] = gr.Button("Load Model", variant="secondary", elem_classes=["double-height"])
-                        config_components["inspect_model"] = gr.Button("Inspect Model", variant="huggingface", elem_classes=["double-height"])
-                        config_components["unload"] = gr.Button("Unload Model", elem_classes=["double-height"])
-                    
-                    # Customization settings
+                        config_components.update(
+                            ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX),
+                            batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH),
+                            temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE),
+                            repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY)
+                        )
                     with gr.Row(elem_classes=["clean-elements"]):
-                        custom_components = {}
-                        custom_components["max_history_slots"] = gr.Dropdown(choices=temporary.HISTORY_SLOT_OPTIONS, label="Max History Slots", value=temporary.MAX_HISTORY_SLOTS)
-                        custom_components["session_log_height"] = gr.Dropdown(choices=temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Session Log Height", value=temporary.SESSION_LOG_HEIGHT)
-                        custom_components["input_lines"] = gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES)
-                        custom_components["max_attach_slots"] = gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS)
-                    
+                        config_components.update(
+                            load_models=gr.Button("Load Model", variant="secondary", elem_classes=["double-height"]),
+                            inspect_model=gr.Button("Inspect Model", variant="huggingface", elem_classes=["double-height"]),
+                            unload=gr.Button("Unload Model", elem_classes=["double-height"])
+                        )
+                    custom_components = {}
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        custom_components.update(
+                            max_history_slots=gr.Dropdown(choices=temporary.HISTORY_SLOT_OPTIONS, label="Max History Slots", value=temporary.MAX_HISTORY_SLOTS),
+                            session_log_height=gr.Dropdown(choices=temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Session Log Height", value=temporary.SESSION_LOG_HEIGHT),
+                            input_lines=gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES),
+                            max_attach_slots=gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS)
+                        )
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components["afterthought_time"] = gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
-                    
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["save_settings"] = gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
+                        config_components.update(
+                            save_settings=gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
+                        )
                         custom_components["delete_all_vectorstores"] = gr.Button("Delete All VectorStores", variant="stop", elem_classes=["double-height"])
-                    
-                    
                     with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("Notes: Changes to Max History Slots and Max Attach Slots require restarting the application. Dynamic countdown until processing begins enabling last moment after-thought reprompt.")
-
-                    # Status row
+                        gr.Markdown("Notes: Changes to Max History Slots and Max Attach Slots require restarting the application.")
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["status_settings"] = gr.Textbox(label="Status", interactive=False, scale=20)
-                        config_components["shutdown"] = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"])
-                        config_components["shutdown"].click(fn=shutdown_program, inputs=[states["models_loaded"]])
+                        config_components.update(
+                            status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
+                            shutdown=gr.Button("Exit Program", variant="stop", elem_classes=["double-height"]).click(fn=shutdown_program, inputs=[states["models_loaded"]])
+                        )
 
         # Helper Functions
         def select_model_folder():
-            """
-            Open a folder selection dialog and return the selected folder path.
-            Uses tkinter's filedialog to create a native folder selection dialog.
-            Ensures proper window management and path handling.
-            """
-            import tkinter as tk
-            from tkinter import filedialog
-            import os
-            from scripts import temporary
-
-            print("Opening folder selection dialog...")
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
-            initial_dir = getattr(temporary, "MODEL_FOLDER", None)
-            if initial_dir is None or not os.path.exists(initial_dir):
-                initial_dir = os.path.expanduser("~")
-            print(f"Initial directory: {initial_dir}")
-            try:
-                folder_selected = filedialog.askdirectory(initialdir=initial_dir, title="Select Model Folder")
-            finally:
-                root.destroy()
-            if folder_selected:
-                print(f"Selected folder: {folder_selected}")
-                temporary.MODEL_FOLDER = folder_selected
-                return folder_selected
-            current_folder = getattr(temporary, "MODEL_FOLDER", os.path.expanduser("~"))
-            print(f"No folder selected, returning current MODEL_FOLDER: {current_folder}")
-            return current_folder
+            initial_dir = temporary.MODEL_FOLDER if os.path.exists(temporary.MODEL_FOLDER) else os.path.expanduser("~")
+            folder = filedialog.askdirectory(initialdir=initial_dir, title="Select Model Folder")
+            root.destroy()
+            temporary.MODEL_FOLDER = folder or temporary.MODEL_FOLDER
+            return temporary.MODEL_FOLDER
 
-        def update_model_list(folder_path):
-            """
-            Update the model dropdown based on the selected folder.
-            """
-            from scripts.models import get_available_models
-            from scripts import temporary
-            temporary.MODEL_FOLDER = folder_path
-            available_models = get_available_models() or ["No models found"]
-            current_model = temporary.MODEL_NAME
-            default_value = current_model if current_model in available_models else None
-            return gr.update(choices=available_models, value=default_value)
+        def update_model_list(folder):
+            temporary.MODEL_FOLDER = folder
+            models = get_available_models() or ["No models found"]
+            value = temporary.MODEL_NAME if temporary.MODEL_NAME in models else models[0]
+            return gr.update(choices=models, value=value)
 
         def update_config_settings(*args):
-            keys = ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model", "model_dir"]
-            attr_map = {
-                "ctx": "N_CTX",
-                "batch": "N_BATCH",
-                "temp": "TEMPERATURE",
-                "repeat": "REPEAT_PENALTY",
-                "vram": "VRAM_SIZE",
-                "gpu": "SELECTED_GPU",
-                "cpu": "SELECTED_CPU",
-                "model": "MODEL_NAME",
-                "model_dir": "MODEL_FOLDER"
-            }
-            for key, value in zip(keys, args):
-                if key in attr_map:
-                    attr_name = attr_map[key]
-                    if attr_name in ["N_CTX", "N_BATCH", "VRAM_SIZE"]:
-                        value = int(value)
-                    elif attr_name in ["TEMPERATURE", "REPEAT_PENALTY"]:
-                        value = float(value)
-                    setattr(temporary, attr_name, value)
-                else:
-                    print(f"Warning: Unknown key {key}")
+            keys, attr_map = ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model", "model_dir"], {"ctx": "N_CTX", "batch": "N_BATCH", "temp": "TEMPERATURE", "repeat": "REPEAT_PENALTY", "vram": "VRAM_SIZE", "gpu": "SELECTED_GPU", "cpu": "SELECTED_CPU", "model": "MODEL_NAME", "model_dir": "MODEL_FOLDER"}
+            for k, v in zip(keys, args):
+                if k in attr_map:
+                    setattr(temporary, attr_map[k], int(v) if k in ["ctx", "batch", "vram"] else float(v) if k in ["temp", "repeat"] else v)
             return "Settings updated in memory. Click 'Save Settings' to commit."
 
         def update_mlock(mlock):
@@ -738,14 +710,65 @@ def launch_interface():
             utility.save_config()
             return "Settings saved to persistent.json"
 
+        def update_action_button(phase):
+            """Update the button’s label and variant based on the interaction phase."""
+            if phase == "waiting_for_input":
+                return gr.update(value="Send Input", variant="secondary", visible=True)  # Green via CSS
+            elif phase == "afterthought_countdown":
+                return gr.update(value="Cancel Input", variant="primary", visible=True)
+            elif phase == "generating_response":
+                return gr.update(value="Cancel Response", variant="stop", visible=True)
+            return gr.update(visible=False)
+
+        async def action_handler(phase, user_input, session_log, tot_enabled, loaded_files, disable_think,
+                                 rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection,
+                                 web_search_enabled, models_loaded, interaction_phase):
+            if phase == "waiting_for_input":
+                async for output in chat_interface(user_input, session_log, tot_enabled, loaded_files, disable_think,
+                                                   rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection,
+                                                   web_search_enabled, models_loaded, interaction_phase):
+                    yield output
+            else:
+                if phase == "afterthought_countdown":
+                    cancel_flag = True
+                    new_phase = "waiting_for_input"
+                    status_msg = "Input cancelled."
+                elif phase == "generating_response":
+                    cancel_flag = True
+                    new_phase = "waiting_for_input"
+                    status_msg = "Response generation cancelled."
+                else:
+                    new_phase = interaction_phase
+                    status_msg = "No action taken."
+                yield session_log, status_msg, update_action_button(new_phase), cancel_flag, loaded_files, new_phase
+
+
+        def send_input(user_input, session_log, tot_enabled, loaded_files_state, disable_think,
+                       rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection,
+                       web_search_enabled, models_loaded, interaction_phase):
+            """Handle the Send Response action."""
+            return chat_interface(user_input, session_log, tot_enabled, loaded_files_state, disable_think,
+                                  rp_location, user_name, user_role, ai_npc, cancel_flag, mode_selection,
+                                  web_search_enabled, models_loaded, interaction_phase)
+
+        def cancel_action(cancel_flag, interaction_phase):
+            """Handle cancellation based on current phase."""
+            if interaction_phase == "afterthought_countdown":
+                return True, "waiting_for_input", "Input cancelled."
+            elif interaction_phase == "generating_response":
+                return True, "waiting_for_input", "Response generation cancelled."
+            return cancel_flag, interaction_phase, "No action taken."
+
         # Event Handlers
         buttons["start_new_session"].click(
             fn=start_new_session,
             outputs=[chat_components["session_log"], status_text, chat_components["user_input"]]
         )
-        action_buttons["send"].click(
-            fn=chat_interface,
+
+        action_buttons["action"].click(
+            fn=action_handler,
             inputs=[
+                states["interaction_phase"],
                 chat_components["user_input"],
                 chat_components["session_log"],
                 switches["tot"],
@@ -757,21 +780,20 @@ def launch_interface():
                 rpg_fields["ai_npc"],
                 states["cancel_flag"],
                 right_panel["mode_selection"],
-                switches["web_search"]
+                switches["web_search"],
+                states["models_loaded"],
+                states["interaction_phase"]
             ],
             outputs=[
                 chat_components["session_log"],
                 status_text,
-                action_buttons["send"],
-                action_buttons["cancel"],
+                action_buttons["action"],
                 states["cancel_flag"],
-                states["loaded_files"]
+                states["loaded_files"],
+                states["interaction_phase"]
             ]
         )
-        action_buttons["cancel"].click(
-            fn=lambda: (True, gr.update(visible=True), gr.update(visible=False), "Input cancelled."),
-            outputs=[states["cancel_flag"], action_buttons["send"], action_buttons["cancel"], status_text]
-        )
+
         action_buttons["copy_response"].click(
             fn=copy_last_response,
             inputs=[chat_components["session_log"]],
@@ -793,14 +815,12 @@ def launch_interface():
                 inputs=[states["loaded_files"], gr.State(value=i)],
                 outputs=[states["loaded_files"], status_text] + right_panel["file_slots"] + [right_panel["attach_files"]]
             )
-        config_drops = [config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]]
-        for comp in config_drops:
+        for comp in [config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]]:
             comp.change(
                 fn=update_config_settings,
-                inputs=config_drops + [config_components["model_dir"]],
+                inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]] + [config_components["model_dir"]],
                 outputs=[config_components["status_settings"]]
             )
-
         config_components["browse"].click(
             fn=select_model_folder,
             outputs=[config_components["model_dir"]]
@@ -809,24 +829,25 @@ def launch_interface():
             inputs=[config_components["model_dir"]],
             outputs=[config_components["model"]]
         ).then(
-            fn=lambda folder: f"Model directory updated to: {folder}",
+            fn=lambda f: f"Model directory updated to: {f}",
             inputs=[config_components["model_dir"]],
             outputs=[config_components["status_settings"]]
         )
-
-        for chk in [config_components.get("mlock_gpu"), config_components.get("mlock_cpu")]:
-            if chk:
-                chk.change(
-                    fn=update_mlock,
-                    inputs=[chk],
-                    outputs=[config_components["status_settings"]]
-                )
+        for chk in [config_components.get(k) for k in ["mlock_gpu", "mlock_cpu"] if config_components.get(k)]:
+            chk.change(
+                fn=update_mlock,
+                inputs=[chk],
+                outputs=[config_components["status_settings"]]
+            )
         config_components["unload"].click(
             fn=unload_models,
             outputs=[config_components["status_settings"]]
         ).then(
             fn=lambda: False,
             outputs=[states["models_loaded"]]
+        ).then(
+            fn=lambda: gr.update(interactive=False),
+            outputs=[chat_components["user_input"]]
         )
         config_components["inspect_model"].click(
             fn=inspect_model,
@@ -840,6 +861,10 @@ def launch_interface():
             fn=load_models,
             inputs=[config_components["model"], config_components["vram"]],
             outputs=[config_components["status_settings"], states["models_loaded"]]
+        ).then(
+            fn=lambda ml: gr.update(interactive=ml),
+            inputs=[states["models_loaded"]],
+            outputs=[chat_components["user_input"]]
         )
         config_components["save_settings"].click(
             fn=save_all_settings,
@@ -852,12 +877,7 @@ def launch_interface():
         right_panel["toggle_rpg_settings"].click(
             fn=toggle_rpg_settings,
             inputs=[states["showing_rpg_right"]],
-            outputs=[
-                right_panel["toggle_rpg_settings"],
-                right_panel["file_attachments"],
-                right_panel["rpg_settings"],
-                states["showing_rpg_right"]
-            ]
+            outputs=[right_panel["toggle_rpg_settings"], right_panel["file_attachments"], right_panel["rpg_settings"], states["showing_rpg_right"]]
         )
         rpg_fields["save_rpg"].click(
             fn=save_rp_settings,
@@ -896,41 +916,21 @@ def launch_interface():
         custom_components["afterthought_time"].change(
             fn=lambda v: setattr(temporary, "AFTERTHOUGHT_TIME", v),
             inputs=[custom_components["afterthought_time"]],
-            outputs=[config_components["status_settings"]]  # Optional: show status update
+            outputs=[config_components["status_settings"]]
         )
         config_components["model"].change(
             fn=update_model_based_options,
             inputs=[config_components["model"]],
-            outputs=[
-                right_panel["mode_selection"],
-                switches["disable_think"],
-                recommended_mode
-            ]
+            outputs=[right_panel["mode_selection"], switches["disable_think"], recommended_mode]
         ).then(
             fn=update_mode_based_options,
             inputs=[right_panel["mode_selection"], states["showing_rpg_right"]],
-            outputs=[
-                switches["tot"],
-                switches["web_search"],
-                right_panel["attach_files"],
-                right_panel["toggle_rpg_settings"],
-                right_panel["file_attachments"],
-                right_panel["rpg_settings"],
-                states["showing_rpg_right"]
-            ]
+            outputs=[switches["tot"], switches["web_search"], right_panel["attach_files"], right_panel["toggle_rpg_settings"], right_panel["file_attachments"], right_panel["rpg_settings"], states["showing_rpg_right"]]
         )
         right_panel["mode_selection"].change(
             fn=update_mode_based_options,
             inputs=[right_panel["mode_selection"], states["showing_rpg_right"]],
-            outputs=[
-                switches["tot"],
-                switches["web_search"],
-                right_panel["attach_files"],
-                right_panel["toggle_rpg_settings"],
-                right_panel["file_attachments"],
-                right_panel["rpg_settings"],
-                states["showing_rpg_right"]
-            ]
+            outputs=[switches["tot"], switches["web_search"], right_panel["attach_files"], right_panel["toggle_rpg_settings"], right_panel["file_attachments"], right_panel["rpg_settings"], states["showing_rpg_right"]]
         )
 
         demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)
