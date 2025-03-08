@@ -116,6 +116,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Development
 With regards to the current version of the program...
+- History files are being created, eg `Session saved to data\history\session_20250308_112411.json with 0 attached files.`, but these are not being shown on the slots on the left, and possibly not being handled how I intend, so need put history slots on low, and re-test.
 - Ongoing full test and bugfix.
 
 ## Far Development.
