@@ -19,6 +19,7 @@ MODELS_LOADED = False
 SESSION_ACTIVE = False
 N_GPU_LAYERS = 0
 MAX_HISTORY_SLOTS = 15 # Maximum number of saved sessions (replaces MAX_SESSIONS)
+yake_history_detail = [None] * MAX_HISTORY_SLOTS
 MAX_ATTACH_SLOTS = 6 # Maximum number of attachable files (replaces RAG_MAX_DOCS)
 last_save_time = 0 
 AFTERTHOUGHT_TIME = True

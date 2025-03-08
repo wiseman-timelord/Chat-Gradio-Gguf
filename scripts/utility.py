@@ -133,10 +133,14 @@ def manage_session_history():
         oldest_file.unlink()
         print(f"Deleted oldest session: {oldest_file}")
         
-def load_session_history(file_path: str) -> tuple:
-    with open(file_path, "r") as f:
-        session_data = json.load(f)
-    return session_data["label"], session_data["history"]
+def load_session_history(session_file):
+    with open(session_file, 'r') as f:
+        data = json.load(f)
+    session_id = data.get('session_id', session_file.stem.replace('session_', ''))
+    label = data.get('label', 'Untitled')
+    history = data.get('history', [])
+    attached_files = data.get('attached_files', [])
+    return session_id, label, history, attached_files
 
 def web_search(query: str, num_results: int = 3) -> str:
     """Perform a web search using DuckDuckGo without artificial delays."""
@@ -200,6 +204,32 @@ def delete_all_session_vectorstores() -> str:
         return "All session vectorstores deleted."
     else:
         return "No session vectorstores found to delete."
+
+def delete_all_history_and_vectors():
+    """
+    Delete all history JSON files in HISTORY_DIR and all vectorstores in VECTORSTORE_DIR.
+    Returns a status message indicating the result.
+    """
+    history_dir = Path(HISTORY_DIR)
+    vectorstore_dir = Path(VECTORSTORE_DIR)
+    
+    # Delete all history JSON files
+    for file in history_dir.glob('*.json'):
+        try:
+            file.unlink()
+            print(f"Deleted history file: {file}")
+        except Exception as e:
+            print(f"Error deleting {file}: {e}")
+    
+    # Delete the entire vectorstore directory
+    if vectorstore_dir.exists():
+        try:
+            shutil.rmtree(vectorstore_dir)
+            print(f"Deleted vectorstore directory: {vectorstore_dir}")
+        except Exception as e:
+            print(f"Error deleting {vectorstore_dir}: {e}")
+    
+    return "All history and vectorstores deleted."
 
 def get_saved_sessions():
     """Get list of saved session files sorted by modification time."""

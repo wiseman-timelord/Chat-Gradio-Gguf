@@ -548,22 +548,11 @@ def unload_models():
     return "No model loaded to unload."
 
 
-def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings=None, session_history=None):
+async def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings=None, session_history=None):
     from scripts.utility import get_available_gpus
-    """
-    Generate a response stream by executing the CLI tool with appropriate arguments.
+    import asyncio
+    from pathlib import Path
     
-    Args:
-        prompt (str): The input prompt for the model.
-        mode (str): The operation mode (e.g., "chat", "rpg", "code").
-        settings (dict): Model settings from get_model_settings.
-        disable_think (bool): Whether to disable reasoning/thinking steps.
-        rp_settings (dict, optional): RPG settings for RPG mode.
-        session_history (str, optional): Session history for context.
-    
-    Yields:
-        str: Tokens from the CLI output stream (or full response if STREAM_OUTPUT is False).
-    """
     # Construct full model path
     model_path = str(Path(temporary.MODEL_FOLDER) / temporary.MODEL_NAME)
     if not Path(model_path).exists():
@@ -579,13 +568,13 @@ def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings
         "--batch-size", str(temporary.N_BATCH),
         "--temp", str(temporary.TEMPERATURE),
         "--repeat-penalty", str(temporary.REPEAT_PENALTY),
+        "-n", "512"          # Limit output to 512 tokens
     ]
 
-    # Add GPU selection (optional)
+    # Add GPU selection
     available_gpus = get_available_gpus()
     if temporary.SELECTED_GPU in available_gpus:
         gpu_index = available_gpus.index(temporary.SELECTED_GPU)
-        # command.extend(["--vulkan-device", str(gpu_index)])  # Uncomment if needed
         print(f"Selected GPU: {temporary.SELECTED_GPU} (index {gpu_index}), using default device selection.")
     else:
         print(f"Warning: Selected GPU '{temporary.SELECTED_GPU}' not found. Default GPU may be used.")
@@ -600,51 +589,64 @@ def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings
         )
         command.extend(["--prompt", f"{rp_context}\n{prompt}"])
 
+    # Add --verbose only for reasoning models when THINK is not disabled
     if settings.get("is_reasoning") and not disable_think:
         command.append("--verbose")
+        print("Debug: Added --verbose flag for reasoning model.")
 
     # Log the command
     print(f"Executing CLI command: {' '.join(command)}")
 
     try:
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1
+        # Start the subprocess asynchronously
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
+        print("Debug: Subprocess started.")
 
-        if temporary.STREAM_OUTPUT:
-            # Stream output with timeout check
-            start_time = time.time()
-            timeout = 30  # 30 seconds timeout
-            while True:
-                line = process.stdout.readline()
+        start_time = time.time()
+        prompt_response_timer = 300  # 300 seconds (5 minutes) total timeout
+        elapsed_time = 0
+
+        while True:
+            try:
+                # Read a line with a 1-second timeout
+                line = await asyncio.wait_for(process.stdout.readline(), timeout=1)
                 if line:
-                    yield line.strip()
-                elif process.poll() is not None:  # Process has ended
+                    decoded_line = line.decode().strip()
+                    print(f"Debug: Received output: {decoded_line}")
+                    yield decoded_line
+                else:
+                    print("Debug: End of stdout reached.")
+                    break  # EOF
+            except asyncio.TimeoutError:
+                elapsed_time = int(time.time() - start_time)
+                if process.returncode is not None:
+                    print(f"Debug: Process ended with return code {process.returncode}.")
                     break
-                elif time.time() - start_time > timeout:
+                if elapsed_time > prompt_response_timer:
                     process.terminate()
-                    yield "Error: CLI response timed out after 30 seconds."
+                    print(f"Debug: Terminated process due to {prompt_response_timer}-second timeout.")
+                    yield f"Error: CLI response timed out after {prompt_response_timer} seconds."
                     break
-        else:
-            # Non-streaming: collect full output
-            output, stderr = process.communicate(timeout=30)
-            if stderr:
-                raise RuntimeError(f"CLI Error: {stderr}")
-            if process.returncode != 0:
-                raise RuntimeError(f"CLI process exited with code {process.returncode}")
-            yield output.strip()
+                print(f"Waiting for output... {elapsed_time}s")
 
-        # Check for errors
-        stderr_output = process.stderr.read()
+        # Check stderr for errors
+        stderr_output = await process.stderr.read()
         if stderr_output:
-            raise RuntimeError(f"CLI Error: {stderr_output}")
+            error_msg = f"CLI Error: {stderr_output.decode().strip()}"
+            print(f"Debug: {error_msg}")
+            raise RuntimeError(error_msg)
 
-    except subprocess.TimeoutExpired:
-        process.terminate()
-        yield "Error: CLI execution timed out after 30 seconds."
+        if process.returncode != 0:
+            error_msg = f"CLI process exited with code {process.returncode}"
+            print(f"Debug: {error_msg}")
+            raise RuntimeError(error_msg)
+
+        print("Debug: Subprocess completed successfully.")
     except Exception as e:
-        yield f"Error executing CLI: {str(e)}"
+        error_msg = f"Error executing CLI: {str(e)}"
+        print(f"Debug: {error_msg}")
+        yield error_msg
