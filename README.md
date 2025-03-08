@@ -72,7 +72,7 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
 - Python => 3.8 (tested on 3.11.0) - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section.
-- Powerful GPU - Main or Compute, with VRam 2-64GB, testing on, rx470 and HD7950.  
+- Suitable CPU/GPU - Gpu may be, Main or Compute, with VRam 2-64GB, testing on rx470 in Compute.  
 
 ### Instructions
 1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Text-Gradio-Gguf` or `C:\Programs\Text-Gradio-Gguf`. 
