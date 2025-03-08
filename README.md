@@ -23,7 +23,7 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 - **Configurable Context Window**: Set `n_ctx` to 8192, 16384, 24576, or 32768 via dropdown.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
 - **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
-- **Session History Rotation**: Configurable 6-14 Session History slots on rotation, enabling load recent sessions, while not using excessive space. 
+- **Highly Customizable UI**: Configurable; 10-20 Session History slots, 2-10 file slots, Session Log 400-550px height, 2-8 Lines of input. 
 - **Afterthought Countdown**: If, =>10 lines then 5s or 5-10 lines then 3s or <5 lines then 1s, wait for you to cancel send and return to edit, saving on mis-prompts and waits.
 
 ### Preview
@@ -71,7 +71,8 @@ A high-quality chat interface with uses include, Codeing, Rpg Game, Chat, with e
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
 - Python => 3.8 (tested on 3.11.0) - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
-- Llm Model - You will need a Large Language Model in GGUF format, See below
+- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section.
+- Powerful GPU - Main or Compute, with VRam 2-64GB, testing on, rx470 and HD7950.  
 
 ### Instructions
 1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Text-Gradio-Gguf` or `C:\Programs\Text-Gradio-Gguf`. 
