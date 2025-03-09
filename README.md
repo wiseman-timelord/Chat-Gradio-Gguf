@@ -116,8 +116,8 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Development
 With regards to the current version of the program...
-- the user input box is not clearing after being sent.
-- it suddenly stops outputting after ~2500 text characters, seems as I set the batch size to 4096 tokens, this is possibly the token limit for output. Either way, when I stated `please continue` and hit send, it replied with...
+1. the user input box is not clearing after being sent.
+2. it suddenly stops outputting after ~2500 text characters, seems as I set the batch size to 4096 tokens, this is possibly the token limit for output. Either way, when I stated `please continue` and hit send, it replied with...
 ```
 AI-Chat-Response:
 I 'll continue in an unbiased and unc ensored manner . Please provide the context or ask a question , and I 'll respond accordingly . Keep in mind that I 'll give you direct and honest answers , without sugar co ating or filtering out sensitive information .
@@ -125,9 +125,28 @@ I 'll continue in an unbiased and unc ensored manner . Please provide the contex
 What 's on your mind ?
 ```
 ...so as to have no idea what I was on about. This means the context of the optimal, amount and method, of previous interactions is not being injected into the prompt appropriately, or its not being correctly prompted in the second interaction onwards, possibly we would have a second prompt for user interaction, where there is adapted content from other chat mode, for injecting previous context into, would require assessment of, latest most effective, techniqes, as well as any relvant code already present. Additionally investigate what can be done about detection of if the stream has ended prematurely or actually finished output, because if it has not finished output, then it will need to continue, if that can be automated, to a pre-set limit for output, and steram in sections while looking out for end output signature and keeping note of total output. Needs a brainstorm and plan. 
-- History slots are having typically 1 word labels with 17 chracter date/time, even though I specified for generated label to have 4-5 word description, possibly when the 1st response comes back from the AI, then also again we would generate a label from the contents of now both communications, and update the label on the session with the new completed label. also if there is no response from the AI within a history session, and then the user switches to a different session or starts a new session, without generating a response from the ai, then the session with only 1 input is deleted when the user switches to whatever other choice. Thus, there will always be 2 interactions in all present history slots, and it will generate the label from each of those slots with 2 interactions.    
-- Need THINK option to be visible when using reasoning model with any modes. THINK option should obviously not be visible if not a reasoning model. `Enable THINK`, enabled by default, but I think there is something special to put into the prompt or the argument when its a reasoning model and you do not want it to use the THINK phase.  
-- Attach files is uploading to the vectorstore, then having some error. I also notice that it immediately uploads the files, instead of waiting for the user to then click send, like traditional chatbots do, however, Possibly a better way to do vectorstores, would be to not have file slots as items, but instead a text display like...
+3. I want some better control over prompting, this calls for a new page in the configuration the `Prompting` page, where there will be, some kind of non/editable text indicating the enhancements used and the mode, such as..
+```
+Operation Mode: 
+    Chat
+
+Enhancements: 
+    Web-Search, VectorStore
+
+Prompt Contents:
+...
+```
+- a non-editable text box `Last Prompt Sent` displaying the most recent prompt sent to the model, if it also had a section above the prompt, for example...
+```
+
+...
+```
+...then having the raw contents of the prompt sent to the model.
+
+to show if the relevant features were used in that prompt, such as, tot, websearch  were with the prompting options avtive shown above it in some display showing al above the pro 
+4. History slots are having typically 1 word labels with 17 chracter date/time, even though I specified for generated label to have 4-5 word description, possibly when the 1st response comes back from the AI, then also again we would generate a label from the contents of now both communications, and update the label on the session with the new completed label. also if there is no response from the AI within a history session, and then the user switches to a different session or starts a new session, without generating a response from the ai, then the session with only 1 input is deleted when the user switches to whatever other choice. Thus, there will always be 2 interactions in all present history slots, and it will generate the label from each of those slots with 2 interactions.    
+5. Need THINK option to be visible when using reasoning model with any modes. THINK option should obviously not be visible if not a reasoning model. `Enable THINK`, enabled by default, but I think there is something special to put into the prompt or the argument when its a reasoning model and you do not want it to use the THINK phase.  
+6. Attach files is uploading to the vectorstore, then having some error. I also notice that it immediately uploads the files, instead of waiting for the user to then click send, like traditional chatbots do, however, Possibly a better way to do vectorstores, would be to not have file slots as items, but instead a text display like...
 ```
 Vectorized Data:
 ExampleFilenameOne.tct
