@@ -139,8 +139,12 @@ ExampleFilenameThree.tct
 File Vectorized: ExampleFilenameOne.txt
 File Vectorized: ExampleFilenameTwo.txt
 ```
-...on the other hand, if the processes of attaching files for purposes of input in AI chatbots requires the files be added to each interaction of relevance, and the data is not pulled from the vectorstore, then obviously we would want to keep it as file slots. I am unsure as to how it works, but if it is just about dumping data into a vector store while not requiring the original files after, then there are simpler more srtreamline methods of managine it on the UI, is what I am trying to say. 
-
+...on the other hand, if the processes of attaching files for purposes of input in AI chatbots requires the files be added to each interaction of relevance, and the data is not pulled from the vectorstore, then obviously we would want to keep it as file slots. I am unsure as to how it works, but if it is just about dumping data into a vector store while not requiring the original files after, then there are simpler more srtreamline methods of managine it on the UI, is what I am trying to say. Possibly even at the start of the session history we could maintain a list like...
+```
+Vectorized Data:
+    ExampleFilenameOne.txt, ExampleFilenameTwo.txt, ExampleFilenameThree.txt
+``` 
+...that is read for populating the Vectorized Data display, instead of having to search through the document. The idea of populating the list somehow from the session history log, is to reduce required variables
 ## Far Development.
 With regards to the next generation of the program will be ...
 - Add `PyWin32` and `Whisper`, details are here.`https://www.perplexity.ai/search/1-how-does-mantella-mod-for-sk-Q32RILakTQ.lvQ3NHLJb5A`.
