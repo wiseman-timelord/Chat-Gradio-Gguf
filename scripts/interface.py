@@ -99,7 +99,9 @@ def process_uploaded_files(files, loaded_files, models_loaded):
     new_files = [f for f in files if os.path.isfile(f) and f not in loaded_files]
     print("New files to add:", new_files)
     available_slots = max_files - len(loaded_files)
-    loaded_files.extend(new_files[:available_slots])
+    # Insert new files at the beginning (top of the list)
+    for file in reversed(new_files[:available_slots]):  # Reverse to maintain upload order
+        loaded_files.insert(0, file)
     
     session_vectorstore = create_session_vectorstore(loaded_files)
     context_injector.set_session_vectorstore(session_vectorstore)
@@ -253,7 +255,7 @@ def update_file_slot_ui(loaded_files):
         if i < temporary.MAX_ATTACH_SLOTS:
             if i < len(loaded_files):
                 filename = Path(loaded_files[i]).name
-                short_name = (filename[:13] + ".." if len(filename) > 15 else filename)
+                short_name = (filename[:36] + ".." if len(filename) > 38 else filename)
                 label = f"{short_name}"
                 variant = "secondary"
             else:
@@ -763,6 +765,10 @@ def launch_interface():
             fn=process_uploaded_files,
             inputs=[right_panel["attach_files"], states["loaded_files"], states["models_loaded"]],
             outputs=[status_text, states["loaded_files"]]
+        ).then(
+            fn=update_file_slot_ui,
+            inputs=[states["loaded_files"]],
+            outputs=right_panel["file_slots"] + [right_panel["attach_files"]]
         )
 
         right_panel["remove_all_attachments"].click(
