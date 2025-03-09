@@ -116,14 +116,14 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Development
 With regards to the current version of the program...
-1. it suddenly stops outputting after ~2500 text characters, seems as I set the batch size to 4096 tokens, this is possibly the token limit for output. Either way, when I stated `please continue` and hit send, it replied with...
+1. When given a complicated multi-line prompt, for generation of a storyboard, it suddenly stoped outputting after ~2500 text characters. I set the batch output size to 4096 tokens, this is possibly the token limit for output. Either way, when I stated `please continue` and hit send, it replied with...
 ```
 AI-Chat-Response:
 I 'll continue in an unbiased and unc ensored manner . Please provide the context or ask a question , and I 'll respond accordingly . Keep in mind that I 'll give you direct and honest answers , without sugar co ating or filtering out sensitive information .
 
 What 's on your mind ?
 ```
-...so as to have no idea what I was on about. This means the context of the optimal, amount and method, of previous interactions is not being injected into the prompt appropriately, or its not being correctly prompted in the second interaction onwards, possibly we would have a second prompt for user interaction, where there is adapted content from other chat mode, for injecting previous context into, would require assessment of, latest most effective, techniqes, as well as any relvant code already present. Additionally investigate what can be done about detection of if the stream has ended prematurely or actually finished output, because if it has not finished output, then it will need to continue, if that can be automated, to a pre-set limit for output, and steram in sections while looking out for end output signature and keeping note of total output. Needs a brainstorm and plan. 
+...so as to have no idea what I was on about. This means the context of the previous interactions is not being injected into the prompt appropriately, or its not being correctly prompted in the second interaction onwards, possibly we would have a second prompt for user interaction, where there is adapted content from other chat mode, for injecting previous context into, would require assessment of, latest most effective, techniqes, as well as any relvant code already present. Additionally investigate what can be done about detection of if the stream has ended prematurely or actually finished output, because if it has not finished output, then it will need to continue, if that can be automated, to a pre-set limit for output, and steram in sections while looking out for end output signature and keeping note of total output. Needs a brainstorm and plan, what is the best solution.
 2. I want some better control over prompting, this calls for a new page in the configuration the `Prompting` page, where there will be, some kind of non/editable text indicating the enhancements used and the mode, such as..
 ```
 Operation Mode: 
