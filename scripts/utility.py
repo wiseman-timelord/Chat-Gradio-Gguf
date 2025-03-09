@@ -232,7 +232,7 @@ def trim_session_history(max_sessions):
 
 def save_config():
     config_path = Path("data/persistent.json")
-    config_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure the 'data' directory exists
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     config = {
         "model_settings": {
             "model_dir": temporary.MODEL_FOLDER,
@@ -240,7 +240,6 @@ def save_config():
             "n_ctx": temporary.N_CTX,
             "temperature": temporary.TEMPERATURE,
             "repeat_penalty": temporary.REPEAT_PENALTY,
-            "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "llama_cli_path": temporary.LLAMA_CLI_PATH,
             "vram_size": temporary.VRAM_SIZE,
             "selected_gpu": temporary.SELECTED_GPU,
@@ -337,7 +336,6 @@ def load_config():
             temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
             temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
             temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))
-            temporary.USE_PYTHON_BINDINGS = bool(config["model_settings"].get("use_python_bindings", True))
             temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "")
             temporary.VRAM_SIZE = int(config["model_settings"].get("vram_size", 8192))
             temporary.SELECTED_GPU = config["model_settings"].get("selected_gpu", None)

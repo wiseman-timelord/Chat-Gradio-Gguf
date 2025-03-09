@@ -450,6 +450,7 @@ def launch_interface():
     from tkinter import filedialog
     import os
     import gradio as gr
+    from pathlib import Path  # Added for update_model_list
     from scripts import temporary, utility, models
     from scripts.temporary import (
         STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS, STREAM_OUTPUT,
@@ -462,10 +463,13 @@ def launch_interface():
         INPUT_LINES_OPTIONS, ATTACH_SLOT_OPTIONS
     )
 
-    available_models = models.get_available_models() or ["No models found"]
-    default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else "Select_a_model..."
+
+    available_models = models.get_available_models()
+    default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else available_models[0]  # First choice is always valid
 
     with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important;height:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
+        model_folder_state = gr.State(temporary.MODEL_FOLDER)
+
         states = dict(
             loaded_files=gr.State([]),
             models_loaded=gr.State(False),
@@ -539,6 +543,8 @@ def launch_interface():
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
                     is_cpu_only = temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
                     config_components = {}
+                    
+                    # CPU/GPU Options
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("CPU/GPU Options...")
                     with gr.Row(visible=not is_cpu_only, elem_classes=["clean-elements"]):
@@ -553,17 +559,20 @@ def launch_interface():
                             backend_type=gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=5),
                             cpu=gr.Dropdown(choices=cpu_choices, label="Select CPU", value=temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices else cpu_choices[0], scale=5),
                         )
+                    
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Model Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             model_dir=gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=10),
-                            browse=gr.Button("Browse", variant="secondary", elem_classes=["double-height"])
+                            model=gr.Dropdown(
+                                choices=available_models,
+                                label="Select Model",
+                                value=default_model,  # Will be "Select_a_model..." or "No models found"
+                                allow_custom_value=False,
+                                scale=10
+                            )
                         )
-                        config_components.update(
-                            model=gr.Dropdown(choices=available_models, label="Select Model", value=default_model, allow_custom_value=True, scale=10)
-                        )
-                        recommended_mode = gr.Textbox(label="Detected Mode", interactive=False, scale=5)
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX),
@@ -572,14 +581,19 @@ def launch_interface():
                             repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY),
                         )
                         with gr.Column(elem_classes=["clean-elements"]):
-                            config_components["stream_output"] = gr.Checkbox(label="Stream Output", value=temporary.STREAM_OUTPUT)
-                            config_components["mlock_cpu"] = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
+                            config_components.update(
+                                stream_output=gr.Checkbox(label="Stream Output", value=temporary.STREAM_OUTPUT),
+                                # Removed: mlock_cpu and use_python_bindings checkboxes
+                            )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
+                            browse=gr.Button("Browse", variant="secondary", elem_classes=["double-height"]), 
                             load_models=gr.Button("Load Model", variant="secondary", elem_classes=["double-height"]),
                             inspect_model=gr.Button("Inspect Model", variant="huggingface", elem_classes=["double-height"]),
-                            unload=gr.Button("Unload Model", elem_classes=["double-height"])
+                            unload=gr.Button("Unload Model", elem_classes=["double-height"], variant="huggingface"),
                         )
+                    
+                    # Interface Options
                     custom_components = {}
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Interface Options...")
@@ -589,8 +603,13 @@ def launch_interface():
                             session_log_height=gr.Dropdown(choices=temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Session Log Height", value=temporary.SESSION_LOG_HEIGHT),
                             input_lines=gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES),
                             max_attach_slots=gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS),
-                            afterthought_time=gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
                         )
+                        with gr.Column(elem_classes=["clean-elements"]):
+                            custom_components.update(
+                                afterthought_time=gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
+                            )
+                    
+                    # Critical Actions
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Critical Actions...")
                     with gr.Row(elem_classes=["clean-elements-normbot"]):
@@ -600,7 +619,6 @@ def launch_interface():
                         custom_components.update(
                             delete_all_vectorstores=gr.Button("Delete All History/Vectors", variant="stop", elem_classes=["double-height"])
                         )
-                        
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
@@ -609,20 +627,32 @@ def launch_interface():
 
         # Helper Functions
         def select_model_folder():
+            print("Opening directory selection dialog...")
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
             initial_dir = temporary.MODEL_FOLDER if os.path.exists(temporary.MODEL_FOLDER) else os.path.expanduser("~")
             folder = filedialog.askdirectory(initialdir=initial_dir, title="Select Model Folder")
             root.destroy()
-            temporary.MODEL_FOLDER = folder or temporary.MODEL_FOLDER
-            return temporary.MODEL_FOLDER
+            if folder:
+                print(f"Selected folder: {folder}")
+                temporary.MODEL_FOLDER = folder
+                return folder, folder  # Return for model_dir and model_folder_state
+            else:
+                print("No folder selected")
+                return temporary.MODEL_FOLDER, temporary.MODEL_FOLDER  # Return current folder if none selected
 
         def update_model_list(folder):
-            temporary.MODEL_FOLDER = folder
-            models_list = models.get_available_models() or ["No models found"]
-            value = temporary.MODEL_NAME if temporary.MODEL_NAME in models_list else models_list[0]
-            return gr.update(choices=models_list, value=value)
+            model_dir = Path(folder)
+            models = [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
+            if models:
+                choices = ["Select_a_model..."] + models
+                value = "Select_a_model..."  # Reset to default when folder changes
+            else:
+                choices = ["No models found"]
+                value = "No models found"  # Set to indicate no models
+            print(f"Updating model list for {folder}: {choices}")
+            return gr.update(choices=choices, value=value)
 
         def update_config_settings(*args):
             keys = ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]
@@ -646,25 +676,6 @@ def launch_interface():
         def save_all_settings():
             utility.save_config()
             return "Settings saved to persistent.json"
-
-        def update_model_options(model_name):
-            if model_name in ["Select_a_model...", "No models found"]:
-                mode = "Chat"
-                think_visible = False
-                is_reasoning = False
-                recommended = "Select a model"
-            else:
-                settings = get_model_settings(model_name)
-                mode = settings["category"].capitalize()
-                think_visible = settings["is_reasoning"]
-                is_reasoning = settings["is_reasoning"]
-                recommended = mode
-            return [
-                gr.update(value=mode),
-                gr.update(visible=think_visible, value=True if think_visible else False),
-                gr.update(value=recommended),
-                is_reasoning
-            ]
 
         async def action_handler(phase, user_input, session_log, tot_enabled, loaded_files,
                                  enable_think, is_reasoning_model, rp_location, user_name, user_role, ai_npc,
@@ -778,27 +789,28 @@ def launch_interface():
 
         config_components["browse"].click(
             fn=select_model_folder,
-            outputs=[config_components["model_dir"]]
-        ).then(
-            fn=update_model_list,
-            inputs=[config_components["model_dir"]],
-            outputs=[config_components["model"]]
+            outputs=[config_components["model_dir"], model_folder_state]
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
-            inputs=[config_components["model_dir"]],
+            inputs=[model_folder_state],
             outputs=[config_components["status_settings"]]
         )
 
-        for chk in [config_components.get(k) for k in ["mlock_gpu", "mlock_cpu"] if config_components.get(k)]:
-            chk.change(
-                fn=update_mlock,
-                inputs=[chk],
-                outputs=[config_components["status_settings"]]
-            )
+        model_folder_state.change(
+            fn=update_model_list,
+            inputs=[model_folder_state],
+            outputs=[config_components["model"]]
+        )
 
         config_components["stream_output"].change(
             fn=update_stream_output,
             inputs=[config_components["stream_output"]],
+            outputs=[config_components["status_settings"]]
+        )
+
+        config_components["model"].change(
+            fn=lambda model: (setattr(temporary, "MODEL_NAME", model), f"Selected model: {model}")[1],
+            inputs=[config_components["model"]],
             outputs=[config_components["status_settings"]]
         )
 
@@ -814,8 +826,8 @@ def launch_interface():
         )
 
         config_components["inspect_model"].click(
-            fn=models.inspect_model,
-            inputs=[config_components["model"], config_components["vram"]],
+            fn=inspect_model,
+            inputs=[config_components["model_dir"], config_components["model"], config_components["vram"]],
             outputs=[config_components["status_settings"]]
         )
 
@@ -823,13 +835,13 @@ def launch_interface():
             fn=set_loading_status,
             outputs=[config_components["status_settings"]]
         ).then(
-            fn=models.load_models,
-            inputs=[config_components["model"], config_components["vram"]],
+            fn=load_models,
+            inputs=[config_components["model_dir"], config_components["model"], config_components["vram"]],
             outputs=[config_components["status_settings"], states["models_loaded"]]
         ).then(
-            fn=lambda ml: gr.update(interactive=ml),
-            inputs=[states["models_loaded"]],
-            outputs=[chat_components["user_input"]]
+            fn=lambda status, ml: (status, gr.update(interactive=ml)),
+            inputs=[config_components["status_settings"], states["models_loaded"]],
+            outputs=[config_components["status_settings"], chat_components["user_input"]]
         )
 
         config_components["save_settings"].click(
@@ -896,16 +908,7 @@ def launch_interface():
             outputs=[config_components["status_settings"]]
         )
 
-        config_components["model"].change(
-            fn=update_model_options,
-            inputs=[config_components["model"]],
-            outputs=[right_panel["mode_selection"], switches["enable_think"], recommended_mode, states["is_reasoning_model"]]
-        ).then(
-            fn=update_mode_based_options,
-            inputs=[right_panel["mode_selection"], states["showing_rpg_right"]],
-            outputs=[switches["tot"], switches["web_search"], right_panel["attach_files"], right_panel["toggle_rpg_settings"], right_panel["file_attachments"], right_panel["rpg_settings"], states["showing_rpg_right"]]
-        )
-
+        # Corrected event handler: Fixed typo and removed duplicate
         right_panel["mode_selection"].change(
             fn=update_mode_based_options,
             inputs=[right_panel["mode_selection"], states["showing_rpg_right"]],
