@@ -87,6 +87,8 @@ def save_rp_settings(rp_location, user_name, user_role, ai_npc, ai_npc_role):
 def process_uploaded_files(files, loaded_files, models_loaded):
     from scripts.utility import create_session_vectorstore
     import scripts.temporary as temporary
+    import os
+    print("Uploaded files:", files)
     if not models_loaded:
         return "Error: Load a model first.", loaded_files
     
@@ -94,13 +96,15 @@ def process_uploaded_files(files, loaded_files, models_loaded):
     if len(loaded_files) >= max_files:
         return f"Max files ({max_files}) reached.", loaded_files
     
-    new_files = [f for f in files if f not in loaded_files]
+    new_files = [f for f in files if os.path.isfile(f) and f not in loaded_files]
+    print("New files to add:", new_files)
     available_slots = max_files - len(loaded_files)
     loaded_files.extend(new_files[:available_slots])
     
     session_vectorstore = create_session_vectorstore(loaded_files)
     context_injector.set_session_vectorstore(session_vectorstore)
     
+    print("Updated loaded_files:", loaded_files)
     return f"Processed {min(len(new_files), available_slots)} new files.", loaded_files
 
 def eject_file(loaded_files, slot_index):
@@ -245,7 +249,7 @@ def update_file_slot_ui(loaded_files):
     from pathlib import Path
     import scripts.temporary as temporary
     button_updates = []
-    for i in range(MAX_ATTACH_SLOTS):
+    for i in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS):
         if i < temporary.MAX_ATTACH_SLOTS:
             if i < len(loaded_files):
                 filename = Path(loaded_files[i]).name
@@ -254,7 +258,7 @@ def update_file_slot_ui(loaded_files):
                 variant = "secondary"
             else:
                 label = "File Slot Free"
-                variant = "primary"
+                variant = "huggingface"
             visible = True
         else:
             label = ""
@@ -287,47 +291,40 @@ def filter_operational_content(text):
     filtered_lines = [line for line in lines if not any(re.search(pattern, line) for pattern in patterns)]
     return "\n".join(filtered_lines)
 
-def update_session_buttons(num_buttons):
+def update_session_buttons():
     sessions = utility.get_saved_sessions()
     button_updates = []
-    
-    for i in range(num_buttons):
-        if i < len(sessions):
-            session_path = Path(HISTORY_DIR) / sessions[i]
-            try:
-                # Get session timestamp
-                stat = session_path.stat()
-                update_time = stat.st_mtime if stat.st_mtime else stat.st_ctime
-                formatted_time = datetime.fromtimestamp(update_time).strftime("%Y-%m-%d %H:%M")
-
-                # Load session history
-                session_id, label, history, _ = utility.load_session_history(session_path)
-
-                # Generate description
-                if history:
-                    text = " ".join([msg['content'] for msg in history])
-                    text = filter_operational_content(text)  # Filter out operational content
-                    kw_extractor = yake.KeywordExtractor(lan="en", n=2, dedupLim=0.9, top=1)
-                    keywords = kw_extractor.extract_keywords(text)
-                    description = keywords[0][0][:20] if keywords else "No description"
-                else:
-                    description = "No history"
-
-                # Cache description
-                temporary.yake_history_detail[i] = description
-
-                # Format button label
-                btn_label = f"{formatted_time} - {description}"
-            except Exception as e:
-                print(f"Error loading session {session_path}: {e}")
-                btn_label = f"Session {i+1}"
+    for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS):
+        if i < temporary.MAX_HISTORY_SLOTS:
+            if i < len(sessions):
+                session_path = Path(HISTORY_DIR) / sessions[i]
+                try:
+                    stat = session_path.stat()
+                    update_time = stat.st_mtime if stat.st_mtime else stat.st_ctime
+                    formatted_time = datetime.fromtimestamp(update_time).strftime("%Y-%m-%d %H:%M")
+                    session_id, label, history, _ = utility.load_session_history(session_path)
+                    if history:
+                        text = " ".join([msg['content'] for msg in history])
+                        text = filter_operational_content(text)
+                        kw_extractor = yake.KeywordExtractor(lan="en", n=2, dedupLim=0.9, top=1)
+                        keywords = kw_extractor.extract_keywords(text)
+                        description = keywords[0][0][:20] if keywords else "No description"
+                    else:
+                        description = "No history"
+                    temporary.yake_history_detail[i] = description
+                    btn_label = f"{formatted_time} - {description}"
+                except Exception as e:
+                    print(f"Error loading session {session_path}: {e}")
+                    btn_label = f"Session {i+1}"
+                    temporary.yake_history_detail[i] = None
+            else:
+                btn_label = "History Slot Empty"
                 temporary.yake_history_detail[i] = None
+            visible = True
         else:
-            btn_label = "History Slot Empty"
-            temporary.yake_history_detail[i] = None
-        
-        button_updates.append(gr.update(value=btn_label, visible=True))
-    
+            btn_label = ""
+            visible = False
+        button_updates.append(gr.update(value=btn_label, visible=visible))
     return button_updates
 
 def format_session_id(session_id):
@@ -468,15 +465,14 @@ def launch_interface():
     available_models = models.get_available_models() or ["No models found"]
     default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else "Select_a_model..."
 
-    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important;height:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:10px!important}") as demo:
+    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important;height:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
         states = dict(
             loaded_files=gr.State([]),
             models_loaded=gr.State(False),
             showing_rpg_right=gr.State(False),
             cancel_flag=gr.State(False),
             interaction_phase=gr.State("waiting_for_input"),
-            is_reasoning_model=gr.State(False),
-            num_history_buttons=gr.State(temporary.MAX_HISTORY_SLOTS)  # Tracks number of buttons
+            is_reasoning_model=gr.State(False)
         )
 
         with gr.Tabs():
@@ -486,7 +482,7 @@ def launch_interface():
                         with gr.Column(visible=True, elem_classes=["clean-elements"]):
                             buttons = dict(
                                 start_new_session=gr.Button("Start New Session...", variant="secondary"),
-                                session=[gr.Button(f"History Slot {i+1}", variant="huggingface") for i in range(temporary.MAX_HISTORY_SLOTS)]
+                                session=[gr.Button(f"History Slot {i+1}", variant="huggingface", visible=False) for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS)]
                             )
 
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
@@ -523,7 +519,7 @@ def launch_interface():
                         with right_panel["file_attachments"]:
                             right_panel.update(
                                 attach_files=gr.UploadButton("Attach New Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"]),
-                                file_slots=[gr.Button("File Slot Free", variant="huggingface") for _ in range(temporary.MAX_ATTACH_SLOTS)],
+                                file_slots=[gr.Button("File Slot Free", variant="huggingface", visible=False) for _ in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS)],
                                 remove_all_attachments=gr.Button("Remove All Attachments", variant="primary")
                             )
                         with right_panel["rpg_settings"]:
@@ -543,38 +539,41 @@ def launch_interface():
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
                     is_cpu_only = temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
                     config_components = {}
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("CPU/GPU Options...")
                     with gr.Row(visible=not is_cpu_only, elem_classes=["clean-elements"]):
                         config_components.update(
                             gpu=gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=temporary.SELECTED_GPU, scale=5),
                             backend_type=gr.Textbox(label="Installed Backend", value=temporary.BACKEND_TYPE, interactive=False, scale=5),
                             vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=3),
-                            mlock_gpu=gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
                         )
                     with gr.Row(visible=is_cpu_only, elem_classes=["clean-elements"]):
                         cpu_choices = [cpu["label"] for cpu in utility.get_cpu_info()] or ["Default CPU"]
                         config_components.update(
                             backend_type=gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=5),
                             cpu=gr.Dropdown(choices=cpu_choices, label="Select CPU", value=temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices else cpu_choices[0], scale=5),
-                            mlock_cpu=gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
                         )
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("Model Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
-                            model_dir=gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=20),
+                            model_dir=gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=10),
                             browse=gr.Button("Browse", variant="secondary", elem_classes=["double-height"])
                         )
-                    with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             model=gr.Dropdown(choices=available_models, label="Select Model", value=default_model, allow_custom_value=True, scale=10)
                         )
-                        recommended_mode = gr.Textbox(label="Detected Mode Keywords", interactive=False, scale=5)
+                        recommended_mode = gr.Textbox(label="Detected Mode", interactive=False, scale=5)
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX),
                             batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH),
                             temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE),
                             repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY),
-                            stream_output=gr.Checkbox(label="Stream Output", value=temporary.STREAM_OUTPUT, info="Enable to stream response tokens as they generate.")
                         )
+                        with gr.Column(elem_classes=["clean-elements"]):
+                            config_components["stream_output"] = gr.Checkbox(label="Stream Output", value=temporary.STREAM_OUTPUT)
+                            config_components["mlock_cpu"] = gr.Checkbox(label="MLock Enabled", value=temporary.MLOCK, scale=3)
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             load_models=gr.Button("Load Model", variant="secondary", elem_classes=["double-height"]),
@@ -582,6 +581,8 @@ def launch_interface():
                             unload=gr.Button("Unload Model", elem_classes=["double-height"])
                         )
                     custom_components = {}
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("Interface Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components.update(
                             max_history_slots=gr.Dropdown(choices=temporary.HISTORY_SLOT_OPTIONS, label="Max History Slots", value=temporary.MAX_HISTORY_SLOTS),
@@ -591,14 +592,15 @@ def launch_interface():
                             afterthought_time=gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("Critical Actions...")
+                    with gr.Row(elem_classes=["clean-elements-normbot"]):
                         config_components.update(
                             save_settings=gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
                         )
                         custom_components.update(
                             delete_all_vectorstores=gr.Button("Delete All History/Vectors", variant="stop", elem_classes=["double-height"])
                         )
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("Notes: Changes to Max History Slots and Max Attach Slots require restarting the application.")
+                        
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
@@ -693,7 +695,7 @@ def launch_interface():
             outputs=[chat_components["session_log"], status_text, chat_components["user_input"]]
         ).then(
             fn=update_session_buttons,
-            inputs=[states["num_history_buttons"]],
+            inputs=[],
             outputs=buttons["session"]
         )
 
@@ -727,7 +729,7 @@ def launch_interface():
             ]
         ).then(
             fn=update_session_buttons,
-            inputs=[states["num_history_buttons"]],
+            inputs=[],
             outputs=buttons["session"]
         )
 
@@ -763,7 +765,7 @@ def launch_interface():
                 outputs=[chat_components["session_log"], status_text]
             ).then(
                 fn=update_session_buttons,
-                inputs=[states["num_history_buttons"]],  # Added
+                inputs=[],
                 outputs=buttons["session"]
             )
 
@@ -852,7 +854,7 @@ def launch_interface():
             outputs=[config_components["status_settings"]]
         ).then(
             fn=update_session_buttons,
-            inputs=[states["num_history_buttons"]],
+            inputs=[],
             outputs=buttons["session"]
         )
 
@@ -869,17 +871,19 @@ def launch_interface():
         )
 
         custom_components["max_history_slots"].change(
-            fn=lambda s: setattr(temporary, "MAX_HISTORY_SLOTS", s) or None,
-            inputs=[custom_components["max_history_slots"]]
+            fn=lambda s: setattr(temporary, "MAX_HISTORY_SLOTS", s),
+            inputs=[custom_components["max_history_slots"]],
+            outputs=[]
         ).then(
             fn=update_session_buttons,
-            inputs=[states["num_history_buttons"]],  # Added
+            inputs=[],
             outputs=buttons["session"]
         )
 
         custom_components["max_attach_slots"].change(
-            fn=lambda s: setattr(temporary, "MAX_ATTACH_SLOTS", s) or None,
-            inputs=[custom_components["max_attach_slots"]]
+            fn=lambda s: setattr(temporary, "MAX_ATTACH_SLOTS", s),
+            inputs=[custom_components["max_attach_slots"]],
+            outputs=[]
         ).then(
             fn=update_file_slot_ui,
             inputs=[states["loaded_files"]],
@@ -910,8 +914,12 @@ def launch_interface():
 
         demo.load(
             fn=update_session_buttons,
-            inputs=[states["num_history_buttons"]],
+            inputs=[],
             outputs=buttons["session"]
+        ).then(
+            fn=update_file_slot_ui,
+            inputs=[states["loaded_files"]],
+            outputs=right_panel["file_slots"] + [right_panel["attach_files"]]
         )
 
         demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)
