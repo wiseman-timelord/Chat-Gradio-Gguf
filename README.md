@@ -116,16 +116,14 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Development
 With regards to the current version of the program...
-- History files are being created, eg `Session saved to data\history\session_20250308_112411.json with 0 attached files.`, but these are not being shown on the slots on the left, and possibly not being handled how I intend. They should be detailed in order of which one was modified most recently at the top. When, a new session is produced or an existing session updated, then all the other `history slots`, should be below it in the left column, rotating the other slots down by 1 as required. like a notmal history slot feature works on a chatbot, but obviously in our case there is a specified number of maximum slots, where the most oldes modified one is removed when the concurrent sessions goes over that number.
-- Debugging Input/Response mechanisms.
+- History slots are having typically 1 word labels with 17 chracter date/time, even though I specified for generated label to have 4-5 word description, possibly when the 1st response comes back from the AI, then also again we would generate a label from the contents of now both communications, and update the label on the session with the new completed label. also if there is no response from the AI within a history session, and then the user switches to a different session or starts a new session, without generating a response from the ai, then the session with only 1 input is deleted when the user switches to whatever other choice. Thus, there will always be 2 interactions in all present history slots, and it will generate the label from each of those slots with 2 interactions.    
 - Need THINK option to be visible when using reasoning model with any modes. THINK option should obviously not be visible if not a reasoning model. `Enable THINK`, enabled by default, but I think there is something special to put into the prompt or the argument when its a reasoning model and you do not want it to use the THINK phase.  
-- 5 main scripts need to be optimized soon.
 
 ## Far Development.
 With regards to the next generation of the program will be ...
 - Add `PyWin32` and `Whisper`, details are here.`https://www.perplexity.ai/search/1-how-does-mantella-mod-for-sk-Q32RILakTQ.lvQ3NHLJb5A`.
 - There are a lot of globals, ensure all globals are safe_three_word labels, so as, to not so much have a chance to interfere with other programs using the same globals.
-- attatched files should be able to be written to   
+- attatched files should be able to be written to.
 - 6 modes and dual model like this...
 ```
 | **Mode**             | **Models**                     | **Features**                                      | **Implementation Notes**                                                                 |
