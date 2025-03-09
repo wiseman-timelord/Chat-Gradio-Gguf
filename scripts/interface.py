@@ -357,56 +357,61 @@ def create_session_label(text):
     return first_line
 
 async def chat_interface(user_input, session_log, tot_enabled, loaded_files, enable_think,
-                         is_reasoning_model, rp_location, user_name, user_role, ai_npc,
-                         cancel_flag, mode_selection, web_search_enabled, models_loaded,
-                         interaction_phase):
+                        is_reasoning_model, rp_location, user_name, user_role, ai_npc,
+                        cancel_flag, mode_selection, web_search_enabled, models_loaded,
+                        interaction_phase):
     from scripts import temporary, utility, models
     from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
     import asyncio
     
+    # Check if models are loaded
     if not models_loaded:
-        yield session_log, "Please load a model first.", gr.update(), cancel_flag, loaded_files, interaction_phase
+        yield session_log, "Please load a model first.", gr.update(), cancel_flag, loaded_files, interaction_phase, gr.update()
         return
     
+    # Start a new session if not active
     if not temporary.SESSION_ACTIVE:
         temporary.current_session_id = None
         temporary.session_label = ""
         temporary.SESSION_ACTIVE = True
         session_log = []
-        yield session_log, "New session started.", gr.update(), cancel_flag, loaded_files, interaction_phase
+        yield session_log, "New session started.", gr.update(), cancel_flag, loaded_files, interaction_phase, gr.update()
         await asyncio.sleep(0.1)
     
+    # Validate input
     if not user_input.strip():
-        yield session_log, "No input provided.", gr.update(), cancel_flag, loaded_files, interaction_phase
+        yield session_log, "No input provided.", gr.update(), cancel_flag, loaded_files, interaction_phase, gr.update()
         return
 
+    # Append user input and clear the textbox
     session_log.append({'role': 'user', 'content': f"User:\n{user_input}"})
-    # Set session label based on the first user input of the session
     if len(session_log) == 1 and session_log[0]['role'] == 'user':
         temporary.session_label = create_session_label(user_input)
     session_log.append({'role': 'assistant', 'content': "Afterthought countdown... "})
-
     interaction_phase = "afterthought_countdown"
-    yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase
+    yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value="")  # Clear user input here
 
+    # Afterthought countdown
     countdown_seconds = 6 if len(user_input.split('\n')) >= 10 else 4 if len(user_input.split('\n')) >= 5 else 2 if temporary.AFTERTHOUGHT_TIME else 1
     for i in range(countdown_seconds, -1, -1):
         session_log[-1]['content'] = f"Afterthought countdown... {i}s"
-        yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase
+        yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update()
         await asyncio.sleep(1)
         if cancel_flag:
             session_log[-1]['content'] = "Input cancelled."
             interaction_phase = "waiting_for_input"
-            yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase
+            yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update()
             return
 
+    # Prepare to generate response
     session_log[-1]['content'] = "Afterthought countdown... 0s ...Executing CLI llama-cli"
     interaction_phase = "generating_response"
-    yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase
+    yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update()
 
     settings = models.get_model_settings(MODEL_NAME)
     mode = mode_selection.lower()
 
+    # Handle file attachments
     if loaded_files:
         session_vectorstore = utility.create_session_vectorstore(loaded_files)
         models.context_injector.set_session_vectorstore(session_vectorstore)
@@ -414,12 +419,13 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     prompt = user_input
     if web_search_enabled and mode in ["chat", "code"]:
         session_log[-1]['content'] = "Performing web search..."
-        yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase
+        yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update()
         search_results = utility.web_search(user_input)
         prompt = f"{user_input}\n\nWeb Search Results:\n{search_results}"
 
+    # Generate response
     if tot_enabled and mode == "chat":
-        yield session_log, "TOT not implemented in streaming mode yet.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input"
+        yield session_log, "TOT not implemented in streaming mode yet.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update()
     else:
         rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
         session_history = ", ".join([f"{msg['role']}: {msg['content']}" for msg in session_log[:-2]]) if mode == "rpg" else None
@@ -432,16 +438,17 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                 break
             response += line + " "
             session_log[-1]['content'] = "AI-Chat-Response:\n" + response.strip()
-            yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase
+            yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update()
             await asyncio.sleep(0)
 
+    # Finalize interaction
     interaction_phase = "waiting_for_input"
     if cancel_flag:
         session_log[-1]['content'] = "Generation cancelled."
     else:
         session_log[-1]['content'] = "AI-Chat-Response:\n" + response.strip()
         utility.save_session_history(session_log, loaded_files)
-    yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase
+    yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update()
 
 def launch_interface():
     """Launch the Gradio interface for the Text-Gradio-Gguf chatbot."""
@@ -498,20 +505,19 @@ def launch_interface():
                             action_buttons = {}
                             with gr.Column(elem_classes=["clean-elements"]):
                                 action_buttons.update(
-                                    action=gr.Button("Send Input", variant="secondary", scale=20, elem_classes=["send-button"])
+                                    action=gr.Button("Send Input", variant="secondary", scale=30, elem_classes=["send-button"])
                                 )
                             with gr.Column(elem_classes=["clean-elements"]):
-                                with gr.Row(elem_classes=["clean-elements"]):
-                                    action_buttons.update(
-                                        edit_previous=gr.Button("Edit Last Input", variant="huggingface"),
-                                        copy_response=gr.Button("Copy Last Output", variant="huggingface")
-                                    )
-                                with gr.Row(elem_classes=["clean-elements"]):
-                                    switches = dict(
-                                        web_search=gr.Checkbox(label="Web-Search", value=False, visible=True),
-                                        tot=gr.Checkbox(label="Enable TOT", value=False, visible=True),
-                                        enable_think=gr.Checkbox(label="Enable THINK", value=True, visible=False)
-                                    )
+                                action_buttons.update(
+                                    edit_previous=gr.Button("Edit Last Input", variant="huggingface"),
+                                    copy_response=gr.Button("Copy Last Output", variant="huggingface")
+                                )
+                            with gr.Column(elem_classes=["clean-elements"]):
+                                switches = dict(
+                                    web_search=gr.Checkbox(label="Web-Search", value=False, visible=True),
+                                    tot=gr.Checkbox(label="Enable TOT", value=False, visible=True),
+                                    enable_think=gr.Checkbox(label="Enable THINK", value=True, visible=False)
+                                )
 
                     with gr.Column(scale=1):
                         right_panel = dict(
@@ -613,11 +619,11 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Critical Actions...")
                     with gr.Row(elem_classes=["clean-elements-normbot"]):
-                        config_components.update(
-                            save_settings=gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
-                        )
                         custom_components.update(
                             delete_all_vectorstores=gr.Button("Delete All History/Vectors", variant="stop", elem_classes=["double-height"])
+                        )
+                        config_components.update(
+                            save_settings=gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
@@ -681,12 +687,14 @@ def launch_interface():
                                  enable_think, is_reasoning_model, rp_location, user_name, user_role, ai_npc,
                                  cancel_flag, mode_selection, web_search_enabled, models_loaded, interaction_phase):
             if phase == "waiting_for_input":
+                # Pass through all 7 values from chat_interface
                 async for output in chat_interface(user_input, session_log, tot_enabled, loaded_files, enable_think,
                                                    is_reasoning_model, rp_location, user_name, user_role, ai_npc,
                                                    cancel_flag, mode_selection, web_search_enabled, models_loaded,
                                                    interaction_phase):
                     yield output
             else:
+                # Handle cancellation or other phases with 7 outputs
                 if phase == "afterthought_countdown":
                     cancel_flag = True
                     new_phase = "waiting_for_input"
@@ -698,7 +706,7 @@ def launch_interface():
                 else:
                     new_phase = interaction_phase
                     status_msg = "No action taken."
-                yield session_log, status_msg, update_action_button(new_phase), cancel_flag, loaded_files, new_phase
+                yield session_log, status_msg, update_action_button(new_phase), cancel_flag, loaded_files, new_phase, gr.update()
 
         # Event Handlers
         buttons["start_new_session"].click(
@@ -736,7 +744,8 @@ def launch_interface():
                 action_buttons["action"],
                 states["cancel_flag"],
                 states["loaded_files"],
-                states["interaction_phase"]
+                states["interaction_phase"],
+                chat_components["user_input"]
             ]
         ).then(
             fn=update_session_buttons,
