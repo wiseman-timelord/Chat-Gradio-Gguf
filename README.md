@@ -130,6 +130,7 @@ ExampleFilenameThree.tct
 File Vectorized: ExampleFilenameOne.txt
 File Vectorized: ExampleFilenameTwo.txt
 ```
+...on the other hand, if the processes of attaching files for purposes of input in AI chatbots requires the files be added to each interaction of relevance, and the data is not pulled from the vectorstore, then obviously we would want to keep it as file slots. I am unsure as to how it works, but if it is just about dumping data into a vector store while not requiring the original files after, then there are simpler more srtreamline methods of managine it on the UI, is what I am trying to say. 
 
 ## Far Development.
 With regards to the next generation of the program will be ...
@@ -153,15 +154,11 @@ With regards to the next generation of the program will be ...
 - Color themes. Deepseek R1 AND Grok3Beta, found this extremely difficult, Deepseek was better. It needs to be re-attempted later, possibly with GPT4o1. Make it all shades of grey, then allow people to choose the primary button color in configuration, or something simple like that.
 - two new modes—Chat-Notate and Chat-Notate-Uncensored—to your Windows 10-based chatbot. These modes allow the AI to process uploaded PDFs into summarized notations, stored in .\data\notation, with two versions: a detailed summary (up to the model's context limit, minus a safety margin) and a concise summary (256 tokens). During chats, the AI selects the most relevant detailed notation based on user input to deliver informed responses. A Notation Library menu in the UI enables users to manage notations by indexing new PDFs or deleting existing ones. For reasoning models in these modes, the THINK phase is disabled (like in TOT mode), ensuring practical, notation-driven conversations. This feature is slated for a later development phase.
 
-
-
 ## Credits
 - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
 - [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
 - [Claude_Sonnet](https://claude.ai) - For a smaller amount of the work on this project, useually when there was issue with the other 2 above.
 - [Perplexity](https://www.perplexity.ai) - For research to look at more sites than normal, also notice its agentic now.
-
-
 
 ## License
 **Wiseman-Timelord's Glorified License** is detailed in the file `.\Licence.txt`, that will later be added.
