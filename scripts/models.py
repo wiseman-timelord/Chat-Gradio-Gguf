@@ -2,7 +2,6 @@
 
 # Imports...
 import time, subprocess
-from llama_cpp import Llama
 from pathlib import Path
 import gradio as gr
 from langchain_community.vectorstores import FAISS
@@ -64,10 +63,6 @@ class ContextInjector:
 context_injector = ContextInjector()
 
 # Functions...
-def reload_vectorstore(name: str):
-    context_injector.load_vectorstore(name)
-    return "Knowledge updated"
-
 def get_model_size(model_path: str) -> float:
     """Get model file size in MB."""
     return Path(model_path).stat().st_size / (1024 * 1024)
@@ -89,23 +84,6 @@ def set_cpu_affinity():
             except Exception as e:
                 print(f"Failed to set CPU affinity: {e}")
                 
-
-def get_llm():
-    from scripts.temporary import llm, MODEL_NAME, MODEL_FOLDER, N_CTX, N_GPU_LAYERS, N_BATCH, MMAP, MLOCK
-    if MODEL_NAME != "Select_a_model...":
-        if llm is None:
-            model_path = Path(MODEL_FOLDER) / MODEL_NAME
-            llm = Llama(
-                model_path=str(model_path),
-                n_ctx=N_CTX,
-                n_gpu_layers=N_GPU_LAYERS,
-                n_batch=N_BATCH,
-                mmap=MMAP,
-                mlock=MLOCK,
-                verbose=False
-            )
-        return llm
-    return None
 
 def get_available_models():
     from .temporary import MODEL_FOLDER
@@ -448,64 +426,45 @@ def inspect_model(model_name, vram_size):
 
 def load_models(model_name, vram_size):
     global llm, MODELS_LOADED, MODEL_NAME
-    from scripts.temporary import N_CTX, N_BATCH, MMAP, MLOCK, DYNAMIC_GPU_LAYERS
-    from scripts.utility import save_config  # Import save_config
+    from scripts.temporary import N_CTX, N_BATCH, MMAP, MLOCK, DYNAMIC_GPU_LAYERS, USE_PYTHON_BINDINGS
+    from scripts.utility import save_config
     from pathlib import Path
-    from llama_cpp import Llama
-    
-    # Step 0: Save the current configuration to persistent.json
+    if USE_PYTHON_BINDINGS:
+        from llama_cpp import Llama
+
     save_config()
-    print("Debug: Configuration saved to persistent.json before loading model.")
-    
     if model_name == "Select_a_model...":
         return "Select a model to load.", False
-    
+
     try:
-        model_dir = Path(temporary.MODEL_FOLDER)
-        if not model_dir.is_dir():
-            return f"Error: Model folder '{model_dir}' is not a valid directory.", False
-        
-        model_path = model_dir / model_name
-        print(f"Debug: Attempting to load model from: {model_path}")
+        model_path = Path(temporary.MODEL_FOLDER) / model_name
         if not model_path.exists():
             return f"Error: Model file '{model_path}' not found.", False
-        
-        file_size = model_path.stat().st_size / (1024 * 1024)  # Size in MB
-        print(f"Debug: Model file size: {file_size:.2f} MB")
-        
-        # Step 1: Extract accurate layer information from model
+
         num_layers = get_model_layers(str(model_path))
-        print(f"Debug: Retrieved number of layers: {num_layers}")
-        
-        # Step 2: Validate layer count
         if num_layers <= 0:
-            return f"Error: Could not determine layer count for model {model_name}. Loading aborted.", False
-        
-        # Step 3: Calculate GPU layers based on VRAM and model size
+            return f"Error: Could not determine layer count for model {model_name}.", False
+
         temporary.N_GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
             str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
         )
-        print(f"Debug: Calculated N_GPU_LAYERS = {temporary.N_GPU_LAYERS} based on VRAM={vram_size} MB")
-        
-        # Step 4: Load the model with calculated GPU layers
-        print(f"Debug: Loading model with n_gpu_layers={temporary.N_GPU_LAYERS}")
-        llm = Llama(
-            model_path=str(model_path),
-            n_ctx=N_CTX,
-            n_gpu_layers=temporary.N_GPU_LAYERS,
-            n_batch=N_BATCH,
-            mmap=MMAP,
-            mlock=MLOCK,
-            verbose=True
-        )
-        
-        # Step 5: Update global state
+
+        if USE_PYTHON_BINDINGS:
+            llm = Llama(
+                model_path=str(model_path),
+                n_ctx=N_CTX,
+                n_gpu_layers=temporary.N_GPU_LAYERS,
+                n_batch=N_BATCH,
+                mmap=MMAP,
+                mlock=MLOCK,
+                verbose=True
+            )
+        else:
+            llm = None
+
         MODELS_LOADED = True
         MODEL_NAME = model_name
-        status = f"Model '{model_name}' loaded successfully. GPU layers: {temporary.N_GPU_LAYERS}/{num_layers}"
-        print(f"Debug: {status}")
-        return status, True
-    
+        return f"Model '{model_name}' loaded successfully. GPU layers: {temporary.N_GPU_LAYERS}/{num_layers}", True
     except Exception as e:
         return f"Error loading model: {str(e)}", False
 

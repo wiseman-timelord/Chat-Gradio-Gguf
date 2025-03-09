@@ -58,20 +58,6 @@ def get_available_gpus():
         except Exception:
             return ["CPU Only"]
 
-def process_file(file_path: Path) -> dict:
-    """Process a file and return its metadata."""
-    if file_path.suffix[1:].lower() not in ALLOWED_EXTENSIONS:
-        raise ValueError(f"Unsupported file type: {file_path.suffix}")
-    return {
-        "name": file_path.name,
-        "content": file_path.read_text(encoding="utf-8"),
-        "type": file_path.suffix[1:].lower()
-    }
-
-def strip_html(text: str) -> str:
-    """Remove HTML tags from text."""
-    return re.sub(r'<[^>]+>', '', text)
-
 def save_session_history(history: list, loaded_files: list, force_save: bool = False) -> str:
     """Save chat history and attached files with time-based logic."""
     global last_save_time, current_session_id
@@ -375,8 +361,7 @@ def load_config():
             temporary.AI_NPC_NAME = config["rp_settings"].get("ai_npc", "Robot")
             temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")
     else:
-        # Default to ".\models" if no config exists
-        temporary.MODEL_FOLDER = ".\models"
+        temporary.MODEL_FOLDER = str(Path(".\models").resolve())
     
     # Resolve MODEL_FOLDER to an absolute path
     temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())      
