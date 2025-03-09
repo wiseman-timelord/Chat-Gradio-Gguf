@@ -120,13 +120,16 @@ With regards to the current version of the program...
 - Need THINK option to be visible when using reasoning model with any modes. THINK option should obviously not be visible if not a reasoning model. `Enable THINK`, enabled by default, but I think there is something special to put into the prompt or the argument when its a reasoning model and you do not want it to use the THINK phase.  
 - Attach files is uploading to the vectorstore, then having some error. I also notice that it immediately uploads the files, instead of waiting for the user to then click send, like traditional chatbots do, however, Possibly a better way to do vectorstores, would be to not have file slots as items, but instead a text display like...
 ```
-Uploaded Files:
+Vectorized Data:
 ExampleFilenameOne.tct
 ExampleFilenameTwo.tct
 ExampleFilenameThree.tct
 ```
-...this make one wonder if a specified number of file slots should still be enforced at all, even as the total number of files allowed for the session to be entered into the database, then when the user adds files, they are uploaded to the vectorstore, and for each file uploaded, this then becomes noted in the chatlog in a recognizable format, as the document/file limited to 40 characters with a `..` at the end unless its the full filename. The listed items remaining listed in a display for the duration, so as to be able to display what is in the vector database relevant to the session. The idea is, by printing it in the session, then the program scanning the given session log through for files added, then compiling the information, and producing the list from it, then adding any additional ones to that list, instead of re-scanning the complete log repeatingly during a session. I would have to think about it.
-
+...this make one wonder if a specified number of file slots should still be enforced at all, even as the total number of files allowed for the session to be entered into the database, then when the user adds files, they are uploaded to the vectorstore, and for each file uploaded, this then becomes noted in the chatlog in a recognizable format, as the document/file limited to 40 characters with a `..` at the end unless its the full filename. The listed items remaining listed in a display for the duration, so as to be able to display what is in the vector database relevant to the session. The idea is, by printing it in the session, then the program scanning the given session log through for files added, then compiling the information, and producing the list from it, then adding any additional ones to that list, instead of re-scanning the complete log repeatingly during a session. I would have to think about it. For notation in the Session log of attached files, it could be like...
+```
+File Vectorized: ExampleFilenameOne.txt
+File Vectorized: ExampleFilenameTwo.txt
+```
 
 ## Far Development.
 With regards to the next generation of the program will be ...
