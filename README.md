@@ -1,5 +1,5 @@
 # Text-Gradio-Gguf
-![preview_image](media/project_banner.jpg)
+![banner_image](media/project_banner.jpg)
 <br>Status: Alpha - Testing and bugfixing.
 
 ## Description
@@ -18,7 +18,7 @@ Intended as a high-quality chat interface with uses include, Codeing, Rpg Game, 
 - **Afterthought Countdown**: If, =>10 lines then 5s or 5-10 lines then 3s or <5 lines then 1s, wait for you to cancel send and return to edit, saving on mis-prompts and waits.
 
 ### Preview
-- The "Conversation" page, the session rotation, log and input, and the Operation Mode selector with dynamic display elements...
+- The "Conversation" page, with Operation Mode selector and relating dynamic panel displays switcher, and other features one commonly finds...
 ![preview_image](media/conversation_page.jpg)
 
 - The "Configuration" page - for configuration of, models and hardware, and relevant components, as well as ui customization...
