@@ -466,7 +466,7 @@ def launch_interface():
     available_models = models.get_available_models()
     default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else available_models[0]
 
-    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important;height:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
+    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important;height:80px!important}.half-width{width:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
 
         # Updated states to include selected_panel for panel toggle
@@ -558,12 +558,12 @@ def launch_interface():
                                         elem_classes=["send-button"]
                                     )
                                 )
-                            with gr.Column(elem_classes=["clean-elements"], scale=1):
+                            with gr.Column(elem_classes=["clean-elements"], min_width=166):
                                 action_buttons.update(
                                     edit_previous=gr.Button("Edit Last Input", variant="huggingface"),
                                     copy_response=gr.Button("Copy Last Output", variant="huggingface")
                                 )
-                            with gr.Column(elem_classes=["clean-elements"], scale=1):
+                            with gr.Column(elem_classes=["clean-elements"], min_width=166):
                                 switches = dict(
                                     web_search=gr.Checkbox(label="Web-Search", value=False, visible=True),
                                     tot=gr.Checkbox(label="Enable TOT", value=False, visible=True),
@@ -592,7 +592,6 @@ def launch_interface():
                     with gr.Row(visible=not is_cpu_only, elem_classes=["clean-elements"]):
                         config_components.update(
                             gpu=gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=temporary.SELECTED_GPU, scale=5),
-                            backend_type=gr.Textbox(label="Installed Backend", value=temporary.BACKEND_TYPE, interactive=False, scale=5),
                             vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=3),
                         )
                     with gr.Row(visible=is_cpu_only, elem_classes=["clean-elements"]):
@@ -610,12 +609,12 @@ def launch_interface():
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
-                            ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX),
-                            batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH),
-                            temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE),
-                            repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY),
+                            ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX, scale=5),
+                            batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH, scale=5),
+                            temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE, scale=5),
+                            repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY, scale=5),
                         )
-                        with gr.Column(elem_classes=["clean-elements"]):
+                        with gr.Column(elem_classes=["clean-elements"], min_width=166):
                             config_components.update(
                                 stream_output=gr.Checkbox(label="Stream Output", value=temporary.STREAM_OUTPUT),
                             )
@@ -631,12 +630,12 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components = {}
                         custom_components.update(
-                            max_history_slots=gr.Dropdown(choices=temporary.HISTORY_SLOT_OPTIONS, label="Max History Slots", value=temporary.MAX_HISTORY_SLOTS),
-                            session_log_height=gr.Dropdown(choices=temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Session Log Height", value=temporary.SESSION_LOG_HEIGHT),
-                            input_lines=gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES),
-                            max_attach_slots=gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS),
+                            max_history_slots=gr.Dropdown(choices=temporary.HISTORY_SLOT_OPTIONS, label="Max History Slots", value=temporary.MAX_HISTORY_SLOTS, scale=5),
+                            session_log_height=gr.Dropdown(choices=temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Session Log Height", value=temporary.SESSION_LOG_HEIGHT, scale=5),
+                            input_lines=gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES, scale=5),
+                            max_attach_slots=gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS, scale=5)
                         )
-                        with gr.Column(elem_classes=["clean-elements"]):
+                        with gr.Column(elem_classes=["clean-elements"], min_width=166):
                             custom_components.update(
                                 afterthought_time=gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
                             )
