@@ -126,15 +126,6 @@ def eject_file(loaded_files, slot_index):
     updates = update_file_slot_ui(loaded_files)
     return [loaded_files, status_msg] + updates
 
-def remove_all_attachments(loaded_files):
-    from scripts.utility import create_session_vectorstore
-    loaded_files.clear()
-    session_vectorstore = create_session_vectorstore(loaded_files)
-    context_injector.set_session_vectorstore(session_vectorstore)
-    status_msg = "All attachments removed."
-    updates = update_file_slot_ui(loaded_files)
-    return [loaded_files, status_msg] + updates
-
 def toggle_rpg_settings(showing_rpg_right):
     new_showing_rpg_right = not showing_rpg_right
     toggle_label = "Show File Attachments" if new_showing_rpg_right else "Show RPG Settings"
@@ -257,14 +248,14 @@ def update_file_slot_ui(loaded_files):
                 filename = Path(loaded_files[i]).name
                 short_name = (filename[:36] + ".." if len(filename) > 38 else filename)
                 label = f"{short_name}"
-                variant = "secondary"
+                variant = "primary"  # Changed from "secondary" to "primary"
             else:
                 label = "File Slot Free"
-                variant = "huggingface"
+                variant = "huggingface"  # Unchanged
             visible = True
         else:
             label = ""
-            variant = "primary"
+            variant = "primary"  # This is for hidden slots, can remain as is
             visible = False
         button_updates.append(gr.update(value=label, visible=visible, variant=variant))
     attach_files_visible = len(loaded_files) < temporary.MAX_ATTACH_SLOTS
@@ -532,7 +523,6 @@ def launch_interface():
                             right_panel.update(
                                 attach_files=gr.UploadButton("Attach New Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"]),
                                 file_slots=[gr.Button("File Slot Free", variant="huggingface", visible=False) for _ in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS)],
-                                remove_all_attachments=gr.Button("Remove All Attachments", variant="primary")
                             )
                         with right_panel["rpg_settings"]:
                             rpg_fields = dict(
@@ -769,12 +759,6 @@ def launch_interface():
             fn=update_file_slot_ui,
             inputs=[states["loaded_files"]],
             outputs=right_panel["file_slots"] + [right_panel["attach_files"]]
-        )
-
-        right_panel["remove_all_attachments"].click(
-            fn=remove_all_attachments,
-            inputs=[states["loaded_files"]],
-            outputs=[states["loaded_files"], status_text] + right_panel["file_slots"] + [right_panel["attach_files"]]
         )
 
         for i, btn in enumerate(right_panel["file_slots"]):
