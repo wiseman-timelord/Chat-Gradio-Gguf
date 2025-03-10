@@ -116,6 +116,75 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Gen 1 Development
 With regards to the current version of the program...
+1. it selects model folder and populates dir and loads model correctly, but when I produce my first input then click `send input`, then it is producing this error...
+```
+Inputs received: Hey, got a horse?
+Traceback (most recent call last):
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\queueing.py", line 625, in process_events
+    response = await route_utils.call_process_api(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\route_utils.py", line 322, in call_process_api
+    output = await app.get_blocks().process_api(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\blocks.py", line 2103, in process_api
+    result = await self.call_function(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\blocks.py", line 1650, in call_function
+    prediction = await anyio.to_thread.run_sync(  # type: ignore
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\anyio\to_thread.py", line 56, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2461, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 962, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\utils.py", line 890, in wrapper
+    response = f(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^
+  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\scripts\interface.py", line 712, in action_handler
+    gr.Button.update(),       # action_buttons["action"]
+    ^^^^^^^^^^^^^^^^
+AttributeError: type object 'Button' has no attribute 'update'
+```
+...thats this line...
+```
+                gr.Button.update(),       # action_buttons["action"]
+```
+...in this section...
+```
+        # Define placeholder action_handler to resolve NameError
+        def action_handler(
+            interaction_phase,
+            user_input,
+            session_log,
+            tot,
+            loaded_files,
+            enable_think,
+            is_reasoning_model,
+            rp_location,
+            user_name,
+            user_role,
+            ai_npc,
+            cancel_flag,
+            mode_selection,
+            web_search,
+            models_loaded,
+            interaction_phase_state
+        ):
+            print("Inputs received:", user_input)
+            return (
+                session_log,              # chat_components["session_log"]
+                "Action handled",         # status_text
+                gr.Button.update(),       # action_buttons["action"]
+                False,                    # states["cancel_flag"]
+                loaded_files,             # states["loaded_files"]
+                "waiting_for_input",      # states["interaction_phase"]
+                gr.Textbox.update()       # chat_components["user_input"]
+            )
+```
 1. When given a complicated multi-line prompt, for generation of a storyboard, it suddenly stoped outputting after ~2500 text characters. I set the batch output size to 4096 tokens, this is possibly the token limit for output. Either way, when I stated `please continue` and hit send, it replied with...
 ```
 AI-Chat-Response:
