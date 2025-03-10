@@ -85,7 +85,7 @@ def get_available_models():
         choices = ["Select_a_model..."] + models
     else:
         choices = ["No models found"]
-    print(f"Available models in {temporary.MODEL_FOLDER}: {choices}")
+    print(f"Populated Models Folder: {choices}")
     return choices
 
 def get_model_settings(model_name):

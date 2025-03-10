@@ -485,21 +485,17 @@ def launch_interface():
         with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
-                    # Slim Left Column for mode and panel controls
                     with gr.Column(min_width=325, elem_classes=["clean-elements"]):
-                        # Operation Mode Switch
                         mode_selection = gr.Radio(
                             choices=["Chat", "Code", "Rpg"],
                             label="Operation Mode",
                             value="Chat"
                         )
-                        # Panel Toggle Switch (choices updated dynamically)
                         panel_toggle = gr.Radio(
                             choices=["Files", "History"],
                             label="Panel Mode",
                             value="Files"
                         )
-                        # Dynamic Panels
                         with gr.Group(visible=True) as attachments_group:
                             attach_files = gr.UploadButton(
                                 "Attach New Files",
@@ -523,7 +519,6 @@ def launch_interface():
                                 save_rpg=gr.Button("Save RPG Settings", variant="primary")
                             )
                         with gr.Group(visible=False) as history_slots_group:
-                            # "Start New Session" button added at the top of history slots
                             start_new_session_btn = gr.Button("Start New Session...", variant="secondary")
                             buttons = dict(
                                 session=[gr.Button(
@@ -533,44 +528,40 @@ def launch_interface():
                                 ) for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS)]
                             )
 
-                    # Wider Right Column for chat interface
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
-                        # Removed start_new_session button from here
-                        chat_components = dict(
-                            session_log=gr.Chatbot(
+                        chat_components = {}
+                        with gr.Row(elem_classes=["clean-elements"]):
+                            chat_components["session_log"] = gr.Chatbot(
                                 label="Session Log",
                                 height=temporary.SESSION_LOG_HEIGHT,
                                 elem_classes=["scrollable"],
                                 type="messages"
-                            ),
-                            user_input=gr.Textbox(
-                                label="User Input",
-                                lines=temporary.INPUT_LINES,
-                                interactive=False,
-                                placeholder="Enter text here..."
                             )
-                        )
+                        with gr.Row(elem_classes=["clean-elements"]):
+                            with gr.Column(scale=10, elem_classes=["clean-elements"]):
+                                chat_components["user_input"] = gr.Textbox(
+                                    label="User Input",
+                                    lines=temporary.INPUT_LINES,
+                                    interactive=False,
+                                    placeholder="Enter text here..."
+                                )
+                            with gr.Column(min_width=166, elem_classes=["clean-elements"]):
+                                switches = dict(
+                                    web_search=gr.Checkbox(label="Internet", value=False, visible=True),
+                                    tot=gr.Checkbox(label="T.O.T.", value=False, visible=True),
+                                    enable_think=gr.Checkbox(label="THINK", value=True, visible=False)
+                                )
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons = {}
                             with gr.Column(elem_classes=["clean-elements"], scale=40):
-                                action_buttons.update(
-                                    action=gr.Button(
-                                        "Send Input",
-                                        variant="secondary",
-                                        elem_classes=["send-button"]
-                                    )
+                                action_buttons["action"] = gr.Button(
+                                    "Send Input",
+                                    variant="secondary",
+                                    elem_classes=["send-button"]
                                 )
                             with gr.Column(elem_classes=["clean-elements"], min_width=166):
-                                action_buttons.update(
-                                    edit_previous=gr.Button("Edit Last Input", variant="huggingface"),
-                                    copy_response=gr.Button("Copy Last Output", variant="huggingface")
-                                )
-                            with gr.Column(elem_classes=["clean-elements"], min_width=166):
-                                switches = dict(
-                                    web_search=gr.Checkbox(label="Web-Search", value=False, visible=True),
-                                    tot=gr.Checkbox(label="Enable TOT", value=False, visible=True),
-                                    enable_think=gr.Checkbox(label="Enable THINK", value=True, visible=False)
-                                )
+                                action_buttons["edit_previous"] = gr.Button("Edit Last Input", variant="huggingface")
+                                action_buttons["copy_response"] = gr.Button("Copy Last Output", variant="huggingface")
 
                 with gr.Row():
                     status_text = gr.Textbox(
