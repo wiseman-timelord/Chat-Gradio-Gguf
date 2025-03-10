@@ -114,7 +114,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 - [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested.
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
-## Development
+## Gen 1 Development
 With regards to the current version of the program...
 1. When given a complicated multi-line prompt, for generation of a storyboard, it suddenly stoped outputting after ~2500 text characters. I set the batch output size to 4096 tokens, this is possibly the token limit for output. Either way, when I stated `please continue` and hit send, it replied with...
 ```
@@ -127,7 +127,7 @@ What 's on your mind ?
 2. History slots are having typically, date/time + additional 1 word, labels, even though I specified for generated label to have 4-5 word contextual word combination, possibly when the 1st response comes back from the AI, then also again we would generate a label from the contents of now both communications, and update the label on the session with the new completed label. also if there is no response from the AI within a history session, and then the user switches to a different session or starts a new session, without generating a response from the ai, then the session with only 1 input is deleted when the user switches to whatever other choice. Thus, there will always be 2 interactions in all present history slots, and it will generate the label from each of those slots with 2 interactions.    
 3. Need THINK option to be visible when using reasoning model with any modes. THINK option should obviously not be visible if not a reasoning model. `Enable THINK`, disabled by default, but I think there is something special to put into the prompt or the argument when its a reasoning model and you do not want it to use the THINK phase, which would apply to only models detected to be reasoning models. If the user uses the `Enable Think` option, then it should use think for the following input, but after the response from the AI, it should automatically disable `Enable Think`, ready for an input where the user selects `Enable Think` again. 
 
-## Far Development.
+## Gen => 2 Development.
 With regards to the next generation of the program will be ...
 - Add `PyWin32` and `Whisper`, details are here.`https://www.perplexity.ai/search/1-how-does-mantella-mod-for-sk-Q32RILakTQ.lvQ3NHLJb5A`.
 - There are a lot of globals, ensure all globals are safe_three_word labels, so as, to not so much have a chance to interfere with other programs using the same globals.
