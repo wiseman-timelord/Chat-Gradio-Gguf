@@ -129,7 +129,7 @@ CONFIG_TEMPLATE = """{
       "input_lines": 5
 	},
   "backend_config": {
-    "type": "GPU/CPU - Vulkan",
+    "backend_type": "GPU/CPU - Vulkan",
     "llama_bin_path": "data/llama-vulkan-bin"
   },
   "rp_settings": {

@@ -7,11 +7,11 @@ import gradio as gr
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
-from . import temporary
+import scripts.temporary as temporary  # Import module instead of specific variables
 from scripts.temporary import (
     N_CTX, N_GPU_LAYERS, N_BATCH, LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, prompt_templates, llm,
-    MODEL_NAME, MODEL_FOLDER, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED
+    MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED
 )
 
 # Classes...
@@ -76,13 +76,13 @@ def set_cpu_affinity():
                 print(f"Failed to set CPU affinity: {e}")
 
 def get_available_models():
-    model_dir = Path(MODEL_FOLDER)
+    model_dir = Path(temporary.MODEL_FOLDER)
     models = [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
     if models:
-        choices = ["Select_a_model..."] + models  # Include default option
+        choices = ["Select_a_model..."] + models
     else:
-        choices = ["No models found"]  # Indicate no models available
-    print(f"Available models in {MODEL_FOLDER}: {choices}")
+        choices = ["No models found"]
+    print(f"Available models in {temporary.MODEL_FOLDER}: {choices}")
     return choices
 
 def get_model_settings(model_name):

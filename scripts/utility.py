@@ -230,46 +230,6 @@ def trim_session_history(max_sessions):
         oldest_file = session_files.pop()
         oldest_file.unlink()
 
-def save_config():
-    config_path = Path("data/persistent.json")
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config = {
-        "model_settings": {
-            "model_dir": temporary.MODEL_FOLDER,
-            "model_name": temporary.MODEL_NAME,
-            "n_ctx": temporary.N_CTX,
-            "temperature": temporary.TEMPERATURE,
-            "repeat_penalty": temporary.REPEAT_PENALTY,
-            "llama_cli_path": temporary.LLAMA_CLI_PATH,
-            "vram_size": temporary.VRAM_SIZE,
-            "selected_gpu": temporary.SELECTED_GPU,
-            "selected_cpu": temporary.SELECTED_CPU,
-            "mmap": temporary.MMAP,
-            "mlock": temporary.MLOCK,
-            "n_batch": temporary.N_BATCH,
-            "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
-            "afterthought_time": temporary.AFTERTHOUGHT_TIME,
-            "max_history_slots": temporary.MAX_HISTORY_SLOTS,
-            "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
-            "session_log_height": temporary.SESSION_LOG_HEIGHT,
-            "input_lines": temporary.INPUT_LINES
-        },
-        "backend_config": {
-            "type": temporary.BACKEND_TYPE,
-            "llama_bin_path": temporary.LLAMA_BIN_PATH
-        },
-        "rp_settings": {
-            "rp_location": temporary.RP_LOCATION,
-            "user_name": temporary.USER_PC_NAME,
-            "user_role": temporary.USER_PC_ROLE,
-            "ai_npc": temporary.AI_NPC_NAME,
-            "ai_npc_role": temporary.AI_NPC_ROLE
-        }
-    }
-    with open(config_path, 'w') as f:
-        json.dump(config, f, indent=4)
-    return "Settings saved to persistent.json"
-
 def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary."""
     reload_required = False
@@ -330,8 +290,19 @@ def load_config():
     if config_path.exists():
         with open(config_path) as f:
             config = json.load(f)
-            # Model settings
+            
+            # Migrate old configs if backend_config is missing
+            if "backend_config" not in config:
+                config["backend_config"] = {
+                    "backend_type": "Not Configured",
+                    "llama_bin_path": ""
+                }
+                print("Migrated config: Added missing backend_config section")
+
+            # Load model folder from config, default to ".\models" if not specified
             temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", ".\models")
+            
+            # Load other model settings
             temporary.MODEL_NAME = config["model_settings"].get("model_name", "Select_a_model...")
             temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
             temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
@@ -349,17 +320,63 @@ def load_config():
             temporary.MAX_ATTACH_SLOTS = int(config["model_settings"].get("max_attach_slots", 6))
             temporary.SESSION_LOG_HEIGHT = int(config["model_settings"].get("session_log_height", 450))
             temporary.INPUT_LINES = int(config["model_settings"].get("input_lines", 5))
-            # Backend config
-            temporary.BACKEND_TYPE = config["backend_config"].get("type", "")
+            
+            # Load backend config
+            temporary.BACKEND_TYPE = config["backend_config"].get("backend_type", "Not Configured")
             temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")
-            # RP settings
+            print(f"Debug: Loaded backend_config - type={temporary.BACKEND_TYPE}, path={temporary.LLAMA_BIN_PATH}")
+            
+            # Load RPG settings
             temporary.RP_LOCATION = config["rp_settings"].get("rp_location", "Public")
             temporary.USER_PC_NAME = config["rp_settings"].get("user_name", "Human")
             temporary.USER_PC_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
             temporary.AI_NPC_NAME = config["rp_settings"].get("ai_npc", "Robot")
             temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")
+            
+            print(f"Loaded config: MODEL_FOLDER={temporary.MODEL_FOLDER}, BACKEND_TYPE={temporary.BACKEND_TYPE}")
     else:
-        temporary.MODEL_FOLDER = str(Path(".\models").resolve())
+        print("Config file not found, please re-install.")
     
-    # Resolve MODEL_FOLDER to an absolute path
-    temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())      
+    # Always resolve MODEL_FOLDER to an absolute path
+    temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())
+    print(f"Resolved MODEL_FOLDER to: {temporary.MODEL_FOLDER}")
+    
+def save_config():
+    config_path = Path("data/persistent.json")
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config = {
+        "model_settings": {
+            "model_dir": str(Path(temporary.MODEL_FOLDER).resolve()),
+            "model_name": temporary.MODEL_NAME,
+            "n_ctx": temporary.N_CTX,
+            "temperature": temporary.TEMPERATURE,
+            "repeat_penalty": temporary.REPEAT_PENALTY,
+            "llama_cli_path": temporary.LLAMA_CLI_PATH,
+            "vram_size": temporary.VRAM_SIZE,
+            "selected_gpu": temporary.SELECTED_GPU,
+            "selected_cpu": temporary.SELECTED_CPU,
+            "mmap": temporary.MMAP,
+            "mlock": temporary.MLOCK,
+            "n_batch": temporary.N_BATCH,
+            "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
+            "afterthought_time": temporary.AFTERTHOUGHT_TIME,
+            "max_history_slots": temporary.MAX_HISTORY_SLOTS,
+            "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
+            "session_log_height": temporary.SESSION_LOG_HEIGHT,
+            "input_lines": temporary.INPUT_LINES
+        },
+        "backend_config": {
+            "backend_type": temporary.BACKEND_TYPE,  # Key remains "backend_type"
+            "llama_bin_path": temporary.LLAMA_BIN_PATH
+        },
+        "rp_settings": {
+            "rp_location": temporary.RP_LOCATION,
+            "user_name": temporary.USER_PC_NAME,
+            "user_role": temporary.USER_PC_ROLE,
+            "ai_npc": temporary.AI_NPC_NAME,
+            "ai_npc_role": temporary.AI_NPC_ROLE
+        }
+    }
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=4)
+    return "Settings saved to persistent.json"

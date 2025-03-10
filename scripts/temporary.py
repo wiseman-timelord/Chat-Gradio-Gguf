@@ -4,7 +4,7 @@
 import time
 
 # General Constants/Variables/Lists/Maps/Arrays
-MODEL_FOLDER = "models"
+MODEL_FOLDER = "path/to/your/models"
 VECTORSTORE_DIR = "data/vectors"
 TEMP_DIR = "data/temp"
 HISTORY_DIR = "data/history"
@@ -21,7 +21,7 @@ yake_history_detail = [None] * MAX_HISTORY_SLOTS
 MAX_ATTACH_SLOTS = 6
 last_save_time = 0 
 AFTERTHOUGHT_TIME = True
-MODEL_NAME = "Select a model..."
+MODEL_NAME = "Select_a_model..."
 N_CTX = 8192
 VRAM_SIZE = 8192
 SELECTED_GPU = None
@@ -32,7 +32,7 @@ MLOCK = True  # Always True, option removed
 STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True  # Always True, option removed
 LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
-BACKEND_TYPE = ""
+BACKEND_TYPE = "Not Configured"
 LLAMA_BIN_PATH = ""
 RAG_AUTO_LOAD = ["general_knowledge"]
 REPEAT_PENALTY = 1.0
