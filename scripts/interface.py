@@ -484,7 +484,7 @@ def launch_interface():
             with gr.Tab("Conversation"):
                 with gr.Row():
                     # Slim Left Column for mode and panel controls
-                    with gr.Column(scale=1, elem_classes=["clean-elements"]):
+                    with gr.Column(min_width=325, elem_classes=["clean-elements"]):
                         # Operation Mode Switch
                         mode_selection = gr.Radio(
                             choices=["Chat", "Code", "Rpg"],
@@ -493,9 +493,9 @@ def launch_interface():
                         )
                         # Panel Toggle Switch (choices updated dynamically)
                         panel_toggle = gr.Radio(
-                            choices=["Attachments", "History Slots"],
-                            label="Select Panel",
-                            value="Attachments"
+                            choices=["Files", "History"],
+                            label="Panel Mode",
+                            value="Files"
                         )
                         # Dynamic Panels
                         with gr.Group(visible=True) as attachments_group:
@@ -532,7 +532,7 @@ def launch_interface():
                             )
 
                     # Wider Right Column for chat interface
-                    with gr.Column(scale=4, elem_classes=["clean-elements"]):
+                    with gr.Column(scale=30, elem_classes=["clean-elements"]):
                         # Removed start_new_session button from here
                         chat_components = dict(
                             session_log=gr.Chatbot(
@@ -614,7 +614,7 @@ def launch_interface():
                             temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE, scale=5),
                             repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY, scale=5),
                         )
-                        with gr.Column(elem_classes=["clean-elements"], min_width=166):
+                        with gr.Column(elem_classes=["clean-elements"]):
                             config_components.update(
                                 stream_output=gr.Checkbox(label="Stream Output", value=temporary.STREAM_OUTPUT),
                             )
@@ -635,7 +635,7 @@ def launch_interface():
                             input_lines=gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES, scale=5),
                             max_attach_slots=gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS, scale=5)
                         )
-                        with gr.Column(elem_classes=["clean-elements"], min_width=166):
+                        with gr.Column(elem_classes=["clean-elements"]):
                             custom_components.update(
                                 afterthought_time=gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
                             )
@@ -666,16 +666,16 @@ def launch_interface():
         def update_panel_on_mode_change(mode, current_panel):
             mode = mode.lower()
             if mode == "rpg":
-                choices = ["Attachments", "RPG Config", "History Slots"]
+                choices = ["Files", "Roleplay", "History"]
             else:
-                choices = ["Attachments", "History Slots"]
+                choices = ["Files", "History"]
             if current_panel not in choices:
-                new_panel = "Attachments"
+                new_panel = "Files"
             else:
                 new_panel = current_panel
-            attachments_visible = new_panel == "Attachments"
-            rpg_visible = new_panel == "RPG Config" and mode == "rpg"
-            history_visible = new_panel == "History Slots"
+            attachments_visible = new_panel == "Files"
+            rpg_visible = new_panel == "Roleplay" and mode == "rpg"
+            history_visible = new_panel == "History"
             return (
                 gr.update(choices=choices, value=new_panel),
                 gr.update(visible=attachments_visible),
