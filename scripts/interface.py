@@ -31,17 +31,13 @@ from scripts.utility import (
 )
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings,
-    context_injector, inspect_model, load_models
+    context_injector, inspect_model, load_models, get_available_models
 )
 from langchain_core.documents import Document
 
 # Functions...
 def set_loading_status():
     return "Loading model..."
-
-def update_model_list(new_dir):
-    temporary.MODEL_FOLDER = new_dir
-    return gr.update(choices=models.get_available_models())
 
 def format_response(output: str) -> str:
     formatted = []
@@ -53,24 +49,30 @@ def format_response(output: str) -> str:
     return f'<span style="color: {RESPONSE_COLOR}">{output}</span>'
 
 def update_model_list(new_dir):
+    print(f"Updating model list with new_dir: {new_dir}")
     temporary.MODEL_FOLDER = new_dir
-    return gr.update(choices=models.get_available_models())
+    choices = get_available_models()
+    print(f"Choices returned: {choices}")
+    return gr.update(choices=choices)
 
-def select_directory():
+def select_directory(current_model_folder):
     print("Opening directory selection dialog...")
     root = tk.Tk()
     root.withdraw()
-    initial_dir = r"C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\models"
-    if not os.path.exists(initial_dir):
-        initial_dir = os.path.expanduser("~")
+    # Force the window to the foreground
+    root.attributes('-topmost', True)
+    root.update_idletasks()
+    initial_dir = current_model_folder if current_model_folder and os.path.exists(current_model_folder) else os.path.expanduser("~")
     path = filedialog.askdirectory(initialdir=initial_dir)
+    # Cleanup attributes after selection
+    root.attributes('-topmost', False)
     root.destroy()
     if path:
         print(f"Selected path: {path}")
-        return path
+        return path, path
     else:
         print("No directory selected")
-        return None
+        return current_model_folder, current_model_folder
 
 def web_search_trigger(query):
     try:
@@ -853,6 +855,7 @@ def launch_interface():
 
         config_components["browse"].click(
             fn=select_directory,
+            inputs=[model_folder_state],
             outputs=[config_components["model_dir"], model_folder_state]
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
@@ -864,6 +867,12 @@ def launch_interface():
             fn=update_model_list,
             inputs=[model_folder_state],
             outputs=[config_components["model"]]
+        )
+
+        model_folder_state.change(
+            fn=lambda f: f"Model directory updated to: {f}",
+            inputs=[model_folder_state],
+            outputs=[config_components["status_settings"]]
         )
 
         config_components["stream_output"].change(

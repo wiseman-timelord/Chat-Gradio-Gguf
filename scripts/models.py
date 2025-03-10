@@ -77,7 +77,10 @@ def set_cpu_affinity():
 
 def get_available_models():
     model_dir = Path(temporary.MODEL_FOLDER)
-    models = [f.name for f in model_dir.glob("*.gguf") if f.is_file()]
+    print(f"Scanning directory: {model_dir}")
+    files = list(model_dir.glob("*.gguf"))
+    print(f"Files found: {[f.name for f in files]}")
+    models = [f.name for f in files if f.is_file()]
     if models:
         choices = ["Select_a_model..."] + models
     else:

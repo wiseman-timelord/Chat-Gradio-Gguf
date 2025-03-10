@@ -324,7 +324,6 @@ def load_config():
             # Load backend config
             temporary.BACKEND_TYPE = config["backend_config"].get("backend_type", "Not Configured")
             temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")
-            print(f"Debug: Loaded backend_config - type={temporary.BACKEND_TYPE}, path={temporary.LLAMA_BIN_PATH}")
             
             # Load RPG settings
             temporary.RP_LOCATION = config["rp_settings"].get("rp_location", "Public")
