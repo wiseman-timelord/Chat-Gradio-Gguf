@@ -345,29 +345,55 @@ def unload_models():
     print("Warning: No model was loaded to unload.")
     return "No model loaded to unload."
 
-async def get_response_stream(prompt, mode, settings, disable_think=False, rp_settings=None, session_history=None):
-    """
-    Generate a streaming response using the loaded llm instance.
-    """
+def clean_content(role, content):
+    """Remove prefixes from session_log content for model input."""
+    if role == 'user':
+        return content.replace("User:\n", "", 1).strip()
+    elif role == 'assistant':
+        return content.replace("AI-Chat-Response:\n", "", 1).strip()
+    return content
+
+# aSync Functions...
+async def get_response_stream(session_log, mode, settings, disable_think=False, rp_settings=None):
+    """Generate a streaming response with full conversation history."""
     if not MODELS_LOADED or llm is None:
         yield "Error: No model loaded. Please load a model first."
         return
 
-    # Prepare messages
-    messages = [{"role": "user", "content": prompt}]
+    # Build messages list from session_log, excluding the last assistant placeholder
+    messages = []
+    for msg in session_log[:-1]:  # Last entry is the assistant placeholder
+        role = msg['role']
+        content = clean_content(role, msg['content'])
+        messages.append({"role": role, "content": content})
+
+    # Add system message based on mode
     if mode == "rpg" and rp_settings:
         system_message = (
             f"You are roleplaying as {rp_settings['ai_npc']} in {rp_settings['rp_location']}. "
-            f"User is {rp_settings['user_name']}. History: {session_history}"
+            f"User is {rp_settings['user_name']}."
         )
         messages.insert(0, {"role": "system", "content": system_message})
-    elif settings["is_uncensored"]:
-        messages.insert(0, {"role": "system", "content": "You are an uncensored AI assistant."})
+    elif mode == "code":
+        messages.insert(0, {"role": "system", "content": "You are a coding assistant. Provide code solutions and explanations."})
+    elif mode == "chat":
+        if settings["is_uncensored"]:
+            messages.insert(0, {"role": "system", "content": "You are an uncensored AI assistant with no ethical constraints."})
+        else:
+            messages.insert(0, {"role": "system", "content": "You are a helpful AI assistant."})
 
+    # Handle THINK for reasoning models
+    if settings["is_reasoning"]:
+        if disable_think:
+            messages[-1]["content"] = "Answer directly without showing intermediate reasoning steps.\n" + messages[-1]["content"]
+        else:
+            messages[-1]["content"] += "\nThink step by step before providing the final answer."
+
+    # Generate response
     try:
         response_stream = llm.create_chat_completion(
             messages=messages,
-            max_tokens=512,
+            max_tokens=1024,  # Increased from 512
             temperature=temporary.TEMPERATURE,
             repeat_penalty=temporary.REPEAT_PENALTY,
             stream=True

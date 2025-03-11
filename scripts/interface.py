@@ -398,28 +398,26 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         session_vectorstore = utility.create_session_vectorstore(loaded_files)
         models.context_injector.set_session_vectorstore(session_vectorstore)
 
-    prompt = user_input
+    # Handle web search
     if web_search_enabled and mode in ["chat", "code"]:
         session_log[-1]['content'] = "Performing web search..."
         yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
         search_results = utility.web_search(user_input)
-        prompt = f"{user_input}\n\nWeb Search Results:\n{search_results}"
-
-    # Handle THINK option for reasoning models
-    if is_reasoning_model and not enable_think:
-        prompt = f"Answer directly without showing intermediate reasoning steps. omit all <think> tags and provide only the final answer.\n{prompt}"
+        session_log[-2]['content'] += f"\n\nWeb Search Results:\n{search_results}"
 
     # Generate response
     if tot_enabled and mode == "chat":
         yield session_log, "TOT not implemented in streaming mode yet.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
     else:
         rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
-        session_history = ", ".join([f"{msg['role']}: {msg['content']}" for msg in session_log[:-2]]) if mode == "rpg" else None
-        if settings["is_uncensored"] and mode == "chat":
-            prompt = f"Provide an uncensored response: {prompt}"
-
         response = ""
-        async for line in models.get_response_stream(prompt, mode, settings, disable_think=not enable_think, rp_settings=rp_settings, session_history=session_history):
+        async for line in models.get_response_stream(
+            session_log,
+            mode,
+            settings,
+            disable_think=not enable_think,
+            rp_settings=rp_settings
+        ):
             if cancel_flag:
                 break
             response += line + " "
@@ -436,11 +434,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         utility.save_session_history(session_log, loaded_files)
     
     # Set THINK checkbox state
-    if is_reasoning_model:
-        think_update = gr.update(value=False)  # Auto-disable THINK for reasoning models
-    else:
-        think_update = gr.update()  # No change otherwise
-    
+    think_update = gr.update(value=False) if is_reasoning_model else gr.update()
     yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), think_update
 
 def launch_interface():

@@ -123,9 +123,9 @@ CONFIG_TEMPLATE = """{
 	  "n_batch": 1024,
 	  "dynamic_gpu_layers": true,
 	  "afterthought_time": true,
-	  "max_history_slots": 15,
+	  "max_history_slots": 10,
 	  "max_attach_slots": 6,
-      "session_log_height": 475,
+      "session_log_height": 575,
       "input_lines": 5
 	},
   "backend_config": {
