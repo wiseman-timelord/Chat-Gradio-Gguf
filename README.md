@@ -114,6 +114,7 @@ With regards to the current version of the program...
 
 ## Gen => 2 Development.
 With regards to the next generation of the program will be ...
+- 2 model would have to be re-implemented, but a lot of the planning below is for the 2 model vision.
 - Add `PyWin32` and `Whisper`, details are here.`https://www.perplexity.ai/search/1-how-does-mantella-mod-for-sk-Q32RILakTQ.lvQ3NHLJb5A`.
 - There are a lot of globals, ensure all globals are safe_three_word labels, so as, to not so much have a chance to interfere with other programs using the same globals.
 - attatched files should be able to be written to.
