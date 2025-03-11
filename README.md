@@ -68,8 +68,8 @@ Intended as a high-quality chat interface with uses include, Codeing, Rpg Game, 
 ### Instructions
 1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Text-Gradio-Gguf` or `C:\Programs\Text-Gradio-Gguf`. 
 2. Right click the file `Text-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
-3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Text-Gradio-Gguf`. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
-4. You will then be greeted with the `Conversation` page, but you will first be going to the configuration page. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
+3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Text-Gradio-Gguf`. You will then be greeted with the `Conversation` page, but you will first be going to the `Configuration` page. 
+4. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
 5. Go back to the `Conversation` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
 6. When all is finished, click `Exit` on the bottom right and/or close browser-tabs/terminals, however you want to do it. 
 
