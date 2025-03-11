@@ -40,6 +40,7 @@ N_BATCH = 1024
 TEMPERATURE = 0.66
 SESSION_LOG_HEIGHT = 450
 INPUT_LINES = 5
+DATA_DIR = None  # Will be set by launcher.py
 
 # Global LLM instance
 llm = None

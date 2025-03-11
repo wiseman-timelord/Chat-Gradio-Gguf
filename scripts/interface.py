@@ -708,16 +708,23 @@ def launch_interface():
             )
 
         def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, model_dir):
-            # Placeholder: Log the inputs and return a status message
-            print(f"Updating config: ctx={ctx}, batch={batch}, temp={temp}, repeat={repeat}, "
-                  f"vram={vram}, gpu={gpu}, cpu={cpu}, model={model}, model_dir={model_dir}")
+            print(f"Updating temporary: model_dir={model_dir}, model_name={model}")
+            temporary.N_CTX = int(ctx)
+            temporary.N_BATCH = int(batch)
+            temporary.TEMPERATURE = float(temp)
+            temporary.REPEAT_PENALTY = float(repeat)
+            temporary.VRAM_SIZE = int(vram)
+            temporary.SELECTED_GPU = gpu
+            temporary.SELECTED_CPU = cpu
+            temporary.MODEL_NAME = model
+            temporary.MODEL_FOLDER = model_dir
+            print(f"Set temporary.MODEL_FOLDER={temporary.MODEL_FOLDER}, MODEL_NAME={temporary.MODEL_NAME}")
             return "Configuration updated"
 
         def update_stream_output(stream_output_value):
             temporary.STREAM_OUTPUT = stream_output_value
             return f"Stream Output set to: {stream_output_value}"
 
-        # Newly added function to resolve the NameError for save_all_settings
         def save_all_settings():
             return utility.save_config()
 

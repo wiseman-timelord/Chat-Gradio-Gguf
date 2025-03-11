@@ -1,7 +1,7 @@
 # Script: `.\scripts\utility.py`
 
 # Imports...
-import re, subprocess, json, time, random, psutil, shutil  # Ensure shutil is included
+import re, subprocess, json, time, random, psutil, shutil, os  # Ensure shutil is included
 from pathlib import Path
 from datetime import datetime
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -231,151 +231,180 @@ def trim_session_history(max_sessions):
         oldest_file.unlink()
 
 def update_setting(key, value):
-    """Update a setting and return components requiring reload if necessary."""
+    """Update a setting and return components requiring reload if necessary, with a confirmation message."""
     reload_required = False
-    # Model settings
-    if key == "temperature":
-        temporary.TEMPERATURE = float(value)
-    elif key == "n_ctx":
-        temporary.N_CTX = int(value)
-        reload_required = True
-    elif key == "n_gpu_layers":
-        temporary.N_GPU_LAYERS = int(value)
-        reload_required = True
-    elif key == "vram_size":
-        temporary.VRAM_SIZE = int(value)
-        reload_required = True
-    elif key == "selected_gpu":
-        temporary.SELECTED_GPU = value
-    elif key == "selected_cpu":
-        temporary.SELECTED_CPU = value
-    elif key == "repeat_penalty":
-        temporary.REPEAT_PENALTY = float(value)
-    elif key == "mlock":
-        temporary.MLOCK = bool(value)
-    elif key == "afterthought_time":
-        temporary.AFTERTHOUGHT_TIME = bool(value)
-    elif key == "n_batch":
-        temporary.N_BATCH = int(value)
-    elif key == "model_folder":
-        temporary.MODEL_FOLDER = value
-        reload_required = True
-    elif key == "model_name":
-        temporary.MODEL_NAME = value
-        reload_required = True
-    elif key == "max_history_slots":
-        temporary.MAX_HISTORY_SLOTS = int(value)
-    elif key == "max_attach_slots":
-        temporary.MAX_ATTACH_SLOTS = int(value)
-    elif key == "session_log_height":
-        temporary.SESSION_LOG_HEIGHT = int(value)
-    elif key == "input_lines":
-        temporary.INPUT_LINES = int(value)
-    # RPG settings
-    elif key == "rp_location":
-        temporary.RP_LOCATION = str(value)
-    elif key == "user_name":
-        temporary.USER_PC_NAME = str(value)
-    elif key == "user_role":
-        temporary.USER_PC_ROLE = str(value)
-    elif key == "ai_npc":
-        temporary.AI_NPC_NAME = str(value)
+    try:
+        # Model settings
+        if key == "temperature":
+            temporary.TEMPERATURE = float(value)
+        elif key == "n_ctx":
+            temporary.N_CTX = int(value)
+            reload_required = True
+        elif key == "n_gpu_layers":
+            temporary.N_GPU_LAYERS = int(value)
+            reload_required = True
+        elif key == "vram_size":
+            temporary.VRAM_SIZE = int(value)
+            reload_required = True
+        elif key == "selected_gpu":
+            temporary.SELECTED_GPU = value
+        elif key == "selected_cpu":
+            temporary.SELECTED_CPU = value
+        elif key == "repeat_penalty":
+            temporary.REPEAT_PENALTY = float(value)
+        elif key == "mlock":
+            temporary.MLOCK = bool(value)
+        elif key == "afterthought_time":
+            temporary.AFTERTHOUGHT_TIME = bool(value)
+        elif key == "n_batch":
+            temporary.N_BATCH = int(value)
+        elif key == "model_folder":
+            temporary.MODEL_FOLDER = value
+            reload_required = True
+        elif key == "model_name":
+            temporary.MODEL_NAME = value
+            reload_required = True
+        elif key == "max_history_slots":
+            temporary.MAX_HISTORY_SLOTS = int(value)
+        elif key == "max_attach_slots":
+            temporary.MAX_ATTACH_SLOTS = int(value)
+        elif key == "session_log_height":
+            temporary.SESSION_LOG_HEIGHT = int(value)
+        elif key == "input_lines":
+            temporary.INPUT_LINES = int(value)
+        # RPG settings
+        elif key == "rp_location":
+            temporary.RP_LOCATION = str(value)
+        elif key == "user_name":
+            temporary.USER_PC_NAME = str(value)
+        elif key == "user_role":
+            temporary.USER_PC_ROLE = str(value)
+        elif key == "ai_npc":
+            temporary.AI_NPC_NAME = str(value)
 
-    if reload_required:
-        return change_model(temporary.MODEL_NAME.split('/')[-1])  # Reload model if necessary
-    return None, None
+        if reload_required:
+            reload_result = change_model(temporary.MODEL_NAME.split('/')[-1])
+            message = f"Setting '{key}' updated to '{value}', model reload triggered."
+            return message, *reload_result  # Unpack reload_result assuming it returns two values
+        else:
+            message = f"Setting '{key}' updated to '{value}'."
+            return message, None, None
+    except Exception as e:
+        message = f"Error updating setting '{key}': {str(e)}"
+        return message, None, None
     
 def load_config():
     config_path = Path("data/persistent.json")
-    if config_path.exists():
-        with open(config_path) as f:
-            config = json.load(f)
-            
-            # Migrate old configs if backend_config is missing
-            if "backend_config" not in config:
-                config["backend_config"] = {
-                    "backend_type": "Not Configured",
-                    "llama_bin_path": ""
-                }
-                print("Migrated config: Added missing backend_config section")
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Resolved config path: {config_path.resolve()}")
+    try:
+        if config_path.exists():
+            with open(config_path) as f:
+                config = json.load(f)
+                
+                # Migrate old configs if backend_config is missing
+                if "backend_config" not in config:
+                    config["backend_config"] = {
+                        "backend_type": "Not Configured",
+                        "llama_bin_path": ""
+                    }
+                    print("Migrated config: Added missing backend_config section")
 
-            # Load model folder from config, default to ".\models" if not specified
-            temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", ".\models")
-            
-            # Load other model settings
-            temporary.MODEL_NAME = config["model_settings"].get("model_name", "Select_a_model...")
-            temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
-            temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
-            temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))
-            temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "")
-            temporary.VRAM_SIZE = int(config["model_settings"].get("vram_size", 8192))
-            temporary.SELECTED_GPU = config["model_settings"].get("selected_gpu", None)
-            temporary.SELECTED_CPU = config["model_settings"].get("selected_cpu", None)
-            temporary.MMAP = bool(config["model_settings"].get("mmap", True))
-            temporary.MLOCK = bool(config["model_settings"].get("mlock", True))
-            temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"].get("afterthought_time", True))
-            temporary.N_BATCH = int(config["model_settings"].get("n_batch", 1024))
-            temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
-            temporary.MAX_HISTORY_SLOTS = int(config["model_settings"].get("max_history_slots", 10))
-            temporary.MAX_ATTACH_SLOTS = int(config["model_settings"].get("max_attach_slots", 6))
-            temporary.SESSION_LOG_HEIGHT = int(config["model_settings"].get("session_log_height", 450))
-            temporary.INPUT_LINES = int(config["model_settings"].get("input_lines", 5))
-            
-            # Load backend config
-            temporary.BACKEND_TYPE = config["backend_config"].get("backend_type", "Not Configured")
-            temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")
-            
-            # Load RPG settings
-            temporary.RP_LOCATION = config["rp_settings"].get("rp_location", "Public")
-            temporary.USER_PC_NAME = config["rp_settings"].get("user_name", "Human")
-            temporary.USER_PC_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
-            temporary.AI_NPC_NAME = config["rp_settings"].get("ai_npc", "Robot")
-            temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")
-            
-            print(f"Loaded config: MODEL_FOLDER={temporary.MODEL_FOLDER}, BACKEND_TYPE={temporary.BACKEND_TYPE}")
-    else:
-        print("Config file not found, please re-install.")
-    
-    # Always resolve MODEL_FOLDER to an absolute path
-    temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())
-    print(f"Resolved MODEL_FOLDER to: {temporary.MODEL_FOLDER}")
+                # Load model folder from config, default to ".\models" if not specified
+                temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", ".\models")
+                
+                # Load other model settings
+                temporary.MODEL_NAME = config["model_settings"].get("model_name", "Select_a_model...")
+                temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
+                temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
+                temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))
+                temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "")
+                temporary.VRAM_SIZE = int(config["model_settings"].get("vram_size", 8192))
+                temporary.SELECTED_GPU = config["model_settings"].get("selected_gpu", None)
+                temporary.SELECTED_CPU = config["model_settings"].get("selected_cpu", None)
+                temporary.MMAP = bool(config["model_settings"].get("mmap", True))
+                temporary.MLOCK = bool(config["model_settings"].get("mlock", True))
+                temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"].get("afterthought_time", True))
+                temporary.N_BATCH = int(config["model_settings"].get("n_batch", 1024))
+                temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
+                temporary.MAX_HISTORY_SLOTS = int(config["model_settings"].get("max_history_slots", 10))
+                temporary.MAX_ATTACH_SLOTS = int(config["model_settings"].get("max_attach_slots", 6))
+                temporary.SESSION_LOG_HEIGHT = int(config["model_settings"].get("session_log_height", 450))
+                temporary.INPUT_LINES = int(config["model_settings"].get("input_lines", 5))
+                
+                # Load backend config
+                temporary.BACKEND_TYPE = config["backend_config"].get("backend_type", "Not Configured")
+                temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")
+                
+                # Load RPG settings
+                temporary.RP_LOCATION = config["rp_settings"].get("rp_location", "Public")
+                temporary.USER_PC_NAME = config["rp_settings"].get("user_name", "Human")
+                temporary.USER_PC_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
+                temporary.AI_NPC_NAME = config["rp_settings"].get("ai_npc", "Robot")
+                temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")
+                
+                print(f"Loaded config: MODEL_FOLDER={temporary.MODEL_FOLDER}, BACKEND_TYPE={temporary.BACKEND_TYPE}")
+        else:
+            message = "Config file not found, please re-install."
+            print(message)
+            temporary.MODEL_FOLDER = str(Path(".\models").resolve())
+            return message
+        
+        # Always resolve MODEL_FOLDER to an absolute path
+        temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())
+        print(f"Resolved MODEL_FOLDER to: {temporary.MODEL_FOLDER}")
+        return "Configuration loaded successfully."
+    except Exception as e:
+        message = f"Error loading configuration: {str(e)}"
+        print(message)
+        # Ensure MODEL_FOLDER is still set even on error
+        temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER if 'temporary.MODEL_FOLDER' in globals() else ".\models").resolve())
+        return message
     
 def save_config():
     config_path = Path("data/persistent.json")
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config = {
-        "model_settings": {
-            "model_dir": str(Path(temporary.MODEL_FOLDER).resolve()),
-            "model_name": temporary.MODEL_NAME,
-            "n_ctx": temporary.N_CTX,
-            "temperature": temporary.TEMPERATURE,
-            "repeat_penalty": temporary.REPEAT_PENALTY,
-            "llama_cli_path": temporary.LLAMA_CLI_PATH,
-            "vram_size": temporary.VRAM_SIZE,
-            "selected_gpu": temporary.SELECTED_GPU,
-            "selected_cpu": temporary.SELECTED_CPU,
-            "mmap": temporary.MMAP,
-            "mlock": temporary.MLOCK,
-            "n_batch": temporary.N_BATCH,
-            "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
-            "afterthought_time": temporary.AFTERTHOUGHT_TIME,
-            "max_history_slots": temporary.MAX_HISTORY_SLOTS,
-            "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
-            "session_log_height": temporary.SESSION_LOG_HEIGHT,
-            "input_lines": temporary.INPUT_LINES
-        },
-        "backend_config": {
-            "backend_type": temporary.BACKEND_TYPE,  # Key remains "backend_type"
-            "llama_bin_path": temporary.LLAMA_BIN_PATH
-        },
-        "rp_settings": {
-            "rp_location": temporary.RP_LOCATION,
-            "user_name": temporary.USER_PC_NAME,
-            "user_role": temporary.USER_PC_ROLE,
-            "ai_npc": temporary.AI_NPC_NAME,
-            "ai_npc_role": temporary.AI_NPC_ROLE
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Resolved config path: {config_path.resolve()}")
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config = {
+            "model_settings": {
+                "model_dir": str(Path(temporary.MODEL_FOLDER).resolve()),
+                "model_name": temporary.MODEL_NAME,
+                "n_ctx": temporary.N_CTX,
+                "temperature": temporary.TEMPERATURE,
+                "repeat_penalty": temporary.REPEAT_PENALTY,
+                "llama_cli_path": temporary.LLAMA_CLI_PATH,
+                "vram_size": temporary.VRAM_SIZE,
+                "selected_gpu": temporary.SELECTED_GPU,
+                "selected_cpu": temporary.SELECTED_CPU,
+                "mmap": temporary.MMAP,
+                "mlock": temporary.MLOCK,
+                "n_batch": temporary.N_BATCH,
+                "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
+                "afterthought_time": temporary.AFTERTHOUGHT_TIME,
+                "max_history_slots": temporary.MAX_HISTORY_SLOTS,
+                "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
+                "session_log_height": temporary.SESSION_LOG_HEIGHT,
+                "input_lines": temporary.INPUT_LINES
+            },
+            "backend_config": {
+                "backend_type": temporary.BACKEND_TYPE,
+                "llama_bin_path": temporary.LLAMA_BIN_PATH
+            },
+            "rp_settings": {
+                "rp_location": temporary.RP_LOCATION,
+                "user_name": temporary.USER_PC_NAME,
+                "user_role": temporary.USER_PC_ROLE,
+                "ai_npc": temporary.AI_NPC_NAME,
+                "ai_npc_role": temporary.AI_NPC_ROLE
+            }
         }
-    }
-    with open(config_path, 'w') as f:
-        json.dump(config, f, indent=4)
-    return "Settings saved to persistent.json"
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=4)
+        message = "Settings saved successfully to persistent.json"
+        return message
+    except Exception as e:
+        message = f"Error saving configuration: {str(e)}"
+        print(message)
+        return message
