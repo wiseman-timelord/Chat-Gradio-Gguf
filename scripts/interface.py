@@ -816,9 +816,9 @@ def launch_interface():
             outputs=[states["selected_panel"]]
         ).then(
             fn=lambda panel, mode: (
-                gr.update(visible=panel == "Attachments"),
-                gr.update(visible=panel == "RPG Config" and mode.lower() == "rpg"),
-                gr.update(visible=panel == "History Slots")
+                gr.update(visible=panel == "Files"),
+                gr.update(visible=panel == "Roleplay" and mode.lower() == "rpg"),
+                gr.update(visible=panel == "History")
             ),
             inputs=[states["selected_panel"], mode_selection],
             outputs=[attachments_group, rpg_config_group, history_slots_group]
