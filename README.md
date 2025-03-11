@@ -107,75 +107,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Gen 1 Development
 With regards to the current version of the program...
-1. it selects model folder and populates dir and loads model correctly, but when I produce my first input then click `send input`, then it is producing this error...
-```
-Inputs received: Hey, got a horse?
-Traceback (most recent call last):
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\queueing.py", line 625, in process_events
-    response = await route_utils.call_process_api(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\route_utils.py", line 322, in call_process_api
-    output = await app.get_blocks().process_api(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\blocks.py", line 2103, in process_api
-    result = await self.call_function(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\blocks.py", line 1650, in call_function
-    prediction = await anyio.to_thread.run_sync(  # type: ignore
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\anyio\to_thread.py", line 56, in run_sync
-    return await get_async_backend().run_sync_in_worker_thread(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 2461, in run_sync_in_worker_thread
-    return await future
-           ^^^^^^^^^^^^
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 962, in run
-    result = context.run(func, *args)
-             ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\.venv\Lib\site-packages\gradio\utils.py", line 890, in wrapper
-    response = f(*args, **kwargs)
-               ^^^^^^^^^^^^^^^^^^
-  File "C:\Program_Filez\Text-Gradio-Gguf\Text-Gradio-Gguf-main\scripts\interface.py", line 712, in action_handler
-    gr.Button.update(),       # action_buttons["action"]
-    ^^^^^^^^^^^^^^^^
-AttributeError: type object 'Button' has no attribute 'update'
-```
-...thats this line...
-```
-                gr.Button.update(),       # action_buttons["action"]
-```
-...in this section...
-```
-        # Define placeholder action_handler to resolve NameError
-        def action_handler(
-            interaction_phase,
-            user_input,
-            session_log,
-            tot,
-            loaded_files,
-            enable_think,
-            is_reasoning_model,
-            rp_location,
-            user_name,
-            user_role,
-            ai_npc,
-            cancel_flag,
-            mode_selection,
-            web_search,
-            models_loaded,
-            interaction_phase_state
-        ):
-            print("Inputs received:", user_input)
-            return (
-                session_log,              # chat_components["session_log"]
-                "Action handled",         # status_text
-                gr.Button.update(),       # action_buttons["action"]
-                False,                    # states["cancel_flag"]
-                loaded_files,             # states["loaded_files"]
-                "waiting_for_input",      # states["interaction_phase"]
-                gr.Textbox.update()       # chat_components["user_input"]
-            )
-```
+1. Fixing the enhancements.
 <br>2. When given a complicated multi-line prompt, for generation of a storyboard, it suddenly stoped outputting after ~2500 text characters. I set the batch output size to 4096 tokens, this is possibly the token limit for output. Either way, when I stated `please continue` and hit send, it replied with...
 ```
 AI-Chat-Response:
@@ -185,42 +117,7 @@ What 's on your mind ?
 ```
 ...so as to have no idea what I was on about. This means the context of the previous interactions is not being injected into the prompt appropriately, or its not being correctly prompted in the second interaction onwards, possibly we would have a second prompt for user interaction, where there is adapted content from other chat mode, for injecting previous context into, would require assessment of, latest most effective, techniqes, as well as any relvant code already present. Additionally investigate what can be done about detection of if the stream has ended prematurely or actually finished output, because if it has not finished output, then it will need to continue, if that can be automated, to a pre-set limit for output, and steram in sections while looking out for end output signature and keeping note of total output. Needs a brainstorm and plan, what is the best solution.
 <br>3. History slots are having typically, date/time + additional 1 word, labels, even though I specified for generated label to have 4-5 word contextual word combination, I also want to, save the session and create the label, at the point the response is generated by the ai, so as to have more material for the label to be generated with, and then we will only be creating history slot at the point response has been gained from ai AND the user has produced their first input, both will be used.
-<br>4. (current implementation should be tested again, but) Need `THINK` option under, `Web-Search` and `Enable TOT`, to be visible when using reasoning model with any modes. THINK option should obviously not be visible if not a reasoning model. `THINK`, disabled by default, but I think there is something special to put into the prompt or the argument when its a reasoning model and you do not want it to use the THINK phase, which would apply to only models detected to be reasoning models. If the user uses the `Enable Think` option, then it should use think for the following input, but after the response from the AI, it should automatically disable `THINK`, ready for an input where the user selects to enable `THINK` again. Some notes on THINK...
-```
-To prevent DeepSeek-R1 from generating <think> reasoning phases, you can use prompt engineering or API parameters to suppress chain-of-thought (CoT) outputs. Here's how:
-1. Prompt-Level Instructions
-Add explicit directives to your input prompt:
-    Example:
-    "Answer directly without showing intermediate reasoning steps. Omit all <think> tags and provide only the final answer."
-DeepSeek-R1 is trained to follow such instructions due to its supervised fine-tuning (SFT) phase, which exposed it to diverse reasoning formats12. This approach works because:
-    The model recognizes commands like "answer directly" or "omit reasoning" and adjusts its output format accordingly.
-    During RL training, it learned to prioritize user-specified output styles16.
-2. API/Configuration Parameters
-If using an API or deployment framework (e.g., BentoML, vLLM), set:
-python
-generate_params = {
-    "suppress_think_tags": True,  # Hypothetical parameter
-    "max_new_tokens": 150,
-    "temperature": 0.3
-}
-Check your provider’s documentation for parameters like:
 
-    include_think_steps=False
-
-    reasoning_mode="direct"
-Some implementations automatically strip <think> tags if the query doesn’t require reasoning (e.g., simple factual questions)47.
-3. Post-Processing
-For unsupported APIs, filter the output:
-python
-response = model.generate(prompt)
-clean_answer = response.split("<answer>")[-1].strip()
-Why This Works
-    Training design: DeepSeek-R1’s multi-stage training (SFT + RL) allows it to adapt to output constraints. The SFT phase included examples without CoT, enabling direct-response capability26.
-    Structured tokens: The model uses <think> and <answer> as delimiters. Explicit instructions bias the token generator toward skipping the former13.
-Limitations
-    Performance may degrade on complex tasks requiring reasoning, as suppressing CoT removes self-correction mechanisms58.
-    Some implementations may still internally compute reasoning steps (for answer accuracy) but omit them from the output67.
-```
 <br>5. need to update the below keys in `temporary.py`, suitable to new layout of the `Conversation` page, not necessarily those values shown below...
 ```
 MAX_HISTORY_SLOTS = 16 # Maximum saved sessions (ensure compliance with HISTORY_SLOT_OPTIONS)
