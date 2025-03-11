@@ -1,7 +1,7 @@
 # Script: `.\scripts\models.py`
 
 # Imports...
-import time
+import time, re
 from pathlib import Path
 import gradio as gr
 from langchain_community.vectorstores import FAISS
@@ -355,19 +355,18 @@ def clean_content(role, content):
 
 # aSync Functions...
 async def get_response_stream(session_log, mode, settings, disable_think=False, rp_settings=None):
-    """Generate a streaming response with full conversation history."""
     if not MODELS_LOADED or llm is None:
         yield "Error: No model loaded. Please load a model first."
         return
 
-    # Build messages list from session_log, excluding the last assistant placeholder
+    # Build messages from session_log (unchanged)
     messages = []
-    for msg in session_log[:-1]:  # Last entry is the assistant placeholder
+    for msg in session_log[:-1]:
         role = msg['role']
         content = clean_content(role, msg['content'])
         messages.append({"role": role, "content": content})
 
-    # Add system message based on mode
+    # Add system message based on mode (unchanged)
     if mode == "rpg" and rp_settings:
         system_message = (
             f"You are roleplaying as {rp_settings['ai_npc']} in {rp_settings['rp_location']}. "
@@ -382,26 +381,75 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
         else:
             messages.insert(0, {"role": "system", "content": "You are a helpful AI assistant."})
 
-    # Handle THINK for reasoning models
-    if settings["is_reasoning"]:
-        if disable_think:
-            messages[-1]["content"] = "Answer directly without showing intermediate reasoning steps.\n" + messages[-1]["content"]
-        else:
-            messages[-1]["content"] += "\nThink step by step before providing the final answer."
+    # Add reasoning instruction
+    if settings["is_reasoning"] and not disable_think:
+        messages[-1]["content"] += (
+            "\nThink step by step before providing the final answer. "
+            "Structure your response with <think> for reasoning and <answer> for the final answer. "
+            "If you cannot use these tags, separate reasoning and answer with 'Final Answer:'"
+        )
 
-    # Generate response
+    # Stream the response
     try:
         response_stream = llm.create_chat_completion(
             messages=messages,
-            max_tokens=1024,  # Increased from 512
-            temperature=temporary.TEMPERATURE,
-            repeat_penalty=temporary.REPEAT_PENALTY,
+            max_tokens=1024,
+            temperature=TEMPERATURE,
+            repeat_penalty=REPEAT_PENALTY,
             stream=True
         )
+        full_response = ""
+        reasoning_phase = True
+        progress_bar = "Reasoning..."
+        progress_count = 0
+        max_progress = 28
+        final_answer = ""  # Initialize final_answer
+
         for chunk in response_stream:
             if 'choices' in chunk and chunk['choices']:
                 delta = chunk['choices'][0].get('delta', {})
                 if 'content' in delta:
-                    yield delta['content']
+                    chunk_content = delta['content']
+                    full_response += chunk_content
+                    print(chunk_content, end='', flush=True)
+
+                    if reasoning_phase:
+                        # Update progress bar dynamically during reasoning
+                        if "<think>" in full_response and "</think>" not in full_response:
+                            if '.' in chunk_content and progress_count < max_progress:
+                                progress_count += 1
+                                progress_bar = " Reasoning...\n" + "█" * progress_count
+                                yield progress_bar
+                        elif "</think>" in full_response:
+                            reasoning_phase = False
+                            progress_bar = " Reasoning...\n" + "█" * max_progress
+                            final_answer = full_response.split("</think>", 1)[1].strip()
+                            yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
+                        elif "<answer>" in full_response:
+                            reasoning_phase = False
+                            final_answer = full_response.split("<answer>", 1)[1].strip()
+                            if "</answer>" in final_answer:
+                                final_answer = final_answer.split("</answer>", 1)[0].strip()
+                            yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
+                        else:
+                            if progress_count < max_progress and '.' in chunk_content:
+                                progress_count += 1
+                                progress_bar = " Reasoning...\n" + "█" * progress_count
+                                yield progress_bar
+                    else:
+                        # Append new chunk content to final_answer after reasoning phase
+                        final_answer += chunk_content
+                        yield f"{progress_bar}\n\nAI-Chat:\n{final_answer.strip()}"
+
+        # Fallback if no tags are found or stream ends during reasoning
+        if reasoning_phase and full_response:
+            progress_bar = " Reasoning...\n" + "█" * max_progress
+            final_answer = full_response.strip()
+            if "<think>" in final_answer and "</think>" in final_answer:
+                final_answer = final_answer.split("</think>", 1)[1].strip()
+            if "Final Answer:" in final_answer:
+                final_answer = final_answer.split("Final Answer:", 1)[1].strip()
+            yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
+
     except Exception as e:
         yield f"Error generating response: {str(e)}"

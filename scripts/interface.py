@@ -365,11 +365,11 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         yield session_log, "No input provided.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
         return
 
-    # Append user input and clear the textbox
+    # Append user input and prepare assistant response
     session_log.append({'role': 'user', 'content': f"User:\n{user_input}"})
     if len(session_log) == 1 and session_log[0]['role'] == 'user':
         temporary.session_label = create_session_label(user_input)
-    session_log.append({'role': 'assistant', 'content': "Afterthought countdown... "})
+    session_log.append({'role': 'assistant', 'content': ""})  # Start with empty content
     interaction_phase = "afterthought_countdown"
     yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update()
 
@@ -410,7 +410,6 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         yield session_log, "TOT not implemented in streaming mode yet.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
     else:
         rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
-        response = ""
         async for line in models.get_response_stream(
             session_log,
             mode,
@@ -420,8 +419,8 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         ):
             if cancel_flag:
                 break
-            response += line + " "
-            session_log[-1]['content'] = "AI-Chat-Response:\n" + response.strip()
+            # Overwrite the assistant's content with each streamed update
+            session_log[-1]['content'] = line.strip()
             yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
             await asyncio.sleep(0)
 
@@ -430,7 +429,6 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     if cancel_flag:
         session_log[-1]['content'] = "Generation cancelled."
     else:
-        session_log[-1]['content'] = "AI-Chat-Response:\n" + response.strip()
         utility.save_session_history(session_log, loaded_files)
     
     # Set THINK checkbox state
