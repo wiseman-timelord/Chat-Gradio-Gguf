@@ -113,9 +113,10 @@ With regards to the current version of the program...
 4. New Operation/Panel Modes have a delay, look at code and make more efficient and optimal, instead of delay. it takes 2 seconds, so I am assuming its not loading the model, but possibly checking something, or saving/loading the json?
 
 ## Gen => 2 Development.
-With regards to the next generation of the program will be ...
-- 2 model would have to be re-implemented, but a lot of the planning below is for the 2 model vision.
-- Add `PyWin32` and `Whisper`, details are here.`https://www.perplexity.ai/search/1-how-does-mantella-mod-for-sk-Q32RILakTQ.lvQ3NHLJb5A`.
+With regards to the next generation of the program will be (a lot of the planning below is for the 2 model plan, this would have to be re-implemented, but may happen)...
+- Agentic Multi-Model; Vision model for image recognition on websearch, so as to specify, for example, to find a picture of X person in Y pose.
+- Agentic; nConvert, to convert images to 100px thumbnail, for contextually inserting into session log during response, while clicking on the image would pop=up a new page with the full image.
+- TextToVoice/VoiceToText; Add `PyWin32` and `Whisper`, details are here.`https://www.perplexity.ai/search/1-how-does-mantella-mod-for-sk-Q32RILakTQ.lvQ3NHLJb5A`.
 - There are a lot of globals, ensure all globals are safe_three_word labels, so as, to not so much have a chance to interfere with other programs using the same globals.
 - attatched files should be able to be written to.
 - 6 modes and dual model like this...
