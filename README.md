@@ -109,10 +109,13 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 With regards to the current version of the program...
 <br>1. Fixing the enhancements, TOT, WebSearch, Rpg Elements. THINK seemed to work when I tested it, but its not clear what is THINK and what is the response, it needs to be marked clearly with printed...
 ```
-AI-Chat:
+User:
+Example inquiry text.
+
 Reasoning...
 ████████████████████████████
-Response...
+
+AI-Chat:
 Example response text.
 ```
 ...where each `█` represents 1 more full-stop `.` used, for simple line counting. Something like that.
