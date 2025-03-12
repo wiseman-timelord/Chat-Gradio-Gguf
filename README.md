@@ -101,9 +101,9 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Gen 1 Development
 With regards to the current version of the program...
-<br>1. All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch (which should be renamed Searh), also Rpg features.
-<br>2. Check over prompting, see if we can improve the prompts a little.  
-<br>4. Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
+1. All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch (which should be renamed Searh), also Rpg features.
+2. Check over prompting, see if we can improve the prompts a little.  
+3. Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
 
 ## Gen => 2 Development.
 With regards to the next generation of the program will be (a lot of the planning below is for the 2 model plan, this would have to be re-implemented, but may happen)...
