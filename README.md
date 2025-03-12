@@ -114,14 +114,15 @@ STRUCTURE:
 
 INSTRUCTION:
 (State issue with the code or what needs to be created/redacted).
+(State process of investigaction and relevant information).
 
 SECTION(s):
 (Insert code snippets here)
 
-RESOURCES:
+RESOURCE(s):
 Files attached.
 
-CONSTRAINTS:
+CONSTRAINT(s):
 Print complete updated functions.
 ```
 ...something like that.
