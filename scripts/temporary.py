@@ -38,7 +38,7 @@ RAG_AUTO_LOAD = ["general_knowledge"]
 REPEAT_PENALTY = 1.0
 N_BATCH = 1024
 TEMPERATURE = 0.66
-SESSION_LOG_HEIGHT = 550
+SESSION_LOG_HEIGHT = 575
 INPUT_LINES = 5
 DATA_DIR = None  # Will be set by launcher.py
 

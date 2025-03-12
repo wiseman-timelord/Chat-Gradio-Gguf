@@ -521,7 +521,6 @@ def launch_interface():
                                 save_rpg=gr.Button("Save RPG Settings", variant="primary")
                             )
 
-
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
                         chat_components = {}
                         with gr.Row(elem_classes=["clean-elements"]):
@@ -539,11 +538,36 @@ def launch_interface():
                                     interactive=False,
                                     placeholder="Enter text here..."
                                 )
-                            with gr.Column(min_width=166, elem_classes=["clean-elements"]):
+                            with gr.Column(min_width=100, elem_classes=["clean-elements"]):
                                 switches = dict(
-                                    web_search=gr.Checkbox(label="Internet", value=False, visible=True),
+                                    web_search=gr.Checkbox(label="Search", value=False, visible=True),
                                     tot=gr.Checkbox(label="T.O.T.", value=False, visible=True),
                                     enable_think=gr.Checkbox(label="THINK", value=False, visible=False)
+                                )
+                                # Ensure mutual exclusion among Search, T.O.T., and THINK
+                                switches["web_search"].change(
+                                    fn=lambda search_value: [
+                                        gr.update(value=False) if search_value else gr.update(),  # Disable T.O.T.
+                                        gr.update(value=False) if search_value else gr.update()   # Disable THINK
+                                    ],
+                                    inputs=switches["web_search"],
+                                    outputs=[switches["tot"], switches["enable_think"]]
+                                )
+                                switches["tot"].change(
+                                    fn=lambda tot_value: [
+                                        gr.update(value=False) if tot_value else gr.update(),     # Disable Search
+                                        gr.update(value=False) if tot_value else gr.update()      # Disable THINK
+                                    ],
+                                    inputs=switches["tot"],
+                                    outputs=[switches["web_search"], switches["enable_think"]]
+                                )
+                                switches["enable_think"].change(
+                                    fn=lambda think_value: [
+                                        gr.update(value=False) if think_value else gr.update(),   # Disable Search
+                                        gr.update(value=False) if think_value else gr.update()    # Disable T.O.T.
+                                    ],
+                                    inputs=switches["enable_think"],
+                                    outputs=[switches["web_search"], switches["tot"]]
                                 )
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons = {}
@@ -553,9 +577,9 @@ def launch_interface():
                                     variant="secondary",
                                     elem_classes=["send-button"]
                                 )
-                            with gr.Column(elem_classes=["clean-elements"], min_width=166):
-                                action_buttons["edit_previous"] = gr.Button("Edit Last Input", variant="huggingface")
-                                action_buttons["copy_response"] = gr.Button("Copy Last Output", variant="huggingface")
+                            with gr.Column(elem_classes=["clean-elements"], min_width=100):
+                                action_buttons["edit_previous"] = gr.Button("Go Back", variant="huggingface")
+                                action_buttons["copy_response"] = gr.Button("Copy AI", variant="huggingface")
 
                 with gr.Row():
                     status_text = gr.Textbox(
@@ -806,23 +830,23 @@ def launch_interface():
                 outputs=buttons["session"]
             )
 
-            mode_selection.change(
-                fn=lambda mode: (
-                    gr.update(value=False),  # Reset web_search
-                    gr.update(value=False),  # Reset tot
-                    gr.update(value=False) if models.get_model_settings(temporary.MODEL_NAME)["is_reasoning"] else gr.update(),  # Reset enable_think if reasoning model
-                ),
-                inputs=[mode_selection],
-                outputs=[switches["web_search"], switches["tot"], switches["enable_think"]]
-            ).then(
-                fn=update_panel_on_mode_change,
-                inputs=[mode_selection, states["selected_panel"]],
-                outputs=[panel_toggle, attachments_group, rpg_config_group, history_slots_group, states["selected_panel"], attach_files]
-            ).then(
-                fn=update_mode_based_options,
-                inputs=[mode_selection, states["showing_rpg_right"], states["is_reasoning_model"]],
-                outputs=[switches["tot"], switches["web_search"], switches["enable_think"]]
-            )
+        mode_selection.change(
+            fn=lambda mode: (
+                gr.update(value=False),  # Reset web_search
+                gr.update(value=False),  # Reset tot
+                gr.update(value=False) if models.get_model_settings(temporary.MODEL_NAME)["is_reasoning"] else gr.update(),  # Reset enable_think if reasoning model
+            ),
+            inputs=[mode_selection],
+            outputs=[switches["web_search"], switches["tot"], switches["enable_think"]]
+        ).then(
+            fn=update_panel_on_mode_change,
+            inputs=[mode_selection, states["selected_panel"]],
+            outputs=[panel_toggle, attachments_group, rpg_config_group, history_slots_group, states["selected_panel"], attach_files]
+        ).then(
+            fn=update_mode_based_options,
+            inputs=[mode_selection, states["showing_rpg_right"], states["is_reasoning_model"]],
+            outputs=[switches["tot"], switches["web_search"], switches["enable_think"]]
+        )
 
         panel_toggle.change(
             fn=lambda panel: panel,
