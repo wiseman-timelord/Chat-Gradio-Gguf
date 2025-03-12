@@ -106,28 +106,25 @@ With regards to the current version of the program...
 3. Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
 
 ## Gen => 2 Development.
-With regards to the next generation of the program will be (a lot of the planning below is for the 2 model plan, this would have to be re-implemented, but may happen)...
-1. **Single-Model Focus:** Consolidate functionalities into one adaptable model rather than maintaining multiple distinct models.  
-2. **Basic Global and File Handling:**  
+With regards to the next generation of the program will be (a lot of the planning below is for the 2 model plan, this would have to be re-implemented, but may happen)...  
+1. **Basic Global and File Handling:**  
    - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
    - Ensure that attached files can be written to.  
-3. **Cross-Platform Scripting:** Introduce a unified script (`Text-Gradio-Gguf.sh`) to support both Linux and Windows environments.  
-4. **User Interface and Notification Enhancements:**  
+2. **Cross-Platform Scripting:** Introduce a unified script (`Text-Gradio-Gguf.sh`) to support both Linux and Windows environments.  
+3. **User Interface and Notification Enhancements:**  
    - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").  
    - Add a configuration page with a non-editable “Prompting” section showing the operation mode, enhancements (e.g., Web-Search, VectorStore), and the last prompt sent.  
-5. **Enhanced Notation Modes:**  
+4. **Enhanced Notation Modes:**  
    - Introduce “Chat-Notate” and “Chat-Notate-Uncensored” modes to process uploaded PDFs into both detailed and concise summaries.  
    - Store summaries in `.\\data\\notation` and provide a Notation Library menu in the UI for managing these notations.  
    - Disable the THINK phase in these modes to ensure practical, notation-driven conversations.  
-6. **Agentic and Enhanced Features:**  
+5. **Agentic and Enhanced Features:**  
    - Integrate vision capabilities for image recognition on web searches and convert images into contextually relevant thumbnails (with full images accessible via pop-up).  
    - Add voice processing features (Text-to-Voice and Voice-to-Text) using PyWin32 and Whisper.  
-7. **Mode-Specific Integrations and Persistent Sessions:**  
+6. **Mode-Specific Integrations and Persistent Sessions:**  
    - Support various modes (Chatbot, Advanced Chatbot, Coder, Agentic Coder, RPG Text, RPG Text + Images) with tailored features as outlined in the design table.  
    - Introduce persistent modes (Chat-Persistent and RPG-Persistent) to enable ongoing sessions with stored states, allowing persistent interactions (e.g., a consistent AI character like a counsellor).  
-8. **Visual Customization:** Revisit color theme design, favoring shades of grey initially, and allow users to choose a primary button color through configuration.
-8. **Visual Customization:**  
-   - Revisit color theme design, favoring shades of grey initially, and allow users to choose a primary button color through configuration.
+7. **Visual Customization:** Revisit color theme design, favoring shades of grey initially, and allow users to choose a primary button color through configuration.
 
 ## Credits
 - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
