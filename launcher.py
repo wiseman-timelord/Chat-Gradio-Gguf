@@ -13,21 +13,17 @@ def main():
         print("Starting `launcher.main`.")
         # Get the absolute path of the directory containing launcher.py
         script_dir = Path(__file__).parent.resolve()
-        # Set project_root to the script's directory (Text-Gradio-Gguf-main)
+        # Check Critical Paths
         project_root = script_dir
         os.chdir(project_root)
-        print(f"Working directory set to: {project_root}")
-        
-        # Set the data directory as an absolute path
+        print(f"Working directory: {project_root}")
         temporary.DATA_DIR = str(project_root / "data")
-        print(f"Data directory set to: {temporary.DATA_DIR}")
-        
-        # Ensure the data directory exists
+        print(f"Data directory: {temporary.DATA_DIR}")
         Path(temporary.DATA_DIR).mkdir(parents=True, exist_ok=True)
         
-        print("Loading configuration from persistent.json...")
+        print("Loading persistent config...")
         load_config()  # Uses temporary.DATA_DIR implicitly via working directory
-        print("Saving configuration to persistent.json...")
+        print("Saving persistent config...")
         save_config()  # Uses temporary.DATA_DIR implicitly via working directory
         print("Launching Gradio Interface.")
         launch_interface()
