@@ -105,7 +105,10 @@ With regards to the current version of the program...
 <br>2) Check over prompting, see if we can improve the prompts a little.  
 <br>3) Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
 <br>4.a) The `Coder` mode should not have `T.O.T`, but if it is a reasoning model, then THINK would be an option, to be able to turn that on and off.
-<br>4.b) For each input sent to the model, the user would be presented with options for stripped down versions of template prompts, albeit, the display for input on code, would have the be displaying the prefab...
+
+## Gen => 2 Development.
+With regards to the next generation of the program...  
+1. For each input sent to the model, the user would be having options for stripped down versions of template prompts, albeit, the display for input on code, would have the be displaying the editable scrollable prefabs for each one...
 ```
 INFORMATON:
 We are working on my project ProjectName, it is a progtam written in InsertProgrammingLanguage v#.## intended to be run on InsertOperatingSystem.
@@ -128,11 +131,7 @@ Print complete updated function(s) for specifically the functions we are updatin
 or
 Print the complete updated script.
 ```
-...something like that.
-<br>4.b) Option should have options next to for response mode
-
-## Gen => 2 Development.
-With regards to the next generation of the program...  
+...something like that, this also prompts ability to change the size of the user input/session log, via some kind of draggable border that makes one larger while the other smaller, and vice versa, or if that does not exist in gradio, then maybe a slider that could be at the top of the screen, and controll linearly the proportions of each of the settings ranges for the sizes of both being the maximums and 10px or 1 line being the minimum. However its done best. So `Session Log Height` would be labeled `Max Log Height`, and `Input Lines` would become `Max Input Lines`.
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 2. **Cross-Platform Scripting:** Introduce a unified script (`Text-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately.  
 3. **User Interface and Notification Enhancements:**  
