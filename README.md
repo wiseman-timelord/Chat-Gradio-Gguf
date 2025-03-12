@@ -101,9 +101,31 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Gen 1 Development
 With regards to the current version of the program...
-1. All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch (which should be renamed Searh), also Rpg features.
-2. Check over prompting, see if we can improve the prompts a little.  
-3. Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
+<br>1) All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch (which should be renamed Searh), also Rpg features.
+<br>2) Check over prompting, see if we can improve the prompts a little.  
+<br>3) Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
+<br>4.a) The `Coder` mode should not have `T.O.T`, and instead, for each response sent to the model, the user would specify what they need done to the scripts provided as files, and we would need one of my killer prompts, albeit, the display for input would be displaying the prefab...
+```
+INFORMATON:
+We are working on my project ProjectName, it is a progtam written in InsertProgrammingLanguage v#.## intended to be run on InsertOperatingSystem.
+
+INSTRUCTION:
+(State issue with the code or what needs to be created/redacted).
+
+STRUCTURE:
+(Information about directory structure, ie directory list)
+
+RELEVANT SECTION(s):
+(Insert code here)
+
+RESOURCES:
+Files attached.
+
+CONSTRAINTS:
+Print complete updated functions.
+```
+...something like that.
+<br>4.b) Option should have options next to for response mode
 
 ## Gen => 2 Development.
 With regards to the next generation of the program...  
