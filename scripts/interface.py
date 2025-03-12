@@ -203,7 +203,7 @@ def shutdown_program(models_loaded):
 
 def update_mode_based_options(mode, showing_rpg_right, is_reasoning_model):
     mode = mode.lower()
-    if mode == "code":
+    if mode == "coder":
         tot_visible = False
         web_visible = True
     elif mode == "rpg":
