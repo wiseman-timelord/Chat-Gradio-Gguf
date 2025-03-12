@@ -107,39 +107,27 @@ With regards to the current version of the program...
 
 ## Gen => 2 Development.
 With regards to the next generation of the program will be (a lot of the planning below is for the 2 model plan, this would have to be re-implemented, but may happen)...
-- Agentic Multi-Model; Vision model for image recognition on websearch, so as to specify, for example, to find a picture of X person in Y pose.
-- Agentic; nConvert, to convert images to 100px thumbnail, for contextually inserting into session log during response, while clicking on the image would pop=up a new page with the full image.
-- TextToVoice/VoiceToText; Add `PyWin32` and `Whisper`, details are here.`https://www.perplexity.ai/search/1-how-does-mantella-mod-for-sk-Q32RILakTQ.lvQ3NHLJb5A`.
-- There are a lot of globals, ensure all globals are safe_three_word labels, so as, to not so much have a chance to interfere with other programs using the same globals.
-- attatched files should be able to be written to.
-- 6 modes and dual model like this...
-```
-| **Mode**             | **Models**                     | **Features**                                      | **Implementation Notes**                                                                 |
-|-----------------------|--------------------------------|--------------------------------------------------|-----------------------------------------------------------------------------------------|
-| Chatbot              | Single chat model (e.g., DeepSeek-V3) | TOT reasoning, web research                     | Use LangChain for TOT (e.g., recursive prompt splitting), SerpAPI for web queries       |
-| Advanced Chatbot     | Fast + Quality chat models    | TOT on Fast, AUTO/FAST/QUALITY switch, web on Fast | Quantize Fast model (e.g., 4-bit), add Gradio slider for mode, cache Quality outputs   |
-| Coder                | Single code model (e.g., DeepSeek-Coder) | Syntax, formatting, completion                | Leverage Pygments for highlighting, integrate VSCode-like keybinds                     |
-| Agentic Coder        | Code + text models            | Intent → code → review loop                    | Chain via LangChain agents, store intermediate states in .\data\                       |
-| RPG Text             | Single RPG model              | Narrative, character tracking, uncensored       | Parse entities with regex, save JSON states in .\data\history\                         |
-| RPG Text + Images    | RPG + image model (Flux.1-schnell) | Text RPG + scene images                      | Trigger Flux via llama.cpp image fork, display in Gradio gallery (256x256 max)         |
-```
-- Ideas for introduce a, `Chat-Persistent` and `Rpg-Persistent`, mode, where under that mode then it is not specific to the session, and by creating/loading a session, then it would look this up. This could be like lighter version of RPG with 1 AI character, and be like, `Counsellor` or `Girlfriend`, then someone could persistently chat, they cant because its on rotation, to there is a point to it.
-- Introduction of `Text-Gradio-Gguf.sh` file and modifications of scripts, to enable, Linux AND Windows, support. 
-- Verbose Clear Concise Printed Notifications for all stages of model interaction/json handling: `Sending Prompt to Code Model...`, `Generating Code for Chat Model...`, `Response Received from Code Model...`.
-- Color themes. Deepseek R1 AND Grok3Beta, found this extremely difficult, Deepseek was better. It needs to be re-attempted later, possibly with GPT4o1. Make it all shades of grey, then allow people to choose the primary button color in configuration, or something simple like that.
-- two new modes—Chat-Notate and Chat-Notate-Uncensored—to your Windows 10-based chatbot. These modes allow the AI to process uploaded PDFs into summarized notations, stored in .\data\notation, with two versions: a detailed summary (up to the model's context limit, minus a safety margin) and a concise summary (256 tokens). During chats, the AI selects the most relevant detailed notation based on user input to deliver informed responses. A Notation Library menu in the UI enables users to manage notations by indexing new PDFs or deleting existing ones. For reasoning models in these modes, the THINK phase is disabled (like in TOT mode), ensuring practical, notation-driven conversations. This feature is slated for a later development phase.
-   I want some better control over prompting, this calls for a new page in the configuration the `Prompting` page, where there will be, some kind of non/editable text indicating the enhancements used and the mode, such as..
-```
-Operation Mode: 
-    Chat
-
-Enhancements: 
-    Web-Search, VectorStore
-
-Prompt Contents:
-...
-```
-- a non-editable text box `Last Prompt Sent` displaying the most recent prompt sent to the model, if it also had a section above the prompt, then having the raw output of prompt sent to the model being displayed, so final prompt can be assessed.
+1. **Single-Model Focus:** Consolidate functionalities into one adaptable model rather than maintaining multiple distinct models.  
+2. **Basic Global and File Handling:**  
+   - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
+   - Ensure that attached files can be written to.  
+3. **Cross-Platform Scripting:** Introduce a unified script (`Text-Gradio-Gguf.sh`) to support both Linux and Windows environments.  
+4. **User Interface and Notification Enhancements:**  
+   - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").  
+   - Add a configuration page with a non-editable “Prompting” section showing the operation mode, enhancements (e.g., Web-Search, VectorStore), and the last prompt sent.  
+5. **Enhanced Notation Modes:**  
+   - Introduce “Chat-Notate” and “Chat-Notate-Uncensored” modes to process uploaded PDFs into both detailed and concise summaries.  
+   - Store summaries in `.\\data\\notation` and provide a Notation Library menu in the UI for managing these notations.  
+   - Disable the THINK phase in these modes to ensure practical, notation-driven conversations.  
+6. **Agentic and Enhanced Features:**  
+   - Integrate vision capabilities for image recognition on web searches and convert images into contextually relevant thumbnails (with full images accessible via pop-up).  
+   - Add voice processing features (Text-to-Voice and Voice-to-Text) using PyWin32 and Whisper.  
+7. **Mode-Specific Integrations and Persistent Sessions:**  
+   - Support various modes (Chatbot, Advanced Chatbot, Coder, Agentic Coder, RPG Text, RPG Text + Images) with tailored features as outlined in the design table.  
+   - Introduce persistent modes (Chat-Persistent and RPG-Persistent) to enable ongoing sessions with stored states, allowing persistent interactions (e.g., a consistent AI character like a counsellor).  
+8. **Visual Customization:** Revisit color theme design, favoring shades of grey initially, and allow users to choose a primary button color through configuration.
+8. **Visual Customization:**  
+   - Revisit color theme design, favoring shades of grey initially, and allow users to choose a primary button color through configuration.
 
 ## Credits
 - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
