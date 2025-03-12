@@ -295,8 +295,6 @@ def update_setting(key, value):
     
 def load_config():
     config_path = Path("data/persistent.json")
-    print(f"Current working directory: {os.getcwd()}")
-    print(f"Resolved config path: {config_path.resolve()}")
     try:
         if config_path.exists():
             with open(config_path) as f:
@@ -342,8 +340,6 @@ def load_config():
                 temporary.USER_PC_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
                 temporary.AI_NPC_NAME = config["rp_settings"].get("ai_npc", "Robot")
                 temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")
-                
-                print(f"Loaded config: MODEL_FOLDER={temporary.MODEL_FOLDER}, BACKEND_TYPE={temporary.BACKEND_TYPE}")
         else:
             message = "Config file not found, please re-install."
             print(message)
@@ -352,7 +348,6 @@ def load_config():
         
         # Always resolve MODEL_FOLDER to an absolute path
         temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())
-        print(f"Resolved MODEL_FOLDER to: {temporary.MODEL_FOLDER}")
         return "Configuration loaded successfully."
     except Exception as e:
         message = f"Error loading configuration: {str(e)}"
@@ -363,8 +358,6 @@ def load_config():
     
 def save_config():
     config_path = Path("data/persistent.json")
-    print(f"Current working directory: {os.getcwd()}")
-    print(f"Resolved config path: {config_path.resolve()}")
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config = {

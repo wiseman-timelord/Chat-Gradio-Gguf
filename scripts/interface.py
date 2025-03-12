@@ -652,13 +652,15 @@ def launch_interface():
                             )
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Critical Actions...")
-                    with gr.Row(elem_classes=["clean-elements-normbot"]):
+                    with gr.Row(elem_classes=["clean-elements"]):
                         custom_components.update(
                             delete_all_vectorstores=gr.Button("Delete All History/Vectors", variant="stop", elem_classes=["double-height"])
                         )
                         config_components.update(
                             save_settings=gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
                         )
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("Text-Gradio-Gguf by Wiseman-Timelord\n")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
