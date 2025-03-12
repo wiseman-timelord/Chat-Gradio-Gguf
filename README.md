@@ -120,7 +120,7 @@ SECTION(s):
 (Insert code snippets here)
 
 RESOURCE(s):
-Files attached.
+(Detail things provided, remember to mention Files attached if so.)
 
 CONSTRAINT(s):
 Print complete updated functions.
