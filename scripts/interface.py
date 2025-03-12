@@ -291,9 +291,9 @@ def update_session_buttons():
                 if history:
                     text = " ".join([msg['content'] for msg in history])
                     text = filter_operational_content(text)
-                    kw_extractor = yake.KeywordExtractor(lan="en", n=2, dedupLim=0.9, top=1)
+                    kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
                     keywords = kw_extractor.extract_keywords(text)
-                    description = keywords[0][0][:20] if keywords else "No description"
+                    description = keywords[0][0] if keywords else "No description"
                 else:
                     description = "No history"
                 temporary.yake_history_detail[i] = description
