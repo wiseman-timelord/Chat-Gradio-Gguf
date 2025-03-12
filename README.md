@@ -104,7 +104,8 @@ With regards to the current version of the program...
 <br>1) All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch (which should be renamed Searh), also Rpg features.
 <br>2) Check over prompting, see if we can improve the prompts a little.  
 <br>3) Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
-<br>4.a) The `Coder` mode should not have `T.O.T`, and instead, for each response sent to the model, the user would specify what they need done to the scripts provided as files, and we would need one of my killer prompts, albeit, the display for input would be displaying the prefab...
+<br>4.a) The `Coder` mode should not have `T.O.T`, but if it is a reasoning model, then THINK would be an option, to be able to turn that on and off.
+<br>4.b) For each input sent to the model, the user would be presented with options for stripped down versions of template prompts, albeit, the display for input on code, would have the be displaying the prefab...
 ```
 INFORMATON:
 We are working on my project ProjectName, it is a progtam written in InsertProgrammingLanguage v#.## intended to be run on InsertOperatingSystem.
@@ -123,7 +124,9 @@ RESOURCE(s):
 (Detail things provided, remember to mention Files attached if so.)
 
 CONSTRAINT(s):
-Print complete updated functions.
+Print complete updated function(s) for specifically the functions we are updating.
+or
+Print the complete updated script.
 ```
 ...something like that.
 <br>4.b) Option should have options next to for response mode
