@@ -660,7 +660,9 @@ def launch_interface():
                             save_settings=gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("Text-Gradio-Gguf by Wiseman-Timelord\n")
+                        with gr.Column(scale=1, elem_classes=["clean-elements"]):
+                            gr.Markdown("About Program...")
+                            gr.Markdown("[Text-Gradio-Gguf](https://github.com/wiseman-timelord/Text-Gradio-Gguf) by [Wiseman-Timelord](http://wisetime.rf.gd)")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
