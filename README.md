@@ -103,7 +103,6 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 With regards to the current version of the program...
 1. All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch, also Check over prompting, prompt each mode and enhancement, and in the process, see if we can improve the prompts a little, each mode will have to have the optimal setup, possibly websearch will require 2 phases of prompting.  
 3. Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
-4. The `Coder` mode should not have `T.O.T`, but if it is a reasoning model, then THINK would be an option, to be able to turn that on and off.
 
 ## Gen => 2 Development.
 With regards to the next generation of the program...  
