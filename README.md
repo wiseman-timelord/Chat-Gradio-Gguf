@@ -109,11 +109,11 @@ With regards to the current version of the program...
 INFORMATON:
 We are working on my project ProjectName, it is a progtam written in InsertProgrammingLanguage v#.## intended to be run on InsertOperatingSystem.
 
-INSTRUCTION:
-(State issue with the code or what needs to be created/redacted).
-
 STRUCTURE:
 (Information about directory structure, ie directory list)
+
+INSTRUCTION:
+(State issue with the code or what needs to be created/redacted).
 
 RELEVANT SECTION(s):
 (Insert code here)
