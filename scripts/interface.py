@@ -475,9 +475,9 @@ def launch_interface():
         with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
-                    with gr.Column(min_width=325, elem_classes=["clean-elements"]):
+                    with gr.Column(min_width=300, elem_classes=["clean-elements"]):
                         mode_selection = gr.Radio(
-                            choices=["Chat", "Code", "Rpg"],
+                            choices=["Chat", "Coder", "Rpg"],
                             label="Operation Mode",
                             value="Chat"
                         )
@@ -538,7 +538,7 @@ def launch_interface():
                                     interactive=False,
                                     placeholder="Enter text here..."
                                 )
-                            with gr.Column(min_width=100, elem_classes=["clean-elements"]):
+                            with gr.Column(min_width=133, elem_classes=["clean-elements"]):
                                 switches = dict(
                                     web_search=gr.Checkbox(label="Search", value=False, visible=True),
                                     tot=gr.Checkbox(label="T.O.T.", value=False, visible=True),
@@ -577,9 +577,9 @@ def launch_interface():
                                     variant="secondary",
                                     elem_classes=["send-button"]
                                 )
-                            with gr.Column(elem_classes=["clean-elements"], min_width=100):
+                            with gr.Column(elem_classes=["clean-elements"], min_width=133):
                                 action_buttons["edit_previous"] = gr.Button("Go Back", variant="huggingface")
-                                action_buttons["copy_response"] = gr.Button("Copy AI", variant="huggingface")
+                                action_buttons["copy_response"] = gr.Button("Copy Out", variant="huggingface")
 
                 with gr.Row():
                     status_text = gr.Textbox(
@@ -588,7 +588,7 @@ def launch_interface():
                         value="Select model on Configuration page.",
                         scale=30
                     )
-                    gr.Button("Exit Program", variant="stop", elem_classes=["double-height"]).click(
+                    gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], min_width=133).click(
                         fn=shutdown_program,
                         inputs=[states["models_loaded"]]
                     )
@@ -662,7 +662,7 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
-                            shutdown=gr.Button("Exit Program", variant="stop", elem_classes=["double-height"]).click(fn=shutdown_program, inputs=[states["models_loaded"]])
+                            shutdown=gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], min_width=133).click(fn=shutdown_program, inputs=[states["models_loaded"]])
                         )
 
         # Define the start_new_session function
@@ -677,7 +677,7 @@ def launch_interface():
         def update_panel_on_mode_change(mode, current_panel):
             mode = mode.lower()
             if mode == "rpg":
-                choices = ["History", "Files", "Roleplay"]
+                choices = ["History", "Files", "Sheet"]
             else:
                 choices = ["History", "Files"]
             
@@ -686,7 +686,7 @@ def launch_interface():
             
             # Define visibility based on the selected panel
             attachments_visible = new_panel == "Files"
-            rpg_visible = new_panel == "Roleplay" and mode == "rpg"
+            rpg_visible = new_panel == "Sheet" and mode == "rpg"
             history_visible = new_panel == "History"
             attach_files_visible = new_panel == "Files"  # Explicitly control "Attach New Files"
             
@@ -855,7 +855,7 @@ def launch_interface():
         ).then(
             fn=lambda panel, mode: (
                 gr.update(visible=panel == "Files"),
-                gr.update(visible=panel == "Roleplay" and mode.lower() == "rpg"),
+                gr.update(visible=panel == "Sheet" and mode.lower() == "rpg"),
                 gr.update(visible=panel == "History"),
                 gr.update(visible=panel == "Files")  # Update "Attach New Files" visibility
             ),
