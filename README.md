@@ -101,10 +101,11 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Gen 1 Development
 With regards to the current version of the program...
-<br>1) All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch (which should be renamed Searh), also Rpg features.
-<br>2) Check over prompting, see if we can improve the prompts a little.  
-<br>3) Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
-<br>4.a) The `Coder` mode should not have `T.O.T`, but if it is a reasoning model, then THINK would be an option, to be able to turn that on and off.
+<br>1) All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch, also 
+1. Rpg features,.
+2. Check over prompting, see if we can improve the prompts a little.  
+3. Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
+4. The `Coder` mode should not have `T.O.T`, but if it is a reasoning model, then THINK would be an option, to be able to turn that on and off.
 
 ## Gen => 2 Development.
 With regards to the next generation of the program...  
