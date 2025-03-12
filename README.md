@@ -115,8 +115,8 @@ STRUCTURE:
 INSTRUCTION:
 (State issue with the code or what needs to be created/redacted).
 
-RELEVANT SECTION(s):
-(Insert code here)
+SECTION(s):
+(Insert code snippets here)
 
 RESOURCES:
 Files attached.
