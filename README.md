@@ -106,7 +106,7 @@ With regards to the current version of the program...
 2. Check all enhancements.
 4. Test Rpg features.
 5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best.  
-6. Coder MUST be agentic to work correctly given my prompt format, that would require 2 models, and so, I must hide `Coder` mode, until Gen 2.
+6. For my prompts, the Coder MUST be agentic to work correctly. So unless Grok can come up with some prefab prompt that works well, then that would require 2 models, and so, I must hide `Coder` mode until Gen 2.
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
