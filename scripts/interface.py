@@ -764,11 +764,11 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Critical Actions...")
                     with gr.Row(elem_classes=["clean-elements"]):
-                        custom_components.update(
-                            delete_all_vectorstores=gr.Button("Delete All History/Vectors", variant="stop")
-                        )
                         config_components.update(
                             save_settings=gr.Button("Save Settings", variant="primary")
+                        )
+                        custom_components.update(
+                            delete_all_vectorstores=gr.Button("Delete All History/Vectors", variant="stop")
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         with gr.Column(scale=1, elem_classes=["clean-elements"]):
