@@ -106,7 +106,7 @@ With regards to the current version of the program...
 2. Check all enhancements.
 3. Session Log height seems to always be 575 when I load it, possibly its not saving/loading to the JSON correctly but saving in temporary.py correctly, because the display does change size when I do it, just goes back to 575 when I reload.
 4. Test Rpg features.
-5. Speech enhancement. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best.  
+5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best.  
 
 ## Gen => 2 Development.
 With regards to the next generation of the program...  
