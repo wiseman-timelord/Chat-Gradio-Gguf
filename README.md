@@ -105,6 +105,7 @@ With regards to the current version of the program...
 1.  Check over prompting, prompt each mode and enhancement. Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response. Check Websearch prompting, it should be, 2 prompts or 1 dynamic prompt with 2 configurations, for code or chat, it should be tailored to the purpose, as in chat is for research, while in code is trying to, find out about some library or the correct method of implementing something, as possible we want simple method of enhancing for maximum effectiveness.   
 2. Check all enhancements.
 3. Session Log height seems to always be 575 when I load it, possibly its not saving/loading to the JSON correctly but saving in temporary.py correctly, because the display does change size when I do it, just goes back to 575 when I reload.
+4. Test Rpg features.
 
 ## Gen => 2 Development.
 With regards to the next generation of the program...  
