@@ -39,6 +39,11 @@ from langchain_core.documents import Document
 def set_loading_status():
     return "Loading model..."
 
+def update_session_log_height(h):
+    temporary.SESSION_LOG_HEIGHT = int(h)  # Update the variable
+    print(f"Updated SESSION_LOG_HEIGHT to {h}")  # Optional: for debugging
+    return gr.update(height=h)  # Update the UI
+
 def format_response(output: str) -> str:
     formatted = []
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', output, re.DOTALL)
@@ -124,10 +129,7 @@ def eject_file(loaded_files, slot_index):
     from pathlib import Path
     if 0 <= slot_index < len(loaded_files):
         removed_file = loaded_files.pop(slot_index)
-        try:
-            Path(removed_file).unlink()
-        except Exception as e:
-            print(f"Error unlinking file: {e}")
+        # Removed: Path(removed_file).unlink()
         session_vectorstore = create_session_vectorstore(loaded_files)
         context_injector.set_session_vectorstore(session_vectorstore)
         status_msg = f"Ejected {Path(removed_file).name}"
@@ -502,7 +504,7 @@ def launch_interface():
                         # Attachments group for file uploads (moved up)
                         with gr.Group(visible=False) as attachments_group:
                             attach_files = gr.UploadButton(
-                                "Attach New Files",
+                                "Add New Files",  # Changed from "Attach New Files"
                                 file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS],
                                 file_count="multiple",
                                 variant="secondary",
@@ -884,7 +886,7 @@ def launch_interface():
                 gr.update(visible=panel == "Files"),
                 gr.update(visible=panel == "Sheet" and mode.lower() == "rpg"),
                 gr.update(visible=panel == "History"),
-                gr.update(visible=panel == "Files")  # Update "Attach New Files" visibility
+                gr.update(visible=panel == "Files")
             ),
             inputs=[states["selected_panel"], mode_selection],
             outputs=[attachments_group, rpg_config_group, history_slots_group, attach_files]
@@ -993,7 +995,7 @@ def launch_interface():
         )
 
         custom_components["session_log_height"].change(
-            fn=lambda h: gr.update(height=h),
+            fn=update_session_log_height,
             inputs=[custom_components["session_log_height"]],
             outputs=[chat_components["session_log"]]
         )
