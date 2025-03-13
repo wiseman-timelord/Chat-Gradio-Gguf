@@ -39,10 +39,92 @@ from langchain_core.documents import Document
 def set_loading_status():
     return "Loading model..."
 
+def update_panel_on_mode_change(mode, current_panel):
+    mode = mode.lower()
+    if mode == "rpg":
+        choices = ["History", "Files", "Sheet"]
+    else:
+        choices = ["History", "Files"]
+    
+    new_panel = current_panel if current_panel in choices else ("History" if "History" in choices else choices[0])
+    
+    attachments_visible = new_panel == "Files"
+    rpg_visible = new_panel == "Sheet" and mode == "rpg"
+    history_visible = new_panel == "History"
+    attach_files_visible = new_panel == "Files"
+    
+    return (
+        gr.update(choices=choices, value=new_panel),
+        gr.update(visible=attachments_visible),
+        gr.update(visible=rpg_visible),
+        gr.update(visible=history_visible),
+        new_panel,
+        gr.update(visible=attach_files_visible)
+    )
+
+def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, model_dir):
+    """
+    Update configuration settings in the temporary module and return a status message.
+
+    Args:
+        ctx (str): Context size selected by the user.
+        batch (str): Batch size selected by the user.
+        temp (str): Temperature selected by the user.
+        repeat (str): Repeat penalty selected by the user.
+        vram (str): VRAM size selected by the user.
+        gpu (str): Selected GPU.
+        cpu (str): Selected CPU.
+        model (str): Selected model.
+        model_dir (str): Model directory path.
+
+    Returns:
+        str: A status message indicating the updated settings.
+    """
+    # Update the temporary module's variables
+    temporary.CONTEXT_SIZE = int(ctx)
+    temporary.BATCH_SIZE = int(batch)
+    temporary.TEMPERATURE = float(temp)
+    temporary.REPEAT_PENALTY = float(repeat)
+    temporary.VRAM_SIZE = int(vram)
+    temporary.SELECTED_GPU = gpu
+    temporary.SELECTED_CPU = cpu
+    temporary.MODEL_NAME = model
+    temporary.MODEL_FOLDER = model_dir
+
+    # Create a status message
+    status_message = (
+        f"Updated settings: Context Size={ctx}, Batch Size={batch}, "
+        f"Temperature={temp}, Repeat Penalty={repeat}, VRAM Size={vram}, "
+        f"Selected GPU={gpu}, Selected CPU={cpu}, Model={model}, "
+        f"Model Directory={model_dir}"
+    )
+
+    return status_message
+
+def update_stream_output(stream_output_value):
+    temporary.STREAM_OUTPUT = stream_output_value
+    status_message = "Stream output enabled." if stream_output_value else "Stream output disabled."
+    return status_message
+
+def save_all_settings():
+    """
+    Save all configuration settings and return a status message.
+
+    Returns:
+        str: Confirmation message.
+    """
+    utility.save_config()
+    return "Settings saved successfully."
+
 def update_session_log_height(h):
     temporary.SESSION_LOG_HEIGHT = int(h)  # Update the variable
     print(f"Updated SESSION_LOG_HEIGHT to {h}")  # Optional: for debugging
     return gr.update(height=h)  # Update the UI
+
+def update_input_lines(l):
+    temporary.INPUT_LINES = int(l)
+    print(f"Updated INPUT_LINES to {l}")  # Debugging
+    return gr.update(lines=l)
 
 def format_response(output: str) -> str:
     formatted = []
@@ -451,7 +533,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), web_search_update, tot_update, think_update
 
 def launch_interface():
-    """Launch the Gradio interface for the Text-Gradio-Gguf chatbot with updated Conversation tab layout."""
+    """Launch the Gradio interface for the Text-Gradio-Gguf chatbot with a split-screen layout."""
     global demo
     import tkinter as tk
     from tkinter import filedialog
@@ -473,10 +555,9 @@ def launch_interface():
     available_models = models.get_available_models()
     default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else available_models[0]
 
-    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important;height:80px!important}.half-width{width:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
+    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important!important}.half-width{width:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
 
-        # Updated states to include selected_panel for panel toggle
         states = dict(
             loaded_files=gr.State([]),
             models_loaded=gr.State(False),
@@ -484,12 +565,16 @@ def launch_interface():
             cancel_flag=gr.State(False),
             interaction_phase=gr.State("waiting_for_input"),
             is_reasoning_model=gr.State(False),
-            selected_panel=gr.State("History")  # Changed from "Files" to "History"
+            selected_panel=gr.State("History")
         )
+
+        # Define chat_components once to avoid redefinition
+        chat_components = {}
 
         with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
+                    # Settings column (left sidebar)
                     with gr.Column(min_width=300, elem_classes=["clean-elements"]):
                         mode_selection = gr.Radio(
                             choices=["Chat", "Coder", "Rpg"],
@@ -501,10 +586,9 @@ def launch_interface():
                             label="Panel Mode",
                             value="History"
                         )
-                        # Attachments group for file uploads (moved up)
                         with gr.Group(visible=False) as attachments_group:
                             attach_files = gr.UploadButton(
-                                "Add New Files",  # Changed from "Attach New Files"
+                                "Add New Files",
                                 file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS],
                                 file_count="multiple",
                                 variant="secondary",
@@ -515,7 +599,6 @@ def launch_interface():
                                 variant="huggingface",
                                 visible=False
                             ) for _ in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS)]
-                        # History slots group for session history
                         with gr.Group(visible=True) as history_slots_group:
                             start_new_session_btn = gr.Button("Start New Session...", variant="secondary")
                             buttons = dict(
@@ -525,7 +608,6 @@ def launch_interface():
                                     visible=False
                                 ) for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS)]
                             )
-                        # RPG config group for roleplay settings
                         with gr.Group(visible=False) as rpg_config_group:
                             rpg_fields = dict(
                                 rp_location=gr.Textbox(label="RP Location", value=temporary.RP_LOCATION),
@@ -536,66 +618,80 @@ def launch_interface():
                                 save_rpg=gr.Button("Save RPG Settings", variant="primary")
                             )
 
+                    # Main interaction column (split-screen effect)
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
-                        chat_components = {}
                         with gr.Row(elem_classes=["clean-elements"]):
-                            chat_components["session_log"] = gr.Chatbot(
-                                label="Session Log",
-                                height=temporary.SESSION_LOG_HEIGHT,
-                                elem_classes=["scrollable"],
-                                type="messages"
-                            )
-                        with gr.Row(elem_classes=["clean-elements"]):
-                            with gr.Column(scale=10, elem_classes=["clean-elements"]):
-                                chat_components["user_input"] = gr.Textbox(
-                                    label="User Input",
-                                    lines=temporary.INPUT_LINES,
-                                    interactive=False,
-                                    placeholder="Enter text here..."
-                                )
-                            with gr.Column(min_width=133, elem_classes=["clean-elements"]):
-                                switches = dict(
-                                    web_search=gr.Checkbox(label="Search", value=False, visible=True),
-                                    tot=gr.Checkbox(label="T.O.T.", value=False, visible=True),
-                                    enable_think=gr.Checkbox(label="THINK", value=False, visible=False)
-                                )
-                                # Ensure mutual exclusion among Search, T.O.T., and THINK
-                                switches["web_search"].change(
-                                    fn=lambda search_value: [
-                                        gr.update(value=False) if search_value else gr.update(),  # Disable T.O.T.
-                                        gr.update(value=False) if search_value else gr.update()   # Disable THINK
-                                    ],
-                                    inputs=switches["web_search"],
-                                    outputs=[switches["tot"], switches["enable_think"]]
-                                )
-                                switches["tot"].change(
-                                    fn=lambda tot_value: [
-                                        gr.update(value=False) if tot_value else gr.update(),     # Disable Search
-                                        gr.update(value=False) if tot_value else gr.update()      # Disable THINK
-                                    ],
-                                    inputs=switches["tot"],
-                                    outputs=[switches["web_search"], switches["enable_think"]]
-                                )
-                                switches["enable_think"].change(
-                                    fn=lambda think_value: [
-                                        gr.update(value=False) if think_value else gr.update(),   # Disable Search
-                                        gr.update(value=False) if think_value else gr.update()    # Disable T.O.T.
-                                    ],
-                                    inputs=switches["enable_think"],
-                                    outputs=[switches["web_search"], switches["tot"]]
-                                )
-                        with gr.Row(elem_classes=["clean-elements"]):
-                            action_buttons = {}
-                            with gr.Column(elem_classes=["clean-elements"], scale=40):
-                                action_buttons["action"] = gr.Button(
-                                    "Send Input",
-                                    variant="secondary",
-                                    elem_classes=["send-button"]
-                                )
-                            with gr.Column(elem_classes=["clean-elements"], min_width=133):
-                                action_buttons["edit_previous"] = gr.Button("Go Back", variant="huggingface")
-                                action_buttons["copy_response"] = gr.Button("Copy Out", variant="huggingface")
+                            # Left side: Input area and controls
+                            with gr.Row(elem_classes=["clean-elements"]):
+                                with gr.Column(elem_classes=["clean-elements"]):
+                                    with gr.Row(elem_classes=["clean-elements"]):
+                                        switches = dict(
+                                            web_search=gr.Checkbox(label="Search", value=False, visible=True),
+                                            tot=gr.Checkbox(label="T.O.T.", value=False, visible=True),
+                                            enable_think=gr.Checkbox(label="THINK", value=False, visible=False)
+                                        )
+                                        # Mutual exclusion logic
+                                        switches["web_search"].change(
+                                            fn=lambda search_value: [
+                                                gr.update(value=False) if search_value else gr.update(),
+                                                gr.update(value=False) if search_value else gr.update()
+                                            ],
+                                            inputs=switches["web_search"],
+                                            outputs=[switches["tot"], switches["enable_think"]]
+                                        )
+                                        switches["tot"].change(
+                                            fn=lambda tot_value: [
+                                                gr.update(value=False) if tot_value else gr.update(),
+                                                gr.update(value=False) if tot_value else gr.update()
+                                            ],
+                                            inputs=switches["tot"],
+                                            outputs=[switches["web_search"], switches["enable_think"]]
+                                        )
+                                        switches["enable_think"].change(
+                                            fn=lambda think_value: [
+                                                gr.update(value=False) if think_value else gr.update(),
+                                                gr.update(value=False) if think_value else gr.update()
+                                            ],
+                                            inputs=switches["enable_think"],
+                                            outputs=[switches["web_search"], switches["tot"]]
+                                        )
+                                    with gr.Row(elem_classes=["clean-elements"]):
+                                        chat_components["user_input"] = gr.Textbox(
+                                            label="User Input",
+                                            lines=temporary.INPUT_LINES,
+                                            interactive=False,
+                                            placeholder="Enter text here..."
+                                        )
 
+
+                                    with gr.Row(elem_classes=["clean-elements"]):
+                                        action_buttons = {}
+                                        action_buttons["action"] = gr.Button(
+                                            "Send Input",
+                                            variant="secondary",
+                                            elem_classes=["send-button"],
+                                            scale=10
+                                        )
+
+
+
+
+                                # Right side: Session Log
+                                with gr.Column(elem_classes=["clean-elements"]):
+                                    with gr.Row(elem_classes=["clean-elements"]):
+                                        chat_components["session_log"] = gr.Chatbot(
+                                            label="Session Log",
+                                            height=temporary.SESSION_LOG_HEIGHT,
+                                            elem_classes=["scrollable"],
+                                            type="messages"
+                                        )
+                                    with gr.Row(elem_classes=["clean-elements"]):
+                                        action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="huggingface", scale=1) # was min_width=133 (leave in please)
+                                        action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1)
+
+
+
+                # Status bar
                 with gr.Row():
                     status_text = gr.Textbox(
                         label="Status",
@@ -608,7 +704,7 @@ def launch_interface():
                         inputs=[states["models_loaded"]]
                     )
 
-            # Configuration tab remains unchanged for this update
+            # Configuration tab (unchanged)
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
                     is_cpu_only = temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
@@ -646,10 +742,10 @@ def launch_interface():
                             )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
-                            browse=gr.Button("Browse", variant="secondary", elem_classes=["double-height"]), 
-                            load_models=gr.Button("Load Model", variant="secondary", elem_classes=["double-height"]),
-                            inspect_model=gr.Button("Inspect Model", variant="huggingface", elem_classes=["double-height"]),
-                            unload=gr.Button("Unload Model", elem_classes=["double-height"], variant="huggingface"),
+                            browse=gr.Button("Browse", variant="secondary"), 
+                            load_models=gr.Button("Load Model", variant="secondary"),
+                            inspect_model=gr.Button("Inspect Model", variant="huggingface"),
+                            unload=gr.Button("Unload Model", variant="huggingface"),
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Interface Options...")
@@ -669,108 +765,23 @@ def launch_interface():
                         gr.Markdown("Critical Actions...")
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components.update(
-                            delete_all_vectorstores=gr.Button("Delete All History/Vectors", variant="stop", elem_classes=["double-height"])
+                            delete_all_vectorstores=gr.Button("Delete All History/Vectors", variant="stop")
                         )
                         config_components.update(
-                            save_settings=gr.Button("Save Settings", variant="primary", elem_classes=["double-height"])
+                            save_settings=gr.Button("Save Settings", variant="primary")
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         with gr.Column(scale=1, elem_classes=["clean-elements"]):
                             gr.Markdown("About Program...")
                             gr.Markdown("[Text-Gradio-Gguf](https://github.com/wiseman-timelord/Text-Gradio-Gguf) by [Wiseman-Timelord](http://wisetime.rf.gd)")
+                            gr.Markdown("Donations through, [Patreon](https://patreon.com/WisemanTimelord) or [Ko-fi](https://ko-fi.com/WisemanTimelord)")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
                             shutdown=gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], min_width=133).click(fn=shutdown_program, inputs=[states["models_loaded"]])
                         )
 
-        # Define the start_new_session function
-        def start_new_session():
-            from scripts import temporary
-            temporary.current_session_id = None
-            temporary.session_label = ""
-            temporary.SESSION_ACTIVE = True
-            return [], "Type input and click Send to begin...", gr.update(interactive=True)
-
-        # New function to update panel options based on mode
-        def update_panel_on_mode_change(mode, current_panel):
-            mode = mode.lower()
-            if mode == "rpg":
-                choices = ["History", "Files", "Sheet"]
-            else:
-                choices = ["History", "Files"]
-            
-            # Set the default panel to "History" if available
-            new_panel = "History" if "History" in choices else choices[0]
-            
-            # Define visibility based on the selected panel
-            attachments_visible = new_panel == "Files"
-            rpg_visible = new_panel == "Sheet" and mode == "rpg"
-            history_visible = new_panel == "History"
-            attach_files_visible = new_panel == "Files"  # Explicitly control "Attach New Files"
-            
-            return (
-                gr.update(choices=choices, value=new_panel),  # Update panel toggle options
-                gr.update(visible=attachments_visible),       # attachments_group visibility
-                gr.update(visible=rpg_visible),               # rpg_config_group visibility
-                gr.update(visible=history_visible),           # history_slots_group visibility
-                new_panel,                                    # Update selected_panel state
-                gr.update(visible=attach_files_visible)       # Explicitly set attach_files visibility
-            )
-
-        # Define placeholder action_handler to resolve NameError
-        def action_handler(
-            interaction_phase,
-            user_input,
-            session_log,
-            tot,
-            loaded_files,
-            enable_think,
-            is_reasoning_model,
-            rp_location,
-            user_name,
-            user_role,
-            ai_npc,
-            cancel_flag,
-            mode_selection,
-            web_search,
-            models_loaded,
-            interaction_phase_state
-        ):
-            print("Inputs received:", user_input)
-            # Initial return before async processing
-            return (
-                session_log,              # chat_components["session_log"]
-                "Processing input...",    # status_text
-                gr.update(value="Send Input", variant="secondary"),  # action_buttons["action"]
-                False,                    # states["cancel_flag"]
-                loaded_files,             # states["loaded_files"]
-                "waiting_for_input",      # states["interaction_phase"]
-                gr.update(value="")       # chat_components["user_input"]
-            )
-
-        def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, model_dir):
-            print(f"Updating temporary: model_dir={model_dir}, model_name={model}")
-            temporary.CONTEXT_SIZE = int(ctx)
-            temporary.BATCH_SIZE = int(batch)
-            temporary.TEMPERATURE = float(temp)
-            temporary.REPEAT_PENALTY = float(repeat)
-            temporary.VRAM_SIZE = int(vram)
-            temporary.SELECTED_GPU = gpu
-            temporary.SELECTED_CPU = cpu
-            temporary.MODEL_NAME = model
-            temporary.MODEL_FOLDER = model_dir
-            print(f"Set temporary.MODEL_FOLDER={temporary.MODEL_FOLDER}, MODEL_NAME={temporary.MODEL_NAME}")
-            return "Configuration updated"
-
-        def update_stream_output(stream_output_value):
-            temporary.STREAM_OUTPUT = stream_output_value
-            return f"Stream Output set to: {stream_output_value}"
-
-        def save_all_settings():
-            return utility.save_config()
-
-        # Updated Event Handlers
+        # Event handlers (unchanged from original, just referencing updated components)
         start_new_session_btn.click(
             fn=start_new_session,
             outputs=[chat_components["session_log"], status_text, chat_components["user_input"]]
@@ -845,25 +856,25 @@ def launch_interface():
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
                 outputs=[chat_components["session_log"], states["loaded_files"], status_text]
-                ).then(
-                    fn=lambda: context_injector.load_session_vectorstore(temporary.current_session_id),
-                    inputs=[],
-                    outputs=[]
-                ).then(
-                    fn=update_session_buttons,
-                    inputs=[],
-                    outputs=buttons["session"]
-                ).then(
-                    fn=update_file_slot_ui,
-                    inputs=[states["loaded_files"]],
-                    outputs=file_slots + [attach_files]
-                )
+            ).then(
+                fn=lambda: context_injector.load_session_vectorstore(temporary.current_session_id),
+                inputs=[],
+                outputs=[]
+            ).then(
+                fn=update_session_buttons,
+                inputs=[],
+                outputs=buttons["session"]
+            ).then(
+                fn=update_file_slot_ui,
+                inputs=[states["loaded_files"]],
+                outputs=file_slots + [attach_files]
+            )
 
         mode_selection.change(
             fn=lambda mode: (
-                gr.update(value=False),  # Reset web_search
-                gr.update(value=False),  # Reset tot
-                gr.update(value=False) if models.get_model_settings(temporary.MODEL_NAME)["is_reasoning"] else gr.update(),  # Reset enable_think if reasoning model
+                gr.update(value=False),
+                gr.update(value=False),
+                gr.update(value=False) if models.get_model_settings(temporary.MODEL_NAME)["is_reasoning"] else gr.update(),
             ),
             inputs=[mode_selection],
             outputs=[switches["web_search"], switches["tot"], switches["enable_think"]]
@@ -908,7 +919,6 @@ def launch_interface():
             outputs=[states["is_reasoning_model"]]
         )
 
-        # Remaining event handlers for Configuration tab remain unchanged
         for comp in [config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]]:
             comp.change(
                 fn=update_config_settings,
@@ -1001,7 +1011,7 @@ def launch_interface():
         )
 
         custom_components["input_lines"].change(
-            fn=lambda l: gr.update(lines=l),
+            fn=update_input_lines,
             inputs=[custom_components["input_lines"]],
             outputs=[chat_components["user_input"]]
         )
