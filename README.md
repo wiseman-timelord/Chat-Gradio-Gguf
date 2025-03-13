@@ -102,8 +102,8 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Gen 1 Development
 With regards to the current version of the program...
-1. Check over prompting, prompt each mode and enhancement.
-2. Check all enhancements, remaining work; Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response. Check Websearch, it should be, 2 prompts or 1 dynamic prompt with 2 configurations, for code or chat, it should be tailored to the purpose, as in chat is for research, while in code is trying to, find out about some library or the correct method of implementing something, as possible we want simple method of enhancing for maximum effectiveness.   
+1.  Check over prompting, prompt each mode and enhancement. Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response. Check Websearch prompting, it should be, 2 prompts or 1 dynamic prompt with 2 configurations, for code or chat, it should be tailored to the purpose, as in chat is for research, while in code is trying to, find out about some library or the correct method of implementing something, as possible we want simple method of enhancing for maximum effectiveness.   
+2. Check all enhancements.
 
 ## Gen => 2 Development.
 With regards to the next generation of the program...  
