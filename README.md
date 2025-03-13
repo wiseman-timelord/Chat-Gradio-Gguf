@@ -103,11 +103,11 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 ## Gen 1 Development
 With regards to the current version of the program...
 1.  Check over prompting, prompt each mode and enhancement. Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response. Check Websearch prompting, it should be, 2 prompts or 1 dynamic prompt with 2 configurations, for code or chat, it should be tailored to the purpose, as in chat is for research, while in code is trying to, find out about some library or the correct method of implementing something, as possible we want simple method of enhancing for maximum effectiveness.   
+5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best.  
+6. For my prompts, the Coder MUST be agentic to work correctly. So unless Grok can come up with some prefab prompt that works well, then that would require 2 models, and so, I must hide `Coder` mode until Gen 2. Otherwise for now I would implement 2 prompt system intended for use on 1 model, that cannot be an instruct model.
+7. Should There be, `Upload Files` and `Attach Files`, Attach would be added to prompt, while upload would be for adding to vector database? Chat would have Attach and Upload. Code would have only Attach. Rpg would have only Upload.  
 2. Check all enhancements.
 4. Test Rpg features.
-5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best.  
-6. For my prompts, the Coder MUST be agentic to work correctly. So unless Grok can come up with some prefab prompt that works well, then that would require 2 models, and so, I must hide `Coder` mode until Gen 2.
-7. Should There be, `Upload Files` and `Attach Files`, Attach would be added to prompt, while upload would be for adding to vector database? Chat would have Attach and Upload. Code would have only Attach. Rpg would have only Upload.  
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
