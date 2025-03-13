@@ -63,6 +63,12 @@ context_injector = ContextInjector()
 def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
 
+def clean_content(role, content):
+    """Remove prefixes from session_log content for model input."""
+    if role == 'user':
+        return content.replace("User:\n", "", 1).strip()
+    return content.strip()
+
 def set_cpu_affinity():
     from scripts import utility
     cpu_only_backends = ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
@@ -380,11 +386,9 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
             web_prompt = "No web search results were found. Proceed with your best response."
         messages.insert(1, {"role": "system", "content": web_prompt})
 
-    # Add reasoning instruction if applicable
+    # Add reasoning or T.O.T. instructions
     if settings.get("is_reasoning", False) and not disable_think and mode in ["chat", "code"]:
         messages[-1]["content"] += get_reasoning_instruction()
-
-    # Add T.O.T. instruction if enabled for Chat mode
     if tot_enabled and mode == "chat":
         messages[-1]["content"] += get_tot_instruction()
 
@@ -399,7 +403,12 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
         )
         full_response = ""
         reasoning_phase = True
-        progress_bar = "Reasoning..."
+        if tot_enabled:
+            progress_bar_text = " Aggregating..."
+        elif not disable_think and settings.get("is_reasoning", False):
+            progress_bar_text = " Reasoning..."
+        else:
+            progress_bar_text = " Generating..."
         progress_count = 0
         max_progress = 28
         final_answer = ""
@@ -416,11 +425,11 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
                         if "<think>" in full_response and "</think>" not in full_response:
                             if '.' in chunk_content and progress_count < max_progress:
                                 progress_count += 1
-                                progress_bar = " Reasoning...\n" + "█" * progress_count
+                                progress_bar = f"{progress_bar_text}\n" + "█" * progress_count
                                 yield progress_bar
                         elif "</think>" in full_response:
                             reasoning_phase = False
-                            progress_bar = " Reasoning...\n" + "█" * max_progress
+                            progress_bar = f"{progress_bar_text}\n" + "█" * max_progress
                             final_answer = full_response.split("</think>", 1)[1].strip()
                             yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
                         elif "<answer>" in full_response:
@@ -432,14 +441,14 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
                         else:
                             if progress_count < max_progress and '.' in chunk_content:
                                 progress_count += 1
-                                progress_bar = " Reasoning...\n" + "█" * progress_count
+                                progress_bar = f"{progress_bar_text}\n" + "█" * progress_count
                                 yield progress_bar
                     else:
                         final_answer += chunk_content
                         yield f"{progress_bar}\n\nAI-Chat:\n{final_answer.strip()}"
 
         if reasoning_phase and full_response:
-            progress_bar = " Reasoning...\n" + "█" * max_progress
+            progress_bar = f"{progress_bar_text}\n" + "█" * max_progress
             final_answer = full_response.strip()
             if "<think>" in final_answer and "</think>" in final_answer:
                 final_answer = final_answer.split("</think>", 1)[1].strip()

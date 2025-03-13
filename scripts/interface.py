@@ -289,14 +289,20 @@ def update_session_buttons():
                 update_time = stat.st_mtime if stat.st_mtime else stat.st_ctime
                 formatted_time = datetime.fromtimestamp(update_time).strftime("%Y-%m-%d %H:%M")
                 session_id, label, history, _ = utility.load_session_history(session_path)
-                if history:
-                    text = " ".join([msg['content'] for msg in history])
-                    text = filter_operational_content(text)
-                    kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
-                    keywords = kw_extractor.extract_keywords(text)
-                    description = keywords[0][0] if keywords else "No description"
+                if history and len(history) >= 2 and history[0]['role'] == 'user' and history[1]['role'] == 'assistant':
+                    user_input = history[0]['content']
+                    assistant_response = history[1]['content']
+                    user_input_clean = utility.clean_content('user', user_input)
+                    assistant_response_clean = utility.clean_content('assistant', assistant_response)
+                    text_for_yake = user_input_clean + " " + assistant_response_clean
                 else:
-                    description = "No history"
+                    text_for_yake = " ".join([utility.clean_content(msg['role'], msg['content']) for msg in history])
+                text_for_yake = filter_operational_content(text_for_yake)
+                kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
+                keywords = kw_extractor.extract_keywords(text_for_yake)
+                description = keywords[0][0] if keywords else "No description"
+                if len(description) > 16:
+                    description = description[:16]
                 temporary.yake_history_detail[i] = description
                 btn_label = f"{formatted_time} - {description}"
             except Exception as e:
@@ -349,7 +355,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
 
     # Check if models are loaded
     if not models_loaded:
-        yield session_log, "Please load a model first.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
+        yield session_log, "Please load a model first.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update(), gr.update(), gr.update()
         return
 
     # Start a new session if not active
@@ -358,12 +364,12 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         temporary.session_label = ""
         temporary.SESSION_ACTIVE = True
         session_log = []
-        yield session_log, "New session started.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
+        yield session_log, "New session started.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update(), gr.update(), gr.update()
         await asyncio.sleep(0.1)
 
     # Validate input
     if not user_input.strip():
-        yield session_log, "No input provided.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
+        yield session_log, "No input provided.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update(), gr.update(), gr.update()
         return
 
     # Append user input and prepare assistant response
@@ -372,24 +378,24 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         temporary.session_label = create_session_label(user_input)
     session_log.append({'role': 'assistant', 'content': ""})
     interaction_phase = "afterthought_countdown"
-    yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update()
+    yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update(), gr.update(), gr.update()
 
     # Afterthought countdown
     countdown_seconds = 6 if len(user_input.split('\n')) >= 10 else 4 if len(user_input.split('\n')) >= 5 else 2 if temporary.AFTERTHOUGHT_TIME else 1
     for i in range(countdown_seconds, -1, -1):
         session_log[-1]['content'] = f"Afterthought countdown... {i}s"
-        yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+        yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
         await asyncio.sleep(1)
         if cancel_flag:
             session_log[-1]['content'] = "Input cancelled."
             interaction_phase = "waiting_for_input"
-            yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+            yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
             return
 
     # Prepare to generate response
     session_log[-1]['content'] = "Afterthought countdown... 0s ...Executing CLI llama-cli"
     interaction_phase = "generating_response"
-    yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+    yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
 
     settings = models.get_model_settings(MODEL_NAME)
     mode = mode_selection.lower()
@@ -403,14 +409,14 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     search_results = None
     if web_search_enabled and mode in ["chat", "code"]:
         session_log[-1]['content'] = "Performing web search..."
-        yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+        yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
         search_results = utility.web_search(user_input)
         if search_results:
             session_log[-1]['content'] = "Web search completed. Generating response..."
-            yield session_log, "Web search completed. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+            yield session_log, "Web search completed. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
         else:
             session_log[-1]['content'] = "No web search results found. Generating response..."
-            yield session_log, "No web search results found. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+            yield session_log, "No web search results found. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
 
     # Generate response
     rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
@@ -427,7 +433,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         if cancel_flag:
             break
         session_log[-1]['content'] = line.strip()
-        yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+        yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
         await asyncio.sleep(0)
 
     # Finalize interaction
@@ -437,8 +443,10 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     else:
         utility.save_session_history(session_log, loaded_files)
 
-    think_update = gr.update(value=False) if is_reasoning_model else gr.update()
-    yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), think_update
+    web_search_update = gr.update(value=False) if web_search_enabled else gr.update()
+    tot_update = gr.update(value=False) if tot_enabled else gr.update()
+    think_update = gr.update(value=False) if enable_think else gr.update()
+    yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), web_search_update, tot_update, think_update
 
 def launch_interface():
     """Launch the Gradio interface for the Text-Gradio-Gguf chatbot with updated Conversation tab layout."""
@@ -797,7 +805,9 @@ def launch_interface():
                 states["loaded_files"],
                 states["interaction_phase"],
                 chat_components["user_input"],
-                switches["enable_think"]  # Added to handle auto-disable
+                switches["web_search"],
+                switches["tot"],
+                switches["enable_think"]
             ]
         ).then(
             fn=update_session_buttons,
