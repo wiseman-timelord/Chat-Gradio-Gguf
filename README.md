@@ -107,17 +107,18 @@ With regards to the current version of the program...
 3. Session Log height seems to always be 575 when I load it, possibly its not saving/loading to the JSON correctly but saving in temporary.py correctly, because the display does change size when I do it, just goes back to 575 when I reload.
 4. Test Rpg features.
 5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best.  
+6. Coder MUST be agentic to work correctly given my prompt format, that would require 2 models, and so, I must hide `Coder` mode, until Gen 2.
 
 ## Gen => 2 Development.
-With regards to the next generation of the program...  
+With regards to the next generation of the program...
 1. Research local and online AI programs, what kinds of enhancements are common, what would be simple to implement. Someone mentioned Manu, does some kind of webscrape or internet research, producing reports.
-1. For each input sent to the model, the user would be having options for stripped down versions of template prompts, albeit, the display for input on code, would have the be displaying the editable scrollable prefabs for each one...
+1. Coder mode must be agentic =m requiring 2 models. 1 =>8b model for management of tasks and 1 =>8b model instruct for generation of code. Files provided in coder mode,  would NOT be in the vector database like it is in chat mode, but instead be directly and selectively sent to the code model, that thinking model would have to assess which scripts are likely relevant and produce a list and the correct instruction for each task and stage. There would also have to be the editable scrollable prefabs for each one...
 ```
 INFORMATON:
 We are working on my project ProjectName, it is a progtam written in InsertProgrammingLanguage v#.## intended to be run on InsertOperatingSystem.
 
 STRUCTURE:
-(Information about directory structure, ie directory list)
+(Information about directory structure, ie core directory list)
 
 INSTRUCTION:
 (State issue with the code or what needs to be created/redacted).
@@ -129,7 +130,7 @@ SECTION(s):
 RESOURCE(s):
 (Detail things provided, remember to mention Files attached if so.)
 
-CONSTRAINT(s):
+CONSIDERATION(s):
 Print complete updated function(s) for specifically the functions we are updating.
 or
 Print the complete updated script.
