@@ -101,9 +101,9 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 
 ## Gen 1 Development
 With regards to the current version of the program...
-1. All enhancements need testing and bugfixing, this includes, T.O.T., WebSearch, also Check over prompting, prompt each mode and enhancement, and in the process, see if we can improve the prompts a little, each mode will have to have the optimal setup, possibly websearch will require 2 phases of prompting.  
-2. Investigate Yake usage, Still getting 1 word description for history slot.
-3. Full logic and sanity check, as well as check for redundant unused code, then afterwards some optimization to reduce overall characters in inefficient function(s), more optimal ways of doing things, as well as possibly some refractoring.
+1. Check over prompting, prompt each mode and enhancement.
+2. Check Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response.   
+3. Investigate Yake usage, Still getting 1 word description for history slot.
 
 ## Gen => 2 Development.
 With regards to the next generation of the program...  
