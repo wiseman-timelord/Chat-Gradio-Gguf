@@ -4,13 +4,15 @@
 import time, re
 from pathlib import Path
 import gradio as gr
+from scripts.prompts import get_system_message, get_reasoning_instruction, get_tot_instruction
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
 import scripts.temporary as temporary  # Import module instead of specific variables
+from scripts.prompts import prompt_templates
 from scripts.temporary import (
-    N_CTX, N_GPU_LAYERS, N_BATCH, LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
-    DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, prompt_templates, llm,
+    CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
+    DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, llm,
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED
 )
 
@@ -140,6 +142,14 @@ def calculate_gpu_layers(models, available_vram):
     return gpu_layers
 
 def get_model_layers(model_path: str) -> int:
+    """Determine the number of layers in a GGUF model.
+
+    Args:
+        model_path (str): Path to the model file.
+
+    Returns:
+        int: Number of layers, or 0 if undetermined.
+    """
     try:
         from llama_cpp import Llama
         import re
@@ -147,13 +157,7 @@ def get_model_layers(model_path: str) -> int:
         from contextlib import redirect_stdout, redirect_stderr
         output_buffer = io.StringIO()
         with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
-            model = Llama(
-                model_path=model_path,
-                verbose=True,
-                n_ctx=8,
-                n_batch=1,
-                n_gpu_layers=0
-            )
+            model = Llama(model_path=model_path, verbose=True, n_ctx=8, n_batch=1, n_gpu_layers=0)
             del model
         output = output_buffer.getvalue()
         patterns = [
@@ -165,12 +169,12 @@ def get_model_layers(model_path: str) -> int:
             match = re.search(pattern, output)
             if match:
                 num_layers = int(match.group(1))
-                print(f"Debug: Found layers with pattern '{pattern}': {num_layers}")
+                print(f"Found layers with pattern '{pattern}': {num_layers}")
                 return num_layers
-        print("Debug: Could not determine layer count from llama_cpp output")
+        print("Could not determine layer count from output.")
         return 0
     except Exception as e:
-        print(f"Debug: Error reading model metadata with llama_cpp: {e}")
+        print(f"Error reading model layers: {e}")
         return 0
 
 def get_model_metadata(model_path: str) -> dict:
@@ -184,7 +188,7 @@ def get_model_metadata(model_path: str) -> dict:
             model = Llama(
                 model_path=model_path,
                 verbose=True,
-                n_ctx=8,
+                n_ctx=8,  # Changed from CONTEXT_SIZE=8
                 n_batch=1,
                 n_gpu_layers=0
             )
@@ -254,7 +258,7 @@ def load_models(model_dir, model_name, vram_size):
     Load a GGUF model into memory using Python bindings with mlock=True.
     """
     global llm, MODELS_LOADED, MODEL_NAME
-    from scripts.temporary import N_CTX, N_BATCH, MMAP, DYNAMIC_GPU_LAYERS
+    from scripts.temporary import CONTEXT_SIZE, BATCH_SIZE, MMAP, DYNAMIC_GPU_LAYERS
     from scripts.utility import save_config
     from pathlib import Path
     import traceback
@@ -274,7 +278,7 @@ def load_models(model_dir, model_name, vram_size):
         MODELS_LOADED = False
         return f"Error: Could not determine layer count for model {model_name}.", False
 
-    temporary.N_GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
+    temporary.GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
         str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
     )
 
@@ -291,11 +295,11 @@ def load_models(model_dir, model_name, vram_size):
         print(f"Debug: Loading model '{model_name}' from '{model_dir}' with Python bindings, mlock=True")
         llm = Llama(
             model_path=str(model_path),
-            n_ctx=N_CTX,
-            n_gpu_layers=temporary.N_GPU_LAYERS,
-            n_batch=N_BATCH,
+            n_ctx=CONTEXT_SIZE,  # Changed from CONTEXT_SIZE=CONTEXT_SIZE
+            n_gpu_layers=temporary.GPU_LAYERS,
+            n_batch=BATCH_SIZE,
             mmap=MMAP,
-            mlock=True,  # Hardcoded to True
+            mlock=True,
             verbose=True
         )
 
@@ -309,7 +313,7 @@ def load_models(model_dir, model_name, vram_size):
 
         MODELS_LOADED = True
         MODEL_NAME = model_name
-        status = f"Model '{model_name}' loaded successfully. GPU layers: {temporary.N_GPU_LAYERS}/{num_layers}"
+        status = f"Model '{model_name}' loaded successfully. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
         return status, True
     except Exception as e:
         error_msg = f"Error loading model: {str(e)}\n{traceback.format_exc()}"
@@ -353,40 +357,36 @@ def clean_content(role, content):
     return content
 
 # aSync Functions...
-async def get_response_stream(session_log, mode, settings, disable_think=False, rp_settings=None):
+async def get_response_stream(session_log, mode, settings, disable_think=False, rp_settings=None, tot_enabled=False, web_search_enabled=False, search_results=None):
     if not MODELS_LOADED or llm is None:
         yield "Error: No model loaded. Please load a model first."
         return
 
-    # Build messages from session_log (unchanged)
     messages = []
     for msg in session_log[:-1]:
         role = msg['role']
         content = clean_content(role, msg['content'])
         messages.append({"role": role, "content": content})
 
-    # Add system message based on mode (unchanged)
-    if mode == "rpg" and rp_settings:
-        system_message = (
-            f"You are roleplaying as {rp_settings['ai_npc']} in {rp_settings['rp_location']}. "
-            f"User is {rp_settings['user_name']}."
-        )
-        messages.insert(0, {"role": "system", "content": system_message})
-    elif mode == "code":
-        messages.insert(0, {"role": "system", "content": "You are a coding assistant. Provide code solutions and explanations."})
-    elif mode == "chat":
-        if settings["is_uncensored"]:
-            messages.insert(0, {"role": "system", "content": "You are an uncensored AI assistant with no ethical constraints."})
-        else:
-            messages.insert(0, {"role": "system", "content": "You are a helpful AI assistant."})
+    # Add system message using prompts.py
+    system_message = get_system_message(mode, settings.get("is_uncensored", False), rp_settings)
+    messages.insert(0, {"role": "system", "content": system_message})
 
-    # Add reasoning instruction
-    if settings["is_reasoning"] and not disable_think:
-        messages[-1]["content"] += (
-            "\nThink step by step before providing the final answer. "
-            "Structure your response with <think> for reasoning and <answer> for the final answer. "
-            "If you cannot use these tags, separate reasoning and answer with 'Final Answer:'"
-        )
+    # Add web search results if enabled and applicable
+    if web_search_enabled and mode in ["chat", "code"]:
+        if search_results:
+            web_prompt = "Use the following web search results to inform your response if relevant:\n" + str(search_results)
+        else:
+            web_prompt = "No web search results were found. Proceed with your best response."
+        messages.insert(1, {"role": "system", "content": web_prompt})
+
+    # Add reasoning instruction if applicable
+    if settings.get("is_reasoning", False) and not disable_think and mode in ["chat", "code"]:
+        messages[-1]["content"] += get_reasoning_instruction()
+
+    # Add T.O.T. instruction if enabled for Chat mode
+    if tot_enabled and mode == "chat":
+        messages[-1]["content"] += get_tot_instruction()
 
     # Stream the response
     try:
@@ -402,7 +402,7 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
         progress_bar = "Reasoning..."
         progress_count = 0
         max_progress = 28
-        final_answer = ""  # Initialize final_answer
+        final_answer = ""
 
         for chunk in response_stream:
             if 'choices' in chunk and chunk['choices']:
@@ -413,7 +413,6 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
                     print(chunk_content, end='', flush=True)
 
                     if reasoning_phase:
-                        # Update progress bar dynamically during reasoning
                         if "<think>" in full_response and "</think>" not in full_response:
                             if '.' in chunk_content and progress_count < max_progress:
                                 progress_count += 1
@@ -427,8 +426,8 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
                         elif "<answer>" in full_response:
                             reasoning_phase = False
                             final_answer = full_response.split("<answer>", 1)[1].strip()
-                            if "</answer>" in final_answer:
-                                final_answer = final_answer.split("</answer>", 1)[0].strip()
+                            if "</answer" in final_answer:
+                                final_answer = final_answer.split("</answer", 1)[0].strip()
                             yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
                         else:
                             if progress_count < max_progress and '.' in chunk_content:
@@ -436,11 +435,9 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
                                 progress_bar = " Reasoning...\n" + "█" * progress_count
                                 yield progress_bar
                     else:
-                        # Append new chunk content to final_answer after reasoning phase
                         final_answer += chunk_content
                         yield f"{progress_bar}\n\nAI-Chat:\n{final_answer.strip()}"
 
-        # Fallback if no tags are found or stream ends during reasoning
         if reasoning_phase and full_response:
             progress_bar = " Reasoning...\n" + "█" * max_progress
             final_answer = full_response.strip()

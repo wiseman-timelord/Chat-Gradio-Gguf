@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
 VULKAN_TARGET_VERSION = "1.4.304.1"
-LLAMACPP_TARGET_VERSION = "b4837"
+LLAMACPP_TARGET_VERSION = "b4873"
 BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
     "data", "scripts", "models",
@@ -110,7 +110,7 @@ CONFIG_TEMPLATE = """{
 	"model_settings": {
 	  "model_dir": "models",
 	  "model_name": "",
-	  "n_ctx": 8192,
+	  "context_size": 8192,
 	  "temperature": 0.75,
 	  "repeat_penalty": 1.0,
 	  "use_python_bindings": false,

@@ -12,8 +12,8 @@ from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from .models import context_injector, load_models
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
-    ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER,
-    RAG_CHUNK_OVERLAP_DEVIDER, N_CTX, last_save_time
+    ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER, BATCH_SIZE,
+    RAG_CHUNK_OVERLAP_DEVIDER, CONTEXT_SIZE, last_save_time
 )
 from . import temporary
 
@@ -129,12 +129,23 @@ def load_session_history(session_file):
     return session_id, label, history, attached_files
 
 def web_search(query: str, num_results: int = 3) -> str:
-    """Perform a web search using DuckDuckGo without artificial delays."""
+    """Perform a web search using DuckDuckGo and return formatted results.
+
+    Args:
+        query (str): The search query.
+        num_results (int): Number of results to return. Defaults to 3.
+
+    Returns:
+        str: Formatted search results or an error message.
+    """
     wrapper = DuckDuckGoSearchAPIWrapper()
     try:
         results = wrapper.results(query, max_results=num_results)
-        snippets = [f"{result.get('link', 'unknown')}:\n{result.get('snippet', 'No snippet available.')}" for result in results]
-        return f"Results:\n{'nn'.join(snippets)}" if snippets else "No results found."
+        if not results:
+            return "No results found."
+        snippets = [f"{r.get('link', 'unknown')}:\n{r.get('snippet', 'No snippet available.')}" 
+                    for r in results]
+        return f"Results:\n{'nn'.join(snippets)}"
     except Exception as e:
         return f"Error during web search: {str(e)}"
 
@@ -142,11 +153,11 @@ def load_and_chunk_documents(file_paths: list) -> list:
     """Load and chunk documents from a list of file paths for RAG."""
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain_community.document_loaders import TextLoader
-    from .temporary import N_CTX, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER
+    from .temporary import CONTEXT_SIZE, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER
     documents = []
     try:
-        chunk_size = N_CTX // (RAG_CHUNK_SIZE_DEVIDER if RAG_CHUNK_SIZE_DEVIDER != 0 else 4)
-        chunk_overlap = N_CTX // (RAG_CHUNK_OVERLAP_DEVIDER if RAG_CHUNK_OVERLAP_DEVIDER != 0 else 32)
+        chunk_size = CONTEXT_SIZE // (RAG_CHUNK_SIZE_DEVIDER if RAG_CHUNK_SIZE_DEVIDER != 0 else 4)
+        chunk_overlap = CONTEXT_SIZE // (RAG_CHUNK_OVERLAP_DEVIDER if RAG_CHUNK_OVERLAP_DEVIDER != 0 else 32)
         for file_path in file_paths:
             if Path(file_path).suffix[1:].lower() in ALLOWED_EXTENSIONS:
                 loader = TextLoader(file_path)
@@ -223,13 +234,6 @@ def get_saved_sessions():
     session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
     return [f.name for f in session_files]
 
-def trim_session_history(max_sessions):
-    history_dir = Path(HISTORY_DIR)
-    session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
-    while len(session_files) > max_sessions:
-        oldest_file = session_files.pop()
-        oldest_file.unlink()
-
 def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary, with a confirmation message."""
     reload_required = False
@@ -237,11 +241,11 @@ def update_setting(key, value):
         # Model settings
         if key == "temperature":
             temporary.TEMPERATURE = float(value)
-        elif key == "n_ctx":
-            temporary.N_CTX = int(value)
+        elif key == "context_size":
+            temporary.CONTEXT_SIZE = int(value)
             reload_required = True
         elif key == "n_gpu_layers":
-            temporary.N_GPU_LAYERS = int(value)
+            temporary.GPU_LAYERS = int(value)
             reload_required = True
         elif key == "vram_size":
             temporary.VRAM_SIZE = int(value)
@@ -257,7 +261,7 @@ def update_setting(key, value):
         elif key == "afterthought_time":
             temporary.AFTERTHOUGHT_TIME = bool(value)
         elif key == "n_batch":
-            temporary.N_BATCH = int(value)
+            temporary.BATCH_SIZE = int(value)
         elif key == "model_folder":
             temporary.MODEL_FOLDER = value
             reload_required = True
@@ -313,7 +317,7 @@ def load_config():
                 
                 # Load other model settings
                 temporary.MODEL_NAME = config["model_settings"].get("model_name", "Select_a_model...")
-                temporary.N_CTX = int(config["model_settings"].get("n_ctx", 8192))
+                temporary.CONTEXT_SIZE = int(config["model_settings"].get("context_size", 8192))
                 temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
                 temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))
                 temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "")
@@ -323,7 +327,7 @@ def load_config():
                 temporary.MMAP = bool(config["model_settings"].get("mmap", True))
                 temporary.MLOCK = bool(config["model_settings"].get("mlock", True))
                 temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"].get("afterthought_time", True))
-                temporary.N_BATCH = int(config["model_settings"].get("n_batch", 1024))
+                temporary.BATCH_SIZE = int(config["model_settings"].get("n_batch", 1024))
                 temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
                 temporary.MAX_HISTORY_SLOTS = int(config["model_settings"].get("max_history_slots", 10))
                 temporary.MAX_ATTACH_SLOTS = int(config["model_settings"].get("max_attach_slots", 6))
@@ -364,7 +368,7 @@ def save_config():
             "model_settings": {
                 "model_dir": str(Path(temporary.MODEL_FOLDER).resolve()),
                 "model_name": temporary.MODEL_NAME,
-                "n_ctx": temporary.N_CTX,
+                "context_size": temporary.CONTEXT_SIZE,
                 "temperature": temporary.TEMPERATURE,
                 "repeat_penalty": temporary.REPEAT_PENALTY,
                 "llama_cli_path": temporary.LLAMA_CLI_PATH,
@@ -373,7 +377,7 @@ def save_config():
                 "selected_cpu": temporary.SELECTED_CPU,
                 "mmap": temporary.MMAP,
                 "mlock": temporary.MLOCK,
-                "n_batch": temporary.N_BATCH,
+                "n_batch": temporary.BATCH_SIZE,
                 "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
                 "afterthought_time": temporary.AFTERTHOUGHT_TIME,
                 "max_history_slots": temporary.MAX_HISTORY_SLOTS,

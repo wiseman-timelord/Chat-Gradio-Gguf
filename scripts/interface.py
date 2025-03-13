@@ -15,9 +15,9 @@ from queue import Queue
 import scripts.temporary as temporary
 from scripts.temporary import (
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
-    ALLOWED_EXTENSIONS, N_CTX, VRAM_SIZE, SELECTED_GPU, SELECTED_CPU,
-    current_model_settings, N_GPU_LAYERS, VRAM_OPTIONS, REPEAT_PENALTY,
-    MLOCK, HISTORY_DIR, BATCH_OPTIONS, N_BATCH, MODEL_FOLDER,
+    ALLOWED_EXTENSIONS, CONTEXT_SIZE, VRAM_SIZE, SELECTED_GPU, SELECTED_CPU,
+    current_model_settings, GPU_LAYERS, VRAM_OPTIONS, REPEAT_PENALTY,
+    MLOCK, HISTORY_DIR, BATCH_OPTIONS, BATCH_SIZE, MODEL_FOLDER,
     MODEL_NAME, STATUS_TEXTS, CTX_OPTIONS, RP_LOCATION, USER_PC_NAME, USER_PC_ROLE,
     AI_NPC_NAME, AI_NPC_ROLE, SESSION_ACTIVE, TOT_VARIATIONS,
     MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, HISTORY_SLOT_OPTIONS, ATTACH_SLOT_OPTIONS,
@@ -161,6 +161,7 @@ def start_new_session():
     temporary.current_session_id = None
     temporary.session_label = ""
     temporary.SESSION_ACTIVE = True
+    context_injector.set_session_vectorstore(None)  # Clear session vectorstore
     return [], "Type input and click Send to begin...", gr.update(interactive=True)
 
 def load_session_by_index(index):
@@ -171,8 +172,8 @@ def load_session_by_index(index):
         temporary.current_session_id = session_id
         temporary.session_label = label
         temporary.SESSION_ACTIVE = True
-        return history, f"Loaded session: {label}"
-    return [], "No session to load"
+        return history, attached_files, f"Loaded session: {label}"
+    return [], [], "No session to load"
 
 def copy_last_response(session_log):
     if session_log and session_log[-1]['role'] == 'assistant':
@@ -343,23 +344,23 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                         cancel_flag, mode_selection, web_search_enabled, models_loaded,
                         interaction_phase):
     from scripts import temporary, utility, models
-    from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS
+    from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE
     import asyncio
-    
+
     # Check if models are loaded
     if not models_loaded:
         yield session_log, "Please load a model first.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
         return
-    
+
     # Start a new session if not active
-    if not temporary.SESSION_ACTIVE:
+    if not SESSION_ACTIVE:
         temporary.current_session_id = None
         temporary.session_label = ""
         temporary.SESSION_ACTIVE = True
         session_log = []
         yield session_log, "New session started.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
         await asyncio.sleep(0.1)
-    
+
     # Validate input
     if not user_input.strip():
         yield session_log, "No input provided.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
@@ -369,7 +370,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     session_log.append({'role': 'user', 'content': f"User:\n{user_input}"})
     if len(session_log) == 1 and session_log[0]['role'] == 'user':
         temporary.session_label = create_session_label(user_input)
-    session_log.append({'role': 'assistant', 'content': ""})  # Start with empty content
+    session_log.append({'role': 'assistant', 'content': ""})
     interaction_phase = "afterthought_countdown"
     yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update()
 
@@ -399,30 +400,35 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         models.context_injector.set_session_vectorstore(session_vectorstore)
 
     # Handle web search
+    search_results = None
     if web_search_enabled and mode in ["chat", "code"]:
         session_log[-1]['content'] = "Performing web search..."
         yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
         search_results = utility.web_search(user_input)
-        session_log[-2]['content'] += f"\n\nWeb Search Results:\n{search_results}"
+        if search_results:
+            session_log[-1]['content'] = "Web search completed. Generating response..."
+            yield session_log, "Web search completed. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+        else:
+            session_log[-1]['content'] = "No web search results found. Generating response..."
+            yield session_log, "No web search results found. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
 
     # Generate response
-    if tot_enabled and mode == "chat":
-        yield session_log, "TOT not implemented in streaming mode yet.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update()
-    else:
-        rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
-        async for line in models.get_response_stream(
-            session_log,
-            mode,
-            settings,
-            disable_think=not enable_think,
-            rp_settings=rp_settings
-        ):
-            if cancel_flag:
-                break
-            # Overwrite the assistant's content with each streamed update
-            session_log[-1]['content'] = line.strip()
-            yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
-            await asyncio.sleep(0)
+    rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
+    async for line in models.get_response_stream(
+        session_log,
+        mode,
+        settings,
+        disable_think=not enable_think,
+        rp_settings=rp_settings,
+        tot_enabled=tot_enabled and mode == "chat",
+        web_search_enabled=web_search_enabled and mode in ["chat", "code"],
+        search_results=search_results
+    ):
+        if cancel_flag:
+            break
+        session_log[-1]['content'] = line.strip()
+        yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+        await asyncio.sleep(0)
 
     # Finalize interaction
     interaction_phase = "waiting_for_input"
@@ -430,8 +436,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         session_log[-1]['content'] = "Generation cancelled."
     else:
         utility.save_session_history(session_log, loaded_files)
-    
-    # Set THINK checkbox state
+
     think_update = gr.update(value=False) if is_reasoning_model else gr.update()
     yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), think_update
 
@@ -447,7 +452,7 @@ def launch_interface():
     from scripts.temporary import (
         STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS, STREAM_OUTPUT,
         MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, INPUT_LINES,
-        AFTERTHOUGHT_TIME, MODEL_FOLDER, N_CTX, N_BATCH, TEMPERATURE, REPEAT_PENALTY,
+        AFTERTHOUGHT_TIME, MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
         VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
         RP_LOCATION, USER_PC_NAME, USER_PC_ROLE, AI_NPC_NAME, AI_NPC_ROLE,
         ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
@@ -620,8 +625,8 @@ def launch_interface():
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
-                            ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.N_CTX, scale=5),
-                            batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.N_BATCH, scale=5),
+                            ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.CONTEXT_SIZE, scale=5),
+                            batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.BATCH_SIZE, scale=5),
                             temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE, scale=5),
                             repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY, scale=5),
                         )
@@ -736,8 +741,8 @@ def launch_interface():
 
         def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, model_dir):
             print(f"Updating temporary: model_dir={model_dir}, model_name={model}")
-            temporary.N_CTX = int(ctx)
-            temporary.N_BATCH = int(batch)
+            temporary.CONTEXT_SIZE = int(ctx)
+            temporary.BATCH_SIZE = int(batch)
             temporary.TEMPERATURE = float(temp)
             temporary.REPEAT_PENALTY = float(repeat)
             temporary.VRAM_SIZE = int(vram)
@@ -827,12 +832,20 @@ def launch_interface():
             btn.click(
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
-                outputs=[chat_components["session_log"], status_text]
-            ).then(
-                fn=update_session_buttons,
-                inputs=[],
-                outputs=buttons["session"]
-            )
+                outputs=[chat_components["session_log"], states["loaded_files"], status_text]
+                ).then(
+                    fn=lambda: context_injector.load_session_vectorstore(temporary.current_session_id),
+                    inputs=[],
+                    outputs=[]
+                ).then(
+                    fn=update_session_buttons,
+                    inputs=[],
+                    outputs=buttons["session"]
+                ).then(
+                    fn=update_file_slot_ui,
+                    inputs=[states["loaded_files"]],
+                    outputs=file_slots + [attach_files]
+                )
 
         mode_selection.change(
             fn=lambda mode: (
