@@ -103,8 +103,7 @@ You will of course need to have a `*.Gguf` model for anything to work, here are 
 ## Gen 1 Development
 With regards to the current version of the program...
 1. Check over prompting, prompt each mode and enhancement.
-2. Check Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response.   
-3. Investigate Yake usage, Still getting 1 word description for history slot.
+2. Check all enhancements, remaining work; Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response.   
 
 ## Gen => 2 Development.
 With regards to the next generation of the program...  
