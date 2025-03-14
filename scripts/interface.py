@@ -788,10 +788,10 @@ def launch_interface():
                                 allow_custom_value=False,
                                 scale=10
                             ),
-                            ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.CONTEXT_SIZE, scale=5),
-                            batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.BATCH_SIZE, scale=5),
-                            temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE, scale=5),
-                            repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY, scale=5),
+                            ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size (Input/Aware)", value=temporary.CONTEXT_SIZE, scale=5),
+                            batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size (Output)", value=temporary.BATCH_SIZE, scale=5),
+                            temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature (Creativity)", value=temporary.TEMPERATURE, scale=5),
+                            repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=temporary.REPEAT_PENALTY, scale=5),
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
