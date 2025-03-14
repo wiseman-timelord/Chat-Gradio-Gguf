@@ -64,5 +64,5 @@ def get_tot_instruction():
     """
     return (
         "\nPlease consider at least three possible answers or approaches to this question. "
-        "Outline each one step by step, then select the best one and provide its, title and details, in <answer> tags."
+        "Outline each one step by step, and then most importantly, select the best one and provide its, title and details, in <answer> tags."
     )

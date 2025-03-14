@@ -23,12 +23,12 @@ class ContextInjector:
         self.current_vectorstore = None
         self.current_mode = None
         self.session_vectorstore = None
-        print("ContextInjector initialized with session-specific vectorstore support.")
+        print("VectorStore Injector initialized.")
 
     def set_session_vectorstore(self, vectorstore):
         self.session_vectorstore = vectorstore
         if vectorstore:
-            print("Session-specific vectorstore set successfully.")
+            print("Session-specific vectorstore set.")
         else:
             print("Session-specific vectorstore cleared.")
 
@@ -89,9 +89,9 @@ def get_available_models():
     files = list(model_dir.glob("*.gguf"))
     models = [f.name for f in files if f.is_file()]
     if models:
-        choices = ["Select_a_model..."] + models
+        choices = models
     else:
-        choices = ["No models found"]
+        choices = ["Browse_for_model_folder..."]
     print(f"Models Found: {choices}")
     return choices
 
@@ -113,7 +113,7 @@ def get_model_settings(model_name):
     }
 
 def determine_operation_mode(model_name):
-    if model_name == "Select_a_model...":
+    if model_name == "Browse_for_model_folder...":
         return "Select models to enable mode detection.", "Select models to enable mode detection."
     settings = get_model_settings(model_name)
     mode = settings["category"].capitalize()
@@ -123,16 +123,16 @@ def calculate_gpu_layers(models, available_vram):
     from math import floor
     if not models or available_vram <= 0:
         return {model: 0 for model in models}
-    total_size = sum(get_model_size(Path(MODEL_FOLDER) / model) for model in models if model != "Select_a_model...")
+    total_size = sum(get_model_size(Path(MODEL_FOLDER) / model) for model in models if model != "Browse_for_model_folder...")
     if total_size == 0:
         return {model: 0 for model in models}
     vram_allocations = {
         model: (get_model_size(Path(MODEL_FOLDER) / model) / total_size) * available_vram
-        for model in models if model != "Select_a_model..."
+        for model in models if model != "Browse_for_model_folder..."
     }
     gpu_layers = {}
     for model in models:
-        if model == "Select_a_model...":
+        if model == "Browse_for_model_folder...":
             gpu_layers[model] = 0
             continue
         model_path = Path(MODEL_FOLDER) / model
@@ -226,7 +226,7 @@ def get_model_metadata(model_path: str) -> dict:
 
 def inspect_model(model_dir, model_name, vram_size):
     from scripts.utility import save_config
-    if model_name == "Select_a_model...":
+    if model_name == "Browse_for_model_folder...":
         return "Select a model to inspect."
     model_path = Path(model_dir) / model_name
     if not model_path.exists():
@@ -259,30 +259,27 @@ def inspect_model(model_dir, model_name, vram_size):
     except Exception as e:
         return f"Error inspecting model: {str(e)}"
 
-def load_models(model_dir, model_name, vram_size):
-    """
-    Load a GGUF model into memory using Python bindings with mlock=True.
-    """
-    global llm, MODELS_LOADED, MODEL_NAME
+def load_models(model_folder, model, vram_size):
     from scripts.temporary import CONTEXT_SIZE, BATCH_SIZE, MMAP, DYNAMIC_GPU_LAYERS
     from scripts.utility import save_config
     from pathlib import Path
     import traceback
 
     save_config()
-    if model_name in ["Select_a_model...", "No models found"]:  # Handle both cases
-        MODELS_LOADED = False
+
+    if model in ["Browse_for_model_folder...", "No models found"]:
+        temporary.MODELS_LOADED = False
         return "Select a model to load.", False
 
-    model_path = Path(model_dir) / model_name
+    model_path = Path(model_folder) / model
     if not model_path.exists():
-        MODELS_LOADED = False
+        temporary.MODELS_LOADED = False
         return f"Error: Model file '{model_path}' not found.", False
 
     num_layers = get_model_layers(str(model_path))
     if num_layers <= 0:
-        MODELS_LOADED = False
-        return f"Error: Could not determine layer count for model {model_name}.", False
+        temporary.MODELS_LOADED = False
+        return f"Error: Could not determine layer count for model '{model}'.", False
 
     temporary.GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
         str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
@@ -291,17 +288,17 @@ def load_models(model_dir, model_name, vram_size):
     try:
         from llama_cpp import Llama
     except ImportError:
-        MODELS_LOADED = False
+        temporary.MODELS_LOADED = False
         return "Error: llama-cpp-python not installed. Python bindings are required.", False
 
     try:
-        if MODELS_LOADED:
+        if temporary.MODELS_LOADED:
             unload_models()
 
-        print(f"Debug: Loading model '{model_name}' from '{model_dir}' with Python bindings, mlock=True")
-        llm = Llama(
+        print(f"Debug: Loading model '{model}' from '{model_folder}' with Python bindings, mlock=True")
+        temporary.llm = Llama(
             model_path=str(model_path),
-            n_ctx=CONTEXT_SIZE,  # Changed from CONTEXT_SIZE=CONTEXT_SIZE
+            n_ctx=CONTEXT_SIZE,
             n_gpu_layers=temporary.GPU_LAYERS,
             n_batch=BATCH_SIZE,
             mmap=MMAP,
@@ -309,22 +306,22 @@ def load_models(model_dir, model_name, vram_size):
             verbose=True
         )
 
-        # Test inference to verify loading
-        test_output = llm.create_chat_completion(
+        test_output = temporary.llm.create_chat_completion(
             messages=[{"role": "user", "content": "Hello"}],
             max_tokens=5,
             stream=False
         )
         print(f"Debug: Test inference successful: {test_output}")
 
-        MODELS_LOADED = True
-        MODEL_NAME = model_name
-        status = f"Model '{model_name}' loaded successfully. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
+        temporary.MODELS_LOADED = True
+        temporary.MODEL_NAME = model
+        status = f"Model '{model}' loaded successfully. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
         return status, True
+
     except Exception as e:
         error_msg = f"Error loading model: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
-        MODELS_LOADED = False
+        temporary.MODELS_LOADED = False
         return error_msg, False
 
 def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vram: int, num_layers: int, dynamic_gpu_layers: bool = True) -> int:
@@ -364,7 +361,7 @@ def clean_content(role, content):
 
 # aSync Functions...
 async def get_response_stream(session_log, mode, settings, disable_think=False, rp_settings=None, tot_enabled=False, web_search_enabled=False, search_results=None):
-    if not MODELS_LOADED or llm is None:
+    if not temporary.MODELS_LOADED or temporary.llm is None:
         yield "Error: No model loaded. Please load a model first."
         return
 
@@ -374,32 +371,25 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
         content = clean_content(role, msg['content'])
         messages.append({"role": role, "content": content})
 
-    # Add system message using prompts.py
     system_message = get_system_message(mode, settings.get("is_uncensored", False), rp_settings)
     messages.insert(0, {"role": "system", "content": system_message})
 
-    # Add web search results if enabled and applicable
     if web_search_enabled and mode in ["chat", "code"]:
-        if search_results:
-            web_prompt = "Use the following web search results to inform your response if relevant:\n" + str(search_results)
-        else:
-            web_prompt = "No web search results were found. Proceed with your best response."
+        web_prompt = "Use the following web search results to inform your response if relevant:\n" + str(search_results) if search_results else "No web search results were found. Proceed with your best response."
         messages.insert(1, {"role": "system", "content": web_prompt})
 
-    # Add reasoning or T.O.T. instructions
     if settings.get("is_reasoning", False) and not disable_think and mode in ["chat", "code"]:
         messages[-1]["content"] += get_reasoning_instruction()
     if tot_enabled and mode == "chat":
         messages[-1]["content"] += get_tot_instruction()
 
-    # Stream the response
     try:
-        response_stream = llm.create_chat_completion(
+        response_stream = temporary.llm.create_chat_completion(
             messages=messages,
             max_tokens=1024,
-            temperature=TEMPERATURE,
-            repeat_penalty=REPEAT_PENALTY,
-            stream=True
+            temperature=temporary.TEMPERATURE,
+            repeat_penalty=temporary.REPEAT_PENALTY,
+            stream=True  # Always stream
         )
         full_response = ""
         reasoning_phase = True

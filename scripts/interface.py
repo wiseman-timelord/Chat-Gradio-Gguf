@@ -31,7 +31,7 @@ from scripts.utility import (
 )
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings,
-    context_injector, inspect_model, load_models, get_available_models
+    context_injector, inspect_model, load_models
 )
 from langchain_core.documents import Document
 
@@ -62,25 +62,7 @@ def update_panel_on_mode_change(mode, current_panel):
         gr.update(visible=attach_files_visible)
     )
 
-def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, model_dir):
-    """
-    Update configuration settings in the temporary module and return a status message.
-
-    Args:
-        ctx (str): Context size selected by the user.
-        batch (str): Batch size selected by the user.
-        temp (str): Temperature selected by the user.
-        repeat (str): Repeat penalty selected by the user.
-        vram (str): VRAM size selected by the user.
-        gpu (str): Selected GPU.
-        cpu (str): Selected CPU.
-        model (str): Selected model.
-        model_dir (str): Model directory path.
-
-    Returns:
-        str: A status message indicating the updated settings.
-    """
-    # Update the temporary module's variables
+def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model):
     temporary.CONTEXT_SIZE = int(ctx)
     temporary.BATCH_SIZE = int(batch)
     temporary.TEMPERATURE = float(temp)
@@ -89,16 +71,11 @@ def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, mode
     temporary.SELECTED_GPU = gpu
     temporary.SELECTED_CPU = cpu
     temporary.MODEL_NAME = model
-    temporary.MODEL_FOLDER = model_dir
-
-    # Create a status message
     status_message = (
         f"Updated settings: Context Size={ctx}, Batch Size={batch}, "
         f"Temperature={temp}, Repeat Penalty={repeat}, VRAM Size={vram}, "
-        f"Selected GPU={gpu}, Selected CPU={cpu}, Model={model}, "
-        f"Model Directory={model_dir}"
+        f"Selected GPU={gpu}, Selected CPU={cpu}, Model={model}"
     )
-
     return status_message
 
 def update_stream_output(stream_output_value):
@@ -135,14 +112,53 @@ def format_response(output: str) -> str:
         output = output.replace(f'```{lang}\n{code}```', formatted_code)
     return f'<span style="color: {RESPONSE_COLOR}">{output}</span>'
 
+def get_initial_model_value():
+    # Use cached AVAILABLE_MODELS instead of scanning again
+    available_models = temporary.AVAILABLE_MODELS or get_available_models()  # Fallback if None
+    if temporary.MODEL_NAME in available_models:
+        return temporary.MODEL_NAME, get_model_settings(temporary.MODEL_NAME)["is_reasoning"]
+    else:
+        if len(available_models) == 1 and available_models[0] != "Browse_for_model_folder...":
+            default_model = available_models[0]
+            is_reasoning = get_model_settings(default_model)["is_reasoning"]
+        else:
+            default_model = "Browse_for_model_folder..."
+            is_reasoning = False
+        return default_model, is_reasoning
+
 def update_model_list(new_dir):
     print(f"Updating model list with new_dir: {new_dir}")
     temporary.MODEL_FOLDER = new_dir
-    choices = get_available_models()
-    print(f"Choices returned: {choices}")
-    return gr.update(choices=choices)
+    choices = get_available_models()  # Scan the directory for models
+    if choices and choices[0] != "Browse_for_model_folder...":  # If models are found
+        value = choices[0]  # Default to the first model
+    else:  # If no models are found
+        choices = ["Browse_for_model_folder..."]  # Ensure this is in choices
+        value = "Browse_for_model_folder..."  # Set value accordingly
+    print(f"Choices returned: {choices}, Setting value to: {value}")
+    return gr.update(choices=choices, value=value)
+
+def handle_model_selection(model, model_folder_state):
+    """Handle model selection with proper validation."""
+    if model == "Browse_for_model_folder...":
+        new_folder, model_update = browse_for_model_folder(model_folder_state)
+        return new_folder, model_update, "Selecting directory..."
+    elif model in ["Browse_for_model_folder...", "No models found"]:
+        return model_folder_state, gr.update(), "Invalid model selection"
+    else:
+        temporary.MODEL_NAME = model
+        return model_folder_state, gr.update(value=model), f"Selected model: {model}"
 
 def select_directory(current_model_folder):
+    """
+    Open a directory selection dialog and return the selected path.
+
+    Args:
+        current_model_folder (str): The current model folder path.
+
+    Returns:
+        str: The selected directory path or the current path if none selected.
+    """
     print("Opening directory selection dialog...")
     root = tk.Tk()
     root.withdraw()
@@ -156,10 +172,25 @@ def select_directory(current_model_folder):
     root.destroy()
     if path:
         print(f"Selected path: {path}")
-        return path, path
+        return path
     else:
         print("No directory selected")
-        return current_model_folder, current_model_folder
+        return current_model_folder
+
+def browse_for_model_folder(model_folder_state):
+    new_folder = select_directory(model_folder_state)
+    if new_folder:
+        model_folder_state = new_folder
+        temporary.MODEL_FOLDER = new_folder
+        choices = get_available_models()  # Corrected
+        if choices and choices[0] != "Browse_for_model_folder...":
+            selected_model = choices[0]
+        else:
+            selected_model = "Browse_for_model_folder..."
+        temporary.MODEL_NAME = selected_model
+        return model_folder_state, gr.update(choices=choices, value=selected_model)
+    else:
+        return model_folder_state, gr.update(choices=["Browse_for_model_folder..."], value="Browse_for_model_folder...")
 
 def web_search_trigger(query):
     try:
@@ -305,7 +336,7 @@ def update_mode_based_options(mode, showing_rpg_right, is_reasoning_model):
     ]
 
 def update_model_based_options(model_name):
-    if model_name in ["Select_a_model...", "No models found"]:
+    if model_name in ["Browse_for_model_folder...", "No models found"]:
         mode = "Chat"
         think_visible = False
         recommended = "Select a model"
@@ -433,11 +464,10 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                         is_reasoning_model, rp_location, user_name, user_role, ai_npc,
                         cancel_flag, mode_selection, web_search_enabled, models_loaded,
                         interaction_phase):
-    from scripts import temporary, utility, models
+    from scripts import temporary, utility
     from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE
     import asyncio
 
-    # Check if models are loaded
     if not models_loaded:
         yield session_log, "Please load a model first.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update(), gr.update(), gr.update()
         return
@@ -481,13 +511,13 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     interaction_phase = "generating_response"
     yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
 
-    settings = models.get_model_settings(MODEL_NAME)
+    settings = get_model_settings(MODEL_NAME)
     mode = mode_selection.lower()
 
     # Handle file attachments
     if loaded_files:
         session_vectorstore = utility.create_session_vectorstore(loaded_files)
-        models.context_injector.set_session_vectorstore(session_vectorstore)
+        context_injector.set_session_vectorstore(session_vectorstore)
 
     # Handle web search
     search_results = None
@@ -504,10 +534,10 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
 
     # Generate response
     rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
-    async for line in models.get_response_stream(
+    async for line in get_response_stream(
         session_log,
-        mode,
-        settings,
+        settings=settings,
+        mode=mode,
         disable_think=not enable_think,
         rp_settings=rp_settings,
         tot_enabled=tot_enabled and mode == "chat",
@@ -542,7 +572,7 @@ def launch_interface():
     from pathlib import Path
     from scripts import temporary, utility, models
     from scripts.temporary import (
-        STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS, STREAM_OUTPUT,
+        STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS,
         MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, INPUT_LINES,
         AFTERTHOUGHT_TIME, MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
         VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
@@ -552,12 +582,10 @@ def launch_interface():
         INPUT_LINES_OPTIONS, ATTACH_SLOT_OPTIONS
     )
 
-    available_models = models.get_available_models()
-    default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else available_models[0]
-
-    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important!important}.half-width{width:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
+    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important}.half-width{width:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
+        # Initialize state variables early
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
-
+        
         states = dict(
             loaded_files=gr.State([]),
             models_loaded=gr.State(False),
@@ -662,8 +690,6 @@ def launch_interface():
                                             interactive=False,
                                             placeholder="Enter text here..."
                                         )
-
-
                                     with gr.Row(elem_classes=["clean-elements"]):
                                         action_buttons = {}
                                         action_buttons["action"] = gr.Button(
@@ -672,10 +698,6 @@ def launch_interface():
                                             elem_classes=["send-button"],
                                             scale=10
                                         )
-
-
-
-
                                 # Right side: Session Log
                                 with gr.Column(elem_classes=["clean-elements"]):
                                     with gr.Row(elem_classes=["clean-elements"]):
@@ -686,10 +708,8 @@ def launch_interface():
                                             type="messages"
                                         )
                                     with gr.Row(elem_classes=["clean-elements"]):
-                                        action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="huggingface", scale=1) # was min_width=133 (leave in please)
+                                        action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="huggingface", scale=1)
                                         action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1)
-
-
 
                 # Status bar
                 with gr.Row():
@@ -699,12 +719,12 @@ def launch_interface():
                         value="Select model on Configuration page.",
                         scale=30
                     )
-                    gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], min_width=133).click(
+                    gr.Button("Terminate", variant="stop", elem_classes=["double-height"], min_width=110).click(
                         fn=shutdown_program,
                         inputs=[states["models_loaded"]]
                     )
 
-            # Configuration tab (unchanged)
+            # Configuration tab
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
                     is_cpu_only = temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
@@ -712,34 +732,57 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("CPU/GPU Options...")
                     with gr.Row(visible=not is_cpu_only, elem_classes=["clean-elements"]):
+                        gpu_choices = utility.get_available_gpus()
+                        if len(gpu_choices) == 1:
+                            default_gpu = gpu_choices[0]
+                        else:
+                            gpu_choices = ["Select_processing_device..."] + gpu_choices
+                            default_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in gpu_choices else "Select_processing_device..."
                         config_components.update(
-                            gpu=gr.Dropdown(choices=utility.get_available_gpus(), label="Select GPU", value=temporary.SELECTED_GPU, scale=5),
+                            gpu=gr.Dropdown(choices=gpu_choices, label="Select GPU", value=default_gpu, scale=5),
                             vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=3),
                         )
                     with gr.Row(visible=is_cpu_only, elem_classes=["clean-elements"]):
                         cpu_choices = [cpu["label"] for cpu in utility.get_cpu_info()] or ["Default CPU"]
+                        if len(cpu_choices) == 1:
+                            default_cpu = cpu_choices[0]
+                        else:
+                            cpu_choices = ["Select_processing_device..."] + cpu_choices
+                            default_cpu = temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices else "Select_processing_device..."
                         config_components.update(
                             backend_type=gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=5),
-                            cpu=gr.Dropdown(choices=cpu_choices, label="Select CPU", value=temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices else cpu_choices[0], scale=5),
+                            cpu=gr.Dropdown(choices=cpu_choices, label="Select CPU", value=default_cpu, scale=5),
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Model Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
+                        # Use cached AVAILABLE_MODELS instead of scanning again
+                        available_models = temporary.AVAILABLE_MODELS
+                        # Safety check in case AVAILABLE_MODELS is not set
+                        if available_models is None:
+                            available_models = models.get_available_models()
+                            print("Warning: AVAILABLE_MODELS was None, scanned models directory as fallback.")
+                        if len(available_models) == 1 and available_models[0] != "Browse_for_model_folder...":
+                            default_model = available_models[0]
+                        elif available_models == ["Browse_for_model_folder..."] or not available_models:
+                            available_models = ["Browse_for_model_folder..."]
+                            default_model = "Browse_for_model_folder..."
+                        else:
+                            available_models = ["Select_a_model..."] + [m for m in available_models if m != "Browse_for_model_folder..."]
+                            default_model = temporary.MODEL_NAME if temporary.MODEL_NAME in available_models else "Select_a_model..."
                         config_components.update(
-                            model_dir=gr.Textbox(label="Model Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=10),
-                            model=gr.Dropdown(choices=available_models, label="Select Model", value=default_model, allow_custom_value=False, scale=10)
-                        )
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        config_components.update(
+                            model=gr.Dropdown(
+                                choices=available_models,
+                                label="Select Model",
+                                value=default_model,
+                                allow_custom_value=False,
+                                scale=10
+                            ),
                             ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size", value=temporary.CONTEXT_SIZE, scale=5),
                             batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.BATCH_SIZE, scale=5),
                             temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE, scale=5),
                             repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY, scale=5),
                         )
-                        with gr.Column(elem_classes=["clean-elements"]):
-                            config_components.update(
-                                stream_output=gr.Checkbox(label="Stream Output", value=temporary.STREAM_OUTPUT),
-                            )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             browse=gr.Button("Browse", variant="secondary"), 
@@ -748,7 +791,7 @@ def launch_interface():
                             unload=gr.Button("Unload Model", variant="huggingface"),
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("Interface Options...")
+                        gr.Markdown("Program Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components = {}
                         custom_components.update(
@@ -762,8 +805,6 @@ def launch_interface():
                                 afterthought_time=gr.Checkbox(label="After-Thought Time", value=temporary.AFTERTHOUGHT_TIME)
                             )
                     with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("Critical Actions...")
-                    with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             save_settings=gr.Button("Save Settings", variant="primary")
                         )
@@ -773,15 +814,30 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         with gr.Column(scale=1, elem_classes=["clean-elements"]):
                             gr.Markdown("About Program...")
-                            gr.Markdown("[Text-Gradio-Gguf](https://github.com/wiseman-timelord/Text-Gradio-Gguf) by [Wiseman-Timelord](http://wisetime.rf.gd)")
-                            gr.Markdown("Donations through, [Patreon](https://patreon.com/WisemanTimelord) or [Ko-fi](https://ko-fi.com/WisemanTimelord)")
+                            gr.Markdown("[Text-Gradio-Gguf](https://github.com/wiseman-timelord/Text-Gradio-Gguf) by [Wiseman-Timelord](https://github.com/wiseman-timelord).")
+                            gr.Markdown("Website at [wisetime.rf.gd](http://wisetime.rf.gd).")
+                            gr.Markdown("Donations through, [Patreon](https://patreon.com/WisemanTimelord) or [Ko-fi](https://ko-fi.com/WisemanTimelord).")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
-                            shutdown=gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], min_width=133).click(fn=shutdown_program, inputs=[states["models_loaded"]])
+                            shutdown=gr.Button("Terminate", variant="stop", elem_classes=["double-height"], min_width=110).click(fn=shutdown_program, inputs=[states["models_loaded"]])
                         )
 
-        # Event handlers (unchanged from original, just referencing updated components)
+        # Event handlers defined after all components are initialized
+        model_folder_state.change(
+            fn=lambda f: setattr(temporary, "MODEL_FOLDER", f) or None,
+            inputs=[model_folder_state],
+            outputs=[]
+        ).then(
+            fn=update_model_list,
+            inputs=[model_folder_state],
+            outputs=[config_components["model"]]
+        ).then(
+            fn=lambda f: f"Model directory updated to: {f}",
+            inputs=[model_folder_state],
+            outputs=[config_components["status_settings"]]
+        )
+
         start_new_session_btn.click(
             fn=start_new_session,
             outputs=[chat_components["session_log"], status_text, chat_components["user_input"]]
@@ -910,9 +966,9 @@ def launch_interface():
         )
 
         config_components["model"].change(
-            fn=lambda model_name: gr.update(visible=models.get_model_settings(model_name)["is_reasoning"]),
-            inputs=[config_components["model"]],
-            outputs=[switches["enable_think"]]
+            fn=handle_model_selection,
+            inputs=[config_components["model"], model_folder_state],
+            outputs=[model_folder_state, config_components["model"], config_components["status_settings"]]
         ).then(
             fn=lambda model_name: models.get_model_settings(model_name)["is_reasoning"],
             inputs=[config_components["model"]],
@@ -922,35 +978,17 @@ def launch_interface():
         for comp in [config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]]:
             comp.change(
                 fn=update_config_settings,
-                inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]] + [config_components["model_dir"]],
+                inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]],
                 outputs=[config_components["status_settings"]]
             )
 
         config_components["browse"].click(
-            fn=select_directory,
+            fn=browse_for_model_folder,
             inputs=[model_folder_state],
-            outputs=[config_components["model_dir"], model_folder_state]
+            outputs=[model_folder_state, config_components["model"]]
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
             inputs=[model_folder_state],
-            outputs=[config_components["status_settings"]]
-        )
-
-        model_folder_state.change(
-            fn=update_model_list,
-            inputs=[model_folder_state],
-            outputs=[config_components["model"]]
-        )
-
-        model_folder_state.change(
-            fn=lambda f: f"Model directory updated to: {f}",
-            inputs=[model_folder_state],
-            outputs=[config_components["status_settings"]]
-        )
-
-        config_components["stream_output"].change(
-            fn=update_stream_output,
-            inputs=[config_components["stream_output"]],
             outputs=[config_components["status_settings"]]
         )
 
@@ -971,23 +1009,23 @@ def launch_interface():
             outputs=[chat_components["user_input"]]
         )
 
-        config_components["inspect_model"].click(
-            fn=inspect_model,
-            inputs=[config_components["model_dir"], config_components["model"], config_components["vram"]],
-            outputs=[config_components["status_settings"]]
-        )
-
         config_components["load_models"].click(
             fn=set_loading_status,
             outputs=[config_components["status_settings"]]
         ).then(
             fn=load_models,
-            inputs=[config_components["model_dir"], config_components["model"], config_components["vram"]],
+            inputs=[model_folder_state, config_components["model"], config_components["vram"]],
             outputs=[config_components["status_settings"], states["models_loaded"]]
         ).then(
             fn=lambda status, ml: (status, gr.update(interactive=ml)),
             inputs=[config_components["status_settings"], states["models_loaded"]],
             outputs=[config_components["status_settings"], chat_components["user_input"]]
+        )
+
+        config_components["inspect_model"].click(
+            fn=inspect_model,
+            inputs=[model_folder_state, config_components["model"], config_components["vram"]],
+            outputs=[config_components["status_settings"]]
         )
 
         config_components["save_settings"].click(
@@ -1043,9 +1081,9 @@ def launch_interface():
         )
 
         demo.load(
-            fn=lambda model_name: models.get_model_settings(model_name)["is_reasoning"],
-            inputs=[config_components["model"]],
-            outputs=[states["is_reasoning_model"]]
+            fn=get_initial_model_value,
+            inputs=[],
+            outputs=[config_components["model"], states["is_reasoning_model"]]
         ).then(
             fn=update_panel_on_mode_change,
             inputs=[mode_selection, states["selected_panel"]],
@@ -1064,7 +1102,7 @@ def launch_interface():
             outputs=file_slots + [attach_files]
         )
 
-        demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)
+    demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)
 
 if __name__ == "__main__":
     launch_interface()

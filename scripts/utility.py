@@ -16,7 +16,7 @@ from .temporary import (
     RAG_CHUNK_OVERLAP_DEVIDER, CONTEXT_SIZE, last_save_time
 )
 from . import temporary
-from scripts.models import clean_content
+from scripts.models import clean_content, get_available_models
 
 # Functions...
 def get_cpu_info():
@@ -305,7 +305,6 @@ def load_config():
             with open(config_path) as f:
                 config = json.load(f)
                 
-                # Migrate old configs if backend_config is missing
                 if "backend_config" not in config:
                     config["backend_config"] = {
                         "backend_type": "Not Configured",
@@ -313,52 +312,94 @@ def load_config():
                     }
                     print("Migrated config: Added missing backend_config section")
 
-                # Load model folder from config, default to ".\models" if not specified
                 temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", ".\models")
+                temporary.AVAILABLE_MODELS = get_available_models()  # Single scan here
                 
-                # Load other model settings
-                temporary.MODEL_NAME = config["model_settings"].get("model_name", "Select_a_model...")
-                temporary.CONTEXT_SIZE = int(config["model_settings"].get("context_size", 8192))
-                temporary.TEMPERATURE = float(config["model_settings"].get("temperature", 0.5))
-                temporary.REPEAT_PENALTY = float(config["model_settings"].get("repeat_penalty", 1.0))
-                temporary.LLAMA_CLI_PATH = config["model_settings"].get("llama_cli_path", "")
-                temporary.VRAM_SIZE = int(config["model_settings"].get("vram_size", 8192))
-                temporary.SELECTED_GPU = config["model_settings"].get("selected_gpu", None)
-                temporary.SELECTED_CPU = config["model_settings"].get("selected_cpu", None)
-                temporary.MMAP = bool(config["model_settings"].get("mmap", True))
-                temporary.MLOCK = bool(config["model_settings"].get("mlock", True))
-                temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"].get("afterthought_time", True))
-                temporary.BATCH_SIZE = int(config["model_settings"].get("n_batch", 1024))
-                temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"].get("dynamic_gpu_layers", True))
-                temporary.MAX_HISTORY_SLOTS = int(config["model_settings"].get("max_history_slots", 10))
-                temporary.MAX_ATTACH_SLOTS = int(config["model_settings"].get("max_attach_slots", 6))
-                temporary.SESSION_LOG_HEIGHT = int(config["model_settings"].get("session_log_height", 450))
-                temporary.INPUT_LINES = int(config["model_settings"].get("input_lines", 5))
+                if "model_name" in config["model_settings"]:
+                    temporary.MODEL_NAME = config["model_settings"]["model_name"]
+                if "context_size" in config["model_settings"]:
+                    temporary.CONTEXT_SIZE = int(config["model_settings"]["context_size"])
+                if "temperature" in config["model_settings"]:
+                    temporary.TEMPERATURE = float(config["model_settings"]["temperature"])
+                if "repeat_penalty" in config["model_settings"]:
+                    temporary.REPEAT_PENALTY = float(config["model_settings"]["repeat_penalty"])
+                if "llama_cli_path" in config["model_settings"]:
+                    temporary.LLAMA_CLI_PATH = config["model_settings"]["llama_cli_path"]
+                if "vram_size" in config["model_settings"]:
+                    temporary.VRAM_SIZE = int(config["model_settings"]["vram_size"])
+                if "selected_gpu" in config["model_settings"]:
+                    temporary.SELECTED_GPU = config["model_settings"]["selected_gpu"]
+                if "selected_cpu" in config["model_settings"]:
+                    temporary.SELECTED_CPU = config["model_settings"]["selected_cpu"]
+                if "mmap" in config["model_settings"]:
+                    temporary.MMAP = bool(config["model_settings"]["mmap"])
+                if "mlock" in config["model_settings"]:
+                    temporary.MLOCK = bool(config["model_settings"]["mlock"])
+                if "afterthought_time" in config["model_settings"]:
+                    temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"]["afterthought_time"])
+                if "n_batch" in config["model_settings"]:
+                    temporary.BATCH_SIZE = int(config["model_settings"]["n_batch"])
+                if "dynamic_gpu_layers" in config["model_settings"]:
+                    temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"]["dynamic_gpu_layers"])
+                if "max_history_slots" in config["model_settings"]:
+                    temporary.MAX_HISTORY_SLOTS = int(config["model_settings"]["max_history_slots"])
+                if "max_attach_slots" in config["model_settings"]:
+                    temporary.MAX_ATTACH_SLOTS = int(config["model_settings"]["max_attach_slots"])
+                if "session_log_height" in config["model_settings"]:
+                    temporary.SESSION_LOG_HEIGHT = int(config["model_settings"]["session_log_height"])
+                if "input_lines" in config["model_settings"]:
+                    temporary.INPUT_LINES = int(config["model_settings"]["input_lines"])
                 
                 # Load backend config
-                temporary.BACKEND_TYPE = config["backend_config"].get("backend_type", "Not Configured")
-                temporary.LLAMA_BIN_PATH = config["backend_config"].get("llama_bin_path", "")
+                if "backend_type" in config["backend_config"]:
+                    temporary.BACKEND_TYPE = config["backend_config"]["backend_type"]
+                if "llama_bin_path" in config["backend_config"]:
+                    temporary.LLAMA_BIN_PATH = config["backend_config"]["llama_bin_path"]
                 
                 # Load RPG settings
-                temporary.RP_LOCATION = config["rp_settings"].get("rp_location", "Public")
-                temporary.USER_PC_NAME = config["rp_settings"].get("user_name", "Human")
-                temporary.USER_PC_ROLE = config["rp_settings"].get("user_role", "Lead Roleplayer")
-                temporary.AI_NPC_NAME = config["rp_settings"].get("ai_npc", "Robot")
-                temporary.AI_NPC_ROLE = config["rp_settings"].get("ai_npc_role", "Randomers")
+                if "rp_location" in config["rp_settings"]:
+                    temporary.RP_LOCATION = config["rp_settings"]["rp_location"]
+                if "user_name" in config["rp_settings"]:
+                    temporary.USER_PC_NAME = config["rp_settings"]["user_name"]
+                if "user_role" in config["rp_settings"]:
+                    temporary.USER_PC_ROLE = config["rp_settings"]["user_role"]
+                if "ai_npc" in config["rp_settings"]:
+                    temporary.AI_NPC_NAME = config["rp_settings"]["ai_npc"]
+                if "ai_npc_role" in config["rp_settings"]:
+                    temporary.AI_NPC_ROLE = config["rp_settings"]["ai_npc_role"]
+                
+                # Ensure loaded values are in allowed options
+                if temporary.MAX_ATTACH_SLOTS not in temporary.ATTACH_SLOT_OPTIONS:
+                    print(f"Warning: max_attach_slots {temporary.MAX_ATTACH_SLOTS} not in {temporary.ATTACH_SLOT_OPTIONS}, setting to {temporary.ATTACH_SLOT_OPTIONS[0]}")
+                    temporary.MAX_ATTACH_SLOTS = temporary.ATTACH_SLOT_OPTIONS[0]
+                if temporary.INPUT_LINES not in temporary.INPUT_LINES_OPTIONS:
+                    print(f"Warning: input_lines {temporary.INPUT_LINES} not in {temporary.INPUT_LINES_OPTIONS}, setting to {temporary.INPUT_LINES_OPTIONS[0]}")
+                    temporary.INPUT_LINES = temporary.INPUT_LINES_OPTIONS[0]
+                if temporary.MAX_HISTORY_SLOTS not in temporary.HISTORY_SLOT_OPTIONS:
+                    print(f"Warning: max_history_slots {temporary.MAX_HISTORY_SLOTS} not in {temporary.HISTORY_SLOT_OPTIONS}, setting to {temporary.HISTORY_SLOT_OPTIONS[0]}")
+                    temporary.MAX_HISTORY_SLOTS = temporary.HISTORY_SLOT_OPTIONS[0]
+                if temporary.SESSION_LOG_HEIGHT not in temporary.SESSION_LOG_HEIGHT_OPTIONS:
+                    print(f"Warning: session_log_height {temporary.SESSION_LOG_HEIGHT} not in {temporary.SESSION_LOG_HEIGHT_OPTIONS}, setting to {temporary.SESSION_LOG_HEIGHT_OPTIONS[0]}")
+                    temporary.SESSION_LOG_HEIGHT = temporary.SESSION_LOG_HEIGHT_OPTIONS[0]
+                
+                # Validate model_name using the cached list
+                if temporary.MODEL_NAME not in temporary.AVAILABLE_MODELS:
+                    temporary.MODEL_NAME = "Browse_for_model_folder..." if not temporary.AVAILABLE_MODELS else temporary.AVAILABLE_MODELS[0]
+                    print("Warning: No models found, set Model Folder.")
         else:
-            message = "Config file not found, please re-install."
+            message = "Config file not found, using default settings from temporary.py."
             print(message)
             temporary.MODEL_FOLDER = str(Path(".\models").resolve())
+            temporary.AVAILABLE_MODELS = get_available_models()  # Single scan here
             return message
         
-        # Always resolve MODEL_FOLDER to an absolute path
         temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())
         return "Configuration loaded successfully."
     except Exception as e:
         message = f"Error loading configuration: {str(e)}"
         print(message)
-        # Ensure MODEL_FOLDER is still set even on error
         temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER if 'temporary.MODEL_FOLDER' in globals() else ".\models").resolve())
+        temporary.AVAILABLE_MODELS = get_available_models()
         return message
     
 def save_config():
