@@ -105,9 +105,10 @@ You will of course need to have a `*.Gguf` model, use an iMatrix version of the 
 ## Gen 1 Development
 With regards to the current version of the program...
 1.  Check over prompting, prompt each mode and enhancement. Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response. Check Websearch prompting, it should be, 2 prompts or 1 dynamic prompt with 2 configurations, for code or chat, it should be tailored to the purpose, as in chat is for research, while in code is trying to, find out about some library or the correct method of implementing something, as possible we want simple method of enhancing for maximum effectiveness.   
-5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best.  
+5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best. 
 2. Check all enhancements.
 4. Test Rpg features.
+5. There will be, `Upload Files` and `Attach Files`, Attach would be added to prompt raw but with detail about filename at start and (attached script) next to it or something. Upload would be for uploading to the vector database for context. This would require a new panel, instead of files panel, we would have, `Attach` and `Vector`. Operation Mode of Chat would have Attach and Vector, panel options. Code would have only Attach. Rpg would have only Vector.  
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
