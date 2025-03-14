@@ -124,9 +124,9 @@ CONFIG_TEMPLATE = """{
 	  "dynamic_gpu_layers": true,
 	  "afterthought_time": true,
 	  "max_history_slots": 10,
-	  "max_attach_slots": 27,
+	  "max_attach_slots": 6,
       "session_log_height": 650,
-      "input_lines": 5
+      "input_lines": 27
 	},
   "backend_config": {
     "backend_type": "GPU/CPU - Vulkan",
