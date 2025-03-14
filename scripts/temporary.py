@@ -8,7 +8,7 @@ from scripts.prompts import prompt_templates
 MODEL_FOLDER = "path/to/your/models"
 VECTORSTORE_DIR = "data/vectors"
 TEMP_DIR = "data/temp"
-HISTORY_DIR = "data/history"
+HISTORY_DIR = "data/vectors"
 SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"
 session_label = ""
 current_session_id = None
@@ -31,7 +31,7 @@ SELECTED_GPU = None
 SELECTED_CPU = None
 DYNAMIC_GPU_LAYERS = True
 MMAP = True
-MLOCK = True  # Always True, option removed
+MLOCK = True  # Always True
 STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True  # Always True, option removed
 LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"

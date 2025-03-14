@@ -33,7 +33,7 @@ class ContextInjector:
             print("Session-specific vectorstore cleared.")
 
     def load_session_vectorstore(self, session_id):
-        vs_path = Path("data/vectors/session") / f"session_{session_id}"
+        vs_path = Path("data/vectors") / f"session_{session_id}"  # Updated path
         if vs_path.exists():
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
             self.session_vectorstore = FAISS.load_local(
@@ -45,17 +45,6 @@ class ContextInjector:
         else:
             self.session_vectorstore = None
             print(f"No session vectorstore found for session {session_id} at {vs_path}.")
-
-    def inject_context(self, prompt: str) -> str:
-        if self.session_vectorstore is None:
-            print("No session vectorstore available; returning prompt unchanged.")
-            return prompt
-        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        query_embedding = embedding_model.encode([prompt])[0]
-        docs = self.session_vectorstore.similarity_search_by_vector(query_embedding, k=2)
-        context = "\n".join([doc.page_content for doc in docs])
-        print(f"Injected context from session vectorstore: {context[:50]}...")
-        return f"Relevant information:\n{context}\n\nQuery: {prompt}"
 
 context_injector = ContextInjector()
 

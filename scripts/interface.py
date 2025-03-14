@@ -494,8 +494,18 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     interaction_phase = "afterthought_countdown"
     yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update(), gr.update(), gr.update()
 
-    # Afterthought countdown
-    countdown_seconds = 6 if len(user_input.split('\n')) >= 10 else 4 if len(user_input.split('\n')) >= 5 else 2 if temporary.AFTERTHOUGHT_TIME else 1
+    # Afterthought countdown (Updated Section)
+    # Determine countdown seconds based on after-thought setting and input length
+    if temporary.AFTERTHOUGHT_TIME:
+        num_lines = len(user_input.split('\n'))
+        if num_lines >= 10:
+            countdown_seconds = 6
+        elif num_lines >= 5:
+            countdown_seconds = 4
+        else:
+            countdown_seconds = 2
+    else:
+        countdown_seconds = 1  # Always 1 second when after-thought is disabled
     for i in range(countdown_seconds, -1, -1):
         session_log[-1]['content'] = f"Afterthought countdown... {i}s"
         yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
@@ -815,7 +825,7 @@ def launch_interface():
                         with gr.Column(scale=1, elem_classes=["clean-elements"]):
                             gr.Markdown("About Program...")
                             gr.Markdown("[Text-Gradio-Gguf](https://github.com/wiseman-timelord/Text-Gradio-Gguf) by [Wiseman-Timelord](https://github.com/wiseman-timelord).")
-                            gr.Markdown("Website at [wisetime.rf.gd](http://wisetime.rf.gd).")
+                            gr.Markdown("Website address [wisetime.rf.gd](http://wisetime.rf.gd).")
                             gr.Markdown("Donations through, [Patreon](https://patreon.com/WisemanTimelord) or [Ko-fi](https://ko-fi.com/WisemanTimelord).")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(

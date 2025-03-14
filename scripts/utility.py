@@ -181,8 +181,8 @@ def create_session_vectorstore(loaded_files):
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     try:
         vectorstore = FAISS.from_documents(docs, embeddings)
-        save_dir = Path("data/vectors/session") / f"session_{current_session_id}"
-        save_dir.parent.mkdir(parents=True, exist_ok=True)
+        save_dir = Path("data/vectors") / f"session_{current_session_id}"  # Updated path
+        save_dir.mkdir(parents=True, exist_ok=True)
         vectorstore.save_local(str(save_dir))
         print(f"Saved session vectorstore to {save_dir} with {len(docs)} documents.")
         return vectorstore
@@ -192,9 +192,8 @@ def create_session_vectorstore(loaded_files):
 
 def delete_all_session_vectorstores() -> str:
     """Delete all session-specific vectorstore directories."""
-    session_vs_dir = Path("data/vectors/session")
+    session_vs_dir = Path("data/vectors")  # Updated path
     if session_vs_dir.exists():
-        import shutil
         for vs_dir in session_vs_dir.iterdir():
             if vs_dir.is_dir() and vs_dir.name.startswith("session_"):
                 shutil.rmtree(vs_dir)
