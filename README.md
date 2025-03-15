@@ -16,6 +16,7 @@ Intended as a high-quality chat interface with uses include, Codeing, Rpg Game, 
 - **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
 - **Highly Customizable UI**: Configurable; 10-20 Session History slots, 2-10 file slots, Session Log 400-550px height, 2-8 Lines of input. 
 - **Afterthought Countdown**: If, =>10 lines then 5s or 5-10 lines then 3s or <5 lines then 1s, wait for you to cancel send and return to edit, saving on mis-prompts and waits.
+- **Attach or Vectorise**: Optimally for the mode, Attach Files is complete raw input, while Vectorise Files is relevance selected snippets from potentially larger source. 
 
 ### Preview
 - The "Conversation" page, with Operation/Panel Mode selector, and other features. In this case using `T.O.T.` enhancement on `Lamarckvergence-14B` (non-reasoning) model...
