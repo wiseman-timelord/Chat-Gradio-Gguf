@@ -129,8 +129,12 @@ project_root/
 │ └── prompts.py
 │ └── temporary.py
 │ └── utlity.py
-├── temp/
-└─└── *
+├── data/vectors/
+└───└── *
+├── data/temp/
+└───└── *
+├── temp/history
+└───└── *
 ├── .venv/
 └─└── *
 ```
