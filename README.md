@@ -109,7 +109,6 @@ With regards to the current version of the program...
 5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best. 
 2. Check all enhancements.
 4. Test Rpg features.
-5. There will be, `Upload Files` and `Attach Files`, Attach would be added to prompt raw but with detail about filename at start and (attached script) next to it or something. Upload would be for uploading to the vector database for context. This would require a new panel, instead of files panel, we would have, `Attach` and `Vector`. Operation Mode of Chat would have Attach and Vector, panel options. Code would have only Attach. Rpg would have only Vector.  
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
