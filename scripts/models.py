@@ -414,8 +414,8 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
                         elif "<answer>" in full_response:
                             reasoning_phase = False
                             final_answer = full_response.split("<answer>", 1)[1].strip()
-                            if "</answer" in final_answer:
-                                final_answer = final_answer.split("</answer", 1)[0].strip()
+                            if "</answer>" in final_answer:
+                                final_answer = final_answer.split("</answer>", 1)[0].strip()
                             yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
                         else:
                             if progress_count < max_progress and '.' in chunk_content:
@@ -429,8 +429,8 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
         if reasoning_phase and full_response:
             progress_bar = f"{progress_bar_text}\n" + "█" * max_progress
             final_answer = full_response.strip()
-            if "<think>" in final_answer and "</think>" in final_answer:
-                final_answer = final_answer.split("</think>", 1)[1].strip()
+            if "<think>" in full_response and "</think>" in full_response:
+                final_answer = full_response.split("</think>", 1)[1].strip()
             if "Final Answer:" in final_answer:
                 final_answer = final_answer.split("Final Answer:", 1)[1].strip()
             yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"

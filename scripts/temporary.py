@@ -43,9 +43,11 @@ TEMPERATURE = 0.66
 SESSION_LOG_HEIGHT = 650
 INPUT_LINES = 27
 DATA_DIR = None  # Will be set by launcher.py
-
-# Global LLM instance
 llm = None
+
+# Arrays
+session_attached_files = []
+session_vector_files = []
 
 # UI Constants
 USER_COLOR = "#ffffff"

@@ -1,7 +1,7 @@
 # Script: `.\scripts\utility.py`
 
 # Imports...
-import re, subprocess, json, time, random, psutil, shutil, os  # Ensure shutil is included
+import re, subprocess, json, time, random, psutil, shutil, os, zipfile # Ensure shutil is included
 from pathlib import Path
 from datetime import datetime
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -58,58 +58,68 @@ def get_available_gpus():
                 return [gpu.group(1).strip()] if gpu else ["CPU Only"]
         except Exception:
             return ["CPU Only"]
-
-def save_session_history(history: list, loaded_files: list, force_save: bool = False) -> str:
-    """Save chat history and attached files with time-based logic."""
-    global last_save_time, current_session_id
-    current_time = time.time()
-    history_dir = Path(HISTORY_DIR)
-    history_dir.mkdir(exist_ok=True)
-
-    if not force_save and (current_time - last_save_time < 60):
-        print("Session not saved yet (waiting for 60s interval).")
-        return "Session not saved yet (waiting for interval)."
-
-    if current_session_id is None:
-        current_session_id = datetime.now().strftime(SESSION_FILE_FORMAT)
-        print(f"Generated new session_id: {current_session_id}")
-    file_path = history_dir / f"session_{current_session_id}.json"
-    label = session_label if session_label else "Untitled"
+            
+def generate_session_id():
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+def save_session_history(session_log, attached_files, vector_files):
+    if not temporary.current_session_id:
+        temporary.current_session_id = generate_session_id()
+    if not temporary.session_label and session_log:
+        temporary.session_label = create_session_label(session_log[0]["content"] if session_log[0]["role"] == "user" else "")
+    os.makedirs(HISTORY_DIR, exist_ok=True)
+    session_file = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}.json"
     session_data = {
-        "session_id": current_session_id,
-        "label": label,
-        "history": history,
-        "attached_files": loaded_files
+        "session_id": temporary.current_session_id,
+        "label": temporary.session_label,
+        "history": session_log,
+        "attached_files": attached_files,
+        "vector_files": vector_files
     }
-    try:
-        with open(file_path, "w") as f:
-            json.dump(session_data, f, indent=2)
-        manage_session_history()
-        last_save_time = current_time
-        print(f"Session saved to {file_path} with {len(loaded_files)} attached files.")
-        return f"Session saved to {file_path}"
-    except Exception as e:
-        print(f"Error saving session: {str(e)}")
-        return f"Error saving session: {str(e)}"
+    with open(session_file, "w") as f:
+        json.dump(session_data, f)
+    zip_session_files(temporary.current_session_id, attached_files, vector_files)
         
-def load_session_history(file_path: str) -> tuple:
-    with open(file_path, "r") as f:
-        session_data = json.load(f)
-    session_id = session_data.get("session_id", None)
-    label = session_data.get("label", "Untitled")
-    history = session_data.get("history", [])
-    attached_files = session_data.get("attached_files", [])
-    
-    # Convert old tuple format to new dictionary format if necessary
-    if history and isinstance(history[0], list) and len(history[0]) == 2:
-        new_history = []
-        for user_msg, ai_msg in history:
-            new_history.append({'role': 'user', 'content': user_msg})
-            new_history.append({'role': 'assistant', 'content': ai_msg})
-        history = new_history
-    
-    print(f"Loaded session {session_id} from {file_path} with label '{label}' and {len(attached_files)} files.")
-    return session_id, label, history, attached_files
+
+def load_session_history(session_file):
+    with open(session_file, "r") as f:
+        data = json.load(f)
+    session_id = data["session_id"]
+    unzip_session_files(session_id)
+    attach_dir = Path(TEMP_DIR) / f"session_{session_id}" / "attach"
+    vector_dir = Path(TEMP_DIR) / f"session_{session_id}" / "vector"
+    attached_files = [str(f) for f in attach_dir.glob("*") if f.is_file()] if attach_dir.exists() else data.get("attached_files", [])
+    vector_files = [str(f) for f in vector_dir.glob("*") if f.is_file()] if vector_dir.exists() else data.get("vector_files", [])
+    temporary.session_attached_files = attached_files
+    temporary.session_vector_files = vector_files
+    return session_id, data["label"], data["history"], attached_files, vector_files
+
+def zip_session_files(session_id, attached_files, vector_files):
+    temp_dir = Path(TEMP_DIR) / f"session_{session_id}"
+    if temp_dir.exists():
+        attach_zip = Path(TEMP_DIR) / f"session_{session_id}_attach.zip"
+        vector_zip = Path(TEMP_DIR) / f"session_{session_id}_vector.zip"
+        if attached_files:
+            with zipfile.ZipFile(attach_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for file in attached_files:
+                    zf.write(file, Path(file).name)
+        if vector_files:
+            with zipfile.ZipFile(vector_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for file in vector_files:
+                    zf.write(file, Path(file).name)
+        # Clean up temp folder after zipping
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+def unzip_session_files(session_id):
+    temp_dir = Path(TEMP_DIR) / f"session_{session_id}"
+    attach_zip = Path(TEMP_DIR) / f"session_{session_id}_attach.zip"
+    vector_zip = Path(TEMP_DIR) / f"session_{session_id}_vector.zip"
+    if attach_zip.exists():
+        with zipfile.ZipFile(attach_zip, "r") as zf:
+            zf.extractall(temp_dir / "attach")
+    if vector_zip.exists():
+        with zipfile.ZipFile(vector_zip, "r") as zf:
+            zf.extractall(temp_dir / "vector")
 
 def manage_session_history():
     """Limit saved sessions to MAX_HISTORY_SLOTS."""
@@ -128,6 +138,10 @@ def load_session_history(session_file):
     history = data.get('history', [])
     attached_files = data.get('attached_files', [])
     return session_id, label, history, attached_files
+
+def process_uploaded_files(files):
+    """Process uploaded files (if needed beyond copying)."""
+    return [file.name for file in files] if files else []
 
 def web_search(query: str, num_results: int = 3) -> str:
     """Perform a web search using DuckDuckGo and return formatted results.
@@ -170,24 +184,19 @@ def load_and_chunk_documents(file_paths: list) -> list:
         print(f"Error loading documents: {e}")
     return documents
 
-def create_session_vectorstore(loaded_files):
-    """Create and save a session-specific FAISS vector store."""
-    from langchain_huggingface import HuggingFaceEmbeddings
-    from langchain_community.vectorstores import FAISS
-    if not loaded_files:
-        print("No files provided for session vectorstore creation.")
+def create_session_vectorstore(file_paths, session_id):
+    if not file_paths:
         return None
-    docs = load_and_chunk_documents(loaded_files)
+    docs = load_and_chunk_documents(file_paths)
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     try:
         vectorstore = FAISS.from_documents(docs, embeddings)
-        save_dir = Path("data/vectors") / f"session_{current_session_id}"  # Updated path
+        save_dir = Path(VECTORSTORE_DIR) / f"session_{session_id}"
         save_dir.mkdir(parents=True, exist_ok=True)
         vectorstore.save_local(str(save_dir))
-        print(f"Saved session vectorstore to {save_dir} with {len(docs)} documents.")
         return vectorstore
     except Exception as e:
-        print(f"Error creating session vectorstore: {e}")
+        print(f"Error creating vectorstore: {e}")
         return None
 
 def delete_all_session_vectorstores() -> str:

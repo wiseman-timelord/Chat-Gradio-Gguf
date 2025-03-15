@@ -41,26 +41,102 @@ def set_loading_status():
 
 def update_panel_on_mode_change(mode, current_panel):
     mode = mode.lower()
-    if mode == "rpg":
-        choices = ["History", "Files", "Sheet"]
-    else:
-        choices = ["History", "Files"]
+    choices = ["History"]  # Base choice
+    if mode == "chat":
+        choices.extend(["Attach", "Vector"])
+    elif mode == "coder":
+        choices.append("Attach")
+    elif mode == "rpg":
+        choices.extend(["Vector", "Sheet"])
     
-    new_panel = current_panel if current_panel in choices else ("History" if "History" in choices else choices[0])
-    
-    attachments_visible = new_panel == "Files"
+    new_panel = current_panel if current_panel in choices else choices[0]
+    attach_visible = new_panel == "Attach"
+    vector_visible = new_panel == "Vector"
     rpg_visible = new_panel == "Sheet" and mode == "rpg"
     history_visible = new_panel == "History"
-    attach_files_visible = new_panel == "Files"
     
     return (
         gr.update(choices=choices, value=new_panel),
-        gr.update(visible=attachments_visible),
+        gr.update(visible=attach_visible),
+        gr.update(visible=vector_visible),
         gr.update(visible=rpg_visible),
         gr.update(visible=history_visible),
-        new_panel,
-        gr.update(visible=attach_files_visible)
+        new_panel
     )
+
+def process_attach_files(files, attached_files, models_loaded):
+    if not models_loaded:
+        return "Error: Load model first.", attached_files
+    max_files = temporary.MAX_ATTACH_SLOTS
+    if len(attached_files) >= max_files:
+        return f"Max attach files ({max_files}) reached.", attached_files
+    
+    # Estimate blank prompt token count (using "chat" mode as default)
+    blank_prompt = prompt_templates["chat"]
+    blank_prompt_chars = len(blank_prompt)
+    blank_prompt_tokens = (((blank_prompt_chars / 5) * 4) / 4) * 3
+    
+    current_total_tokens = blank_prompt_tokens
+    context_limit = temporary.CONTEXT_SIZE  # Model's context size in tokens
+    
+    new_files = []
+    rejected_files = []
+    
+    for f in files:
+        if os.path.isfile(f) and f not in attached_files:
+            try:
+                with open(f, 'r', encoding='utf-8') as test_file:
+                    content = test_file.read()
+                file_chars = len(content)
+                file_tokens = (((file_chars / 5) * 4) / 4) * 3
+                
+                if current_total_tokens + file_tokens <= context_limit:
+                    new_files.append(f)
+                    current_total_tokens += file_tokens
+                else:
+                    rejected_files.append(Path(f).name)
+            except Exception:
+                continue  # Skip unreadable files
+    
+    available_slots = max_files - len(attached_files)
+    processed_files = new_files[:available_slots]
+    
+    for file in reversed(processed_files):
+        dest = Path(temporary.TEMP_DIR) / f"session_{temporary.current_session_id}" / "attach" / Path(file).name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(file, dest)
+        attached_files.insert(0, str(dest))
+    
+    temporary.session_attached_files = attached_files
+    status = f"Processed {len(processed_files)} attach files."
+    if rejected_files:
+        status += f" Rejected {len(rejected_files)} files due to context limit: {', '.join(rejected_files)}"
+    return status, attached_files
+
+def process_vector_files(files, vector_files, models_loaded):
+    if not models_loaded:
+        return "Error: Load model first.", vector_files
+    new_files = [f for f in files if os.path.isfile(f) and f not in vector_files]
+    for file in new_files:
+        dest = Path(temporary.TEMP_DIR) / f"session_{temporary.current_session_id}" / "vector" / Path(file).name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(file, dest)
+        vector_files.append(str(dest))
+    
+    # Incremental update to vectorstore
+    if context_injector.session_vectorstore is None:
+        session_vectorstore = utility.create_session_vectorstore(vector_files, temporary.current_session_id)
+    else:
+        new_docs = utility.load_and_chunk_documents(new_files)
+        if new_docs:
+            context_injector.session_vectorstore.add_documents(new_docs)
+            session_vectorstore = context_injector.session_vectorstore
+        else:
+            session_vectorstore = context_injector.session_vectorstore
+    
+    context_injector.set_session_vectorstore(session_vectorstore)
+    temporary.session_vector_files = vector_files
+    return f"Processed {len(new_files)} vector files.", vector_files
 
 def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model):
     temporary.CONTEXT_SIZE = int(ctx)
@@ -237,19 +313,20 @@ def process_uploaded_files(files, loaded_files, models_loaded):
     print("Updated loaded_files:", loaded_files)
     return f"Processed {min(len(new_files), available_slots)} new files.", loaded_files
 
-def eject_file(loaded_files, slot_index):
-    from scripts.utility import create_session_vectorstore
-    from pathlib import Path
-    if 0 <= slot_index < len(loaded_files):
-        removed_file = loaded_files.pop(slot_index)
-        # Removed: Path(removed_file).unlink()
-        session_vectorstore = create_session_vectorstore(loaded_files)
-        context_injector.set_session_vectorstore(session_vectorstore)
+def eject_file(file_list, slot_index, is_attach=True):
+    if 0 <= slot_index < len(file_list):
+        removed_file = file_list.pop(slot_index)
+        if is_attach:
+            temporary.session_attached_files = file_list
+        else:
+            temporary.session_vector_files = file_list
+            session_vectorstore = utility.create_session_vectorstore(file_list, temporary.current_session_id)
+            context_injector.set_session_vectorstore(session_vectorstore)
         status_msg = f"Ejected {Path(removed_file).name}"
     else:
         status_msg = "No file to eject"
-    updates = update_file_slot_ui(loaded_files)
-    return [loaded_files, status_msg] + updates
+    updates = update_file_slot_ui(file_list, is_attach)
+    return [file_list, status_msg] + updates
 
 def toggle_rpg_settings(showing_rpg_right):
     new_showing_rpg_right = not showing_rpg_right
@@ -283,12 +360,12 @@ def load_session_by_index(index):
     sessions = utility.get_saved_sessions()
     if index < len(sessions):
         session_file = sessions[index]
-        session_id, label, history, attached_files = utility.load_session_history(Path(HISTORY_DIR) / session_file)
+        session_id, label, history, attached_files, vector_files = utility.load_session_history(Path(HISTORY_DIR) / session_file)
         temporary.current_session_id = session_id
         temporary.session_label = label
         temporary.SESSION_ACTIVE = True
-        return history, attached_files, f"Loaded session: {label}"
-    return [], [], "No session to load"
+        return history, attached_files, vector_files, f"Loaded session: {label}"
+    return [], [], [], "No session to load"
 
 def copy_last_response(session_log):
     if session_log and session_log[-1]['role'] == 'assistant':
@@ -351,13 +428,13 @@ def update_model_based_options(model_name):
         gr.update(value=recommended),
     ]
 
-def update_file_slot_ui(loaded_files):
+def update_file_slot_ui(file_list, is_attach=True):
     from pathlib import Path
-    import scripts.temporary as temporary
     button_updates = []
-    for i in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS):
-        if i < len(loaded_files):  # Only show buttons for loaded files
-            filename = Path(loaded_files[i]).name
+    max_slots = temporary.MAX_POSSIBLE_ATTACH_SLOTS if is_attach else temporary.MAX_POSSIBLE_ATTACH_SLOTS  # Reuse for vector
+    for i in range(max_slots):
+        if i < len(file_list):
+            filename = Path(file_list[i]).name
             short_name = (filename[:36] + ".." if len(filename) > 38 else filename)
             label = f"{short_name}"
             variant = "primary"
@@ -365,10 +442,10 @@ def update_file_slot_ui(loaded_files):
         else:
             label = ""
             variant = "primary"
-            visible = False  # Hide slots beyond the number of loaded files
+            visible = False
         button_updates.append(gr.update(value=label, visible=visible, variant=variant))
-    attach_files_visible = len(loaded_files) < temporary.MAX_ATTACH_SLOTS
-    return button_updates + [gr.update(visible=attach_files_visible)]
+    visible = len(file_list) < temporary.MAX_ATTACH_SLOTS if is_attach else True  # Vector has no limit UI-wise
+    return button_updates + [gr.update(visible=visible)]
 
 
 def filter_operational_content(text):
@@ -466,7 +543,10 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                         interaction_phase):
     from scripts import temporary, utility
     from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE
+    from scripts.models import get_model_settings, get_response_stream
     import asyncio
+    import re
+    from pathlib import Path
 
     if not models_loaded:
         yield session_log, "Please load a model first.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update(), gr.update(), gr.update()
@@ -494,8 +574,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     interaction_phase = "afterthought_countdown"
     yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update(), gr.update(), gr.update()
 
-    # Afterthought countdown (Updated Section)
-    # Determine countdown seconds based on after-thought setting and input length
+    # Afterthought countdown
     if temporary.AFTERTHOUGHT_TIME:
         num_lines = len(user_input.split('\n'))
         if num_lines >= 10:
@@ -505,7 +584,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         else:
             countdown_seconds = 2
     else:
-        countdown_seconds = 1  # Always 1 second when after-thought is disabled
+        countdown_seconds = 1
     for i in range(countdown_seconds, -1, -1):
         session_log[-1]['content'] = f"Afterthought countdown... {i}s"
         yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
@@ -524,48 +603,117 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     settings = get_model_settings(MODEL_NAME)
     mode = mode_selection.lower()
 
-    # Handle file attachments
-    if loaded_files:
-        session_vectorstore = utility.create_session_vectorstore(loaded_files)
-        context_injector.set_session_vectorstore(session_vectorstore)
+    # Handle "Coder" mode with two-step process
+    if mode == "coder":
+        # Step 1: Assess Plan
+        try:
+            assess_content = "\n\n".join(
+                [f"File: {Path(f).name}\nContent:\n```\n{open(f, 'r').read()}\n```" for f in loaded_files if Path(f).exists()]
+            )
+        except Exception as e:
+            assess_content = f"Error reading files: {str(e)}"
+            session_log[-1]['content'] = assess_content
+            yield session_log, "Error in assessment", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            return
 
-    # Handle web search
-    search_results = None
-    if web_search_enabled and mode in ["chat", "code"]:
-        session_log[-1]['content'] = "Performing web search..."
-        yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
-        search_results = utility.web_search(user_input)
-        if search_results:
-            session_log[-1]['content'] = "Web search completed. Generating response..."
-            yield session_log, "Web search completed. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
-        else:
-            session_log[-1]['content'] = "No web search results found. Generating response..."
-            yield session_log, "No web search results found. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+        assess_prompt = f"User request:\n\n{user_input}\n\nAttached files:\n\n{assess_content}"
+        async for line in get_response_stream(
+            session_log[:-1] + [{'role': 'user', 'content': assess_prompt}],
+            mode="assess_plan",
+            settings=settings,
+            disable_think=not enable_think
+        ):
+            if cancel_flag:
+                break
+            session_log[-1]['content'] = line.strip()
+            yield session_log, "Assessing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            await asyncio.sleep(0)
 
-    # Generate response
-    rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
-    async for line in get_response_stream(
-        session_log,
-        settings=settings,
-        mode=mode,
-        disable_think=not enable_think,
-        rp_settings=rp_settings,
-        tot_enabled=tot_enabled and mode == "chat",
-        web_search_enabled=web_search_enabled and mode in ["chat", "code"],
-        search_results=search_results
-    ):
         if cancel_flag:
-            break
-        session_log[-1]['content'] = line.strip()
-        yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
-        await asyncio.sleep(0)
+            session_log[-1]['content'] = "Assessment cancelled."
+            interaction_phase = "waiting_for_input"
+            yield session_log, "Assessment cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            return
+
+        assess_response = session_log[-1]['content']
+
+        # Parse assessment response
+        try:
+            relevant_files_match = re.search(r"\*\*Relevant Files:\*\*\s*(.*?)\s*\*\*Update Plan:\*\*", assess_response, re.DOTALL)
+            relevant_files = [line.strip('- ').strip() for line in relevant_files_match.group(1).split('\n') if line.strip().startswith('-')] if relevant_files_match else []
+            plan_match = re.search(r"\*\*Update Plan:\*\*\s*(.*)", assess_response, re.DOTALL)
+            plan = plan_match.group(1).strip() if plan_match else "No plan provided."
+        except Exception as e:
+            session_log[-1]['content'] = f"Error parsing assessment: {str(e)}"
+            yield session_log, "Error parsing assessment", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            return
+
+        # Step 2: Code Update
+        session_log.append({'role': 'assistant', 'content': ""})
+        all_files = temporary.session_attached_files + temporary.session_vector_files
+        all_files_list = "\n".join([f"- {Path(f).name}" for f in all_files]) if all_files else "- None"
+        try:
+            relevant_content = "\n\n".join(
+                [f"File: {Path(f).name}\nContent:\n```\n{open(f, 'r').read()}\n```" for f in loaded_files if Path(f).name in relevant_files and Path(f).exists()]
+            )
+        except Exception as e:
+            relevant_content = f"Error reading relevant files: {str(e)}"
+            session_log[-1]['content'] = relevant_content
+            yield session_log, "Error in code update", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            return
+
+        update_prompt = f"Original files:\n\n{all_files_list}\n\nRelevant scripts:\n\n{relevant_content}\n\nUpdate plan:\n\n{plan}"
+        async for line in get_response_stream(
+            session_log[:-1] + [{'role': 'user', 'content': update_prompt}],
+            mode="code_update",
+            settings=settings,
+            disable_think=not enable_think
+        ):
+            if cancel_flag:
+                break
+            session_log[-1]['content'] = line.strip()
+            yield session_log, "Updating code...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            await asyncio.sleep(0)
+
+    else:
+        # Handle "Chat" and "RPG" modes
+        # Web search for "Chat" and "Code" modes
+        search_results = None
+        if web_search_enabled and mode in ["chat", "code"]:
+            session_log[-1]['content'] = "Performing web search..."
+            yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            search_results = utility.web_search(user_input)
+            if search_results:
+                session_log[-1]['content'] = "Web search completed. Generating response..."
+                yield session_log, "Web search completed. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            else:
+                session_log[-1]['content'] = "No web search results found. Generating response..."
+                yield session_log, "No web search results found. Generating response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+
+        # Generate response for "Chat" or "RPG"
+        rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
+        async for line in get_response_stream(
+            session_log,
+            settings=settings,
+            mode=mode,
+            disable_think=not enable_think,
+            rp_settings=rp_settings,
+            tot_enabled=tot_enabled and mode == "chat",
+            web_search_enabled=web_search_enabled and mode in ["chat", "code"],
+            search_results=search_results
+        ):
+            if cancel_flag:
+                break
+            session_log[-1]['content'] = line.strip()
+            yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update()
+            await asyncio.sleep(0)
 
     # Finalize interaction
     interaction_phase = "waiting_for_input"
     if cancel_flag:
         session_log[-1]['content'] = "Generation cancelled."
     else:
-        utility.save_session_history(session_log, loaded_files)
+        utility.save_session_history(session_log, loaded_files, temporary.session_vector_files)  # Updated to include vector_files
 
     web_search_update = gr.update(value=False) if web_search_enabled else gr.update()
     tot_update = gr.update(value=False) if tot_enabled else gr.update()
@@ -597,7 +745,8 @@ def launch_interface():
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
         
         states = dict(
-            loaded_files=gr.State([]),
+            attached_files=gr.State([]),
+            vector_files=gr.State([]),
             models_loaded=gr.State(False),
             showing_rpg_right=gr.State(False),
             cancel_flag=gr.State(False),
@@ -613,27 +762,40 @@ def launch_interface():
             with gr.Tab("Conversation"):
                 with gr.Row():
                     # Settings column (left sidebar)
-                    with gr.Column(min_width=300, elem_classes=["clean-elements"]):
+                    with gr.Column(min_width=309, elem_classes=["clean-elements"]):
                         mode_selection = gr.Radio(
                             choices=["Chat", "Coder", "Rpg"],
                             label="Operation Mode",
                             value="Chat"
                         )
                         panel_toggle = gr.Radio(
-                            choices=["History", "Files"],
+                            choices=["History"],  # Dynamically updated by mode
                             label="Panel Mode",
                             value="History"
                         )
-                        with gr.Group(visible=False) as attachments_group:
+                        with gr.Group(visible=False) as attach_group:
                             attach_files = gr.UploadButton(
-                                "Add New Files",
+                                "Add Attach Files",
                                 file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS],
                                 file_count="multiple",
                                 variant="secondary",
                                 elem_classes=["clean-elements"]
                             )
-                            file_slots = [gr.Button(
-                                "File Slot Free",
+                            attach_slots = [gr.Button(
+                                "Attach Slot Free",
+                                variant="huggingface",
+                                visible=False
+                            ) for _ in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS)]
+                        with gr.Group(visible=False) as vector_group:
+                            vector_files_btn = gr.UploadButton(
+                                "Add Vector Files",
+                                file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS],
+                                file_count="multiple",
+                                variant="secondary",
+                                elem_classes=["clean-elements"]
+                            )
+                            vector_slots = [gr.Button(
+                                "Vector Slot Free",
                                 variant="huggingface",
                                 visible=False
                             ) for _ in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS)]
@@ -766,9 +928,7 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Model Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
-                        # Use cached AVAILABLE_MODELS instead of scanning again
                         available_models = temporary.AVAILABLE_MODELS
-                        # Safety check in case AVAILABLE_MODELS is not set
                         if available_models is None:
                             available_models = models.get_available_models()
                             print("Warning: AVAILABLE_MODELS was None, scanned models directory as fallback.")
@@ -855,6 +1015,10 @@ def launch_interface():
             fn=update_session_buttons,
             inputs=[],
             outputs=buttons["session"]
+        ).then(
+            fn=lambda: ([], []),
+            inputs=[],
+            outputs=[states["attached_files"], states["vector_files"]]
         )
 
         action_buttons["action"].click(
@@ -863,7 +1027,7 @@ def launch_interface():
                 chat_components["user_input"],
                 chat_components["session_log"],
                 switches["tot"],
-                states["loaded_files"],
+                states["attached_files"],
                 switches["enable_think"],
                 states["is_reasoning_model"],
                 rpg_fields["rp_location"],
@@ -881,7 +1045,7 @@ def launch_interface():
                 status_text,
                 action_buttons["action"],
                 states["cancel_flag"],
-                states["loaded_files"],
+                states["attached_files"],  # Updated to reflect cleared files
                 states["interaction_phase"],
                 chat_components["user_input"],
                 switches["web_search"],
@@ -889,9 +1053,9 @@ def launch_interface():
                 switches["enable_think"]
             ]
         ).then(
-            fn=update_session_buttons,
-            inputs=[],
-            outputs=buttons["session"]
+            fn=lambda files: update_file_slot_ui(files, True),
+            inputs=[states["attached_files"]],
+            outputs=attach_slots + [attach_files]
         )
 
         action_buttons["copy_response"].click(
@@ -901,27 +1065,44 @@ def launch_interface():
         )
 
         attach_files.upload(
-            fn=process_uploaded_files,
-            inputs=[attach_files, states["loaded_files"], states["models_loaded"]],
-            outputs=[status_text, states["loaded_files"]]
+            fn=process_attach_files,
+            inputs=[attach_files, states["attached_files"], states["models_loaded"]],
+            outputs=[status_text, states["attached_files"]]
         ).then(
-            fn=update_file_slot_ui,
-            inputs=[states["loaded_files"]],
-            outputs=file_slots + [attach_files]
+            fn=lambda files: update_file_slot_ui(files, True),
+            inputs=[states["attached_files"]],
+            outputs=attach_slots + [attach_files]
         )
 
-        for i, btn in enumerate(file_slots):
+        vector_files_btn.upload(
+            fn=process_vector_files,
+            inputs=[vector_files_btn, states["vector_files"], states["models_loaded"]],
+            outputs=[status_text, states["vector_files"]]
+        ).then(
+            fn=lambda files: update_file_slot_ui(files, False),
+            inputs=[states["vector_files"]],
+            outputs=vector_slots + [vector_files_btn]
+        )
+
+        for i, btn in enumerate(attach_slots):
             btn.click(
-                fn=eject_file,
-                inputs=[states["loaded_files"], gr.State(value=i)],
-                outputs=[states["loaded_files"], status_text] + file_slots + [attach_files]
+                fn=lambda files, idx=i: eject_file(files, idx, True),
+                inputs=[states["attached_files"]],
+                outputs=[states["attached_files"], status_text] + attach_slots + [attach_files]
+            )
+
+        for i, btn in enumerate(vector_slots):
+            btn.click(
+                fn=lambda files, idx=i: eject_file(files, idx, False),
+                inputs=[states["vector_files"]],
+                outputs=[states["vector_files"], status_text] + vector_slots + [vector_files_btn]
             )
 
         for i, btn in enumerate(buttons["session"]):
             btn.click(
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
-                outputs=[chat_components["session_log"], states["loaded_files"], status_text]
+                outputs=[chat_components["session_log"], states["attached_files"], states["vector_files"], status_text]
             ).then(
                 fn=lambda: context_injector.load_session_vectorstore(temporary.current_session_id),
                 inputs=[],
@@ -931,9 +1112,13 @@ def launch_interface():
                 inputs=[],
                 outputs=buttons["session"]
             ).then(
-                fn=update_file_slot_ui,
-                inputs=[states["loaded_files"]],
-                outputs=file_slots + [attach_files]
+                fn=lambda files: update_file_slot_ui(files, True),
+                inputs=[states["attached_files"]],
+                outputs=attach_slots + [attach_files]
+            ).then(
+                fn=lambda files: update_file_slot_ui(files, False),
+                inputs=[states["vector_files"]],
+                outputs=vector_slots + [vector_files_btn]
             )
 
         mode_selection.change(
@@ -947,7 +1132,7 @@ def launch_interface():
         ).then(
             fn=update_panel_on_mode_change,
             inputs=[mode_selection, states["selected_panel"]],
-            outputs=[panel_toggle, attachments_group, rpg_config_group, history_slots_group, states["selected_panel"], attach_files]
+            outputs=[panel_toggle, attach_group, vector_group, rpg_config_group, history_slots_group, states["selected_panel"]]
         ).then(
             fn=update_mode_based_options,
             inputs=[mode_selection, states["showing_rpg_right"], states["is_reasoning_model"]],
@@ -960,13 +1145,13 @@ def launch_interface():
             outputs=[states["selected_panel"]]
         ).then(
             fn=lambda panel, mode: (
-                gr.update(visible=panel == "Files"),
+                gr.update(visible=panel == "Attach"),
+                gr.update(visible=panel == "Vector"),
                 gr.update(visible=panel == "Sheet" and mode.lower() == "rpg"),
-                gr.update(visible=panel == "History"),
-                gr.update(visible=panel == "Files")
+                gr.update(visible=panel == "History")
             ),
             inputs=[states["selected_panel"], mode_selection],
-            outputs=[attachments_group, rpg_config_group, history_slots_group, attach_files]
+            outputs=[attach_group, vector_group, rpg_config_group, history_slots_group]
         )
 
         rpg_fields["save_rpg"].click(
@@ -1079,9 +1264,13 @@ def launch_interface():
             inputs=[custom_components["max_attach_slots"]],
             outputs=[]
         ).then(
-            fn=update_file_slot_ui,
-            inputs=[states["loaded_files"]],
-            outputs=file_slots + [attach_files]
+            fn=lambda files: update_file_slot_ui(files, True),
+            inputs=[states["attached_files"]],
+            outputs=attach_slots + [attach_files]
+        ).then(
+            fn=lambda files: update_file_slot_ui(files, False),
+            inputs=[states["vector_files"]],
+            outputs=vector_slots + [vector_files_btn]
         )
 
         custom_components["afterthought_time"].change(
@@ -1097,7 +1286,7 @@ def launch_interface():
         ).then(
             fn=update_panel_on_mode_change,
             inputs=[mode_selection, states["selected_panel"]],
-            outputs=[panel_toggle, attachments_group, rpg_config_group, history_slots_group, states["selected_panel"], attach_files]
+            outputs=[panel_toggle, attach_group, vector_group, rpg_config_group, history_slots_group, states["selected_panel"]]
         ).then(
             fn=update_mode_based_options,
             inputs=[mode_selection, states["showing_rpg_right"], states["is_reasoning_model"]],
@@ -1107,9 +1296,13 @@ def launch_interface():
             inputs=[],
             outputs=buttons["session"]
         ).then(
-            fn=update_file_slot_ui,
-            inputs=[states["loaded_files"]],
-            outputs=file_slots + [attach_files]
+            fn=lambda files: update_file_slot_ui(files, True),
+            inputs=[states["attached_files"]],
+            outputs=attach_slots + [attach_files]
+        ).then(
+            fn=lambda files: update_file_slot_ui(files, False),
+            inputs=[states["vector_files"]],
+            outputs=vector_slots + [vector_files_btn]
         )
 
     demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)
