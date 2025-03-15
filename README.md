@@ -103,6 +103,38 @@ You will of course need to have a `*.Gguf` model, use an iMatrix version of the 
 - [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF) - untested.
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Uncensored Reasoning.
 
+## File Structure
+- Core Project files...
+```
+project_root/
+│ Text-Gradio-Gguf.bat
+│ requisites.py
+│ launcher.py
+├── media/
+│ ├── program_banner_large.jpg
+│ └── program_banner_small.jpg
+├── scripts/
+│ └── interface.py
+│ └── models.py
+│ └── prompts.py
+│ └── temporary.py
+└── └── utlity.py
+```
+- Installed/Temporary files...
+```
+project_root/
+├── data/
+│ └── persistence.json
+│ └── models.py
+│ └── prompts.py
+│ └── temporary.py
+│ └── utlity.py
+├── temp/
+└─└── *
+├── .venv/
+└─└── *
+```
+
 ## Gen 1 Development
 With regards to the current version of the program...
 1.  Check over prompting, prompt each mode and enhancement. Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response. Check Websearch prompting, it should be, 2 prompts or 1 dynamic prompt with 2 configurations, for code or chat, it should be tailored to the purpose, as in chat is for research, while in code is trying to, find out about some library or the correct method of implementing something, as possible we want simple method of enhancing for maximum effectiveness.   
