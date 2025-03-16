@@ -146,10 +146,10 @@ With regards to the current version of the program...
 5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best. 
 2. Check all enhancements.
 4. Test Rpg features.
-5. re-attempt replacing left column collapse switch to being able to switch the two images in `.\media` instead of text, so as to be in-line with graphic on this readme.md. 
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
+1. re-attempt replacing left column collapse switch to being able to switch the two images in `.\media` instead of text, so as to be in-line with quality graphic I made for this readme.md. 
 1. Research local and online AI programs, what kinds of enhancements are common, what would be simple to implement. Someone mentioned Manu, does some kind of webscrape or internet research, producing reports.
 1. Coder mode must be agentic =m requiring 2 models. 1 =>8b model for management of tasks and 1 =>8b model instruct for generation of code. Files provided in coder mode,  would NOT be in the vector database like it is in chat mode, but instead be directly and selectively sent to the code model, that thinking model would have to assess which scripts are likely relevant and produce a list and the correct instruction for each task and stage. There would also have to be the editable scrollable prefabs for each one...
 ```
