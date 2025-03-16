@@ -92,7 +92,7 @@ Intended as a high-quality chat interface with uses include, Codeing, Rpg Game, 
 
 # Models
 You will of course need to have a `*.Gguf` model, use an iMatrix version of the same models if you have nVidia hardware. Here are some of the models used to test the program.. 
-1. Fpr non-iMatrix 14B models...
+1. For non-iMatrix 14B models...
 - [Lamarckvergence-14B-GGUF](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best ~14B model, beating most, ~30B and ~70B.
 2. For non-iMatrix ~8B models.
 - [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Best <8b Model on General leaderboard, and ~500 overall.
