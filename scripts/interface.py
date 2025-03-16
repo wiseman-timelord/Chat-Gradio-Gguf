@@ -27,7 +27,7 @@ from scripts import utility
 from scripts.utility import (
     delete_all_session_vectorstores, create_session_vectorstore, web_search, get_saved_sessions,
     load_session_history, save_session_history, load_and_chunk_documents,
-    get_available_gpus, save_config
+    get_available_gpus, save_config, filter_operational_content
 )
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings,
@@ -588,14 +588,11 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
 
     # Append user input and prepare assistant response
     session_log.append({'role': 'user', 'content': f"User:\n{user_input}"})
-    if len(session_log) == 1 and session_log[0]['role'] == 'user':
-        temporary.session_label = create_session_label(user_input)
-    
     session_log.append({'role': 'assistant', 'content': "Aggregating..."})
     interaction_phase = "afterthought_countdown"
     yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update(), gr.update(), gr.update(), gr.update()
 
-    # Afterthought countdown
+    # Afterthought countdown (unchanged)
     if temporary.AFTERTHOUGHT_TIME:
         num_lines = len(user_input.split('\n'))
         countdown_seconds = 6 if num_lines >= 10 else 4 if num_lines >= 5 else 2
@@ -611,7 +608,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
             yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-    # Prepare to generate response
+    # Generate response (unchanged until finalization)
     session_log[-1]['content'] = "Aggregating..."
     interaction_phase = "generating_response"
     yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
@@ -631,10 +628,9 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                 session_log[-1]['content'] = "No web search results found. Generating response..."
             yield session_log, session_log[-1]['content'], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-        # Generate response with dynamic progress bar
         rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
         full_response = ""
-        progress_count = 0  # Count of '.' for progress bar
+        progress_count = 0
 
         async for chunk in get_response_stream(
             session_log,
@@ -652,14 +648,13 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
             new_periods = chunk.count(".")
             if new_periods > 0:
                 progress_count += new_periods
-                progress_bar = "█" * progress_count  # One '█' per '.'
+                progress_bar = "█" * progress_count
                 session_log[-1]['content'] = f"{progress_bar} Aggregating..."
                 yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-                await asyncio.sleep(0)  # Minimal delay for UI update
-            if "</answer>" in full_response:  # Once complete, break to finalize
+                await asyncio.sleep(0)
+            if "</answer>" in full_response:
                 break
 
-        # Finalize session log with complete response
         if "<answer>" in full_response and "</answer>" in full_response:
             answer_start = full_response.find("<answer>") + len("<answer>")
             answer_end = full_response.find("</answer>")
@@ -667,44 +662,50 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
             progress_bar = "█" * progress_count
             session_log[-1]['content'] = f"{progress_bar} Aggregating...\n\nAI-Chat:\n{final_answer}"
         else:
-            session_log[-1]['content'] = full_response  # Fallback if no <answer> tags
+            session_log[-1]['content'] = full_response
 
-        yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        # Generate YAKE label after first response
+        if len(session_log) >= 2 and session_log[-2]['role'] == 'user' and session_log[-1]['role'] == 'assistant' and not temporary.session_label:
+            user_input_clean = utility.clean_content('user', session_log[-2]['content'])
+            assistant_response_clean = utility.clean_content('assistant', session_log[-1]['content'])
+            text_for_yake = user_input_clean + " " + assistant_response_clean
+            text_for_yake = filter_operational_content(text_for_yake)
+            kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
+            keywords = kw_extractor.extract_keywords(text_for_yake)
+            temporary.session_label = keywords[0][0] if keywords else "No description"
 
-    # Finalize interaction
-    interaction_phase = "waiting_for_input"
-    if cancel_flag:
-        session_log[-1]['content'] = "Generation cancelled."
-    else:
-        ai_response = session_log[-1]['content']
+        # Save session with updated label
         utility.save_session_history(session_log, loaded_files, temporary.session_vector_files)
 
-        # Speak AI output if enabled
-        if speak_enabled:
-            try:
-                if mode == "rpg":
-                    recent_events_match = re.search(r'<recent_events>(.*?)</recent_events>', ai_response, re.DOTALL)
-                    speak_content = recent_events_match.group(1).strip() if recent_events_match else ai_response
-                elif mode == "chat":
-                    if "AI-Chat:\n" in ai_response:
-                        speak_content = ai_response.split("AI-Chat:\n", 1)[1].strip()
+        # Finalize interaction (unchanged from here)
+        interaction_phase = "waiting_for_input"
+        if cancel_flag:
+            session_log[-1]['content'] = "Generation cancelled."
+        else:
+            ai_response = session_log[-1]['content']
+            if speak_enabled:
+                try:
+                    if mode == "rpg":
+                        recent_events_match = re.search(r'<recent_events>(.*?)</recent_events>', ai_response, re.DOTALL)
+                        speak_content = recent_events_match.group(1).strip() if recent_events_match else ai_response
+                    elif mode == "chat":
+                        if "AI-Chat:\n" in ai_response:
+                            speak_content = ai_response.split("AI-Chat:\n", 1)[1].strip()
+                        else:
+                            speak_content = ai_response
                     else:
-                        speak_content = ai_response
-                else:
-                    speak_content = None
+                        speak_content = None
+                    if speak_content:
+                        print(f"DEBUG: Speaking {len(speak_content)} chars: {speak_content}")
+                        speak_text(speak_content)
+                        session_log.append({'role': 'system', 'content': f"Speak Summary (AI Output):\n{speak_content}"})
+                        yield session_log, "Speaking AI output summary...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+                except Exception as e:
+                    error_msg = f"Error speaking AI output summary: {str(e)}"
+                    session_log.append({'role': 'system', 'content': error_msg})
+                    yield session_log, error_msg, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-                if speak_content:
-                    print(f"DEBUG: Speaking {len(speak_content)} chars: {speak_content}")
-                    speak_text(speak_content)
-                    session_log.append({'role': 'system', 'content': f"Speak Summary (AI Output):\n{speak_content}"})
-                    yield session_log, "Speaking AI output summary...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-            except Exception as e:
-                error_msg = f"Error speaking AI output summary: {str(e)}"
-                session_log.append({'role': 'system', 'content': error_msg})
-                yield session_log, error_msg, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-
-    # Preserve the current state of all enhancement checkboxes
-    yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update(value=web_search_enabled), gr.update(value=tot_enabled), gr.update(value=enable_think), gr.update(value=speak_enabled)
+        yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update(value=web_search_enabled), gr.update(value=tot_enabled), gr.update(value=enable_think), gr.update(value=speak_enabled)
     
 def launch_interface():
     """Launch the Gradio interface for the Text-Gradio-Gguf chatbot with a split-screen layout."""
@@ -1056,6 +1057,10 @@ def launch_interface():
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
             outputs=attach_slots + [attach_files]
+        ).then(
+            fn=update_session_buttons,
+            inputs=[],
+            outputs=buttons["session"]
         )
 
         action_buttons["copy_response"].click(

@@ -21,6 +21,23 @@ from . import temporary
 from scripts.models import clean_content, get_available_models
 
 # Functions...
+def filter_operational_content(text):
+    """
+    Remove operational tags and metadata from the text.
+
+    Args:
+        text (str): The input text possibly containing operational tags.
+
+    Returns:
+        str: The text with operational tags removed.
+    """
+    # Remove content within <thinking> and </thinking> tags
+    text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
+    # Remove content within <answer> and </answer> tags
+    text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
+    # Add more patterns as needed for other operational tags
+    return text.strip()
+
 def get_cpu_info():
     """
     Retrieve information about available CPUs and their cores.
@@ -99,17 +116,43 @@ def save_session_history(session_log, attached_files, vector_files):
         
 
 def load_session_history(session_file):
-    with open(session_file, "r") as f:
-        data = json.load(f)
-    session_id = data["session_id"]
-    unzip_session_files(session_id)
-    attach_dir = Path(TEMP_DIR) / f"session_{session_id}" / "attach"
-    vector_dir = Path(TEMP_DIR) / f"session_{session_id}" / "vector"
-    attached_files = [str(f) for f in attach_dir.glob("*") if f.is_file()] if attach_dir.exists() else data.get("attached_files", [])
-    vector_files = [str(f) for f in vector_dir.glob("*") if f.is_file()] if vector_dir.exists() else data.get("vector_files", [])
+    """
+    Load session history from a JSON file, returning five values with defaults for missing keys.
+
+    Args:
+        session_file (Path): Path to the session JSON file.
+
+    Returns:
+        tuple: (session_id, label, history, attached_files, vector_files)
+    """
+    try:
+        with open(session_file, "r") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"Error loading session file {session_file}: {e}")
+        return None, "Error", [], [], []
+
+    session_id = data.get("session_id", session_file.stem.replace('session_', ''))
+    label = data.get("label", "Untitled")
+    history = data.get("history", [])
+    attached_files = data.get("attached_files", [])
+    vector_files = data.get("vector_files", [])
+
+    try:
+        unzip_session_files(session_id)
+        attach_dir = Path(TEMP_DIR) / f"session_{session_id}" / "attach"
+        vector_dir = Path(TEMP_DIR) / f"session_{session_id}" / "vector"
+        if attach_dir.exists():
+            attached_files = [str(f) for f in attach_dir.glob("*") if f.is_file()]
+        if vector_dir.exists():
+            vector_files = [str(f) for f in vector_dir.glob("*") if f.is_file()]
+    except Exception as e:
+        print(f"Error unzipping session files for {session_id}: {e}")
+
     temporary.session_attached_files = attached_files
     temporary.session_vector_files = vector_files
-    return session_id, data["label"], data["history"], attached_files, vector_files
+
+    return session_id, label, history, attached_files, vector_files
 
 def zip_session_files(session_id, attached_files, vector_files):
     temp_dir = Path(TEMP_DIR) / f"session_{session_id}"
