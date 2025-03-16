@@ -17,6 +17,7 @@ Intended as a high-quality chat interface with uses include, Codeing, Rpg Game, 
 - **Highly Customizable UI**: Configurable; 10-20 Session History slots, 2-10 file slots, Session Log 400-550px height, 2-8 Lines of input. 
 - **Afterthought Countdown**: If, =>10 lines then 5s or 5-10 lines then 3s or <5 lines then 1s, wait for you to cancel send and return to edit, saving on mis-prompts and waits.
 - **Attach or Vectorise**: Optimally for the mode, Attach Files is complete raw input, while Vectorise Files is relevance selected snippets from potentially larger source. 
+- **Collapsable Left Column**: Like one would find on modern AI interface. 
 
 ### Preview
 - The "Conversation" page, with Operation/Panel Mode selector, and other features. In this case using `T.O.T.` enhancement on `Lamarckvergence-14B` (non-reasoning) model...
@@ -145,6 +146,7 @@ With regards to the current version of the program...
 5. Speech enhancement with `PyWin32`. It would generate and read the response, but we would want it to be limited in, tot and think, enhancements to only reading the answer. simlarly to the websearch, we would only want the `results` part read if it has one or maybe we need to implement someting in the second prompt to say encapulate the summary section you want read aloud with `<summary>` and `</summary`, or however thats done best. 
 2. Check all enhancements.
 4. Test Rpg features.
+5. re-attempt replacing left column collapse switch to being able to switch the two images in `.\media` instead of text, so as to be in-line with graphic on this readme.md. 
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
