@@ -1,4 +1,4 @@
-# Script: `.\scripts\temporary.py`
+# Script: .\scripts\temporary.py
 
 # Imports...
 import time
@@ -8,7 +8,7 @@ from scripts.prompts import prompt_templates
 MODEL_FOLDER = "path/to/your/models"
 VECTORSTORE_DIR = "data/vectors"
 TEMP_DIR = "data/temp"
-HISTORY_DIR = "data/vectors"
+HISTORY_DIR = "data/history"  # Updated to separate from vectors
 SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"
 session_label = ""
 current_session_id = None
@@ -22,6 +22,7 @@ yake_history_detail = [None] * MAX_HISTORY_SLOTS
 MAX_ATTACH_SLOTS = 8
 last_save_time = 0 
 AFTERTHOUGHT_TIME = True
+SPEAK_SUMMARIES = False  
 MODEL_NAME = "Browse_for_model_folder..."
 CONTEXT_SIZE = 8192
 VRAM_SIZE = 8192
@@ -31,9 +32,9 @@ SELECTED_GPU = None
 SELECTED_CPU = None
 DYNAMIC_GPU_LAYERS = True
 MMAP = True
-MLOCK = True  # Always True
+MLOCK = True
 STREAM_OUTPUT = True
-USE_PYTHON_BINDINGS = True  # Always True, option removed
+USE_PYTHON_BINDINGS = True
 LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
 BACKEND_TYPE = "Not Configured"
 LLAMA_BIN_PATH = ""
@@ -120,6 +121,7 @@ handling_keywords = {
 # Reasoning enhancement keywords
 reasoning_keywords = ["reasoner", "r1", "reasoning", "reason"]
 
+# prompt template table
 current_model_settings = {
     "category": "chat",
     "prompt_template": prompt_templates["chat"]

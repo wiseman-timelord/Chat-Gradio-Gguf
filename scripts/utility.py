@@ -1,7 +1,9 @@
 # Script: `.\scripts\utility.py`
 
 # Imports...
-import re, subprocess, json, time, random, psutil, shutil, os, zipfile # Ensure shutil is included
+import re, subprocess, json, time, random, psutil, shutil, os, zipfile
+import win32com.client
+import pythoncom  # Added for COM initialization
 from pathlib import Path
 from datetime import datetime
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -61,6 +63,20 @@ def get_available_gpus():
             
 def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+def speak_text(text):
+    """Read text aloud using PyWin32's text-to-speech functionality."""
+    try:
+        pythoncom.CoInitialize()  # Initialize COM for this thread
+        speaker = win32com.client.Dispatch("SAPI.SpVoice")
+        print(f"DEBUG: Attempting to speak: {text[:50]}..." if len(text) > 50 else f"DEBUG: Attempting to speak: {text}")
+        speaker.Speak(text)
+        print(f"DEBUG: Successfully spoke: {text[:50]}..." if len(text) > 50 else f"DEBUG: Successfully spoke: {text}")
+    except Exception as e:
+        print(f"Error speaking text: {str(e)}")
+        raise  # Re-raise to catch in chat_interface
+    finally:
+        pythoncom.CoUninitialize()  # Clean up COM initialization
     
 def save_session_history(session_log, attached_files, vector_files):
     if not temporary.current_session_id:
@@ -79,6 +95,7 @@ def save_session_history(session_log, attached_files, vector_files):
     with open(session_file, "w") as f:
         json.dump(session_data, f)
     zip_session_files(temporary.current_session_id, attached_files, vector_files)
+    manage_session_history()  # Added to enforce rotation
         
 
 def load_session_history(session_file):
@@ -237,9 +254,31 @@ def delete_all_history_and_vectors():
     
     return "All history and vectorstores deleted."
 
+def extract_links_with_descriptions(text):
+    """Extract URLs from text and generate concise descriptions."""
+    import re
+    links = re.findall(r'(https?://\S+)', text)
+    if not links:
+        return ""
+    descriptions = []
+    for link in links:
+        desc_prompt = f"Provide a one-sentence description for the following link: {link}"
+        try:
+            response = temporary.llm.create_chat_completion(
+                messages=[{"role": "user", "content": desc_prompt}],
+                max_tokens=50,
+                temperature=0.5,
+                stream=False
+            )
+            description = response['choices'][0]['message']['content'].strip()
+            descriptions.append(f"{link}: {description}")
+        except Exception as e:
+            descriptions.append(f"{link}: Unable to generate description due to {str(e)}")
+    return "\n".join(descriptions)
+
 def get_saved_sessions():
     """Get list of saved session files sorted by modification time."""
-    history_dir = Path(HISTORY_DIR)
+    history_dir = Path(HISTORY_DIR)  # Updated to use HISTORY_DIR
     session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
     return [f.name for f in session_files]
 
@@ -321,60 +360,85 @@ def load_config():
                     print("Migrated config: Added missing backend_config section")
 
                 temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", ".\models")
-                temporary.AVAILABLE_MODELS = get_available_models()  # Single scan here
+                temporary.AVAILABLE_MODELS = get_available_models()
+                print(f"Loaded MODEL_FOLDER: {temporary.MODEL_FOLDER}")
                 
                 if "model_name" in config["model_settings"]:
                     temporary.MODEL_NAME = config["model_settings"]["model_name"]
+                    print(f"Loaded MODEL_NAME: {temporary.MODEL_NAME}")
                 if "context_size" in config["model_settings"]:
                     temporary.CONTEXT_SIZE = int(config["model_settings"]["context_size"])
+                    print(f"Loaded CONTEXT_SIZE: {temporary.CONTEXT_SIZE}")
                 if "temperature" in config["model_settings"]:
                     temporary.TEMPERATURE = float(config["model_settings"]["temperature"])
+                    print(f"Loaded TEMPERATURE: {temporary.TEMPERATURE}")
                 if "repeat_penalty" in config["model_settings"]:
                     temporary.REPEAT_PENALTY = float(config["model_settings"]["repeat_penalty"])
+                    print(f"Loaded REPEAT_PENALTY: {temporary.REPEAT_PENALTY}")
                 if "llama_cli_path" in config["model_settings"]:
                     temporary.LLAMA_CLI_PATH = config["model_settings"]["llama_cli_path"]
+                    print(f"Loaded LLAMA_CLI_PATH: {temporary.LLAMA_CLI_PATH}")
                 if "vram_size" in config["model_settings"]:
                     temporary.VRAM_SIZE = int(config["model_settings"]["vram_size"])
+                    print(f"Loaded VRAM_SIZE: {temporary.VRAM_SIZE}")
                 if "selected_gpu" in config["model_settings"]:
                     temporary.SELECTED_GPU = config["model_settings"]["selected_gpu"]
+                    print(f"Loaded SELECTED_GPU: {temporary.SELECTED_GPU}")
                 if "selected_cpu" in config["model_settings"]:
                     temporary.SELECTED_CPU = config["model_settings"]["selected_cpu"]
+                    print(f"Loaded SELECTED_CPU: {temporary.SELECTED_CPU}")
                 if "mmap" in config["model_settings"]:
                     temporary.MMAP = bool(config["model_settings"]["mmap"])
+                    print(f"Loaded MMAP: {temporary.MMAP}")
                 if "mlock" in config["model_settings"]:
                     temporary.MLOCK = bool(config["model_settings"]["mlock"])
+                    print(f"Loaded MLOCK: {temporary.MLOCK}")
                 if "afterthought_time" in config["model_settings"]:
                     temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"]["afterthought_time"])
+                    print(f"Loaded AFTERTHOUGHT_TIME: {temporary.AFTERTHOUGHT_TIME}")
                 if "n_batch" in config["model_settings"]:
                     temporary.BATCH_SIZE = int(config["model_settings"]["n_batch"])
+                    print(f"Loaded BATCH_SIZE: {temporary.BATCH_SIZE}")
                 if "dynamic_gpu_layers" in config["model_settings"]:
                     temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"]["dynamic_gpu_layers"])
+                    print(f"Loaded DYNAMIC_GPU_LAYERS: {temporary.DYNAMIC_GPU_LAYERS}")
                 if "max_history_slots" in config["model_settings"]:
                     temporary.MAX_HISTORY_SLOTS = int(config["model_settings"]["max_history_slots"])
+                    print(f"Loaded MAX_HISTORY_SLOTS: {temporary.MAX_HISTORY_SLOTS}")
                 if "max_attach_slots" in config["model_settings"]:
                     temporary.MAX_ATTACH_SLOTS = int(config["model_settings"]["max_attach_slots"])
+                    print(f"Loaded MAX_ATTACH_SLOTS: {temporary.MAX_ATTACH_SLOTS}")
                 if "session_log_height" in config["model_settings"]:
                     temporary.SESSION_LOG_HEIGHT = int(config["model_settings"]["session_log_height"])
+                    print(f"Loaded SESSION_LOG_HEIGHT: {temporary.SESSION_LOG_HEIGHT}")
                 if "input_lines" in config["model_settings"]:
                     temporary.INPUT_LINES = int(config["model_settings"]["input_lines"])
+                    print(f"Loaded INPUT_LINES: {temporary.INPUT_LINES}")
                 
                 # Load backend config
                 if "backend_type" in config["backend_config"]:
                     temporary.BACKEND_TYPE = config["backend_config"]["backend_type"]
+                    print(f"Loaded BACKEND_TYPE: {temporary.BACKEND_TYPE}")
                 if "llama_bin_path" in config["backend_config"]:
                     temporary.LLAMA_BIN_PATH = config["backend_config"]["llama_bin_path"]
+                    print(f"Loaded LLAMA_BIN_PATH: {temporary.LLAMA_BIN_PATH}")
                 
                 # Load RPG settings
                 if "rp_location" in config["rp_settings"]:
                     temporary.RP_LOCATION = config["rp_settings"]["rp_location"]
+                    print(f"Loaded RP_LOCATION: {temporary.RP_LOCATION}")
                 if "user_name" in config["rp_settings"]:
                     temporary.USER_PC_NAME = config["rp_settings"]["user_name"]
+                    print(f"Loaded USER_PC_NAME: {temporary.USER_PC_NAME}")
                 if "user_role" in config["rp_settings"]:
                     temporary.USER_PC_ROLE = config["rp_settings"]["user_role"]
+                    print(f"Loaded USER_PC_ROLE: {temporary.USER_PC_ROLE}")
                 if "ai_npc" in config["rp_settings"]:
                     temporary.AI_NPC_NAME = config["rp_settings"]["ai_npc"]
+                    print(f"Loaded AI_NPC_NAME: {temporary.AI_NPC_NAME}")
                 if "ai_npc_role" in config["rp_settings"]:
                     temporary.AI_NPC_ROLE = config["rp_settings"]["ai_npc_role"]
+                    print(f"Loaded AI_NPC_ROLE: {temporary.AI_NPC_ROLE}")
                 
                 # Ensure loaded values are in allowed options
                 if temporary.MAX_ATTACH_SLOTS not in temporary.ATTACH_SLOT_OPTIONS:
@@ -394,21 +458,20 @@ def load_config():
                 if temporary.MODEL_NAME not in temporary.AVAILABLE_MODELS:
                     temporary.MODEL_NAME = "Browse_for_model_folder..." if not temporary.AVAILABLE_MODELS else temporary.AVAILABLE_MODELS[0]
                     print("Warning: No models found, set Model Folder.")
+                
+                temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())
+                print("Configuration loaded successfully from persistent.json")
+                return "Configuration loaded successfully."
         else:
-            message = "Config file not found, using default settings from temporary.py."
-            print(message)
+            print("Config file not found, using defaults from temporary.py")
             temporary.MODEL_FOLDER = str(Path(".\models").resolve())
-            temporary.AVAILABLE_MODELS = get_available_models()  # Single scan here
-            return message
-        
-        temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())
-        return "Configuration loaded successfully."
+            temporary.AVAILABLE_MODELS = get_available_models()
+            return "Config file not found, using default settings from temporary.py."
     except Exception as e:
-        message = f"Error loading configuration: {str(e)}"
-        print(message)
+        print(f"Error loading config: {str(e)}")
         temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER if 'temporary.MODEL_FOLDER' in globals() else ".\models").resolve())
         temporary.AVAILABLE_MODELS = get_available_models()
-        return message
+        return f"Error loading configuration: {str(e)}"
     
 def save_config():
     config_path = Path("data/persistent.json")
@@ -449,9 +512,33 @@ def save_config():
         }
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=4)
-        message = "Settings saved successfully to persistent.json"
-        return message
+        print(f"Saved MODEL_FOLDER: {temporary.MODEL_FOLDER}")
+        print(f"Saved MODEL_NAME: {temporary.MODEL_NAME}")
+        print(f"Saved CONTEXT_SIZE: {temporary.CONTEXT_SIZE}")
+        print(f"Saved TEMPERATURE: {temporary.TEMPERATURE}")
+        print(f"Saved REPEAT_PENALTY: {temporary.REPEAT_PENALTY}")
+        print(f"Saved LLAMA_CLI_PATH: {temporary.LLAMA_CLI_PATH}")
+        print(f"Saved VRAM_SIZE: {temporary.VRAM_SIZE}")
+        print(f"Saved SELECTED_GPU: {temporary.SELECTED_GPU}")
+        print(f"Saved SELECTED_CPU: {temporary.SELECTED_CPU}")
+        print(f"Saved MMAP: {temporary.MMAP}")
+        print(f"Saved MLOCK: {temporary.MLOCK}")
+        print(f"Saved BATCH_SIZE: {temporary.BATCH_SIZE}")
+        print(f"Saved DYNAMIC_GPU_LAYERS: {temporary.DYNAMIC_GPU_LAYERS}")
+        print(f"Saved AFTERTHOUGHT_TIME: {temporary.AFTERTHOUGHT_TIME}")
+        print(f"Saved MAX_HISTORY_SLOTS: {temporary.MAX_HISTORY_SLOTS}")
+        print(f"Saved MAX_ATTACH_SLOTS: {temporary.MAX_ATTACH_SLOTS}")
+        print(f"Saved SESSION_LOG_HEIGHT: {temporary.SESSION_LOG_HEIGHT}")
+        print(f"Saved INPUT_LINES: {temporary.INPUT_LINES}")
+        print(f"Saved BACKEND_TYPE: {temporary.BACKEND_TYPE}")
+        print(f"Saved LLAMA_BIN_PATH: {temporary.LLAMA_BIN_PATH}")
+        print(f"Saved RP_LOCATION: {temporary.RP_LOCATION}")
+        print(f"Saved USER_PC_NAME: {temporary.USER_PC_NAME}")
+        print(f"Saved USER_PC_ROLE: {temporary.USER_PC_ROLE}")
+        print(f"Saved AI_NPC_NAME: {temporary.AI_NPC_NAME}")
+        print(f"Saved AI_NPC_ROLE: {temporary.AI_NPC_ROLE}")
+        print("Settings saved successfully to persistent.json")
+        return "Settings saved successfully."
     except Exception as e:
-        message = f"Error saving configuration: {str(e)}"
-        print(message)
-        return message
+        print(f"Error saving config: {str(e)}")
+        return f"Error saving configuration: {str(e)}"

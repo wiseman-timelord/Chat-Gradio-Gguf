@@ -348,6 +348,22 @@ def clean_content(role, content):
         return content.replace("AI-Chat-Response:\n", "", 1).strip()
     return content
 
+def generate_summary(text):
+    summary_prompt = (
+        "Summarize the following response in under 256 characters, focusing on critical information and conclusions:\n\n"
+        f"{text}"
+    )
+    response = temporary.llm.create_chat_completion(
+        messages=[{"role": "user", "content": summary_prompt}],
+        max_tokens=512,  # Batch size for efficiency
+        temperature=0.5,
+        stream=False
+    )
+    summary = response['choices'][0]['message']['content'].strip()
+    if len(summary) > 256:
+        summary = summary[:253] + "..."  # Truncate with ellipsis
+    return summary
+
 # aSync Functions...
 async def get_response_stream(session_log, mode, settings, disable_think=False, rp_settings=None, tot_enabled=False, web_search_enabled=False, search_results=None):
     if not temporary.MODELS_LOADED or temporary.llm is None:
@@ -378,62 +394,14 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
             max_tokens=1024,
             temperature=temporary.TEMPERATURE,
             repeat_penalty=temporary.REPEAT_PENALTY,
-            stream=True  # Always stream
+            stream=True
         )
-        full_response = ""
-        reasoning_phase = True
-        if tot_enabled:
-            progress_bar_text = " Aggregating..."
-        elif not disable_think and settings.get("is_reasoning", False):
-            progress_bar_text = " Reasoning..."
-        else:
-            progress_bar_text = " Generating..."
-        progress_count = 0
-        max_progress = 28
-        final_answer = ""
-
         for chunk in response_stream:
             if 'choices' in chunk and chunk['choices']:
                 delta = chunk['choices'][0].get('delta', {})
                 if 'content' in delta:
                     chunk_content = delta['content']
-                    full_response += chunk_content
                     print(chunk_content, end='', flush=True)
-
-                    if reasoning_phase:
-                        if "<think>" in full_response and "</think>" not in full_response:
-                            if '.' in chunk_content and progress_count < max_progress:
-                                progress_count += 1
-                                progress_bar = f"{progress_bar_text}\n" + "█" * progress_count
-                                yield progress_bar
-                        elif "</think>" in full_response:
-                            reasoning_phase = False
-                            progress_bar = f"{progress_bar_text}\n" + "█" * max_progress
-                            final_answer = full_response.split("</think>", 1)[1].strip()
-                            yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
-                        elif "<answer>" in full_response:
-                            reasoning_phase = False
-                            final_answer = full_response.split("<answer>", 1)[1].strip()
-                            if "</answer>" in final_answer:
-                                final_answer = final_answer.split("</answer>", 1)[0].strip()
-                            yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
-                        else:
-                            if progress_count < max_progress and '.' in chunk_content:
-                                progress_count += 1
-                                progress_bar = f"{progress_bar_text}\n" + "█" * progress_count
-                                yield progress_bar
-                    else:
-                        final_answer += chunk_content
-                        yield f"{progress_bar}\n\nAI-Chat:\n{final_answer.strip()}"
-
-        if reasoning_phase and full_response:
-            progress_bar = f"{progress_bar_text}\n" + "█" * max_progress
-            final_answer = full_response.strip()
-            if "<think>" in full_response and "</think>" in full_response:
-                final_answer = full_response.split("</think>", 1)[1].strip()
-            if "Final Answer:" in final_answer:
-                final_answer = final_answer.split("Final Answer:", 1)[1].strip()
-            yield f"{progress_bar}\n\nAI-Chat:\n{final_answer}"
-
+                    yield chunk_content
     except Exception as e:
         yield f"Error generating response: {str(e)}"
