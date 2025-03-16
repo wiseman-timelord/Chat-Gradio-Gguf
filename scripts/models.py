@@ -383,7 +383,7 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
         web_prompt = "Use the following web search results to inform your response if relevant:\n" + str(search_results) if search_results else "No web search results were found. Proceed with your best response."
         messages.insert(1, {"role": "system", "content": web_prompt})
 
-    if settings.get("is_reasoning", False) and not disable_think and mode in ["chat", "code"]:
+    if settings.get("is_reasoning", False) and not disable_think and mode == "chat":
         messages[-1]["content"] += get_reasoning_instruction()
     if tot_enabled and mode == "chat":
         messages[-1]["content"] += get_tot_instruction()
