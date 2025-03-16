@@ -1,14 +1,7 @@
 # Script: `.\requisites.py` (Dual purpose script, installer or validation)
 
 # Imports
-import os
-import json
-import platform
-import subprocess
-import sys
-import contextlib
-import time
-import copy
+import os, json, psutil, platform, subprocess, sys, contextlib, time, copy
 import pkg_resources
 from pathlib import Path
 from typing import Dict, Any, Optional
