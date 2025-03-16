@@ -1,7 +1,7 @@
 # Script: `.\requisites.py` (Dual purpose script, installer or validation)
 
 # Imports
-import os, json, psutil, platform, subprocess, sys, contextlib, time, copy
+import os, json, platform, subprocess, sys, contextlib, time, copy
 import pkg_resources
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -38,6 +38,7 @@ REQUIREMENTS = [
     "pyperclip",
     "yake",
     "psutil",
+    "pywin32", 
     "llama-cpp-python",
     "langchain-community==0.3.18",
     "pygments==2.17.2",

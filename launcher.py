@@ -4,7 +4,7 @@ print("Starting `launcher` Imports.")
 from pathlib import Path
 import os
 from scripts import temporary
-from scripts.utility import load_config, save_config
+from scripts.utility import load_config  # Removed save_config import
 from scripts.interface import launch_interface
 print("`launcher` Imports Complete.")
 
@@ -17,11 +17,11 @@ def main():
         temporary.DATA_DIR = str(script_dir / "data")
         print(f"Data directory: {temporary.DATA_DIR}")
         Path(temporary.DATA_DIR).mkdir(parents=True, exist_ok=True)
+        Path(temporary.HISTORY_DIR).mkdir(parents=True, exist_ok=True)  # Added
+        Path(temporary.VECTORSTORE_DIR).mkdir(parents=True, exist_ok=True)  # Added
         
         print("Loading persistent config...")
         load_config()
-        print("Saving persistent config...")
-        save_config()
         print("Launching Gradio Interface...")
         try:
             launch_interface()
