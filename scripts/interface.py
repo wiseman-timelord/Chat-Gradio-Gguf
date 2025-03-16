@@ -752,7 +752,8 @@ def launch_interface():
             cancel_flag=gr.State(False),
             interaction_phase=gr.State("waiting_for_input"),
             is_reasoning_model=gr.State(False),
-            selected_panel=gr.State("History")
+            selected_panel=gr.State("History"),
+            expanded_state=gr.State(True)  # Added for collapsible left column
         )
 
         # Define chat_components once to avoid redefinition
@@ -761,8 +762,9 @@ def launch_interface():
         with gr.Tabs():
             with gr.Tab("Conversation"):
                 with gr.Row():
-                    # Settings column (left sidebar)
-                    with gr.Column(min_width=309, elem_classes=["clean-elements"]):
+                    # Expanded left column
+                    with gr.Column(visible=True, min_width=310, elem_classes=["clean-elements"]) as left_column_expanded:
+                        toggle_button_expanded = gr.Button("Text-Gradio-Gguf", variant="secondary")
                         mode_selection = gr.Radio(
                             choices=["Chat", "Coder", "Rpg"],
                             label="Operation Mode",
@@ -817,7 +819,11 @@ def launch_interface():
                                 ai_npc_role=gr.Textbox(label="AI Role", value=temporary.AI_NPC_ROLE),
                                 save_rpg=gr.Button("Save RPG Settings", variant="primary")
                             )
-
+                    
+                    # Collapsed left column
+                    with gr.Column(visible=False, min_width=80, elem_classes=["clean-elements"]) as left_column_collapsed:
+                        toggle_button_collapsed = gr.Button("TGG", variant="secondary")
+                    
                     # Main interaction column (split-screen effect)
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
                         with gr.Row(elem_classes=["clean-elements"]):
@@ -985,7 +991,6 @@ def launch_interface():
                         with gr.Column(scale=1, elem_classes=["clean-elements"]):
                             gr.Markdown("About Program...")
                             gr.Markdown("[Text-Gradio-Gguf](https://github.com/wiseman-timelord/Text-Gradio-Gguf) by [Wiseman-Timelord](https://github.com/wiseman-timelord).")
-                            gr.Markdown("Website address [wisetime.rf.gd](http://wisetime.rf.gd).")
                             gr.Markdown("Donations through, [Patreon](https://patreon.com/WisemanTimelord) or [Ko-fi](https://ko-fi.com/WisemanTimelord).")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
@@ -1277,6 +1282,33 @@ def launch_interface():
             fn=lambda v: setattr(temporary, "AFTERTHOUGHT_TIME", v),
             inputs=[custom_components["afterthought_time"]],
             outputs=[config_components["status_settings"]]
+        )
+
+        # Toggle function to switch expanded_state
+        def toggle_expanded_state(current_state):
+            return not current_state
+
+        # Click events for toggle buttons
+        toggle_button_expanded.click(
+            fn=toggle_expanded_state,
+            inputs=[states["expanded_state"]],
+            outputs=[states["expanded_state"]]
+        )
+
+        toggle_button_collapsed.click(
+            fn=toggle_expanded_state,
+            inputs=[states["expanded_state"]],
+            outputs=[states["expanded_state"]]
+        )
+
+        # Update column visibility when expanded_state changes
+        states["expanded_state"].change(
+            fn=lambda state: [
+                gr.update(visible=state),
+                gr.update(visible=not state)
+            ],
+            inputs=[states["expanded_state"]],
+            outputs=[left_column_expanded, left_column_collapsed]
         )
 
         demo.load(
