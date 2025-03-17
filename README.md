@@ -142,11 +142,10 @@ project_root/
 
 ## Gen 1 Development
 With regards to the current version of the program...
-1.  Check over prompting, prompt each mode and enhancement. Websearch, is supposed to require 2 phases of prompting, ensure it works ok, and has its own printed information in the session log. Stats on sites visited or someth, then output final response. Check Websearch prompting, it should be, 2 prompts or 1 dynamic prompt with 2 configurations, for code or chat, it should be tailored to the purpose, as in chat is for research, while in code is trying to, find out about some library or the correct method of implementing something, as possible we want simple method of enhancing for maximum effectiveness.   
-5. Check all available modes with Speech enhancement with `PyWin32`. 
-2. Check all enhancements.
-4. Test Rpg features.
-5. Prompt for uncensored needs making dynamic.
+1. Continue work on prompting system until it works soundly.
+2. Check all available modes with each enhancement combination (note text to speak uses `PyWin32`). 
+3. Test and develop Rpg features, I want a `NPC Roles` and dropdown box in `Configuration` page for, ie 1, 2, 3, 4, 5, 6` `ai_npc_name_#` inputs, in `Program Options` section.
+5. Prompt for uncensored is now dynamic, enabling uncensored unrestricted prompt enhancement for uncensored models, instead of just having one prompt for uncensored. This needs refining now.
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
