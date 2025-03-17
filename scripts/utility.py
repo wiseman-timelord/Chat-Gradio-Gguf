@@ -130,7 +130,7 @@ def load_session_history(session_file):
             data = json.load(f)
     except Exception as e:
         print(f"Error loading session file {session_file}: {e}")
-        return None, "Error", [], [], []
+        return None, "Error", [], [], []  # Always return 5 values
 
     session_id = data.get("session_id", session_file.stem.replace('session_', ''))
     label = data.get("label", "Untitled")
@@ -146,19 +146,25 @@ def load_session_history(session_file):
             attached_files = [str(f) for f in attach_dir.glob("*") if f.is_file()]
         if vector_dir.exists():
             vector_files = [str(f) for f in vector_dir.glob("*") if f.is_file()]
+        else:
+            vector_files = []  # Empty list if no vector directory
     except Exception as e:
         print(f"Error unzipping session files for {session_id}: {e}")
 
     temporary.session_attached_files = attached_files
     temporary.session_vector_files = vector_files
 
+    # Debugging print to confirm 5 values
+    print(f"load_session_history returning: {session_id}, {label}, {len(history)}, {len(attached_files)}, {len(vector_files)}")
     return session_id, label, history, attached_files, vector_files
 
 def zip_session_files(session_id, attached_files, vector_files):
     temp_dir = Path(TEMP_DIR) / f"session_{session_id}"
+    vector_dir = Path(VECTORSTORE_DIR)  # Change to VECTORSTORE_DIR
+    os.makedirs(vector_dir, exist_ok=True)
     if temp_dir.exists():
         attach_zip = Path(TEMP_DIR) / f"session_{session_id}_attach.zip"
-        vector_zip = Path(TEMP_DIR) / f"session_{session_id}_vector.zip"
+        vector_zip = vector_dir / f"session_{session_id}_vector.zip"  # Updated path
         if attached_files:
             with zipfile.ZipFile(attach_zip, "w", zipfile.ZIP_DEFLATED) as zf:
                 for file in attached_files:
@@ -167,13 +173,12 @@ def zip_session_files(session_id, attached_files, vector_files):
             with zipfile.ZipFile(vector_zip, "w", zipfile.ZIP_DEFLATED) as zf:
                 for file in vector_files:
                     zf.write(file, Path(file).name)
-        # Clean up temp folder after zipping
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 def unzip_session_files(session_id):
     temp_dir = Path(TEMP_DIR) / f"session_{session_id}"
     attach_zip = Path(TEMP_DIR) / f"session_{session_id}_attach.zip"
-    vector_zip = Path(TEMP_DIR) / f"session_{session_id}_vector.zip"
+    vector_zip = Path(VECTORSTORE_DIR) / f"session_{session_id}_vector.zip"  # Updated path
     if attach_zip.exists():
         with zipfile.ZipFile(attach_zip, "r") as zf:
             zf.extractall(temp_dir / "attach")
@@ -191,13 +196,47 @@ def manage_session_history():
         print(f"Deleted oldest session: {oldest_file}")
         
 def load_session_history(session_file):
-    with open(session_file, 'r') as f:
-        data = json.load(f)
-    session_id = data.get('session_id', session_file.stem.replace('session_', ''))
-    label = data.get('label', 'Untitled')
-    history = data.get('history', [])
-    attached_files = data.get('attached_files', [])
-    return session_id, label, history, attached_files
+    """
+    Load session history from a JSON file, returning five values with defaults for missing keys.
+
+    Args:
+        session_file (Path): Path to the session JSON file.
+
+    Returns:
+        tuple: (session_id, label, history, attached_files, vector_files)
+    """
+    try:
+        with open(session_file, "r") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"Error loading session file {session_file}: {e}")
+        return None, "Error", [], [], []  # Always return 5 values
+
+    session_id = data.get("session_id", session_file.stem.replace('session_', ''))
+    label = data.get("label", "Untitled")
+    history = data.get("history", [])
+    attached_files = data.get("attached_files", [])
+    vector_files = data.get("vector_files", [])
+
+    try:
+        unzip_session_files(session_id)
+        attach_dir = Path(TEMP_DIR) / f"session_{session_id}" / "attach"
+        vector_dir = Path(TEMP_DIR) / f"session_{session_id}" / "vector"
+        if attach_dir.exists():
+            attached_files = [str(f) for f in attach_dir.glob("*") if f.is_file()]
+        if vector_dir.exists():
+            vector_files = [str(f) for f in vector_dir.glob("*") if f.is_file()]
+        else:
+            vector_files = []  # Empty list if no vector directory
+    except Exception as e:
+        print(f"Error unzipping session files for {session_id}: {e}")
+
+    temporary.session_attached_files = attached_files
+    temporary.session_vector_files = vector_files
+
+    # Debugging print to confirm 5 values
+    print(f"load_session_history returning: {session_id}, {label}, {len(history)}, {len(attached_files)}, {len(vector_files)}")
+    return session_id, label, history, attached_files, vector_files
 
 def process_uploaded_files(files):
     """Process uploaded files (if needed beyond copying)."""

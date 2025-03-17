@@ -499,7 +499,7 @@ def update_session_buttons():
                 stat = session_path.stat()
                 update_time = stat.st_mtime if stat.st_mtime else stat.st_ctime
                 formatted_time = datetime.fromtimestamp(update_time).strftime("%Y-%m-%d %H:%M")
-                session_id, label, history, _ = utility.load_session_history(session_path)
+                session_id, label, history, attached_files, vector_files = utility.load_session_history(session_path)
                 if history and len(history) >= 2 and history[0]['role'] == 'user' and history[1]['role'] == 'assistant':
                     user_input = history[0]['content']
                     assistant_response = history[1]['content']
@@ -610,7 +610,10 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
 
     # Determine streaming behavior
     mode = mode_selection.lower()
-    use_direct_streaming = (mode == "chat" and not tot_enabled and not web_search_enabled) or mode == "code"
+    use_direct_streaming = (mode == "chat" and not tot_enabled and not web_search_enabled) or mode == "coder"
+
+    # Define prefix based on mode
+    prefix = "AI-Chat:" if mode == "chat" else "AI-Coder:" if mode == "coder" else f"{ai_npc}:" if mode == "rpg" else ""
 
     if not use_direct_streaming:
         if mode == "chat":
@@ -619,14 +622,15 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
             elif web_search_enabled:
                 generation_message = "Researching..."
             else:
-                generation_message = "Generating response..."  # Fallback
+                generation_message = "Generating response..."
         elif mode == "rpg":
             generation_message = "Npc Taking Turn..."
         else:
             generation_message = "Generating..."
         session_log[-1]['content'] = generation_message
     else:
-        session_log[-1]['content'] = ""
+        session_log[-1]['content'] = prefix + "\n"  # Add newline after prefix for direct streaming
+        yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
     interaction_phase = "generating_response"
     yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
@@ -663,7 +667,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
             break
         full_response += chunk
         if use_direct_streaming:
-            session_log[-1]['content'] = full_response
+            session_log[-1]['content'] += chunk  # Append chunk to prefix with newline
             yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         else:
             new_periods = chunk.count(".")
@@ -675,21 +679,21 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         if mode == "chat" and tot_enabled and "</answer>" in full_response:
             break
 
-    # Finalize response
+    # Finalize response for non-direct streaming
     if not use_direct_streaming:
         if mode == "rpg":
-            session_log[-1]['content'] = f"{ai_npc}:\n{full_response}"
+            session_log[-1]['content'] = f"{prefix}\n{full_response}"
         elif mode == "chat" and tot_enabled:
             if "<answer>" in full_response and "</answer>" in full_response:
                 answer_start = full_response.find("<answer>") + len("<answer>")
                 answer_end = full_response.find("</answer>")
                 final_answer = full_response[answer_start:answer_end].strip()
                 progress_bar = "█" * progress_count
-                session_log[-1]['content'] = f"{progress_bar} Aggregating...\n\nAI-Chat:\n{final_answer}"
+                session_log[-1]['content'] = f"{progress_bar} Aggregating...\n\n{prefix}\n{final_answer}"
             else:
-                session_log[-1]['content'] = full_response
+                session_log[-1]['content'] = f"{prefix}\n{full_response}"  # Add newline
         else:
-            session_log[-1]['content'] = full_response
+            session_log[-1]['content'] = f"{prefix}\n{full_response}"  # Add newline
 
     # Generate YAKE label after first response
     if len(session_log) >= 2 and session_log[-2]['role'] == 'user' and session_log[-1]['role'] == 'assistant' and not temporary.session_label:
@@ -712,17 +716,8 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                 recent_events_match = re.search(r'<recent_events>(.*?)</recent_events>', ai_response, re.DOTALL)
                 speak_content = recent_events_match.group(1).strip() if recent_events_match else ai_response
             elif mode == "chat":
-                if tot_enabled:
-                    if "AI-Chat:\n" in ai_response:
-                        speak_content = ai_response.split("AI-Chat:\n", 1)[1].strip()
-                    else:
-                        speak_content = ai_response
-                elif not web_search_enabled:
-                    paragraphs = ai_response.split("\n\n")
-                    if len(paragraphs) == 1:
-                        speak_content = paragraphs[0]
-                    else:
-                        speak_content = paragraphs[0] + "\n\n" + paragraphs[-1]
+                if f"{prefix}\n" in ai_response:
+                    speak_content = ai_response.split(f"{prefix}\n", 1)[1].strip()  # Unified extraction for all chat sub-modes
                 else:
                     speak_content = ai_response
             else:
@@ -1143,7 +1138,7 @@ def launch_interface():
             btn.click(
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
-                outputs=[chat_components["session_log"], states["attached_files"], states["vector_files"], status_text, switches["web_search"], switches["tot"], switches["enable_think"], switches["speak"]]
+                outputs=[chat_components["session_log"], states["attached_files"], states["vector_files"], status_text]
             ).then(
                 fn=lambda: context_injector.load_session_vectorstore(temporary.current_session_id),
                 inputs=[],
