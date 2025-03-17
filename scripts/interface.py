@@ -414,37 +414,37 @@ def shutdown_program(models_loaded):
     os._exit(0)
 
 def update_mode_based_options(mode, showing_rpg_right, is_reasoning_model):
+    """
+    Update the visibility of mode-based options in the UI based on the current mode and model properties.
+
+    Args:
+        mode (str): The current operation mode ("chat", "coder", "rpg").
+        showing_rpg_right (bool): Whether the RPG settings panel is visible.
+        is_reasoning_model (bool): Whether the loaded model is a reasoning model.
+
+    Returns:
+        list: A list of Gradio update objects for switches["tot"], switches["web_search"],
+              switches["enable_think"], and switches["speak"].
+    """
     mode = mode.lower()
     if mode == "coder":
         tot_visible = False
         web_visible = True
+        speak_visible = False
     elif mode == "rpg":
         tot_visible = False
         web_visible = False
+        speak_visible = True
     else:  # chat mode
         tot_visible = True
         web_visible = True
-    think_visible = is_reasoning_model
+        speak_visible = True
+    think_visible = (mode == "chat") and is_reasoning_model
     return [
         gr.update(visible=tot_visible),  # for switches["tot"]
         gr.update(visible=web_visible),  # for switches["web_search"]
         gr.update(visible=think_visible),  # for switches["enable_think"]
-    ]
-
-def update_model_based_options(model_name):
-    if model_name in ["Browse_for_model_folder...", "No models found"]:
-        mode = "Chat"
-        think_visible = False
-        recommended = "Select a model"
-    else:
-        settings = get_model_settings(model_name)
-        mode = settings["category"].capitalize()
-        think_visible = settings["is_reasoning"]
-        recommended = mode
-    return [
-        gr.update(value=mode),
-        gr.update(visible=think_visible),
-        gr.update(value=recommended),
+        gr.update(visible=speak_visible),  # for switches["speak"]
     ]
 
 def update_file_slot_ui(file_list, is_attach=True):
@@ -629,7 +629,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
             generation_message = "Generating..."
         session_log[-1]['content'] = generation_message
     else:
-        session_log[-1]['content'] = prefix + "\n"  # Add newline after prefix for direct streaming
+        session_log[-1]['content'] = "Thinking..."
         yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
     interaction_phase = "generating_response"
@@ -652,6 +652,8 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
     full_response = ""
     progress_count = 0
+    thinking_done = False
+    display_response = ""
 
     async for chunk in get_response_stream(
         session_log,
@@ -667,7 +669,16 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
             break
         full_response += chunk
         if use_direct_streaming:
-            session_log[-1]['content'] += chunk  # Append chunk to prefix with newline
+            if not thinking_done:
+                if '</think>' in full_response:
+                    thinking_done = True
+                    last_think_end = full_response.rfind('</think>') + len('</think>')
+                    display_response = full_response[last_think_end:].strip()
+                    session_log[-1]['content'] = f"{prefix}\n{display_response}"
+                # Else, keep "Thinking..." until </think> is found
+            else:
+                display_response += chunk
+                session_log[-1]['content'] = f"{prefix}\n{display_response}"
             yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         else:
             new_periods = chunk.count(".")
@@ -676,31 +687,30 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                 progress_bar = "█" * progress_count
                 session_log[-1]['content'] = f"{progress_bar} {generation_message}"
                 yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-        if mode == "chat" and tot_enabled and "</answer>" in full_response:
-            break
 
     # Finalize response for non-direct streaming
     if not use_direct_streaming:
+        display_response = re.sub(r'<think>.*?</think>', '', full_response, flags=re.DOTALL).strip()
         if mode == "rpg":
-            session_log[-1]['content'] = f"{prefix}\n{full_response}"
+            session_log[-1]['content'] = f"{prefix}\n{display_response}"
         elif mode == "chat" and tot_enabled:
-            if "<answer>" in full_response and "</answer>" in full_response:
-                answer_start = full_response.find("<answer>") + len("<answer>")
-                answer_end = full_response.find("</answer>")
-                final_answer = full_response[answer_start:answer_end].strip()
-                progress_bar = "█" * progress_count
-                session_log[-1]['content'] = f"{progress_bar} Aggregating...\n\n{prefix}\n{final_answer}"
+            if "<answer>" in display_response and "</answer>" in display_response:
+                answer_start = display_response.find("<answer>") + len("<answer>")
+                answer_end = display_response.find("</answer>")
+                final_answer = display_response[answer_start:answer_end].strip()
+                session_log[-1]['content'] = f"{prefix}\n{final_answer}"
             else:
-                session_log[-1]['content'] = f"{prefix}\n{full_response}"  # Add newline
+                session_log[-1]['content'] = f"{prefix}\n{display_response}"
         else:
-            session_log[-1]['content'] = f"{prefix}\n{full_response}"  # Add newline
+            session_log[-1]['content'] = f"{prefix}\n{display_response}"
+        yield session_log, "Response generated.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
     # Generate YAKE label after first response
     if len(session_log) >= 2 and session_log[-2]['role'] == 'user' and session_log[-1]['role'] == 'assistant' and not temporary.session_label:
         user_input_clean = utility.clean_content('user', session_log[-2]['content'])
         assistant_response_clean = utility.clean_content('assistant', session_log[-1]['content'])
         text_for_yake = user_input_clean + " " + assistant_response_clean
-        text_for_yake = filter_operational_content(text_for_yake)
+        text_for_yake = utility.filter_operational_content(text_for_yake)
         kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
         keywords = kw_extractor.extract_keywords(text_for_yake)
         temporary.session_label = keywords[0][0] if keywords else "No description"
@@ -720,20 +730,15 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                 if f"{prefix}\n" in ai_response:
                     response_text = ai_response.split(f"{prefix}\n", 1)[1].strip()
                 else:
-                    response_text = ai_response.strip()
-                
-                # Check conditions for speaking only first and last paragraphs
-                if not tot_enabled and not web_search_enabled and not settings["is_reasoning"] and not settings["is_uncensored"]:
-                    # Extract first and last paragraphs
-                    paragraphs = [p.strip() for p in response_text.split('\n\n') if p.strip()]
-                    if len(paragraphs) > 1:
-                        speak_content = paragraphs[0] + "\n\n" + paragraphs[-1]
-                    elif paragraphs:
-                        speak_content = paragraphs[0]
-                    else:
-                        speak_content = ""
+                    response_text = response_text.strip()
+                # Always speak first and last paragraphs for chat mode
+                paragraphs = [p.strip() for p in response_text.split('\n\n') if p.strip()]
+                if len(paragraphs) > 1:
+                    speak_content = paragraphs[0] + "\n\n" + paragraphs[-1]
+                elif paragraphs:
+                    speak_content = paragraphs[0]
                 else:
-                    speak_content = response_text
+                    speak_content = ""
             else:
                 speak_content = None
             if speak_content:
@@ -1279,12 +1284,10 @@ def launch_interface():
             fn=lambda status, ml: (status, gr.update(interactive=ml)),
             inputs=[config_components["status_settings"], states["models_loaded"]],
             outputs=[config_components["status_settings"], chat_components["user_input"]]
-        )
-
-        config_components["inspect_model"].click(
-            fn=inspect_model,
-            inputs=[model_folder_state, config_components["model"], config_components["vram"]],
-            outputs=[config_components["status_settings"]]
+        ).then(
+            fn=update_mode_based_options,
+            inputs=[mode_selection, states["showing_rpg_right"], states["is_reasoning_model"]],
+            outputs=[switches["tot"], switches["web_search"], switches["enable_think"]]
         )
 
         config_components["save_settings"].click(

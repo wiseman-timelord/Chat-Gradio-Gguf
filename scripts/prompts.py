@@ -12,12 +12,11 @@ prompt_templates = {
         "tot": (
             "Tree of Thought (T.O.T.) is enabled."
             "Consider 3+ answers/approaches to question."
-            "Outline each step-by-step, then pick best, give title and details in <answer> tags"
+            "Outline each step-by-step, then pick best, use, a title and answer tags for the <answer>details</answer>"
         ),
         "reasoning": (
             "Reasoning is enabled. Think step by step before providing your final answer. "
-            "Use <think> tags for your reasoning and <answer> tags for your final response. "
-            "If tags are unavailable, use 'Final Answer:' to separate reasoning from the answer."
+            "Use think tags for your <think>reasoning</think>, and after that produce your thought out response. "
         )
     },
     "code": "You are a coding assistant. Provide code solutions and explanations.",
