@@ -716,10 +716,24 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                 recent_events_match = re.search(r'<recent_events>(.*?)</recent_events>', ai_response, re.DOTALL)
                 speak_content = recent_events_match.group(1).strip() if recent_events_match else ai_response
             elif mode == "chat":
+                # Remove the prefix
                 if f"{prefix}\n" in ai_response:
-                    speak_content = ai_response.split(f"{prefix}\n", 1)[1].strip()  # Unified extraction for all chat sub-modes
+                    response_text = ai_response.split(f"{prefix}\n", 1)[1].strip()
                 else:
-                    speak_content = ai_response
+                    response_text = ai_response.strip()
+                
+                # Check conditions for speaking only first and last paragraphs
+                if not tot_enabled and not web_search_enabled and not settings["is_reasoning"] and not settings["is_uncensored"]:
+                    # Extract first and last paragraphs
+                    paragraphs = [p.strip() for p in response_text.split('\n\n') if p.strip()]
+                    if len(paragraphs) > 1:
+                        speak_content = paragraphs[0] + "\n\n" + paragraphs[-1]
+                    elif paragraphs:
+                        speak_content = paragraphs[0]
+                    else:
+                        speak_content = ""
+                else:
+                    speak_content = response_text
             else:
                 speak_content = None
             if speak_content:

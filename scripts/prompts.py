@@ -10,8 +10,9 @@ prompt_templates = {
             "Web search is enabled. Incorporate relevant findings from the provided search results into your response."
         ),
         "tot": (
-            "Tree of Thought (T.O.T.) is active. Consider 3+ answers or approaches to the query, "
-            "outline each step-by-step, then select the best one, concluding with a 'Final Answer:' section summarizing your reasoning."
+            "Tree of Thought (T.O.T.) is enabled."
+            "Consider 3+ answers/approaches to question."
+            "Outline each step-by-step, then pick best, give title and details in <answer> tags"
         ),
         "reasoning": (
             "Reasoning is enabled. Think step by step before providing your final answer. "
