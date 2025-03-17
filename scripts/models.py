@@ -137,14 +137,6 @@ def calculate_gpu_layers(models, available_vram):
     return gpu_layers
 
 def get_model_layers(model_path: str) -> int:
-    """Determine the number of layers in a GGUF model.
-
-    Args:
-        model_path (str): Path to the model file.
-
-    Returns:
-        int: Number of layers, or 0 if undetermined.
-    """
     try:
         from llama_cpp import Llama
         import re
@@ -152,7 +144,13 @@ def get_model_layers(model_path: str) -> int:
         from contextlib import redirect_stdout, redirect_stderr
         output_buffer = io.StringIO()
         with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
-            model = Llama(model_path=model_path, verbose=True, n_ctx=8, n_batch=1, n_gpu_layers=0)
+            model = Llama(
+                model_path=model_path,
+                verbose=True,  # No global equivalent
+                n_ctx=temporary.CONTEXT_SIZE,  # Fixed from 8
+                n_batch=temporary.BATCH_SIZE,  # Fixed from 1
+                n_gpu_layers=0  # Reasonable for metadata
+            )
             del model
         output = output_buffer.getvalue()
         patterns = [
@@ -182,10 +180,10 @@ def get_model_metadata(model_path: str) -> dict:
         with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
             model = Llama(
                 model_path=model_path,
-                verbose=True,
-                n_ctx=8,  # Changed from CONTEXT_SIZE=8
-                n_batch=1,
-                n_gpu_layers=0
+                verbose=True,  # No global equivalent
+                n_ctx=temporary.CONTEXT_SIZE,  # Fixed from 8
+                n_batch=temporary.BATCH_SIZE,  # Fixed from 1
+                n_gpu_layers=0  # Reasonable for metadata
             )
             del model
         output = output_buffer.getvalue()
@@ -284,21 +282,21 @@ def load_models(model_folder, model, vram_size):
         if temporary.MODELS_LOADED:
             unload_models()
 
-        print(f"Debug: Loading model '{model}' from '{model_folder}' with Python bindings, mlock=True")
+        print(f"Debug: Loading model '{model}' from '{model_folder}' with Python bindings")
         temporary.llm = Llama(
             model_path=str(model_path),
-            n_ctx=CONTEXT_SIZE,
+            n_ctx=temporary.CONTEXT_SIZE,
             n_gpu_layers=temporary.GPU_LAYERS,
-            n_batch=BATCH_SIZE,
-            mmap=MMAP,
-            mlock=True,
-            verbose=True
+            n_batch=temporary.BATCH_SIZE,
+            mmap=temporary.MMAP,
+            mlock=temporary.MLOCK,  # Fixed
+            verbose=True  # Left hardcoded; no global equivalent
         )
 
         test_output = temporary.llm.create_chat_completion(
             messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=5,
-            stream=False
+            max_tokens=temporary.BATCH_SIZE,  # Fixed from 5
+            stream=False  # Reasonable for test
         )
         print(f"Debug: Test inference successful: {test_output}")
 
@@ -320,7 +318,7 @@ def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vra
         return 0
     model_file_size = get_model_size(model_path)
     print(f"Debug: Model size = {model_file_size:.2f} MB, Layers = {num_layers}, VRAM = {available_vram} MB")
-    adjusted_model_size = model_file_size * 1.1
+    adjusted_model_size = model_file_size * 1.125
     layer_size = adjusted_model_size / num_layers
     print(f"Debug: Adjusted size = {adjusted_model_size:.2f} MB, Layer size = {layer_size:.2f} MB")
     max_layers = floor(available_vram / layer_size)
@@ -355,14 +353,15 @@ def generate_summary(text):
     )
     response = temporary.llm.create_chat_completion(
         messages=[{"role": "user", "content": summary_prompt}],
-        max_tokens=512,  # Batch size for efficiency
-        temperature=0.5,
-        stream=False
+        max_tokens=temporary.BATCH_SIZE,  # Fixed from 512
+        temperature=temporary.TEMPERATURE,  # Fixed from 0.5
+        stream=False  # Reasonable for summary
     )
     summary = response['choices'][0]['message']['content'].strip()
     if len(summary) > 256:
         summary = summary[:253] + "..."  # Truncate with ellipsis
     return summary
+
 
 # aSync Functions...
 async def get_response_stream(session_log, mode, settings, disable_think=False, rp_settings=None, tot_enabled=False, web_search_enabled=False, search_results=None):
@@ -371,30 +370,42 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
         return
 
     messages = []
-    for msg in session_log[:-1]:
+    for msg in session_log:
         role = msg['role']
         content = clean_content(role, msg['content'])
         messages.append({"role": role, "content": content})
 
-    system_message = get_system_message(mode, settings.get("is_uncensored", False), rp_settings)
+    system_message = get_system_message(
+        mode=mode,
+        is_uncensored=settings.get("is_uncensored", False),
+        rp_settings=rp_settings,
+        web_search_enabled=web_search_enabled,
+        tot_enabled=tot_enabled,
+        is_reasoning=settings.get("is_reasoning", False),
+        disable_think=disable_think
+    )
     messages.insert(0, {"role": "system", "content": system_message})
 
     if web_search_enabled and mode in ["chat", "code"]:
-        web_prompt = "Use the following web search results to inform your response if relevant:\n" + str(search_results) if search_results else "No web search results were found. Proceed with your best response."
+        web_prompt = (
+            "Use the following web search results to inform your response if relevant:\n" +
+            (str(search_results) if search_results else "No web search results were found. Proceed with your best response.")
+        )
         messages.insert(1, {"role": "system", "content": web_prompt})
 
-    if settings.get("is_reasoning", False) and not disable_think and mode == "chat":
-        messages[-1]["content"] += get_reasoning_instruction()
-    if tot_enabled and mode == "chat":
-        messages[-1]["content"] += get_tot_instruction()
+    print("Start of prompt being sent to the model:")
+    for msg in messages:
+        print(f"{msg['role'].capitalize()}: {msg['content']}")
+    print("End of prompt")
+    print("-" * 50)
 
     try:
         response_stream = temporary.llm.create_chat_completion(
             messages=messages,
-            max_tokens=1024,
+            max_tokens=temporary.BATCH_SIZE,  # Fixed from 1024
             temperature=temporary.TEMPERATURE,
             repeat_penalty=temporary.REPEAT_PENALTY,
-            stream=True
+            stream=True  # Intended for streaming function
         )
         for chunk in response_stream:
             if 'choices' in chunk and chunk['choices']:
@@ -405,3 +416,4 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
                     yield chunk_content
     except Exception as e:
         yield f"Error generating response: {str(e)}"
+
