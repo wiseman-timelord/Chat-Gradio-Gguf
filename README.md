@@ -146,6 +146,7 @@ With regards to the current version of the program...
 5. Check all available modes with Speech enhancement with `PyWin32`. 
 2. Check all enhancements.
 4. Test Rpg features.
+5. Prompt for uncensored needs making dynamic.
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
