@@ -340,12 +340,12 @@ def toggle_rpg_settings(showing_rpg_right):
 
 def create_session_label(text):
     first_line = text.split('\n')[0].strip()
-    if len(first_line) > 30:
-        last_space = first_line.rfind(' ', 0, 29)
+    if len(first_line) > 35:
+        last_space = first_line.rfind(' ', 0, 34)
         if last_space != -1:
             first_line = first_line[:last_space]
         else:
-            first_line = first_line[:30]
+            first_line = first_line[:35]
     return first_line
 
 def start_new_session(models_loaded):
@@ -560,37 +560,26 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                         is_reasoning_model, rp_location, user_name, user_role, ai_npc,
                         cancel_flag, mode_selection, web_search_enabled, models_loaded,
                         interaction_phase, speak_enabled):
-    from scripts import temporary, utility
-    from scripts.temporary import STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE
-    from scripts.models import get_model_settings, get_response_stream
-    from scripts.utility import speak_text
+    import gradio as gr
+    from scripts.models import get_model_settings
+    from scripts import utility, temporary
     import asyncio
-    import re
-    from pathlib import Path
 
+    # Early return if no models are loaded
     if not models_loaded:
-        yield session_log, "Please load a model first.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        yield session_log, "Please load a model first.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         return
 
-    # Start a new session if not active
-    if not SESSION_ACTIVE:
-        temporary.current_session_id = None
-        temporary.session_label = ""
-        temporary.SESSION_ACTIVE = True
-        session_log = []
-        yield session_log, "New session started.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-        await asyncio.sleep(0.1)
-
-    # Validate input
+    # Early return if input is empty
     if not user_input.strip():
-        yield session_log, "No input provided.", update_action_button("waiting_for_input"), cancel_flag, loaded_files, "waiting_for_input", gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        yield session_log, "No input provided.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         return
 
     # Append user input and prepare assistant response
     session_log.append({'role': 'user', 'content': f"User:\n{user_input}"})
-    session_log.append({'role': 'assistant', 'content': ""})
+    session_log.append({'role': 'assistant', 'content': "Waiting for response..."})
     interaction_phase = "afterthought_countdown"
-    yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update(), gr.update(), gr.update(), gr.update()
+    yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=False), gr.update(), gr.update(), gr.update(), gr.update()
 
     # Afterthought countdown
     if temporary.AFTERTHOUGHT_TIME:
@@ -598,69 +587,63 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         countdown_seconds = 6 if num_lines >= 10 else 4 if num_lines >= 5 else 2
     else:
         countdown_seconds = 1
+
     for i in range(countdown_seconds, -1, -1):
-        session_log[-1]['content'] = f"Afterthought countdown... {i}s"
-        yield session_log, "Counting down...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        status_message = f"Afterthought countdown... {i}s"
+        yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         await asyncio.sleep(1)
         if cancel_flag:
             session_log[-1]['content'] = "Input cancelled."
             interaction_phase = "waiting_for_input"
-            yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            yield session_log, "Input cancelled.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=True, value=""), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-    # Determine streaming behavior
+    # Set up streaming behavior and prefix
     mode = mode_selection.lower()
-    use_direct_streaming = (mode == "chat" and not tot_enabled and not web_search_enabled) or mode == "coder"
-
-    # Define prefix based on mode
     prefix = "AI-Chat:" if mode == "chat" else "AI-Coder:" if mode == "coder" else f"{ai_npc}:" if mode == "rpg" else ""
 
-    if not use_direct_streaming:
-        if mode == "chat":
-            if tot_enabled:
-                generation_message = "Aggregating..."
-            elif web_search_enabled:
-                generation_message = "Researching..."
-            else:
-                generation_message = "Generating response..."
-        elif mode == "rpg":
-            generation_message = "Npc Taking Turn..."
-        else:
-            generation_message = "Generating..."
-        session_log[-1]['content'] = generation_message
+    # Determine start and end stream tags
+    if mode == "chat" and tot_enabled:
+        start_stream_tag = '<answer>'
+        end_stream_tag = '</answer>'
+    elif mode == "chat" and enable_think and is_reasoning_model:
+        start_stream_tag = '</think>'
+        end_stream_tag = None
     else:
-        session_log[-1]['content'] = "Thinking..."
-        yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        start_stream_tag = None
+        end_stream_tag = None
 
     interaction_phase = "generating_response"
-    yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+    settings = get_model_settings(temporary.MODEL_NAME)
 
-    settings = get_model_settings(MODEL_NAME)
+    # Web search phase (if applicable)
+    search_results = None
+    if web_search_enabled and mode == "chat":
+        status_message = "Performing web search..."
+        yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        search_results = utility.web_search(user_input)
+        status_message = "Web search completed." if search_results else "No web search results found."
+        yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-    if mode in ["chat", "rpg"]:
-        search_results = None
-        if web_search_enabled and mode == "chat":
-            session_log[-1]['content'] = "Performing web search..."
-            yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-            search_results = utility.web_search(user_input)
-            if search_results:
-                session_log[-1]['content'] = "Web search completed. Generating response..."
-            else:
-                session_log[-1]['content'] = "No web search results found. Generating response..."
-            yield session_log, session_log[-1]['content'], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+    # Initial status before streaming
+    if start_stream_tag:
+        status_message = ""  # Will show █ as full stops are detected
+    else:
+        status_message = "Streaming response..."
+    yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-    rp_settings = {"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None
+    # Stream the response
     full_response = ""
-    progress_count = 0
-    thinking_done = False
     display_response = ""
+    total_periods = 0
+    streaming = False
 
     async for chunk in get_response_stream(
         session_log,
         mode=mode,
         settings=settings,
         disable_think=not enable_think,
-        rp_settings=rp_settings,
+        rp_settings={"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None,
         tot_enabled=tot_enabled and mode == "chat",
         web_search_enabled=web_search_enabled and mode == "chat",
         search_results=search_results
@@ -668,94 +651,42 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         if cancel_flag:
             break
         full_response += chunk
-        if use_direct_streaming:
-            if not thinking_done:
-                if '</think>' in full_response:
-                    thinking_done = True
-                    last_think_end = full_response.rfind('</think>') + len('</think>')
-                    display_response = full_response[last_think_end:].strip()
-                    session_log[-1]['content'] = f"{prefix}\n{display_response}"
-                # Else, keep "Thinking..." until </think> is found
+
+        if start_stream_tag and start_stream_tag not in full_response:
+            new_periods = chunk.count('.')
+            total_periods += new_periods
+            status_message = '█' * total_periods
+            yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        else:
+            if not streaming:
+                streaming = True
+                if start_stream_tag:
+                    start_index = full_response.find(start_stream_tag) + len(start_stream_tag)
+                    display_response = full_response[start_index:]
+                else:
+                    display_response = full_response
+                session_log[-1]['content'] = f"{prefix}\n{display_response}"
+                status_message = "Streaming response..."
             else:
                 display_response += chunk
                 session_log[-1]['content'] = f"{prefix}\n{display_response}"
-            yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-        else:
-            new_periods = chunk.count(".")
-            if new_periods > 0:
-                progress_count += new_periods
-                progress_bar = "█" * progress_count
-                session_log[-1]['content'] = f"{progress_bar} {generation_message}"
-                yield session_log, "Generating...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-    # Finalize response for non-direct streaming
-    if not use_direct_streaming:
-        display_response = re.sub(r'<think>.*?</think>', '', full_response, flags=re.DOTALL).strip()
-        if mode == "rpg":
-            session_log[-1]['content'] = f"{prefix}\n{display_response}"
-        elif mode == "chat" and tot_enabled:
-            if "<answer>" in display_response and "</answer>" in display_response:
-                answer_start = display_response.find("<answer>") + len("<answer>")
-                answer_end = display_response.find("</answer>")
-                final_answer = display_response[answer_start:answer_end].strip()
-                session_log[-1]['content'] = f"{prefix}\n{final_answer}"
-            else:
+            if end_stream_tag and end_stream_tag in full_response:
+                end_index = full_response.find(end_stream_tag)
+                display_response = full_response[start_index:end_index].strip()
                 session_log[-1]['content'] = f"{prefix}\n{display_response}"
-        else:
-            session_log[-1]['content'] = f"{prefix}\n{display_response}"
-        yield session_log, "Response generated.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+                break
 
-    # Generate YAKE label after first response
-    if len(session_log) >= 2 and session_log[-2]['role'] == 'user' and session_log[-1]['role'] == 'assistant' and not temporary.session_label:
-        user_input_clean = utility.clean_content('user', session_log[-2]['content'])
-        assistant_response_clean = utility.clean_content('assistant', session_log[-1]['content'])
-        text_for_yake = user_input_clean + " " + assistant_response_clean
-        text_for_yake = utility.filter_operational_content(text_for_yake)
-        kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
-        keywords = kw_extractor.extract_keywords(text_for_yake)
-        temporary.session_label = keywords[0][0] if keywords else "No description"
+            yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-    # Save session with updated label
-    utility.save_session_history(session_log, loaded_files, temporary.session_vector_files)
-
-    # Speak functionality
-    if speak_enabled:
-        try:
-            ai_response = session_log[-1]['content']
-            if mode == "rpg":
-                recent_events_match = re.search(r'<recent_events>(.*?)</recent_events>', ai_response, re.DOTALL)
-                speak_content = recent_events_match.group(1).strip() if recent_events_match else ai_response
-            elif mode == "chat":
-                # Remove the prefix
-                if f"{prefix}\n" in ai_response:
-                    response_text = ai_response.split(f"{prefix}\n", 1)[1].strip()
-                else:
-                    response_text = response_text.strip()
-                # Always speak first and last paragraphs for chat mode
-                paragraphs = [p.strip() for p in response_text.split('\n\n') if p.strip()]
-                if len(paragraphs) > 1:
-                    speak_content = paragraphs[0] + "\n\n" + paragraphs[-1]
-                elif paragraphs:
-                    speak_content = paragraphs[0]
-                else:
-                    speak_content = ""
-            else:
-                speak_content = None
-            if speak_content:
-                print(f"DEBUG: Speaking {len(speak_content)} chars: {speak_content}")
-                utility.speak_text(speak_content)
-                session_log.append({'role': 'system', 'content': f"Speak Summary (AI Output):\n{speak_content}"})
-                yield session_log, "Speaking AI output summary...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-        except Exception as e:
-            error_msg = f"Error speaking AI output summary: {str(e)}"
-            session_log.append({'role': 'system', 'content': error_msg})
-            yield session_log, error_msg, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-
-    # Finalize interaction
+    # Final update
     interaction_phase = "waiting_for_input"
     if cancel_flag:
         session_log[-1]['content'] = "Generation cancelled."
-    yield session_log, STATUS_TEXTS["response_generated"], update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(value=""), gr.update(value=web_search_enabled), gr.update(value=tot_enabled), gr.update(value=enable_think), gr.update(value=speak_enabled)
+        status_message = "Generation cancelled."
+    else:
+        status_message = "Interaction complete, awaiting input..."
+    yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=True, value=""), gr.update(), gr.update(), gr.update(), gr.update()
     
 def launch_interface():
     """Launch the Gradio interface for the Text-Gradio-Gguf chatbot with a split-screen layout."""
