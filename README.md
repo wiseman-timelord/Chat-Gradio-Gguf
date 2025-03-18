@@ -18,6 +18,7 @@ Intended as a high-quality chat interface with uses include, Codeing, Rpg Game, 
 - **Afterthought Countdown**: If, =>10 lines then 5s or 5-10 lines then 3s or <5 lines then 1s, wait for you to cancel send and return to edit, saving on mis-prompts and waits.
 - **Attach or Vectorise**: Optimally for the mode, Attach Files is complete raw input, while Vectorise Files is relevance selected snippets from potentially larger source. 
 - **Collapsable Left Column**: Like one would find on modern AI interface. 
+- **ASynchronous Response Stream**: Separate thread with its own event loop, allowing chunks of response queued/processed without blocking Gradio UI event loop.
 
 ### Preview
 - The "Conversation" page, with Operation/Panel Mode selector, and other features or enhancements...
