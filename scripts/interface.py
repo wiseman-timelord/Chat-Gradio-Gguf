@@ -3,7 +3,7 @@
 # Imports...
 import gradio as gr
 from gradio import themes
-import re, os, json, pyperclip, yake, random, asyncio, queue, threading, asyncio
+import re, os, json, pyperclip, yake, random, asyncio, queue, threading, asyncio, time
 from pathlib import Path
 from datetime import datetime
 import tkinter as tk
@@ -152,12 +152,19 @@ def update_input_lines(l):
 
 def format_response(output: str) -> str:
     formatted = []
-    code_blocks = re.findall(r'```(\w+)?\n(.*?)```', output, re.DOTALL)
+    # Preserve think blocks during streaming
+    think_blocks = re.findall(r'<think>(.*?)</think>', output, re.DOTALL)
+    for thought in think_blocks:
+        formatted.append(f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>')
+    
+    # Process remaining content
+    clean_output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL)
+    code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
     for lang, code in code_blocks:
         lexer = get_lexer_by_name(lang, stripall=True)
         formatted_code = highlight(code, lexer, HtmlFormatter())
         output = output.replace(f'```{lang}\n{code}```', formatted_code)
-    return f'<span style="color: {RESPONSE_COLOR}">{output}</span>'
+    return '<br>'.join(formatted) + final_output
 
 def get_initial_model_value():
     # Use cached AVAILABLE_MODELS instead of scanning again
@@ -394,8 +401,8 @@ def update_file_slot_ui(file_list, is_attach=True):
     visible = len(file_list) < temporary.MAX_ATTACH_SLOTS if is_attach else True  # Vector has no limit UI-wise
     return button_updates + [gr.update(visible=visible)]
 
-
 def filter_operational_content(text):
+    """Remove operational tags and metadata from the text."""
     patterns = [
         r"ggml_vulkan:.*",
         r"load_tensors:.*",
@@ -412,10 +419,11 @@ def filter_operational_content(text):
         r"eval:.*",
         r"embd_inp.size.*",
         r"waiting for user input",
+        r"<think>.*?</think>",
     ]
-    lines = text.split("\n")
-    filtered_lines = [line for line in lines if not any(re.search(pattern, line) for pattern in patterns)]
-    return "\n".join(filtered_lines)
+    for pattern in patterns:
+        text = re.sub(pattern, '', text, flags=re.DOTALL)
+    return text.strip()
 
 def update_session_buttons():
     sessions = utility.get_saved_sessions()[:temporary.MAX_HISTORY_SLOTS]  # Limit to MAX_HISTORY_SLOTS
@@ -486,16 +494,19 @@ def create_session_label(text):
             first_line = first_line[:30]
     return first_line
 
+# Async Converstation Interface
 async def conversation_interface(user_input, session_log, tot_enabled, loaded_files, enable_think,
                                  is_reasoning_model, cancel_flag, web_search_enabled,
-                                 models_loaded, interaction_phase, speak_enabled):
-    if not models_loaded:
+                                 models_loaded, interaction_phase, speak_enabled, llm_state, models_loaded_state):
+    if not models_loaded_state:
         yield session_log, "Please load a model first.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         return
 
     if not user_input.strip():
         yield session_log, "No input provided.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         return
+
+    print("Debug: Starting conversation_interface with input:", user_input)
 
     original_input = user_input
     if temporary.session_attached_files:
@@ -512,110 +523,105 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
     interaction_phase = "afterthought_countdown"
     yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=False), gr.update(), gr.update(), gr.update(), gr.update()
 
-    # Updated delay to 1, 3, 5 seconds
     countdown_seconds = 5 if len(user_input.split('\n')) >= 10 else 3 if len(user_input.split('\n')) >= 5 else 1
+    progress_indicators = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    
     for i in range(countdown_seconds, -1, -1):
-        yield session_log, f"Afterthought countdown... {i}s", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        current_progress = random.choice(progress_indicators)
+        yield session_log, f"{current_progress} Afterthought countdown... {i}s", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         await asyncio.sleep(1)
         if cancel_flag:
-            if session_log and session_log[-1]['role'] == 'assistant':
-                session_log.pop()
+            session_log.pop()
             interaction_phase = "waiting_for_input"
             yield session_log, "Input cancelled.", update_action_button(interaction_phase), False, loaded_files, interaction_phase, gr.update(interactive=True, value=original_input), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-    prefix = "AI-Chat-Response:"  # Simplified to a single prefix
-    start_stream_tag = '<answer>' if tot_enabled else '</think>' if enable_think and is_reasoning_model else None
-    end_stream_tag = '</answer>' if tot_enabled else None
-
+    prefix = "AI-Chat-Response:"
     interaction_phase = "generating_response"
     settings = get_model_settings(temporary.MODEL_NAME)
 
     search_results = None
     if web_search_enabled:
-        yield session_log, "Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        yield session_log, "🔍 Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         search_results = await asyncio.to_thread(utility.web_search, user_input)
-        yield session_log, "Web search completed." if search_results else "No web search results found.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-
-    yield session_log, "Streaming response..." if not start_stream_tag else "Awaiting model response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        yield session_log, "✅ Web search completed." if search_results else "⚠️ No web results.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
     q = queue.Queue()
     cancel_event = threading.Event()
+    thinking_content = []
+    final_answer = []
 
     def run_generator():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        async def consume_generator():
-            try:
-                async for chunk in get_response_stream(
-                    session_log,
-                    settings=settings,
-                    disable_think=not enable_think,
-                    tot_enabled=tot_enabled,
-                    web_search_enabled=web_search_enabled,
-                    search_results=search_results,
-                    cancel_event=cancel_event
-                ):
-                    if chunk == "<CANCELLED>":
-                        q.put(chunk)
-                        break
-                    if cancel_event.is_set():
-                        break
-                    q.put(chunk)
-                q.put(None)
-            except Exception as e:
-                q.put(f"Error: {str(e)}")
-        loop.run_until_complete(consume_generator())
-        loop.close()
+        try:
+            for chunk in get_response_stream(
+                session_log,
+                settings=settings,
+                disable_think=not enable_think,
+                tot_enabled=tot_enabled,
+                web_search_enabled=web_search_enabled,
+                search_results=search_results,
+                cancel_event=cancel_event,
+                llm_state=llm_state,
+                models_loaded_state=models_loaded_state
+            ):
+                q.put(chunk)
+            q.put(None)
+        except Exception as e:
+            q.put(f"Error: {str(e)}")
 
+    print("Debug: Starting generator thread")
     thread = threading.Thread(target=run_generator, daemon=True)
     thread.start()
 
-    full_response = ""
-    display_response = ""
-    total_periods = 0
-    streaming = False
-
     while True:
+        print("Debug: Waiting for chunk")
         chunk = await asyncio.to_thread(q.get)
+        print(f"Debug: Received chunk: {chunk}")
         if chunk is None:
             break
         if cancel_flag:
             cancel_event.set()
-            continue
+            session_log[-1]['content'] = "Generation cancelled."
+            break
         if chunk == "<CANCELLED>":
             session_log[-1]['content'] = "Generation cancelled."
             break
-        elif isinstance(chunk, str) and chunk.startswith("Error:"):
+        if isinstance(chunk, str) and chunk.startswith("Error:"):
             session_log[-1]['content'] = chunk
-            break
-        full_response += chunk
+            yield session_log, f"⚠️ {chunk}", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
+            return
 
-        if start_stream_tag and start_stream_tag not in full_response:
-            total_periods += chunk.count('.')
-            yield session_log, '█' * total_periods, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        if chunk.startswith("<THINK>") and chunk.endswith("</THINK>"):
+            thought = chunk[7:-8].strip()
+            if thought:
+                thinking_content.append(thought)
+                session_log[-1]['content'] = f"{prefix}\n<thinking>\n" + "\n".join(thinking_content) + "\n</thinking>"
+                yield session_log, "🤔 Reasoning...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         else:
-            if not streaming:
-                streaming = True
-                if start_stream_tag:
-                    start_index = full_response.find(start_stream_tag) + len(start_stream_tag)
-                    display_response = full_response[start_index:].lstrip()
-                else:
-                    display_response = re.sub(r'^</think>\s*', '', full_response)
-                session_log[-1]['content'] = f"{prefix}\n{display_response}"
+            final_answer.append(chunk)
+            display = "".join(final_answer).strip()
+            if tot_enabled:
+                session_log[-1]['content'] = f"{prefix}\n<answer>\n{display}\n</answer>"
             else:
-                display_response += chunk
-                session_log[-1]['content'] = f"{prefix}\n{display_response}"
+                session_log[-1]['content'] = f"{prefix}\n{display}"
+            current_progress = random.choice(progress_indicators)
+            yield session_log, f"{current_progress} Formulating answer...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-            if end_stream_tag and end_stream_tag in full_response:
-                end_index = full_response.find(end_stream_tag)
-                display_response = full_response[start_index:end_index].strip()
-                session_log[-1]['content'] = f"{prefix}\n{display_response}"
-                break
+        await asyncio.sleep(0.02)
 
-            yield session_log, "Streaming response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+    final_content = "".join(final_answer).strip()
+    if thinking_content and not final_content:
+        session_log[-1]['content'] = f"{prefix}\n<thinking>\n" + "\n".join(thinking_content) + "\n</thinking>\n<answer>\n(Response interrupted)</answer>"
+    elif not final_content and not thinking_content:
+        session_log[-1]['content'] = f"{prefix}\n<answer>\n(Empty response)</answer>"
+        yield session_log, "⚠️ No response generated.", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
+        return
+    else:
+        session_log[-1]['content'] = filter_operational_content(f"{prefix}\n{final_content}")
 
-    
+    yield session_log, "✅ Response ready", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
+
+# Core Gradio Interface    
 def launch_interface():
     """Launch the Gradio interface for the Text-Gradio-Gguf conversationbot with a split-screen layout."""
     global demo
@@ -655,6 +661,7 @@ def launch_interface():
             attached_files=gr.State([]),
             vector_files=gr.State([]),
             models_loaded=gr.State(False),
+            llm=gr.State(None),  # Add this line
             cancel_flag=gr.State(False),
             interaction_phase=gr.State("waiting_for_input"),
             is_reasoning_model=gr.State(False),
@@ -938,7 +945,9 @@ def launch_interface():
                 switches["web_search"],
                 states["models_loaded"],
                 states["interaction_phase"],
-                switches["speak"]
+                switches["speak"],
+                states["llm"],  # Add this
+                states["models_loaded"]  # Already present, kept for clarity
             ],
             outputs=[
                 conversation_components["session_log"],
@@ -953,14 +962,6 @@ def launch_interface():
                 switches["enable_think"],
                 switches["speak"]
             ]
-        ).then(
-            fn=lambda files: update_file_slot_ui(files, True),
-            inputs=[states["attached_files"]],
-            outputs=attach_slots + [attach_files]
-        ).then(
-            fn=update_session_buttons,
-            inputs=[],
-            outputs=buttons["session"]
         )
 
         action_buttons["copy_response"].click(
@@ -1074,11 +1075,9 @@ def launch_interface():
         )
 
         config_components["unload"].click(
-            fn=models.unload_models,
-            outputs=[config_components["status_settings"]]
-        ).then(
-            fn=lambda: False,
-            outputs=[states["models_loaded"]]
+            fn=unload_models,
+            inputs=[states["llm"], states["models_loaded"]],
+            outputs=[config_components["status_settings"], states["llm"], states["models_loaded"]]
         ).then(
             fn=lambda: gr.update(interactive=False),
             outputs=[conversation_components["user_input"]]
@@ -1089,8 +1088,8 @@ def launch_interface():
             outputs=[config_components["status_settings"]]
         ).then(
             fn=load_models,
-            inputs=[model_folder_state, config_components["model"], config_components["vram"]],
-            outputs=[config_components["status_settings"], states["models_loaded"]]
+            inputs=[model_folder_state, config_components["model"], config_components["vram"], states["llm"], states["models_loaded"]],
+            outputs=[config_components["status_settings"], states["models_loaded"], states["llm"], states["models_loaded"]]
         ).then(
             fn=lambda status, ml: (status, gr.update(interactive=ml)),
             inputs=[config_components["status_settings"], states["models_loaded"]],

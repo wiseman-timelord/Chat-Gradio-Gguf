@@ -252,7 +252,7 @@ def inspect_model(model_dir, model_name, vram_size):
     except Exception as e:
         return f"Error inspecting model: {str(e)}"
 
-def load_models(model_folder, model, vram_size):
+def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     from scripts.temporary import CONTEXT_SIZE, BATCH_SIZE, MMAP, DYNAMIC_GPU_LAYERS
     from scripts.utility import save_config
     from pathlib import Path
@@ -261,18 +261,15 @@ def load_models(model_folder, model, vram_size):
     save_config()
 
     if model in ["Browse_for_model_folder...", "No models found"]:
-        temporary.MODELS_LOADED = False
-        return "Select a model to load.", False
+        return "Select a model to load.", False, llm_state, models_loaded_state
 
     model_path = Path(model_folder) / model
     if not model_path.exists():
-        temporary.MODELS_LOADED = False
-        return f"Error: Model file '{model_path}' not found.", False
+        return f"Error: Model file '{model_path}' not found.", False, llm_state, models_loaded_state
 
     num_layers = get_model_layers(str(model_path))
     if num_layers <= 0:
-        temporary.MODELS_LOADED = False
-        return f"Error: Could not determine layer count for model '{model}'.", False
+        return f"Error: Could not determine layer count for model '{model}'.", False, llm_state, models_loaded_state
 
     temporary.GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
         str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
@@ -281,41 +278,38 @@ def load_models(model_folder, model, vram_size):
     try:
         from llama_cpp import Llama
     except ImportError:
-        temporary.MODELS_LOADED = False
-        return "Error: llama-cpp-python not installed. Python bindings are required.", False
+        return "Error: llama-cpp-python not installed. Python bindings are required.", False, llm_state, models_loaded_state
 
     try:
-        if temporary.MODELS_LOADED:
-            unload_models()
+        if models_loaded_state:
+            unload_models(llm_state, models_loaded_state)
 
         print(f"Debug: Loading model '{model}' from '{model_folder}' with Python bindings")
-        temporary.llm = Llama(
+        new_llm = Llama(
             model_path=str(model_path),
             n_ctx=temporary.CONTEXT_SIZE,
             n_gpu_layers=temporary.GPU_LAYERS,
             n_batch=temporary.BATCH_SIZE,
             mmap=temporary.MMAP,
-            mlock=temporary.MLOCK,  # Fixed
-            verbose=True  # Left hardcoded; no global equivalent
+            mlock=temporary.MLOCK,
+            verbose=True
         )
 
-        test_output = temporary.llm.create_chat_completion(
+        test_output = new_llm.create_chat_completion(
             messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=temporary.BATCH_SIZE,  # Fixed from 5
-            stream=False  # Reasonable for test
+            max_tokens=temporary.BATCH_SIZE,
+            stream=False
         )
         print(f"Debug: Test inference successful: {test_output}")
 
-        temporary.MODELS_LOADED = True
-        temporary.MODEL_NAME = model
+        temporary.MODEL_NAME = model  # Keep for settings
         status = f"Model '{model}' loaded successfully. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
-        return status, True
+        return status, True, new_llm, True
 
     except Exception as e:
         error_msg = f"Error loading model: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
-        temporary.MODELS_LOADED = False
-        return error_msg, False
+        return error_msg, False, None, False
 
 def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vram: int, num_layers: int, dynamic_gpu_layers: bool = True) -> int:
     from math import floor
@@ -332,17 +326,15 @@ def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vra
     print(f"Debug: Max layers with VRAM = {max_layers}, Final result = {result}")
     return result
 
-def unload_models():
-    global llm, MODELS_LOADED, MODEL_NAME
+def unload_models(llm_state, models_loaded_state):
     import gc
-    if MODELS_LOADED:
-        del llm
+    if models_loaded_state:
+        del llm_state
         gc.collect()
-        MODELS_LOADED = False
-        print(f"Model {MODEL_NAME} unloaded.")
-        return "Model unloaded successfully."
+        print(f"Model {temporary.MODEL_NAME} unloaded.")
+        return "Model unloaded successfully.", None, False
     print("Warning: No model was loaded to unload.")
-    return "No model loaded to unload."
+    return "No model loaded to unload.", llm_state, models_loaded_state
 
 def clean_content(role, content):
     """Remove prefixes from session_log content for model input."""
@@ -370,15 +362,20 @@ def generate_summary(text):
 
 
 # aSync Functions...
-async def get_response_stream(session_log, settings, disable_think=False, tot_enabled=False, web_search_enabled=False, search_results=None, cancel_event=None):
-    if not MODELS_LOADED or llm is None:
+def get_response_stream(session_log, settings, disable_think=False, tot_enabled=False, 
+                        web_search_enabled=False, search_results=None, cancel_event=None, 
+                        llm_state=None, models_loaded_state=False):
+    if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
         return
 
-    messages = [{"role": msg['role'], "content": clean_content(msg['role'], msg['content'])} for msg in session_log]
-    user_input = messages[-1]['content'] if messages and messages[-1]['role'] == 'user' else ""
-    is_programming = any(keyword in user_input.lower() for keyword in handling_keywords["code"])
+    print("Debug: Entering get_response_stream")
+    print(f"Debug: session_log = {session_log}")
 
+    # Build messages
+    messages = []
+    
+    # System message
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
         is_nsfw=settings.get("is_nsfw", False),
@@ -387,41 +384,60 @@ async def get_response_stream(session_log, settings, disable_think=False, tot_en
         is_reasoning=settings.get("is_reasoning", False),
         disable_think=disable_think
     )
-    
-    if is_programming:
-        programming_prompt = "You are a helpful AI Programming Assistant. Provide code solutions and explanations when appropriate."
-        system_message = programming_prompt + "\n\n" + system_message
-    
-    messages.insert(0, {"role": "system", "content": system_message})
+    if web_search_enabled and search_results:
+        system_message += f"\n\n=== Web Results ===\n{search_results}"
+    messages.append({"role": "system", "content": system_message})
 
-    if web_search_enabled:
-        web_prompt = (
-            "Use the following web search results to inform your response if relevant:\n" +
-            (str(search_results) if search_results else "No web search results were found. Proceed with your best response.")
-        )
-        messages.insert(1, {"role": "system", "content": web_prompt})
+    # Include only the latest user message
+    if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
+        user_content = clean_content('user', session_log[-2]['content'])
+        messages.append({"role": "user", "content": user_content})
+    else:
+        print("Debug: No valid user message in session_log")
+        yield "Error: No user input to process."
+        return
 
-    print("Start of prompt being sent to the model:")
+    # Debug prompt
+    print("\n" + "="*40 + " FULL PROMPT " + "="*40)
     for msg in messages:
-        print(f"{msg['role'].capitalize()}: {msg['content']}")
-    print("End of prompt")
-    print("-" * 50)
+        print(f"{msg['role'].upper()}:\n{msg['content']}\n")
+    print("="*93 + "\n")
 
     try:
-        response_stream = llm.create_chat_completion(
+        print("Debug: Calling llm_state.create_chat_completion")
+        response_stream = llm_state.create_chat_completion(
             messages=messages,
             max_tokens=BATCH_SIZE,
             temperature=TEMPERATURE,
             repeat_penalty=REPEAT_PENALTY,
             stream=True
         )
+        
+        buffer = ""
+        has_content = False
         for chunk in response_stream:
             if cancel_event and cancel_event.is_set():
                 yield "<CANCELLED>"
                 return
             if 'choices' in chunk and chunk['choices']:
-                delta = chunk['choices'][0].get('delta', {})
-                if 'content' in delta:
-                    yield delta['content']
+                content = chunk['choices'][0].get('delta', {}).get('content', '')
+                if content:
+                    has_content = True
+                    buffer += content
+                    while '\n' in buffer or '.' in buffer:
+                        split_pos = buffer.find('\n') + 1 if '\n' in buffer else buffer.find('.') + 1
+                        if split_pos > 0:
+                            yielded_chunk = buffer[:split_pos]
+                            yield yielded_chunk
+                            print(f"Debug: Yielded chunk: {yielded_chunk.strip()}")  # Log only yielded chunks
+                            buffer = buffer[split_pos:]
+        if buffer.strip():
+            yield buffer
+            print(f"Debug: Yielded final buffer: {buffer.strip()}")
+        elif not has_content:
+            print("Debug: Model generated no content")
+            yield "Error: Model generated an empty response."
     except Exception as e:
-        yield f"Error generating response: {str(e)}"
+        error_msg = f"Error generating response: {str(e)}"
+        print(f"Debug: {error_msg}")
+        yield error_msg

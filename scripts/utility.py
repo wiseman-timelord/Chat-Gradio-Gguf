@@ -22,20 +22,10 @@ from scripts.models import clean_content, get_available_models
 
 # Functions...
 def filter_operational_content(text):
-    """
-    Remove operational tags and metadata from the text.
-
-    Args:
-        text (str): The input text possibly containing operational tags.
-
-    Returns:
-        str: The text with operational tags removed.
-    """
-    # Remove content within <thinking> and </thinking> tags
-    text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
-    # Remove content within <answer> and </answer> tags
+    """Remove operational tags and metadata from the text."""
+    # Updated to handle <think> tags
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
-    # Add more patterns as needed for other operational tags
     return text.strip()
 
 def get_cpu_info():

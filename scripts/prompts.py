@@ -24,26 +24,38 @@ prompt_templates = {
     }
 }
 
-def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, tot_enabled=False, is_reasoning=False, disable_think=False):
+def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, 
+                      tot_enabled=False, is_reasoning=False, disable_think=False):
+    # Base prompt selection
     if is_uncensored:
         base_prompt = prompt_templates["chat"]["base_unfiltered"]
-    elif is_nsfw:
-        base_prompt = prompt_templates["chat"]["base_nsfw"]
     else:
         base_prompt = prompt_templates["chat"]["base"]
     
+    # Initialize segments with base prompt
     segments = [base_prompt]
+    
+    # Add web search instruction if enabled
     if web_search_enabled:
         segments.append(prompt_templates["chat"]["web_search"])
+    
+    # Add Tree of Thought instruction if enabled
     if tot_enabled:
         segments.append(prompt_templates["chat"]["tot"])
+    
+    # Handle reasoning requirements
     if is_reasoning:
         if not disable_think:
             segments.append(prompt_templates["chat"]["reasoning"])
         else:
             segments.append(prompt_templates["chat"]["no_reasoning"])
     
-    return "\n\n".join(segments)
+    # Add NSFW handling if needed
+    if is_nsfw:
+        segments.append("This conversation may contain NSFW content. Respond appropriately.")
+    
+    # Combine all segments with clear section breaks
+    return "\n\n=== System Instructions ===\n" + "\n\n".join(segments) + "\n\n=== Conversation ==="
 
 def get_reasoning_instruction():
     return prompt_templates["chat"]["reasoning"]
