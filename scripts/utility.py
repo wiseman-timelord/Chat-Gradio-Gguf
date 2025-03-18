@@ -407,8 +407,6 @@ def update_setting(key, value):
             temporary.REPEAT_PENALTY = float(value)
         elif key == "mlock":
             temporary.MLOCK = bool(value)
-        elif key == "afterthought_time":
-            temporary.AFTERTHOUGHT_TIME = bool(value)
         elif key == "n_batch":
             temporary.BATCH_SIZE = int(value)
         elif key == "model_folder":
@@ -426,14 +424,6 @@ def update_setting(key, value):
         elif key == "input_lines":
             temporary.INPUT_LINES = int(value)
         # RPG settings
-        elif key == "rp_location":
-            temporary.RP_LOCATION = str(value)
-        elif key == "user_name":
-            temporary.USER_PC_NAME = str(value)
-        elif key == "user_role":
-            temporary.USER_PC_ROLE = str(value)
-        elif key == "ai_npc":
-            temporary.AI_NPC_NAME = str(value)
 
         if reload_required:
             reload_result = change_model(temporary.MODEL_NAME.split('/')[-1])
@@ -482,8 +472,6 @@ def load_config():
                     temporary.MMAP = bool(config["model_settings"]["mmap"])
                 if "mlock" in config["model_settings"]:
                     temporary.MLOCK = bool(config["model_settings"]["mlock"])
-                if "afterthought_time" in config["model_settings"]:
-                    temporary.AFTERTHOUGHT_TIME = bool(config["model_settings"]["afterthought_time"])
                 if "n_batch" in config["model_settings"]:
                     temporary.BATCH_SIZE = int(config["model_settings"]["n_batch"])
                 if "dynamic_gpu_layers" in config["model_settings"]:
@@ -497,23 +485,10 @@ def load_config():
                 if "input_lines" in config["model_settings"]:
                     temporary.INPUT_LINES = int(config["model_settings"]["input_lines"])
                 
-                # Load backend config
                 if "backend_type" in config["backend_config"]:
                     temporary.BACKEND_TYPE = config["backend_config"]["backend_type"]
                 if "llama_bin_path" in config["backend_config"]:
                     temporary.LLAMA_BIN_PATH = config["backend_config"]["llama_bin_path"]
-                
-                # Load RPG settings
-                if "rp_location" in config["rp_settings"]:
-                    temporary.RP_LOCATION = config["rp_settings"]["rp_location"]
-                if "user_name" in config["rp_settings"]:
-                    temporary.USER_PC_NAME = config["rp_settings"]["user_name"]
-                if "user_role" in config["rp_settings"]:
-                    temporary.USER_PC_ROLE = config["rp_settings"]["user_role"]
-                if "ai_npc" in config["rp_settings"]:
-                    temporary.AI_NPC_NAME = config["rp_settings"]["ai_npc"]
-                if "ai_npc_role" in config["rp_settings"]:
-                    temporary.AI_NPC_ROLE = config["rp_settings"]["ai_npc_role"]
                 
                 # Ensure loaded values are in allowed options
                 if temporary.MAX_ATTACH_SLOTS not in temporary.ATTACH_SLOT_OPTIONS:
@@ -525,7 +500,6 @@ def load_config():
                 if temporary.SESSION_LOG_HEIGHT not in temporary.SESSION_LOG_HEIGHT_OPTIONS:
                     temporary.SESSION_LOG_HEIGHT = temporary.SESSION_LOG_HEIGHT_OPTIONS[0]
                 
-                # Validate model_name using the cached list
                 if temporary.MODEL_NAME not in temporary.AVAILABLE_MODELS:
                     temporary.MODEL_NAME = "Browse_for_model_folder..." if not temporary.AVAILABLE_MODELS else temporary.AVAILABLE_MODELS[0]
                 
@@ -559,7 +533,6 @@ def save_config():
                 "mlock": temporary.MLOCK,
                 "n_batch": temporary.BATCH_SIZE,
                 "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
-                "afterthought_time": temporary.AFTERTHOUGHT_TIME,
                 "max_history_slots": temporary.MAX_HISTORY_SLOTS,
                 "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
                 "session_log_height": temporary.SESSION_LOG_HEIGHT,
@@ -568,13 +541,6 @@ def save_config():
             "backend_config": {
                 "backend_type": temporary.BACKEND_TYPE,
                 "llama_bin_path": temporary.LLAMA_BIN_PATH
-            },
-            "rp_settings": {
-                "rp_location": temporary.RP_LOCATION,
-                "user_name": temporary.USER_PC_NAME,
-                "user_role": temporary.USER_PC_ROLE,
-                "ai_npc": temporary.AI_NPC_NAME,
-                "ai_npc_role": temporary.AI_NPC_ROLE
             }
         }
         with open(config_path, 'w') as f:
@@ -592,18 +558,12 @@ def save_config():
         print(f"Saved MLOCK: {temporary.MLOCK}")
         print(f"Saved BATCH_SIZE: {temporary.BATCH_SIZE}")
         print(f"Saved DYNAMIC_GPU_LAYERS: {temporary.DYNAMIC_GPU_LAYERS}")
-        print(f"Saved AFTERTHOUGHT_TIME: {temporary.AFTERTHOUGHT_TIME}")
         print(f"Saved MAX_HISTORY_SLOTS: {temporary.MAX_HISTORY_SLOTS}")
         print(f"Saved MAX_ATTACH_SLOTS: {temporary.MAX_ATTACH_SLOTS}")
         print(f"Saved SESSION_LOG_HEIGHT: {temporary.SESSION_LOG_HEIGHT}")
         print(f"Saved INPUT_LINES: {temporary.INPUT_LINES}")
         print(f"Saved BACKEND_TYPE: {temporary.BACKEND_TYPE}")
         print(f"Saved LLAMA_BIN_PATH: {temporary.LLAMA_BIN_PATH}")
-        print(f"Saved RP_LOCATION: {temporary.RP_LOCATION}")
-        print(f"Saved USER_PC_NAME: {temporary.USER_PC_NAME}")
-        print(f"Saved USER_PC_ROLE: {temporary.USER_PC_ROLE}")
-        print(f"Saved AI_NPC_NAME: {temporary.AI_NPC_NAME}")
-        print(f"Saved AI_NPC_ROLE: {temporary.AI_NPC_ROLE}")
         print("Settings saved successfully to persistent.json")
         return "Settings saved successfully."
     except Exception as e:

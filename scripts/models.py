@@ -12,7 +12,7 @@ import scripts.temporary as temporary  # Import module instead of specific varia
 from scripts.prompts import prompt_templates
 from scripts.temporary import (
     CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
-    DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, llm,
+    DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, handling_keywords, llm,
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED
 )
 
@@ -49,6 +49,23 @@ class ContextInjector:
 context_injector = ContextInjector()
 
 # Functions...
+def is_programming_related(user_input):
+    """
+    Check if the user input is related to programming based on keywords.
+
+    Args:
+        user_input (str): The user's input text.
+
+    Returns:
+        bool: True if programming-related, False otherwise.
+    """
+    programming_keywords = [
+        "code", "programming", "script", "function", "class", "variable", "loop", "condition",
+        "algorithm", "debug", "syntax", "compile", "execute", "IDE", "framework", "library",
+        "API", "database", "SQL", "Python", "Java", "C++", "JavaScript", "HTML", "CSS", "Git", "version control"
+    ]
+    return any(keyword.lower() in user_input.lower() for keyword in programming_keywords)
+
 def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
 
@@ -85,28 +102,17 @@ def get_available_models():
     return choices
 
 def get_model_settings(model_name):
-    from .temporary import category_keywords, handling_keywords
     model_name_lower = model_name.lower()
-    category = "chat"
-    for cat, keywords in category_keywords.items():
-        if any(keyword in model_name_lower for keyword in keywords):
-            category = cat
-            break
     is_uncensored = any(keyword in model_name_lower for keyword in handling_keywords["uncensored"])
     is_reasoning = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
+    is_nsfw = any(keyword in model_name_lower for keyword in handling_keywords["nsfw"])
     return {
-        "category": category,
+        "category": "chat",
         "is_uncensored": is_uncensored,
         "is_reasoning": is_reasoning,
+        "is_nsfw": is_nsfw,
         "detected_keywords": []
     }
-
-def determine_operation_mode(model_name):
-    if model_name == "Browse_for_model_folder...":
-        return "Select models to enable mode detection.", "Select models to enable mode detection."
-    settings = get_model_settings(model_name)
-    mode = settings["category"].capitalize()
-    return mode, mode
 
 def calculate_gpu_layers(models, available_vram):
     from math import floor
@@ -364,29 +370,31 @@ def generate_summary(text):
 
 
 # aSync Functions...
-async def get_response_stream(session_log, mode, settings, disable_think=False, rp_settings=None, tot_enabled=False, web_search_enabled=False, search_results=None):
-    if not temporary.MODELS_LOADED or temporary.llm is None:
+async def get_response_stream(session_log, settings, disable_think=False, tot_enabled=False, web_search_enabled=False, search_results=None, cancel_event=None):
+    if not MODELS_LOADED or llm is None:
         yield "Error: No model loaded. Please load a model first."
         return
 
-    messages = []
-    for msg in session_log:
-        role = msg['role']
-        content = clean_content(role, msg['content'])
-        messages.append({"role": role, "content": content})
+    messages = [{"role": msg['role'], "content": clean_content(msg['role'], msg['content'])} for msg in session_log]
+    user_input = messages[-1]['content'] if messages and messages[-1]['role'] == 'user' else ""
+    is_programming = any(keyword in user_input.lower() for keyword in handling_keywords["code"])
 
     system_message = get_system_message(
-        mode=mode,
         is_uncensored=settings.get("is_uncensored", False),
-        rp_settings=rp_settings,
+        is_nsfw=settings.get("is_nsfw", False),
         web_search_enabled=web_search_enabled,
         tot_enabled=tot_enabled,
         is_reasoning=settings.get("is_reasoning", False),
         disable_think=disable_think
     )
+    
+    if is_programming:
+        programming_prompt = "You are a helpful AI Programming Assistant. Provide code solutions and explanations when appropriate."
+        system_message = programming_prompt + "\n\n" + system_message
+    
     messages.insert(0, {"role": "system", "content": system_message})
 
-    if web_search_enabled and mode in ["chat", "code"]:
+    if web_search_enabled:
         web_prompt = (
             "Use the following web search results to inform your response if relevant:\n" +
             (str(search_results) if search_results else "No web search results were found. Proceed with your best response.")
@@ -400,20 +408,20 @@ async def get_response_stream(session_log, mode, settings, disable_think=False, 
     print("-" * 50)
 
     try:
-        response_stream = temporary.llm.create_chat_completion(
+        response_stream = llm.create_chat_completion(
             messages=messages,
-            max_tokens=temporary.BATCH_SIZE,  # Fixed from 1024
-            temperature=temporary.TEMPERATURE,
-            repeat_penalty=temporary.REPEAT_PENALTY,
-            stream=True  # Intended for streaming function
+            max_tokens=BATCH_SIZE,
+            temperature=TEMPERATURE,
+            repeat_penalty=REPEAT_PENALTY,
+            stream=True
         )
         for chunk in response_stream:
+            if cancel_event and cancel_event.is_set():
+                yield "<CANCELLED>"
+                return
             if 'choices' in chunk and chunk['choices']:
                 delta = chunk['choices'][0].get('delta', {})
                 if 'content' in delta:
-                    chunk_content = delta['content']
-                    print(chunk_content, end='', flush=True)
-                    yield chunk_content
+                    yield delta['content']
     except Exception as e:
         yield f"Error generating response: {str(e)}"
-

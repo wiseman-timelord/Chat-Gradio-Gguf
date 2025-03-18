@@ -75,13 +75,6 @@ ATTACH_SLOT_OPTIONS = [2, 4, 6, 8, 10]
 SESSION_LOG_HEIGHT_OPTIONS = [400, 550, 650, 700, 750, 850, 1000, 1200, 1450, 1750]
 INPUT_LINES_OPTIONS = [15, 21, 25, 27, 29, 33, 39, 47, 57, 69]
 
-# RPG Settings
-RP_LOCATION = "Public"
-USER_PC_NAME = "Human"
-USER_PC_ROLE = "Lead Roleplayer"
-AI_NPC_NAME = "Robot"
-AI_NPC_ROLE = "Randomers"
-
 # TOT Settings
 TOT_VARIATIONS = [
     "Please provide a detailed answer.",
@@ -105,24 +98,15 @@ STATUS_TEXTS = {
     "error": "An error occurred"
 }
 
-# Model Categories and Keywords
-category_keywords = {
-    "code": ["code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell"],
-    "rpg": ["nsfw", "adult", "mature", "explicit", "rp", "roleplay"],
-    "chat": []
-}
-
 # Handling Keywords for Special Model Behaviors
 handling_keywords = {
+    "code": ["code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell"],
     "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
-    "reasoning": ["reason", "r1", "think"]
+    "reasoning": ["reason", "r1", "think"],
+    "nsfw": ["nsfw", "adult", "mature", "explicit"]
 }
-
-# Reasoning enhancement keywords
-reasoning_keywords = ["reasoner", "r1", "reasoning", "reason"]
 
 # prompt template table
 current_model_settings = {
-    "category": "chat",
-    "prompt_template": prompt_templates["chat"]
+    "category": "chat"  # Simplified; prompt_template removed as it’s not needed
 }
