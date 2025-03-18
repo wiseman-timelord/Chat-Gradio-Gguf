@@ -115,7 +115,6 @@ CONFIG_TEMPLATE = """{
 	  "mlock": true,
 	  "n_batch": 1024,
 	  "dynamic_gpu_layers": true,
-	  "afterthought_time": true,
 	  "max_history_slots": 10,
 	  "max_attach_slots": 6,
       "session_log_height": 650,
@@ -124,14 +123,7 @@ CONFIG_TEMPLATE = """{
   "backend_config": {
     "backend_type": "GPU/CPU - Vulkan",
     "llama_bin_path": "data/llama-vulkan-bin"
-  },
-  "rp_settings": {
-      "rp_location": "Public",
-      "user_name": "Human",
-      "user_role": "Lead Roleplayer",
-      "ai_npc": "Robot",
-      "ai_npc_role": "Randomer"
-    }
+  }
 }"""
 
 # Utility Functions
