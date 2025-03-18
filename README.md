@@ -3,10 +3,9 @@
 <br>Status: Alpha - Testing and bugfixing.
 
 ## Description
-Intended as a high-quality chat interface with uses include, Conversation and Programming, modes Rpg Game, Chat, programmed towards windows 10 non-WSL, with any Cpu/Gpu on GGUF models. Dynamic modes enabling correct, interface and prompts, for relating theme of sessions, With the latest advancements, and no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as, Gradio and Grok3Beta, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and modern GGUF LLMs.
+Intended as a high-quality chat interface programmed towards windows 10 non-WSL, with any Cpu/Gpu on GGUF models. Dynamic modes enabling correct, interface and prompts, for relating theme of sessions, With the latest advancements, and no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as, Gradio and Grok3Beta, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. Capable of all things possible through simple scripts and awesome libraries and modern GGUF LLMs.
 
 ### Features
-- **Operation Modes **:  "Chat" for general purpose, "Coder" for working on code, "Rpg" for customizable scenario themed interaction.
 - **Comprihensive CPU/GPU Support**: CPUs x64-CPU/AVX2/AVX512 and GPUs AMD/nVIDIA/Intel, with dropdown list selection supporting multi CPU/GPU setup.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, TOT, no-THINK, and code formatting, and with file attachments. 
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
@@ -70,9 +69,9 @@ Intended as a high-quality chat interface with uses include, Conversation and Pr
 ### Instructions
 1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Text-Gradio-Gguf` or `C:\Programs\Text-Gradio-Gguf`. 
 2. Right click the file `Text-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
-3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Text-Gradio-Gguf`. You will then be greeted with the `Conversation` page, but you will first be going to the `Configuration` page. 
+3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Text-Gradio-Gguf`. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. 
 4. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
-5. Go back to the `Conversation` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
+5. Go back to the `Interaction` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
 6. When all is finished, click `Exit` on the bottom right and/or close browser-tabs/terminals, however you want to do it. 
 
 ### Notation
@@ -83,10 +82,9 @@ Intended as a high-quality chat interface with uses include, Conversation and Pr
 
 ### Model label/name Keywords...
 1. Keywords for Operation mode...
-- `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
-- `RPG Game` keywords - "nsfw", "adult", "mature", "explicit", "rp", "roleplay".
 - `Chat` keywords - none of the above.
 2. Keywords for Enhancements...
+- `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
 - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
 - `reasoning` keywords - "reason", "r1", "think".
 
@@ -140,13 +138,14 @@ project_root/
 With regards to the current version of the program...
 1. Continue work on prompting system until it works soundly.
 2. Check all available modes with each enhancement combination (note text to speak uses `PyWin32`). 
-3. Test and develop Rpg features, I want a `NPC Roles` and dropdown box in `Configuration` page for, ie 1, 2, 3, 4, 5, 6` `ai_npc_name_#` inputs, in `Program Options` section.
-4. The program is already becoming agentic, with multi-phase interactions, for such multiple prompt interactions, I want such workflows to be visualized, such as `DECIDING ON ATTACHMENTS -> (processing user input) -> (generating final response) `, then when it is processing the user input then the line would be replaced with `(deciding on attachments) - PROCESSING USER INPUT -> (generating final response) `, then when it is generating the final response then the line would be replaced with `(deciding on attachments) - (processing user input) -> GENERATING FINAL RESPONSE`, and also variants of this multi-phase visualization for promcesses involved, should be done, for visualised feed back, enhancing user experience. We already have the `█` in the status bar for progress indication in the status bar, that is great. Either way, such multi-part processes involving prompting will be represented as such, and simlarly the `█` should be used optimally in the status bar for progress in each phase, therein, so the only option is to then re-think each operation mode, and make them more effectively use multiple interactions for each response, but also visualization would include library usage for things such as, Yake or Zipfile, process, around 1-2 usage of model, as I think is how mostly the implementations currently are. So it is already somewhat agentic, and this should be figured out, and visualized as such. This visualization of phases or stages within interactions will require continual updade, but also act as an explamation or map of what is going on within the options of processes available. Plan it all out, determine, what is already present and main events within the chain of interactions between, libraries used and model interactions, to make up different stages for the visualization, that should always have i am guessing 2-6 main phases depending upon their complexity, we do not want simple tasks not involving libraries or models to be a phase.
 5. Unable to cancel generation of response while streaming. Note, the llama.cpp binary is ran in a subprocess. It seemed to work before as a subprocess while printing output, but doesnt produce the output in terminal since attempting to fix the `Cancel Response` button, to cancel generation mid stream. it would be nice to have the streaming text to the command window, while keeping it as subprocess.
-
+6. Rpg is overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements.
+7. Coder mode was not possible without dual model, due to needing a text to instruct conversion, so removed until =>Gen2.
+8. Gen 1 must be Chat only.
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
+1. Agentic operation...with multi-phase interactions, for such multiple prompt interactions, I want such workflows to be visualized, such as `DECIDING ON ATTACHMENTS -> (processing user input) -> (generating final response) `, then when it is processing the user input then the line would be replaced with `(deciding on attachments) - PROCESSING USER INPUT -> (generating final response) `, then when it is generating the final response then the line would be replaced with `(deciding on attachments) - (processing user input) -> GENERATING FINAL RESPONSE`, and also variants of this multi-phase visualization for promcesses involved, should be done, for visualised feed back, enhancing user experience. We already have the `█` in the status bar for progress indication in the status bar, that is great. Either way, such multi-part processes involving prompting will be represented as such, and simlarly the `█` should be used optimally in the status bar for progress in each phase, therein, so the only option is to then re-think each operation mode, and make them more effectively use multiple interactions for each response, but also visualization would include library usage for things such as, Yake or Zipfile, process, around 1-2 usage of model, as I think is how mostly the implementations currently are. So it is already somewhat agentic, and this should be figured out, and visualized as such. This visualization of phases or stages within interactions will require continual updade, but also act as an explamation or map of what is going on within the options of processes available. Plan it all out, determine, what is already present and main events within the chain of interactions between, libraries used and model interactions, to make up different stages for the visualization, that should always have i am guessing 2-6 main phases depending upon their complexity, we do not want simple tasks not involving libraries or models to be a phase.
 1. re-attempt left column collapse switch with two images in `.\media` instead of text, so as to be in-line with quality graphic I made for this readme.md. 
 1. Research local and online AI programs, what kinds of enhancements are common, what would be simple to implement. Someone mentioned Manu, does some kind of webscrape or internet research, producing reports.
 1. Coder mode must be agentic =m requiring 2 models. 1 =>8b model for management of tasks and 1 =>8b model instruct for generation of code. Files provided in coder mode,  would NOT be in the vector database like it is in chat mode, but instead be directly and selectively sent to the code model, that thinking model would have to assess which scripts are likely relevant and produce a list and the correct instruction for each task and stage. There would also have to be the editable scrollable prefabs for each one...
