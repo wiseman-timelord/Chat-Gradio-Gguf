@@ -3,7 +3,7 @@
 # Imports...
 import gradio as gr
 from gradio import themes
-import re, os, json, pyperclip, yake, random, asyncio
+import re, os, json, pyperclip, yake, random, asyncio, queue, threading, asyncio
 from pathlib import Path
 from datetime import datetime
 import tkinter as tk
@@ -539,10 +539,12 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     import gradio as gr
     from scripts.models import get_model_settings
     from scripts import utility, temporary
-    import asyncio
     import re
     import yake
     from pathlib import Path
+    import queue
+    import threading
+    import asyncio
 
     # Early return if no models are loaded
     if not models_loaded:
@@ -605,12 +607,12 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     interaction_phase = "generating_response"
     settings = get_model_settings(temporary.MODEL_NAME)
 
-    # Web search phase (if applicable)
+    # Web search phase (non-blocking)
     search_results = None
     if web_search_enabled and mode == "chat":
         status_message = "Performing web search..."
         yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-        search_results = utility.web_search(user_input)
+        search_results = await asyncio.to_thread(utility.web_search, user_input)
         status_message = "Web search completed." if search_results else "No web search results found."
         yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
@@ -621,23 +623,56 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
         status_message = "Streaming response..."
     yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-    # Stream the response
+    # Stream the response using a separate thread
+    q = queue.Queue()
+    cancel_event = threading.Event()
+
+    def run_generator():
+        # Create and set a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Define an async function to consume the async generator
+        async def consume_generator():
+            try:
+                async for chunk in get_response_stream(
+                    session_log,
+                    mode=mode,
+                    settings=settings,
+                    disable_think=not enable_think,
+                    rp_settings={"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None,
+                    tot_enabled=tot_enabled and mode == "chat",
+                    web_search_enabled=web_search_enabled and mode == "chat",
+                    search_results=search_results
+                ):
+                    if cancel_event.is_set():
+                        break
+                    q.put(chunk)
+                q.put(None)  # Sentinel to indicate completion
+            except Exception as e:
+                q.put(f"Error: {str(e)}")
+
+        # Run the async function in the thread's event loop
+        loop.run_until_complete(consume_generator())
+        loop.close()  # Clean up the event loop
+
+    thread = threading.Thread(target=run_generator, daemon=True)
+    thread.start()
+
     full_response = ""
     display_response = ""
     total_periods = 0
     streaming = False
 
-    async for chunk in get_response_stream(
-        session_log,
-        mode=mode,
-        settings=settings,
-        disable_think=not enable_think,
-        rp_settings={"rp_location": rp_location, "user_name": user_name, "user_role": user_role, "ai_npc": ai_npc, "ai_npc_role": temporary.AI_NPC_ROLE} if mode == "rpg" else None,
-        tot_enabled=tot_enabled and mode == "chat",
-        web_search_enabled=web_search_enabled and mode == "chat",
-        search_results=search_results
-    ):
+    while True:
+        chunk = await asyncio.to_thread(q.get)
+        if chunk is None:
+            break
         if cancel_flag:
+            cancel_event.set()
+            continue
+        if isinstance(chunk, str) and chunk.startswith("Error:"):
+            session_log[-1]['content'] = chunk
             break
         full_response += chunk
 
@@ -668,12 +703,12 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
 
             yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-    # Handle speaking phase if enabled
+    # Handle speaking phase if enabled (non-blocking)
     if not cancel_flag and speak_enabled:
         interaction_phase = "speaking"
         status_message = "Speaking..."
         yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=False), gr.update(), gr.update(), gr.update(), gr.update()
-        utility.speak_text(full_response)
+        await asyncio.to_thread(utility.speak_text, full_response)
 
     # Final update with label generation and clearing attached files
     interaction_phase = "waiting_for_input"
@@ -691,7 +726,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
             label = label[:35]
         temporary.session_label = label
 
-        # Save session history with updated label and maintained file links
+        # Save session history
         utility.save_session_history(session_log, temporary.session_attached_files, temporary.session_vector_files if temporary.session_vector_files else [])
         
         # Clear attached files after response
