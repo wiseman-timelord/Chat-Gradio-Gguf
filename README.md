@@ -119,25 +119,21 @@ project_root/
 │ └── models.py
 │ └── prompts.py
 │ └── temporary.py
-└── └── utlity.py
+└──── utlity.py
 ```
 - Installed/Temporary files...
 ```
 project_root/
 ├── data/
 │ └── persistence.json
-│ └── models.py
-│ └── prompts.py
-│ └── temporary.py
-│ └── utlity.py
 ├── data/vectors/
-└───└── *
+└─────── *
 ├── data/temp/
-└───└── *
+└────── *
 ├── temp/history
-└───└── *
+└────── *
 ├── .venv/
-└─└── *
+└────── *
 ```
 
 ## Gen 1 Development
@@ -145,9 +141,7 @@ With regards to the current version of the program...
 1. Continue work on prompting system until it works soundly.
 2. Check all available modes with each enhancement combination (note text to speak uses `PyWin32`). 
 3. Test and develop Rpg features, I want a `NPC Roles` and dropdown box in `Configuration` page for, ie 1, 2, 3, 4, 5, 6` `ai_npc_name_#` inputs, in `Program Options` section.
-5. Display updates while interferring with model is not happening, it waits for the model to finish output before any updates happen. In order for the progress indication in status bar and other parts to visually appear to be working correctly, would require the model interferernce to be done through a different processes, how is this best done? subprocesses or popping up a new terminal window? figure it out.
-6. Testing pending on fixing screen update issues. `Send Input` button is always green through CSS, but we need this css color to change to Orange when afterthought countdown is counting down, and we want it to be red from the point when the prompt has been sent to the model and we are awating complete response. 
-7. The program is already becoming agentic, some actions in some modes producing multiple prompt interactions. I want such workflows to be visualized, such as `DECIDING ON ATTACHMENTS -> (processing user input) -> (generating final response) `, then when it is processing the user input then the line would be replaced with `(deciding on attachments) - PROCESSING USER INPUT -> (generating final response) `, and so on, then the given multi-part interactions would have some visualised feed back, other than that there would be the `█` in the status bar for progress indication. such multi-part processes involving prompting will be represented as such, and simlarly the `█` should be used optimally for each process it can represent effectively.
+7. The program is already becoming agentic, with multi-phase interactions, for such multiple prompt interactions, I want such workflows to be visualized, such as `DECIDING ON ATTACHMENTS -> (processing user input) -> (generating final response) `, then when it is processing the user input then the line would be replaced with `(deciding on attachments) - PROCESSING USER INPUT -> (generating final response) `, then when it is generating the final response then the line would be replaced with `(deciding on attachments) - (processing user input) -> GENERATING FINAL RESPONSE`, and also variants of this multi-phase visualization for promcesses involved, should be done, for visualised feed back, enhancing user experience. We already have the `█` in the status bar for progress indication in the status bar, that is great. Either way, such multi-part processes involving prompting will be represented as such, and simlarly the `█` should be used optimally in the status bar for progress in each phase, therein, so the only option is to then re-think each operation mode, and make them more effectively use multiple interactions for each response, but also visualization would include library usage for things such as, Yake or Zipfile, process, around 1-2 usage of model, as I think is how mostly the implementations currently are. So it is already somewhat agentic, and this should be figured out, and visualized as such. This visualization of phases or stages within interactions will require continual updade, but also act as an explamation or map of what is going on within the options of processes available. Plan it all out, determine, what is already present and main events within the chain of interactions between, libraries used and model interactions, to make up different stages for the visualization, that should always have i am guessing 2-6 main phases depending upon their complexity, we do not want simple tasks not involving libraries or models to be a phase.
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
