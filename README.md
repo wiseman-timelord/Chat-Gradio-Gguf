@@ -136,7 +136,7 @@ project_root/
 
 ## Gen 1 Development
 With regards to the current version of the program...
-1. It is now Chat only, and streamlined as a result. This is all now do-able and has mostly/all already been working in earlier versions, just need to fix the features based on what I already figured out. To note, 6. Rpg rpg overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. To note, Coder mode was not possible without dual model, due to needing a text to instruct conversion, so removed until =>Gen2.
+1. It is now Chat only, and streamlined as a result. This is all now do-able and has mostly/all already been working in earlier versions, just need to fix the features based on what I already figured out. To note, 6. Rpg rpg overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. To note, Coder mode was not possible without dual model, due to needing a text to instruct conversion, so removed until =>Gen2. This will require re-brand to `Chat-Gradio-Gguf`, inline with, `Rpg-Gradio-Gguf` and new project blueprint `Code-Gradio-Gguf`, 3 programs, not 1 that struggles to do all.
 1. Continue work on prompting system until it works soundly, check all model keywords themes with enhancement combination (note text to speak uses `PyWin32`). 
 5. Output is now brokwn. It seemed to work before as a subprocess while printing output, and stream when its the final response or for direct answers. We want streaming raw text input/output to the command window, while keeping it as subprocess, for the gradio display to update correctly.
 
