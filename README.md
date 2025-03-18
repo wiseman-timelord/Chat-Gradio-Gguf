@@ -136,12 +136,9 @@ project_root/
 
 ## Gen 1 Development
 With regards to the current version of the program...
-1. Continue work on prompting system until it works soundly.
-2. Check all available modes with each enhancement combination (note text to speak uses `PyWin32`). 
-5. Unable to cancel generation of response while streaming. Note, the llama.cpp binary is ran in a subprocess. It seemed to work before as a subprocess while printing output, but doesnt produce the output in terminal since attempting to fix the `Cancel Response` button, to cancel generation mid stream. it would be nice to have the streaming text to the command window, while keeping it as subprocess.
-6. Rpg is overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements.
-7. Coder mode was not possible without dual model, due to needing a text to instruct conversion, so removed until =>Gen2.
-8. Gen 1 must be Chat only.
+1. It is now Chat only, and streamlined as a result. This is all now do-able and has mostly/all already been working in earlier versions, just need to fix the features based on what I already figured out. To note, 6. Rpg rpg overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. To note, Coder mode was not possible without dual model, due to needing a text to instruct conversion, so removed until =>Gen2.
+1. Continue work on prompting system until it works soundly, check all model keywords themes with enhancement combination (note text to speak uses `PyWin32`). 
+5. Output is now brokwn. It seemed to work before as a subprocess while printing output, and stream when its the final response or for direct answers. We want streaming raw text input/output to the command window, while keeping it as subprocess, for the gradio display to update correctly.
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
