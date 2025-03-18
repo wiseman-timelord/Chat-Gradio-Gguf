@@ -1,7 +1,7 @@
 # Script: `.\scripts\utility.py`
 
 # Imports...
-import re, subprocess, json, time, random, psutil, shutil, os, zipfile
+import re, subprocess, json, time, random, psutil, shutil, os, zipfile, yake
 import win32com.client
 import pythoncom  # Added for COM initialization
 from pathlib import Path
@@ -106,37 +106,32 @@ def save_session_history(session_log, attached_files, vector_files):
         "session_id": temporary.current_session_id,
         "label": temporary.session_label,
         "history": session_log,
-        "attached_files": attached_files,
-        "vector_files": vector_files
+        "attached_files": attached_files,  # Store original file paths
+        "vector_files": vector_files if vector_files else []
     }
     with open(session_file, "w") as f:
         json.dump(session_data, f)
-    zip_session_files(temporary.current_session_id, attached_files, vector_files)
-    manage_session_history()  # Added to enforce rotation
+    manage_session_history()
         
 
 def load_session_history(session_file):
-    """
-    Load session history from a JSON file, returning five values with defaults for missing keys.
-
-    Args:
-        session_file (Path): Path to the session JSON file.
-
-    Returns:
-        tuple: (session_id, label, history, attached_files, vector_files)
-    """
     try:
         with open(session_file, "r") as f:
             data = json.load(f)
     except Exception as e:
         print(f"Error loading session file {session_file}: {e}")
-        return None, "Error", [], [], []  # Always return 5 values
+        return None, "Error", [], [], []
 
     session_id = data.get("session_id", session_file.stem.replace('session_', ''))
     label = data.get("label", "Untitled")
     history = data.get("history", [])
     attached_files = data.get("attached_files", [])
     vector_files = data.get("vector_files", [])
+
+    # Check and filter attached files
+    attached_files = [file for file in attached_files if Path(file).exists()]
+    if len(attached_files) != len(data.get("attached_files", [])):
+        print(f"Removed missing attached files from session {session_id}")
 
     try:
         unzip_session_files(session_id)
@@ -147,15 +142,16 @@ def load_session_history(session_file):
         if vector_dir.exists():
             vector_files = [str(f) for f in vector_dir.glob("*") if f.is_file()]
         else:
-            vector_files = []  # Empty list if no vector directory
+            vector_files = []
+            print("No VectorStore found for Session History slot.")  # Print message when no vectorstore exists
+            # If no vector files but needed, a temporary vectorstore could be created here if required
+            # For now, we leave it empty as per requirement to handle absence gracefully
     except Exception as e:
         print(f"Error unzipping session files for {session_id}: {e}")
 
     temporary.session_attached_files = attached_files
     temporary.session_vector_files = vector_files
 
-    # Debugging print to confirm 5 values
-    print(f"load_session_history returning: {session_id}, {label}, {len(history)}, {len(attached_files)}, {len(vector_files)}")
     return session_id, label, history, attached_files, vector_files
 
 def zip_session_files(session_id, attached_files, vector_files):
@@ -262,6 +258,29 @@ def web_search(query: str, num_results: int = 3) -> str:
         return f"Results:\n{'nn'.join(snippets)}"
     except Exception as e:
         return f"Error during web search: {str(e)}"
+
+def summarize_document(file_path):
+    """Summarize the contents of a document using YAKE, up to 100 characters."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            content = file.read()
+        kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
+        keywords = kw_extractor.extract_keywords(content)
+        summary = keywords[0][0] if keywords else "No summary available"
+        return summary[:100]  # Truncate to 100 characters
+    except Exception as e:
+        print(f"Error summarizing document {file_path}: {e}")
+        return "Error generating summary"
+
+def get_attached_files_summary(attached_files):
+    """Generate a list of summaries for attached files."""
+    if not attached_files:
+        return "No attached files to summarize."
+    summary_list = []
+    for file in attached_files:
+        summary = summarize_document(file)
+        summary_list.append(f"**{Path(file).name}** - {summary}")
+    return "\n".join(summary_list)
 
 def load_and_chunk_documents(file_paths: list) -> list:
     """Load and chunk documents from a list of file paths for RAG."""

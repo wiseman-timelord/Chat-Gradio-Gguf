@@ -71,46 +71,20 @@ def process_attach_files(files, attached_files, models_loaded):
     if len(attached_files) >= max_files:
         return f"Max attach files ({max_files}) reached.", attached_files
     
-    # Estimate blank prompt token count (using "chat" mode as default)
-    blank_prompt = prompt_templates["chat"]
-    blank_prompt_chars = len(blank_prompt)
-    blank_prompt_tokens = (((blank_prompt_chars / 5) * 4) / 4) * 3
-    
-    current_total_tokens = blank_prompt_tokens
-    context_limit = temporary.CONTEXT_SIZE  # Model's context size in tokens
-    
     new_files = []
-    rejected_files = []
-    
     for f in files:
-        if os.path.isfile(f) and f not in attached_files:
-            try:
-                with open(f, 'r', encoding='utf-8') as test_file:
-                    content = test_file.read()
-                file_chars = len(content)
-                file_tokens = (((file_chars / 5) * 4) / 4) * 3
-                
-                if current_total_tokens + file_tokens <= context_limit:
-                    new_files.append(f)
-                    current_total_tokens += file_tokens
-                else:
-                    rejected_files.append(Path(f).name)
-            except Exception:
-                continue  # Skip unreadable files
+        if os.path.isfile(f):
+            file_name = Path(f).name
+            # Remove older versions with the same name (Requirement 5)
+            attached_files = [existing for existing in attached_files if Path(existing).name != file_name]
+            new_files.append(f)
     
     available_slots = max_files - len(attached_files)
     processed_files = new_files[:available_slots]
-    
-    for file in reversed(processed_files):
-        dest = Path(temporary.TEMP_DIR) / f"session_{temporary.current_session_id}" / "attach" / Path(file).name
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(file, dest)
-        attached_files.insert(0, str(dest))
+    attached_files = processed_files + attached_files  # Add new files to the front
     
     temporary.session_attached_files = attached_files
     status = f"Processed {len(processed_files)} attach files."
-    if rejected_files:
-        status += f" Rejected {len(rejected_files)} files due to context limit: {', '.join(rejected_files)}"
     return status, attached_files
 
 def process_vector_files(files, vector_files, models_loaded):
@@ -537,13 +511,15 @@ def format_session_id(session_id):
 
 def update_action_button(phase):
     if phase == "waiting_for_input":
-        return gr.update(value="Send Input", variant="secondary")
+        return gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"])
     elif phase == "afterthought_countdown":
-        return gr.update(value="Cancel Input", variant="stop")
+        return gr.update(value="Cancel Input", variant="secondary", elem_classes=["send-button-orange"])
     elif phase == "generating_response":
-        return gr.update(value="Cancel Response", variant="stop")
+        return gr.update(value="Cancel Response", variant="secondary", elem_classes=["send-button-red"])
+    elif phase == "speaking":
+        return gr.update(value="Speaking...", variant="secondary", elem_classes=["send-button-orange"])
     else:
-        return gr.update(value="Unknown Phase", variant="primary")
+        return gr.update(value="Unknown Phase", variant="secondary", elem_classes=["send-button-green"])
 
 def create_session_label(text):
     """Generate a ~30-character summary from the first line of the input."""
@@ -564,6 +540,9 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     from scripts.models import get_model_settings
     from scripts import utility, temporary
     import asyncio
+    import re
+    import yake
+    from pathlib import Path
 
     # Early return if no models are loaded
     if not models_loaded:
@@ -574,6 +553,16 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
     if not user_input.strip():
         yield session_log, "No input provided.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         return
+
+    # Attach raw content from files to user input
+    if temporary.session_attached_files:
+        for file in temporary.session_attached_files:
+            try:
+                with open(file, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                user_input += f"\n\nAttached File Content ({Path(file).name}):\n{file_content}"
+            except Exception as e:
+                print(f"Error reading attached file {file}: {e}")
 
     # Append user input and prepare assistant response
     session_log.append({'role': 'user', 'content': f"User:\n{user_input}"})
@@ -627,7 +616,7 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
 
     # Initial status before streaming
     if start_stream_tag:
-        status_message = ""  # Will show █ as full stops are detected
+        status_message = "Awaiting model response..."
     else:
         status_message = "Streaming response..."
     yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
@@ -662,9 +651,9 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
                 streaming = True
                 if start_stream_tag:
                     start_index = full_response.find(start_stream_tag) + len(start_stream_tag)
-                    display_response = full_response[start_index:]
+                    display_response = full_response[start_index:].lstrip()
                 else:
-                    display_response = full_response
+                    display_response = re.sub(r'^</think>\s*', '', full_response)
                 session_log[-1]['content'] = f"{prefix}\n{display_response}"
                 status_message = "Streaming response..."
             else:
@@ -679,13 +668,36 @@ async def chat_interface(user_input, session_log, tot_enabled, loaded_files, ena
 
             yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-    # Final update
+    # Handle speaking phase if enabled
+    if not cancel_flag and speak_enabled:
+        interaction_phase = "speaking"
+        status_message = "Speaking..."
+        yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=False), gr.update(), gr.update(), gr.update(), gr.update()
+        utility.speak_text(full_response)
+
+    # Final update with label generation and clearing attached files
     interaction_phase = "waiting_for_input"
     if cancel_flag:
         session_log[-1]['content'] = "Generation cancelled."
         status_message = "Generation cancelled."
     else:
+        # Generate label using Yake
+        text_for_yake = user_input + " " + full_response
+        text_for_yake = utility.filter_operational_content(text_for_yake)
+        kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
+        keywords = kw_extractor.extract_keywords(text_for_yake)
+        label = keywords[0][0] if keywords else "No description"
+        if len(label) > 35:
+            label = label[:35]
+        temporary.session_label = label
+
+        # Save session history with updated label and maintained file links
+        utility.save_session_history(session_log, temporary.session_attached_files, temporary.session_vector_files if temporary.session_vector_files else [])
+        
+        # Clear attached files after response
+        temporary.session_attached_files = []
         status_message = "Interaction complete, awaiting input..."
+
     yield session_log, status_message, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=True, value=""), gr.update(), gr.update(), gr.update(), gr.update()
     
 def launch_interface():
@@ -708,7 +720,19 @@ def launch_interface():
         INPUT_LINES_OPTIONS, ATTACH_SLOT_OPTIONS
     )
 
-    with gr.Blocks(title="Chat-Gradio-Gguf", css=".scrollable{overflow-y:auto}.send-button{background-color:green!important;color:white!important}.half-width{width:80px!important}.double-height{height:80px!important}.clean-elements{gap:4px!important;margin-bottom:4px!important}.clean-elements-normbot{gap:4px!important;margin-bottom:20px!important}") as demo:
+    with gr.Blocks(
+        title="Chat-Gradio-Gguf",
+        css="""
+        .scrollable { overflow-y: auto }
+        .half-width { width: 80px !important }
+        .double-height { height: 80px !important }
+        .clean-elements { gap: 4px !important; margin-bottom: 4px !important }
+        .clean-elements-normbot { gap: 4px !important; margin-bottom: 20px !important }
+        .send-button-green { background-color: green !important; color: white !important }
+        .send-button-orange { background-color: orange !important; color: white !important }
+        .send-button-red { background-color: red !important; color: white !important }
+        """
+    ) as demo:
         # Initialize state variables early
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
         
@@ -845,7 +869,7 @@ def launch_interface():
                                         action_buttons["action"] = gr.Button(
                                             "Send Input",
                                             variant="secondary",
-                                            elem_classes=["send-button"],
+                                            elem_classes=["send-button-green"],
                                             scale=10
                                         )
                                 # Right side: Session Log
