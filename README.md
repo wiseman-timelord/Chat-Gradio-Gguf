@@ -20,12 +20,11 @@ Intended as a high-quality chat interface with uses include, Codeing, Rpg Game, 
 - **Collapsable Left Column**: Like one would find on modern AI interface. 
 
 ### Preview
-- The "Conversation" page, with Operation/Panel Mode selector, and other features. In this case using `T.O.T.` enhancement on `Lamarckvergence-14B` (non-reasoning) model...
+- The "Conversation" page, with Operation/Panel Mode selector, and other features or enhancements...
 ![preview_image](media/conversation_page.jpg)
 
 - The "Configuration" page - for configuration of, models and hardware, and relevant components, as well as ui customization...
 ![preview_image](media/configuration_page.jpg)
-
 
 - Wide Llama.Cpp support in the installer, thanks to latest ~128k ai systems, no longer having to streamline such things...
 ```
