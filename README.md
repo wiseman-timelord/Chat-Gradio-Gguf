@@ -146,7 +146,8 @@ With regards to the current version of the program...
 2. Check all available modes with each enhancement combination (note text to speak uses `PyWin32`). 
 3. Test and develop Rpg features, I want a `NPC Roles` and dropdown box in `Configuration` page for, ie 1, 2, 3, 4, 5, 6` `ai_npc_name_#` inputs, in `Program Options` section.
 5. Prompt for uncensored is now dynamic, enabling uncensored unrestricted prompt enhancement for uncensored models, instead of just having one prompt for uncensored. This needs refining now.
-6. `Send Input` button is always green through CSS, but we need this css color to change to Orange when afterthought countdown is counting down, and we want it to be red from the point when the prompt has been sent to the model and we are awating complete response. 
+5. Display updates while interferring with model is not happening, it waits for the model to finish output before any updates happen. In order for the progress indication in status bar and other parts to visually appear to be working correctly, would require the model interferernce to be done through a different processes, how is this best done? subprocesses or popping up a new terminal window? figure it out.
+6. Testing pending on fixing screen update issues. `Send Input` button is always green through CSS, but we need this css color to change to Orange when afterthought countdown is counting down, and we want it to be red from the point when the prompt has been sent to the model and we are awating complete response. 
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
