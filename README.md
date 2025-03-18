@@ -146,6 +146,7 @@ With regards to the current version of the program...
 2. Check all available modes with each enhancement combination (note text to speak uses `PyWin32`). 
 3. Test and develop Rpg features, I want a `NPC Roles` and dropdown box in `Configuration` page for, ie 1, 2, 3, 4, 5, 6` `ai_npc_name_#` inputs, in `Program Options` section.
 5. Prompt for uncensored is now dynamic, enabling uncensored unrestricted prompt enhancement for uncensored models, instead of just having one prompt for uncensored. This needs refining now.
+6. `Send Input` button is always green through CSS, but we need this css color to change to Orange when afterthought countdown is counting down, and we want it to be red from the point when the prompt has been sent to the model and we are awating complete response. 
 
 ## Gen => 2 Development.
 With regards to the features expected of future generations of the program...
@@ -192,7 +193,6 @@ Print the complete updated script.
 6. **Mode-Specific Integrations and Persistent Sessions:**  
    - Support various modes (Chatbot, Advanced Chatbot, Coder, Agentic Coder, RPG Text, RPG Text + Images) with tailored features as outlined in the design table.  
    - Introduce persistent modes (Chat-Persistent and RPG-Persistent) to enable ongoing sessions with stored states, allowing persistent interactions (e.g., a consistent AI character like a counsellor).  
-7. **Visual Customization:** Revisit color theme design, favoring shades of grey initially, and allow users to choose a primary button color through configuration.
 
 ## Credits
 - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
