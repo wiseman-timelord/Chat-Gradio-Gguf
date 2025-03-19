@@ -62,10 +62,3 @@ def get_reasoning_instruction():
 
 def get_tot_instruction():
     return prompt_templates["chat"]["tot"]
-
-# The following functions are no longer needed for appending to user input but kept for potential reuse
-def get_reasoning_instruction():
-    return prompt_templates["chat"]["reasoning"]
-
-def get_tot_instruction():
-    return prompt_templates["chat"]["tot"]

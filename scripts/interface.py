@@ -523,7 +523,15 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
     interaction_phase = "afterthought_countdown"
     yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=False), gr.update(), gr.update(), gr.update(), gr.update()
 
-    countdown_seconds = 5 if len(user_input.split('\n')) >= 10 else 3 if len(user_input.split('\n')) >= 5 else 1
+    # Updated countdown logic based on character count of raw input
+    input_length = len(original_input.strip())
+    if input_length <= 25:
+        countdown_seconds = 1
+    elif input_length <= 100:
+        countdown_seconds = 3
+    else:
+        countdown_seconds = 5
+
     progress_indicators = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     
     for i in range(countdown_seconds, -1, -1):
@@ -634,7 +642,7 @@ def launch_interface():
     from scripts.temporary import (
         STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE, TOT_VARIATIONS,
         MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, INPUT_LINES,
-        AFTERTHOUGHT_TIME, MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
+        MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
         VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
         ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
         REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,

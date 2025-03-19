@@ -20,9 +20,6 @@ SESSION_ACTIVE = False
 MAX_HISTORY_SLOTS = 10
 yake_history_detail = [None] * MAX_HISTORY_SLOTS
 MAX_ATTACH_SLOTS = 8
-last_save_time = 0 
-AFTERTHOUGHT_TIME = True
-SPEAK_SUMMARIES = False  
 MODEL_NAME = "Browse_for_model_folder..."
 CONTEXT_SIZE = 8192
 VRAM_SIZE = 8192
@@ -37,7 +34,6 @@ STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True
 LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
 BACKEND_TYPE = "Not Configured"
-LLAMA_BIN_PATH = ""
 RAG_AUTO_LOAD = ["general_knowledge"]
 REPEAT_PENALTY = 1.0
 TEMPERATURE = 0.66
@@ -56,10 +52,6 @@ THINK_COLOR = "#c8a2c8"
 RESPONSE_COLOR = "#add8e6"
 SEPARATOR = "=" * 40
 MID_SEPARATOR = "-" * 30
-
-# Model Constants
-DEFAULT_CONTEXT_SIZE = 4096
-DEFAULT_GPU_LAYERS = 35
 
 # Options for Dropdowns
 ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}

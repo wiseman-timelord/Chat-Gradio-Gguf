@@ -49,22 +49,52 @@ class ContextInjector:
 context_injector = ContextInjector()
 
 # Functions...
-def is_programming_related(user_input):
-    """
-    Check if the user input is related to programming based on keywords.
-
-    Args:
-        user_input (str): The user's input text.
-
-    Returns:
-        bool: True if programming-related, False otherwise.
-    """
-    programming_keywords = [
-        "code", "programming", "script", "function", "class", "variable", "loop", "condition",
-        "algorithm", "debug", "syntax", "compile", "execute", "IDE", "framework", "library",
-        "API", "database", "SQL", "Python", "Java", "C++", "JavaScript", "HTML", "CSS", "Git", "version control"
-    ]
-    return any(keyword.lower() in user_input.lower() for keyword in programming_keywords)
+def get_model_metadata(model_path: str) -> dict:
+    if model_path in model_metadata_cache:
+        return model_metadata_cache[model_path]
+    try:
+        from llama_cpp import Llama
+        import re
+        import io
+        from contextlib import redirect_stdout, redirect_stderr
+        output_buffer = io.StringIO()
+        with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
+            model = Llama(
+                model_path=model_path,
+                verbose=True,
+                n_ctx=temporary.CONTEXT_SIZE,
+                n_batch=temporary.BATCH_SIZE,
+                n_gpu_layers=0
+            )
+            del model
+        output = output_buffer.getvalue()
+        metadata = {}
+        for line in output.splitlines():
+            if line.startswith("llama_model_loader: - kv"):
+                match = re.search(r'llama_model_loader: - kv\s+\d+:\s+([\w\.]+)\s+(\w+(?:\[.*?\])?)\s+=\s+(.*)', line)
+                if match:
+                    key = match.group(1)
+                    type_str = match.group(2).split('[')[0]
+                    value_str = match.group(3).strip()
+                    if type_str == 'u32':
+                        value = int(value_str)
+                    elif type_str == 'f32':
+                        value = float(value_str)
+                    elif type_str == 'str':
+                        value = value_str
+                    elif type_str == 'bool':
+                        value = value_str.lower() == 'true'
+                    else:
+                        value = value_str
+                    metadata[key] = value
+        architecture = metadata.get('general.architecture', 'unknown')
+        layers = metadata.get(f'{architecture}.block_count', 0)
+        metadata['layers'] = layers
+        model_metadata_cache[model_path] = metadata
+        return metadata
+    except Exception as e:
+        print(f"Error reading model metadata: {e}")
+        return {}
 
 def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
@@ -143,38 +173,8 @@ def calculate_gpu_layers(models, available_vram):
     return gpu_layers
 
 def get_model_layers(model_path: str) -> int:
-    try:
-        from llama_cpp import Llama
-        import re
-        import io
-        from contextlib import redirect_stdout, redirect_stderr
-        output_buffer = io.StringIO()
-        with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
-            model = Llama(
-                model_path=model_path,
-                verbose=True,  # No global equivalent
-                n_ctx=temporary.CONTEXT_SIZE,  # Fixed from 8
-                n_batch=temporary.BATCH_SIZE,  # Fixed from 1
-                n_gpu_layers=0  # Reasonable for metadata
-            )
-            del model
-        output = output_buffer.getvalue()
-        patterns = [
-            r'block_count\s*=\s*(\d+)',
-            r'n_layer\s*=\s*(\d+)',
-            r'- kv\s+\d+:\s+.*\.block_count\s+u\d+\s+=\s+(\d+)'
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, output)
-            if match:
-                num_layers = int(match.group(1))
-                print(f"Found layers with pattern '{pattern}': {num_layers}")
-                return num_layers
-        print("Could not determine layer count from output.")
-        return 0
-    except Exception as e:
-        print(f"Error reading model layers: {e}")
-        return 0
+    metadata = get_model_metadata(model_path)
+    return metadata.get('layers', 0)
 
 def get_model_metadata(model_path: str) -> dict:
     try:
@@ -336,14 +336,6 @@ def unload_models(llm_state, models_loaded_state):
     print("Warning: No model was loaded to unload.")
     return "No model loaded to unload.", llm_state, models_loaded_state
 
-def clean_content(role, content):
-    """Remove prefixes from session_log content for model input."""
-    if role == 'user':
-        return content.replace("User:\n", "", 1).strip()
-    elif role == 'assistant':
-        return content.replace("AI-Chat-Response:\n", "", 1).strip()
-    return content
-
 def generate_summary(text):
     summary_prompt = (
         "Summarize the following response in under 256 characters, focusing on critical information and conclusions:\n\n"
@@ -363,8 +355,8 @@ def generate_summary(text):
 
 # aSync Functions...
 def get_response_stream(session_log, settings, disable_think=False, tot_enabled=False, 
-                        web_search_enabled=False, search_results=None, cancel_event=None, 
-                        llm_state=None, models_loaded_state=False):
+                       web_search_enabled=False, search_results=None, cancel_event=None, 
+                       llm_state=None, models_loaded_state=False):
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
         return
@@ -388,9 +380,14 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         system_message += f"\n\n=== Web Results ===\n{search_results}"
     messages.append({"role": "system", "content": system_message})
 
-    # Include only the latest user message
+    # Include only the latest user message with context from vectorstore if available
     if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
         user_content = clean_content('user', session_log[-2]['content'])
+        if context_injector.session_vectorstore:
+            query = user_content
+            docs = context_injector.session_vectorstore.similarity_search(query, k=3)
+            context = "\n".join([doc.page_content for doc in docs])
+            user_content = f"{user_content}\n\nRelevant context from attached documents:\n{context}"
         messages.append({"role": "user", "content": user_content})
     else:
         print("Debug: No valid user message in session_log")
@@ -429,7 +426,7 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
                         if split_pos > 0:
                             yielded_chunk = buffer[:split_pos]
                             yield yielded_chunk
-                            print(f"Debug: Yielded chunk: {yielded_chunk.strip()}")  # Log only yielded chunks
+                            print(f"Debug: Yielded chunk: {yielded_chunk.strip()}")
                             buffer = buffer[split_pos:]
         if buffer.strip():
             yield buffer

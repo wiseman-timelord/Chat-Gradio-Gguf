@@ -15,7 +15,7 @@ from .models import context_injector, load_models
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
     ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER, BATCH_SIZE,
-    RAG_CHUNK_OVERLAP_DEVIDER, CONTEXT_SIZE, last_save_time
+    RAG_CHUNK_OVERLAP_DEVIDER, CONTEXT_SIZE
 )
 from . import temporary
 from scripts.models import clean_content, get_available_models
