@@ -81,6 +81,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 
 ### Model label/name Keywords...
+Keywords in model label will dynamically adapt the prompt appropriately...
 - `Vanilla Chat` keywords - none of the below.
 - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
 - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
