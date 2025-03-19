@@ -76,7 +76,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 
 ### Notation
 - VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
-- We use an incorrect calculation of I think `1.1` currently, but the safe calculation was `TotalVRam /((ModelFileSize * 1.1875) / NumLayers = LayerSize) = NumLayersOnGpu`.
+- We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
 - Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, for enhancement detection.
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 
