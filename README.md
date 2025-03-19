@@ -109,14 +109,13 @@ project_root/
 │ requisites.py
 │ launcher.py
 ├── media/
-│ ├── program_banner_large.jpg
-│ └── program_banner_small.jpg
+│ └── project_banner.jpg
 ├── scripts/
 │ └── interface.py
 │ └── models.py
 │ └── prompts.py
 │ └── temporary.py
-└──── utlity.py
+│ └── utlity.py
 ```
 - Installed/Temporary files...
 ```
@@ -127,7 +126,7 @@ project_root/
 └─────── *
 ├── data/temp/
 └────── *
-├── temp/history
+├── data/history
 └────── *
 ├── .venv/
 └────── *
