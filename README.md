@@ -1,4 +1,4 @@
-# Text-Gradio-Gguf
+# Chat-Gradio-Gguf
 ![banner_image](media/project_banner.jpg)
 <br>Status: Alpha - Testing and bugfixing.
 
@@ -29,7 +29,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - Wide Llama.Cpp support in the installer, thanks to latest ~128k ai systems, no longer having to streamline such things...
 ```
 ========================================================================================================================
-    Text-Gradio-Gguf: Install Options
+    Chat-Gradio-Gguf: Install Options
 ========================================================================================================================
 
 
@@ -67,9 +67,9 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - Suitable CPU/GPU - Gpu may be, Main or Compute, with VRam 2-64GB, testing on rx470 in Compute.  
 
 ### Instructions
-1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Text-Gradio-Gguf` or `C:\Programs\Text-Gradio-Gguf`. 
-2. Right click the file `Text-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
-3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Text-Gradio-Gguf`. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. 
+1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Chat-Gradio-Gguf` or `C:\Programs\Chat-Gradio-Gguf`. 
+2. Right click the file `Chat-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
+3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. 
 4. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
 5. Go back to the `Interaction` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
 6. When all is finished, click `Exit` on the bottom right and/or close browser-tabs/terminals, however you want to do it. 
@@ -106,7 +106,7 @@ You will of course need to have a `*.Gguf` model, use an iMatrix version of the 
 - Core Project files...
 ```
 project_root/
-│ Text-Gradio-Gguf.bat
+│ Chat-Gradio-Gguf.bat
 │ requisites.py
 │ launcher.py
 ├── media/
@@ -141,7 +141,7 @@ With regards to the current version of the program...
 5. Output is now brokwn. It seemed to work before as a subprocess while printing output, and stream when its the final response or for direct answers. We want streaming raw text input/output to the command window, while keeping it as subprocess, for the gradio display to update correctly.
 
 ## Gen => 2 Development.
-Will have to figure out if I am making a Coder upgrade, or just making `Code-Gradio-Gguf` lager, hence, `Text-Gradio-Gguf` would become `Chat-Gradio-Gguf` again, and just keep the programs separate. Obviously I already have a semi-working version of `Rpg-Gradio-Gguf`. Putting all 3 in the same program, is causing a headache when it comes to updates. But, here are the old note With regards to the features expected of future generations of the program...
+Will have to figure out if I am making a Coder upgrade, or just making `Code-Gradio-Gguf` lager, hence, `Chat-Gradio-Gguf` would become `Chat-Gradio-Gguf` again, and just keep the programs separate. Obviously I already have a semi-working version of `Rpg-Gradio-Gguf`. Putting all 3 in the same program, is causing a headache when it comes to updates. But, here are the old note With regards to the features expected of future generations of the program...
 1. Agentic operation...with multi-phase interactions, for such multiple prompt interactions, I want such workflows to be visualized, such as `DECIDING ON ATTACHMENTS -> (processing user input) -> (generating final response) `, then when it is processing the user input then the line would be replaced with `(deciding on attachments) - PROCESSING USER INPUT -> (generating final response) `, then when it is generating the final response then the line would be replaced with `(deciding on attachments) - (processing user input) -> GENERATING FINAL RESPONSE`, and also variants of this multi-phase visualization for promcesses involved, should be done, for visualised feed back, enhancing user experience. We already have the `█` in the status bar for progress indication in the status bar, that is great. Either way, such multi-part processes involving prompting will be represented as such, and simlarly the `█` should be used optimally in the status bar for progress in each phase, therein, so the only option is to then re-think each operation mode, and make them more effectively use multiple interactions for each response, but also visualization would include library usage for things such as, Yake or Zipfile, process, around 1-2 usage of model, as I think is how mostly the implementations currently are. So it is already somewhat agentic, and this should be figured out, and visualized as such. This visualization of phases or stages within interactions will require continual updade, but also act as an explamation or map of what is going on within the options of processes available. Plan it all out, determine, what is already present and main events within the chain of interactions between, libraries used and model interactions, to make up different stages for the visualization, that should always have i am guessing 2-6 main phases depending upon their complexity, we do not want simple tasks not involving libraries or models to be a phase.
 1. re-attempt left column collapse switch with two images in `.\media` instead of text, so as to be in-line with quality graphic I made for this readme.md. 
 1. Research local and online AI programs, what kinds of enhancements are common, what would be simple to implement. Someone mentioned Manu, does some kind of webscrape or internet research, producing reports.
@@ -170,7 +170,7 @@ Print the complete updated script.
 ```
 ...something like that, this also prompts ability to change the size of the user input/session log, via some kind of draggable border that makes one larger while the other smaller, and vice versa, or if that does not exist in gradio, then maybe a slider that could be at the top of the screen, and controll linearly the proportions of each of the settings ranges for the sizes of both being the maximums and 10px or 1 line being the minimum. However its done best. So `Session Log Height` would be labeled `Max Log Height`, and `Input Lines` would become `Max Input Lines`.
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-2. **Cross-Platform Scripting:** Introduce a unified script (`Text-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately.  
+2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately.  
 3. **User Interface and Notification Enhancements:**  
    - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").  
    - Add a configuration page with a non-editable “Prompting” section showing the operation mode, enhancements (e.g., Web-Search, VectorStore), and the last prompt sent.  
