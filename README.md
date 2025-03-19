@@ -129,64 +129,25 @@ project_root/
 └────── *
 ```
 
-## Gen 1 Development
+## Current Development
 With regards to the current version of the program...
 1. It is now Chat only, and streamlined as a result. This is all now do-able and has mostly/all already been working in earlier versions, just need to fix the features based on what I already figured out. To note, 6. Rpg rpg overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. To note, Coder mode was not possible without dual model, due to needing a text to instruct conversion, so removed until =>Gen2. This will require re-brand to `Chat-Gradio-Gguf`, inline with, `Rpg-Gradio-Gguf` and new project blueprint `Code-Gradio-Gguf`, 3 programs, not 1 that struggles to do all.
 1. Continue work on prompting system until it works soundly, check all model keywords themes with enhancement combination (note text to speak uses `PyWin32`). 
 5. Output is now brokwn. It seemed to work before as a subprocess while printing output, and stream when its the final response or for direct answers. We want streaming raw text input/output to the command window, while keeping it as subprocess, for the gradio display to update correctly.
 6. I want to go back to the `█` in the status bar for progress indication, each iteration representing one sentence, while for the session log and display to be updating for each complete sentence written, then finally when it is complete resuming normal operation. I did very much like it when I was able to see each sentence appear streaming as complete sentence as each was completely written, while a `█` in the status bar for each complete sentence be it while the model is thinking or doing tot or something, or when it is printing the final output or selected output, but this progress on the status bar should only be applicable while there is text being generated that will not be displayed, so people can see something is going on, however, if we can not do that when its actually printing the material that will be used in the session log, be it the complete output or just a selection of it, then it should not accumulate any more `█` and instead say `Streaming Response...` if its currently in a phase of streaming complete sentences to the session log.
-
-## Code-Gradio-Gguf Development Notes.
-- It would have to be Multi-model, Reasoning to plan work and make prompts, and instruct model to generate code. Agentic operation...with multi-phase interactions, for such multiple prompt interactions, , then when it is processing the user input then the line would be replaced with `(deciding on attachments) - PROCESSING USER INPUT -> (generating final response) `, then when it is generating the final response then the line would be replaced with `(deciding on attachments) - (processing user input) -> GENERATING FINAL RESPONSE`, and also variants of this multi-phase visualization for promcesses involved, should be done, for visualised feed back, enhancing user experience. 
-= Plan it all out, we would be cloning Chat-Gradio-GGuf, determine, what is already present and main events within the chain of interactions between, libraries used and model interactions, to make up different stages for the visualization, that should always have i am guessing 2-6 main phases depending upon their complexity, we do not want simple tasks not involving libraries or models to be a phase.
-- I want such workflows to be visualized, such as `DECIDING ON ATTACHMENTS -> (processing user input) -> (generating final response) `
-
-## Rpg-Gradio-Gguf Development Notes.
-`Rpg-Gradio-Gguf`. Putting all 3 in the same program, is causing a headache when it comes to updates. But, here are the old note With regards to the features expected of future generations of the program...
-1. 
-1. re-attempt left column collapse switch with two images in `.\media` instead of text, so as to be in-line with quality graphic I made for this readme.md. 
-1. Research local and online AI programs, what kinds of enhancements are common, what would be simple to implement. Someone mentioned Manu, does some kind of webscrape or internet research, producing reports.
-1. Coder mode must be agentic =m requiring 2 models. 1 =>8b model for management of tasks and 1 =>8b model instruct for generation of code. Files provided in coder mode,  would NOT be in the vector database like it is in chat mode, but instead be directly and selectively sent to the code model, that thinking model would have to assess which scripts are likely relevant and produce a list and the correct instruction for each task and stage. There would also have to be the editable scrollable prefabs for each one...
-```
-INFORMATON:
-We are working on my project ProjectName, it is a progtam written in InsertProgrammingLanguage v#.## intended to be run on InsertOperatingSystem.
-
-STRUCTURE:
-(Information about directory structure, ie core directory list)
-
-INSTRUCTION:
-(State issue with the code or what needs to be created/redacted).
-(State process of investigaction and relevant information).
-
-SECTION(s):
-(Insert code snippets here)
-
-RESOURCE(s):
-(Detail things provided, remember to mention Files attached if so.)
-
-CONSIDERATION(s):
-Print complete updated function(s) for specifically the functions we are updating.
-or
-Print the complete updated script.
-```
-...something like that, this also prompts ability to change the size of the user input/session log, via some kind of draggable border that makes one larger while the other smaller, and vice versa, or if that does not exist in gradio, then maybe a slider that could be at the top of the screen, and controll linearly the proportions of each of the settings ranges for the sizes of both being the maximums and 10px or 1 line being the minimum. However its done best. So `Session Log Height` would be labeled `Max Log Height`, and `Input Lines` would become `Max Input Lines`.
-1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately.  
-3. **User Interface and Notification Enhancements:**  
-   - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").  
-   - Add a configuration page with a non-editable “Prompting” section showing the operation mode, enhancements (e.g., Web-Search, VectorStore), and the last prompt sent.  
-   - Remove some of the Debug in terminal, selectively.
 4. **Enhanced Notation Modes:**  
    - Introduce “Chat-Notate” and “Chat-Notate-Uncensored” modes to process uploaded PDFs into both detailed and concise summaries.  
-   - Store summaries in `.\\data\\notation` and provide a Notation Library menu in the UI for managing these notations.  
    - Disable the THINK phase in these modes to ensure practical, notation-driven conversations.  
-5. **Agentic and Enhanced Features:**  
-   - Integrate vision capabilities for image recognition on web searches and convert images into contextually relevant thumbnails (with full images accessible via pop-up).  
-   - Add voice processing features (Text-to-Voice and Voice-to-Text) using PyWin32 and Whisper.
-   - Ensure that attached files can be written to.  
-6. **Mode-Specific Integrations and Persistent Sessions:**  
-   - Support various modes (Chatbot, Advanced Chatbot, Coder, Agentic Coder, RPG Text, RPG Text + Images) with tailored features as outlined in the design table.  
-   - Introduce persistent modes (Chat-Persistent and RPG-Persistent) to enable ongoing sessions with stored states, allowing persistent interactions (e.g., a consistent AI character like a counsellor).  
+
+## Far Development
+1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
+7. re-attempt left column collapse switch with two images in `.\media` instead of text, so as to be in-line with quality graphic I made for this readme.md. 
+8. Research local and online AI programs, what kinds of enhancements are common, what would be simple to implement, and would be better way of donig things or add something. Someone mentioned Manu, one to check out does some kind of webscrape or internet research, producing reports.
+- Use something like llama-box to Integrate vision capabilities for image recognition on web searches and convert images into contextually relevant thumbnails (with full images accessible via pop-up).   
+2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
+3. **User Interface and Notification Enhancements:**  
+   - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").   
+   - maintain critical inclusion of Debug notification for terminal, as each are needed to be worked through.
 
 ## Credits
 - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
