@@ -247,11 +247,10 @@ def create_config(backend: str) -> None:
     config_path = BASE_DIR / "data" / "persistent.json"
     config = json.loads(CONFIG_TEMPLATE)
     backend_info = BACKEND_OPTIONS[backend]
-    config["backend_config"]["type"] = backend
+    config["backend_config"]["backend_type"] = backend  # Changed from "type" to "backend_type"
     config["backend_config"]["llama_bin_path"] = backend_info["dest"]
     config["model_settings"]["llama_cli_path"] = backend_info["cli_path"]
     config["model_settings"]["use_python_bindings"] = backend_info["needs_python_bindings"]
-    # Save the config to file
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, 'w') as f:

@@ -50,51 +50,118 @@ context_injector = ContextInjector()
 
 # Functions...
 def get_model_metadata(model_path: str) -> dict:
-    if model_path in model_metadata_cache:
-        return model_metadata_cache[model_path]
+    """
+    Retrieve metadata from a GGUF model, including the number of layers.
+    
+    Args:
+        model_path (str): Path to the GGUF model file.
+    
+    Returns:
+        dict: Metadata with 'layers' key, or empty dict on failure.
+    """
     try:
         from llama_cpp import Llama
-        import re
-        import io
-        from contextlib import redirect_stdout, redirect_stderr
-        output_buffer = io.StringIO()
-        with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
-            model = Llama(
-                model_path=model_path,
-                verbose=True,
-                n_ctx=temporary.CONTEXT_SIZE,
-                n_batch=temporary.BATCH_SIZE,
-                n_gpu_layers=0
-            )
-            del model
-        output = output_buffer.getvalue()
-        metadata = {}
-        for line in output.splitlines():
-            if line.startswith("llama_model_loader: - kv"):
-                match = re.search(r'llama_model_loader: - kv\s+\d+:\s+([\w\.]+)\s+(\w+(?:\[.*?\])?)\s+=\s+(.*)', line)
-                if match:
-                    key = match.group(1)
-                    type_str = match.group(2).split('[')[0]
-                    value_str = match.group(3).strip()
-                    if type_str == 'u32':
-                        value = int(value_str)
-                    elif type_str == 'f32':
-                        value = float(value_str)
-                    elif type_str == 'str':
-                        value = value_str
-                    elif type_str == 'bool':
-                        value = value_str.lower() == 'true'
-                    else:
-                        value = value_str
-                    metadata[key] = value
+        # First attempt: Use model.metadata (more reliable than verbose output)
+        model = Llama(
+            model_path=model_path,
+            n_ctx=512,  # Minimal context for metadata
+            n_batch=1,
+            n_gpu_layers=0,
+            verbose=False  # Avoid verbose output unless needed
+        )
+        metadata = model.metadata  # Direct access to GGUF metadata
+        del model
+        print(f"Debug: Metadata keys for '{model_path}': {list(metadata.keys())}")
+
+        # Extract architecture and layers
         architecture = metadata.get('general.architecture', 'unknown')
+        print(f"Debug: Detected architecture: {architecture}")
         layers = metadata.get(f'{architecture}.block_count', 0)
+
+        # Fallback: Search for alternative layer count keys
+        if layers == 0:
+            for key in metadata:
+                if 'block_count' in key or 'layer_count' in key:
+                    layers = metadata[key]
+                    print(f"Debug: Found layers ({layers}) in key '{key}'")
+                    break
+            else:
+                layers = 0
+
         metadata['layers'] = layers
-        model_metadata_cache[model_path] = metadata
+        if layers == 0:
+            print(f"Warning: Could not determine layer count for '{model_path}'. Metadata: {metadata}")
+        else:
+            print(f"Debug: Found {layers} layers for '{model_path}'")
         return metadata
+
+    except AttributeError:
+        # Fallback to verbose output if metadata attribute is unavailable
+        print("Debug: model.metadata not available, falling back to verbose output")
+        try:
+            import re
+            import io
+            from contextlib import redirect_stdout, redirect_stderr
+            output_buffer = io.StringIO()
+            with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
+                model = Llama(
+                    model_path=model_path,
+                    n_ctx=512,
+                    n_batch=1,
+                    n_gpu_layers=0,
+                    verbose=True
+                )
+                del model
+            output = output_buffer.getvalue()
+            print(f"Debug: Raw output for '{model_path}':\n{output}")
+            metadata = {}
+            for line in output.splitlines():
+                if line.startswith("llama_model_loader: - kv"):
+                    match = re.search(r'llama_model_loader: - kv\s+\d+:\s+([\w\.]+)\s+(\w+(?:\[.*?\])?)\s+=\s+(.*)', line)
+                    if match:
+                        key = match.group(1)
+                        type_str = match.group(2).split('[')[0]
+                        value_str = match.group(3).strip()
+                        if type_str == 'u32':
+                            value = int(value_str)
+                        elif type_str == 'f32':
+                            value = float(value_str)
+                        elif type_str == 'str':
+                            value = value_str
+                        elif type_str == 'bool':
+                            value = value_str.lower() == 'true'
+                        else:
+                            value = value_str
+                        metadata[key] = value
+
+            architecture = metadata.get('general.architecture', 'unknown')
+            layers = metadata.get(f'{architecture}.block_count', 0)
+            if layers == 0:
+                layers = next((value for key, value in metadata.items() if 'block_count' in key or 'layer_count' in key), 0)
+            metadata['layers'] = layers
+            if layers == 0:
+                print(f"Warning: Could not determine layer count. Metadata keys: {list(metadata.keys())}")
+            return metadata
+        except Exception as e:
+            print(f"Error reading metadata (verbose fallback): {e}")
+            return {}
     except Exception as e:
-        print(f"Error reading model metadata: {e}")
+        print(f"Error reading model metadata for '{model_path}': {e}")
         return {}
+
+def get_model_layers(model_path: str) -> int:
+    """
+    Get the number of layers for a GGUF model.
+    
+    Args:
+        model_path (str): Path to the GGUF model file.
+    
+    Returns:
+        int: Number of layers, or 0 if not determined.
+    """
+    metadata = get_model_metadata(model_path)
+    layers = metadata.get('layers', 0)
+    return int(layers)  # Ensure conversion to integer
 
 def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
@@ -171,51 +238,6 @@ def calculate_gpu_layers(models, available_vram):
         max_layers = floor(vram_allocations[model] / layer_size) if layer_size > 0 else 0
         gpu_layers[model] = min(max_layers, num_layers) if DYNAMIC_GPU_LAYERS else num_layers
     return gpu_layers
-
-def get_model_layers(model_path: str) -> int:
-    metadata = get_model_metadata(model_path)
-    return metadata.get('layers', 0)
-
-def get_model_metadata(model_path: str) -> dict:
-    try:
-        import re
-        import io
-        from contextlib import redirect_stdout, redirect_stderr
-        from llama_cpp import Llama
-        output_buffer = io.StringIO()
-        with redirect_stdout(output_buffer), redirect_stderr(output_buffer):
-            model = Llama(
-                model_path=model_path,
-                verbose=True,  # No global equivalent
-                n_ctx=temporary.CONTEXT_SIZE,  # Fixed from 8
-                n_batch=temporary.BATCH_SIZE,  # Fixed from 1
-                n_gpu_layers=0  # Reasonable for metadata
-            )
-            del model
-        output = output_buffer.getvalue()
-        metadata = {}
-        for line in output.splitlines():
-            if line.startswith("llama_model_loader: - kv"):
-                match = re.search(r'llama_model_loader: - kv\s+\d+:\s+([\w\.]+)\s+(\w+(?:\[.*?\])?)\s+=\s+(.*)', line)
-                if match:
-                    key = match.group(1)
-                    type_str = match.group(2).split('[')[0]
-                    value_str = match.group(3).strip()
-                    if type_str == 'u32':
-                        value = int(value_str)
-                    elif type_str == 'f32':
-                        value = float(value_str)
-                    elif type_str == 'str':
-                        value = value_str
-                    elif type_str == 'bool':
-                        value = value_str.lower() == 'true'
-                    else:
-                        value = value_str
-                    metadata[key] = value
-        return metadata
-    except Exception as e:
-        print(f"Debug: Error reading model metadata: {e}")
-        return {}
 
 def inspect_model(model_dir, model_name, vram_size):
     from scripts.utility import save_config
@@ -366,8 +388,6 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
 
     # Build messages
     messages = []
-    
-    # System message
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
         is_nsfw=settings.get("is_nsfw", False),
@@ -380,7 +400,6 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         system_message += f"\n\n=== Web Results ===\n{search_results}"
     messages.append({"role": "system", "content": system_message})
 
-    # Include only the latest user message with context from vectorstore if available
     if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
         user_content = clean_content('user', session_log[-2]['content'])
         if context_injector.session_vectorstore:
@@ -394,7 +413,6 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         yield "Error: No user input to process."
         return
 
-    # Debug prompt
     print("\n" + "="*40 + " FULL PROMPT " + "="*40)
     for msg in messages:
         print(f"{msg['role'].upper()}:\n{msg['content']}\n")
@@ -412,6 +430,9 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         
         buffer = ""
         has_content = False
+        in_thinking_phase = True  # Start in thinking phase
+        sentence_endings = ['.', '!', '?']
+
         for chunk in response_stream:
             if cancel_event and cancel_event.is_set():
                 yield "<CANCELLED>"
@@ -421,16 +442,50 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
                 if content:
                     has_content = True
                     buffer += content
-                    while '\n' in buffer or '.' in buffer:
-                        split_pos = buffer.find('\n') + 1 if '\n' in buffer else buffer.find('.') + 1
-                        if split_pos > 0:
-                            yielded_chunk = buffer[:split_pos]
-                            yield yielded_chunk
-                            print(f"Debug: Yielded chunk: {yielded_chunk.strip()}")
-                            buffer = buffer[split_pos:]
+
+                    # Check for end of thinking phase
+                    if "</think>" in buffer:
+                        in_thinking_phase = False
+                        parts = buffer.split("</think>", 1)
+                        buffer = parts[1]  # Keep content after </think>
+                        # Process any remaining thinking content
+                        if parts[0].strip():
+                            thinking_buffer = parts[0] + "</think>"
+                            for ending in sentence_endings:
+                                if ending in thinking_buffer:
+                                    sentences = [s.strip() + ending for s in thinking_buffer.split(ending) if s.strip()]
+                                    for sentence in sentences[:-1]:  # All but the last (incomplete)
+                                        if "<think>" in sentence or "</think>" in sentence:
+                                            yield "<SENTENCE_COMPLETE>"
+                                            print(f"Debug: Yielded <SENTENCE_COMPLETE> for thinking sentence: {sentence.strip()}")
+
+                    # Handle content based on phase
+                    if in_thinking_phase:
+                        for ending in sentence_endings:
+                            if ending in buffer:
+                                sentences = [s.strip() + ending for s in buffer.split(ending) if s.strip()]
+                                for sentence in sentences[:-1]:  # Exclude incomplete sentence
+                                    yield "<SENTENCE_COMPLETE>"
+                                    print(f"Debug: Yielded <SENTENCE_COMPLETE> for thinking sentence: {sentence.strip()}")
+                                buffer = sentences[-1] if sentences else buffer
+                    else:
+                        # Streaming phase: yield complete sentences
+                        for ending in sentence_endings:
+                            if ending in buffer:
+                                sentences = [s.strip() + ending for s in buffer.split(ending) if s.strip()]
+                                for sentence in sentences[:-1]:
+                                    yield sentence
+                                    print(f"Debug: Yielded streaming sentence: {sentence.strip()}")
+                                buffer = sentences[-1] if sentences else buffer
+
+        # Yield any remaining buffer
         if buffer.strip():
-            yield buffer
-            print(f"Debug: Yielded final buffer: {buffer.strip()}")
+            if in_thinking_phase:
+                yield "<SENTENCE_COMPLETE>"
+                print(f"Debug: Yielded final <SENTENCE_COMPLETE> for thinking buffer: {buffer.strip()}")
+            else:
+                yield buffer
+                print(f"Debug: Yielded final streaming buffer: {buffer.strip()}")
         elif not has_content:
             print("Debug: Model generated no content")
             yield "Error: Model generated an empty response."

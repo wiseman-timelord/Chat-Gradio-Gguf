@@ -523,15 +523,8 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
     interaction_phase = "afterthought_countdown"
     yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=False), gr.update(), gr.update(), gr.update(), gr.update()
 
-    # Updated countdown logic based on character count of raw input
     input_length = len(original_input.strip())
-    if input_length <= 25:
-        countdown_seconds = 1
-    elif input_length <= 100:
-        countdown_seconds = 3
-    else:
-        countdown_seconds = 5
-
+    countdown_seconds = 1 if input_length <= 25 else 3 if input_length <= 100 else 5
     progress_indicators = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     
     for i in range(countdown_seconds, -1, -1):
@@ -556,8 +549,9 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
 
     q = queue.Queue()
     cancel_event = threading.Event()
-    thinking_content = []
     final_answer = []
+    progress_blocks = ""
+    in_thinking_phase = True
 
     def run_generator():
         try:
@@ -599,28 +593,24 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
             yield session_log, f"⚠️ {chunk}", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-        if chunk.startswith("<THINK>") and chunk.endswith("</THINK>"):
-            thought = chunk[7:-8].strip()
-            if thought:
-                thinking_content.append(thought)
-                session_log[-1]['content'] = f"{prefix}\n<thinking>\n" + "\n".join(thinking_content) + "\n</thinking>"
-                yield session_log, "🤔 Reasoning...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        if chunk == "<SENTENCE_COMPLETE>":
+            if in_thinking_phase:
+                progress_blocks += "█"
+                yield session_log, f"Thinking... {progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         else:
+            if in_thinking_phase:
+                in_thinking_phase = False
+                yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
             final_answer.append(chunk)
             display = "".join(final_answer).strip()
-            if tot_enabled:
-                session_log[-1]['content'] = f"{prefix}\n<answer>\n{display}\n</answer>"
-            else:
-                session_log[-1]['content'] = f"{prefix}\n{display}"
+            session_log[-1]['content'] = f"{prefix}\n{display}"
             current_progress = random.choice(progress_indicators)
-            yield session_log, f"{current_progress} Formulating answer...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            yield session_log, f"{current_progress} Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         await asyncio.sleep(0.02)
 
     final_content = "".join(final_answer).strip()
-    if thinking_content and not final_content:
-        session_log[-1]['content'] = f"{prefix}\n<thinking>\n" + "\n".join(thinking_content) + "\n</thinking>\n<answer>\n(Response interrupted)</answer>"
-    elif not final_content and not thinking_content:
+    if not final_content:
         session_log[-1]['content'] = f"{prefix}\n<answer>\n(Empty response)</answer>"
         yield session_log, "⚠️ No response generated.", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
         return
@@ -820,7 +810,11 @@ def launch_interface():
                     config_components = {}
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("CPU/GPU Options...")
+                    # GPU options row, visible when not CPU-only
                     with gr.Row(visible=not is_cpu_only, elem_classes=["clean-elements"]):
+                        config_components.update(
+                            backend_type=gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=3),
+                        )
                         gpu_choices = utility.get_available_gpus()
                         if len(gpu_choices) == 1:
                             default_gpu = gpu_choices[0]
@@ -828,10 +822,14 @@ def launch_interface():
                             gpu_choices = ["Select_processing_device..."] + gpu_choices
                             default_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in gpu_choices else "Select_processing_device..."
                         config_components.update(
-                            gpu=gr.Dropdown(choices=gpu_choices, label="Select GPU", value=default_gpu, scale=5),
-                            vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=3),
+                            gpu=gr.Dropdown(choices=gpu_choices, label="Select GPU", value=default_gpu, scale=4),
+                            vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=2),
                         )
+                    # CPU options row, visible when CPU-only
                     with gr.Row(visible=is_cpu_only, elem_classes=["clean-elements"]):
+                        config_components.update(
+                            backend_type=gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=3),
+                        )
                         cpu_choices = [cpu["label"] for cpu in utility.get_cpu_info()] or ["Default CPU"]
                         if len(cpu_choices) == 1:
                             default_cpu = cpu_choices[0]
@@ -839,8 +837,7 @@ def launch_interface():
                             cpu_choices = ["Select_processing_device..."] + cpu_choices
                             default_cpu = temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_choices else "Select_processing_device..."
                         config_components.update(
-                            backend_type=gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=5),
-                            cpu=gr.Dropdown(choices=cpu_choices, label="Select CPU", value=default_cpu, scale=5),
+                            cpu=gr.Dropdown(choices=cpu_choices, label="Select CPU", value=default_cpu, scale=4),
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Model Options...")
