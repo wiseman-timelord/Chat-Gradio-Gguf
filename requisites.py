@@ -180,15 +180,21 @@ def get_python_wheel_tag() -> str:
     return f"cp{major}{minor}"
 
 def check_llama_conflicts() -> bool:
+    venv_python = str(VENV_DIR / "Scripts" / "python.exe")
     try:
-        import llama_cpp
+        result = subprocess.run(
+            [venv_python, "-c", "import llama_cpp"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
         print_status("llama-cpp-python is installed and compatible")
         return True
-    except ImportError:
-        print_status("llama-cpp-python not found", False)
-        return False
-    except Exception as e:
-        print_status(f"llama-cpp-python conflict detected: {str(e)}", False)
+    except subprocess.CalledProcessError as e:
+        if "ModuleNotFoundError" in e.stderr:
+            print_status("llama-cpp-python not found", False)
+        else:
+            print_status(f"llama-cpp-python conflict: {e.stderr}", False)
         return False
 
 def find_vulkan_versions() -> Dict[str, Path]:
