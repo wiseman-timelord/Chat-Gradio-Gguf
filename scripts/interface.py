@@ -38,6 +38,24 @@ from langchain_core.documents import Document
 def set_loading_status():
     return "Loading model..."
 
+def get_panel_choices(model_settings):
+    """Determine available panel choices based on model settings."""
+    choices = ["History", "Attach", "Vector"]
+    if model_settings.get("is_nsfw", False) or model_settings.get("is_roleplay", False):
+        if "Attach" in choices:
+            choices.remove("Attach")
+    if model_settings.get("is_code", False):
+        if "Vector" in choices:
+            choices.remove("Vector")
+    return choices
+
+def update_panel_choices(model_settings, current_panel):
+    """Update panel_toggle choices and ensure a valid selection."""
+    choices = get_panel_choices(model_settings)
+    if current_panel not in choices:
+        current_panel = choices[0] if choices else "History"
+    return gr.update(choices=choices, value=current_panel), current_panel
+
 def update_panel_on_mode_change(current_panel):
     """
     Update panel visibility based on the selected panel, fixed for Conversation mode.
@@ -477,7 +495,7 @@ def update_action_button(phase):
     elif phase == "afterthought_countdown":
         return gr.update(value="Cancel Submission", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
     elif phase == "generating_response":
-        return gr.update(value="Cancel Response", variant="secondary", elem_classes=["send-button-red"], interactive=True)  # Interactive for cancellation
+        return gr.update(value="Wait For Response", variant="secondary", elem_classes=["send-button-red"], interactive=True)  # Interactive for cancellation
     elif phase == "speaking":
         return gr.update(value="Outputting Speak", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
     else:
@@ -593,14 +611,13 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
             yield session_log, f"⚠️ {chunk}", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-        if chunk == "<SENTENCE_COMPLETE>":
-            if in_thinking_phase:
-                progress_blocks += "█"
-                yield session_log, f"Thinking... {progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        if chunk == "<THINKING_PROGRESS>":
+            progress_blocks += "█"
+            yield session_log, f"{progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        elif chunk == "<THINKING_DONE>":
+            in_thinking_phase = False
+            yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         else:
-            if in_thinking_phase:
-                in_thinking_phase = False
-                yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
             final_answer.append(chunk)
             display = "".join(final_answer).strip()
             session_log[-1]['content'] = f"{prefix}\n{display}"
@@ -659,14 +676,14 @@ def launch_interface():
             attached_files=gr.State([]),
             vector_files=gr.State([]),
             models_loaded=gr.State(False),
-            llm=gr.State(None),  # Add this line
+            llm=gr.State(None),
             cancel_flag=gr.State(False),
             interaction_phase=gr.State("waiting_for_input"),
             is_reasoning_model=gr.State(False),
             selected_panel=gr.State("History"),
-            expanded_state=gr.State(True)
+            expanded_state=gr.State(True),
+            model_settings=gr.State({})  # Added to store full model settings
         )
-
         # Define conversation_components once to avoid redefinition
         conversation_components = {}
 
@@ -1036,14 +1053,6 @@ def launch_interface():
             fn=lambda panel: panel,
             inputs=[panel_toggle],
             outputs=[states["selected_panel"]]
-        ).then(
-            fn=lambda panel: (
-                gr.update(visible=panel == "Attach"),
-                gr.update(visible=panel == "Vector"),
-                gr.update(visible=panel == "History")
-            ),
-            inputs=[states["selected_panel"]],
-            outputs=[attach_group, vector_group, history_slots_group]
         )
 
         config_components["model"].change(
@@ -1054,6 +1063,30 @@ def launch_interface():
             fn=lambda model_name: models.get_model_settings(model_name)["is_reasoning"],
             inputs=[config_components["model"]],
             outputs=[states["is_reasoning_model"]]
+        ).then(
+            fn=lambda model_name: models.get_model_settings(model_name),
+            inputs=[config_components["model"]],
+            outputs=[states["model_settings"]]
+        ).then(
+            fn=update_panel_choices,
+            inputs=[states["model_settings"], states["selected_panel"]],
+            outputs=[panel_toggle, states["selected_panel"]]
+        )
+
+        states["is_reasoning_model"].change(
+            fn=lambda is_reasoning: gr.update(visible=is_reasoning),
+            inputs=[states["is_reasoning_model"]],
+            outputs=[switches["enable_think"]]
+        )
+
+        states["selected_panel"].change(
+            fn=lambda panel: (
+                gr.update(visible=panel == "Attach"),
+                gr.update(visible=panel == "Vector"),
+                gr.update(visible=panel == "History")
+            ),
+            inputs=[states["selected_panel"]],
+            outputs=[attach_group, vector_group, history_slots_group]
         )
 
         for comp in [config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]]:
@@ -1184,15 +1217,13 @@ def launch_interface():
             inputs=[],
             outputs=[config_components["model"], states["is_reasoning_model"]]
         ).then(
-            fn=lambda panel: (
-                gr.update(choices=["History", "Attach", "Vector"], value=panel),
-                gr.update(visible=panel == "Attach"),
-                gr.update(visible=panel == "Vector"),
-                gr.update(visible=panel == "History"),
-                panel
-            ),
-            inputs=[states["selected_panel"]],
-            outputs=[panel_toggle, attach_group, vector_group, history_slots_group, states["selected_panel"]]
+            fn=lambda model_name: models.get_model_settings(model_name),
+            inputs=[config_components["model"]],
+            outputs=[states["model_settings"]]
+        ).then(
+            fn=update_panel_choices,
+            inputs=[states["model_settings"], states["selected_panel"]],
+            outputs=[panel_toggle, states["selected_panel"]]
         ).then(
             fn=lambda is_reasoning: [
                 gr.update(visible=True),

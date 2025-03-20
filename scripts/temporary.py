@@ -95,7 +95,8 @@ handling_keywords = {
     "code": ["code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell"],
     "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
     "reasoning": ["reason", "r1", "think"],
-    "nsfw": ["nsfw", "adult", "mature", "explicit"]
+    "nsfw": ["nsfw", "adult", "mature", "explicit", "lewd"],
+    "roleplay": ["rp", "role", "adventure"]
 }
 
 # prompt template table

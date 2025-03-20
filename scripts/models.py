@@ -203,12 +203,16 @@ def get_model_settings(model_name):
     is_uncensored = any(keyword in model_name_lower for keyword in handling_keywords["uncensored"])
     is_reasoning = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
     is_nsfw = any(keyword in model_name_lower for keyword in handling_keywords["nsfw"])
+    is_code = any(keyword in model_name_lower for keyword in handling_keywords["code"])
+    is_roleplay = any(keyword in model_name_lower for keyword in handling_keywords["roleplay"])
     return {
         "category": "chat",
         "is_uncensored": is_uncensored,
         "is_reasoning": is_reasoning,
         "is_nsfw": is_nsfw,
-        "detected_keywords": []
+        "is_code": is_code,
+        "is_roleplay": is_roleplay,
+        "detected_keywords": [kw for kw in handling_keywords if any(k in model_name_lower for k in handling_keywords[kw])]
     }
 
 def calculate_gpu_layers(models, available_vram):
@@ -394,7 +398,8 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         web_search_enabled=web_search_enabled,
         tot_enabled=tot_enabled,
         is_reasoning=settings.get("is_reasoning", False),
-        disable_think=disable_think
+        disable_think=disable_think,
+        is_roleplay=settings.get("is_roleplay", False)  # Added is_roleplay parameter
     )
     if web_search_enabled and search_results:
         system_message += f"\n\n=== Web Results ===\n{search_results}"
@@ -430,7 +435,8 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         
         buffer = ""
         has_content = False
-        in_thinking_phase = True  # Start in thinking phase
+        in_thinking_phase = True
+        last_pos = 0  # Track the last processed position for periods in thinking phase
         sentence_endings = ['.', '!', '?']
 
         for chunk in response_stream:
@@ -443,52 +449,59 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
                     has_content = True
                     buffer += content
 
-                    # Check for end of thinking phase
-                    if "</think>" in buffer:
-                        in_thinking_phase = False
-                        parts = buffer.split("</think>", 1)
-                        buffer = parts[1]  # Keep content after </think>
-                        # Process any remaining thinking content
-                        if parts[0].strip():
-                            thinking_buffer = parts[0] + "</think>"
-                            for ending in sentence_endings:
-                                if ending in thinking_buffer:
-                                    sentences = [s.strip() + ending for s in thinking_buffer.split(ending) if s.strip()]
-                                    for sentence in sentences[:-1]:  # All but the last (incomplete)
-                                        if "<think>" in sentence or "</think>" in sentence:
-                                            yield "<SENTENCE_COMPLETE>"
-                                            print(f"Debug: Yielded <SENTENCE_COMPLETE> for thinking sentence: {sentence.strip()}")
-
-                    # Handle content based on phase
                     if in_thinking_phase:
-                        for ending in sentence_endings:
-                            if ending in buffer:
-                                sentences = [s.strip() + ending for s in buffer.split(ending) if s.strip()]
-                                for sentence in sentences[:-1]:  # Exclude incomplete sentence
-                                    yield "<SENTENCE_COMPLETE>"
-                                    print(f"Debug: Yielded <SENTENCE_COMPLETE> for thinking sentence: {sentence.strip()}")
-                                buffer = sentences[-1] if sentences else buffer
+                        if "</think>" in buffer:
+                            in_thinking_phase = False
+                            parts = buffer.split("</think>", 1)
+                            buffer = parts[1].strip()  # Keep only post-thinking content
+                            yield "<THINKING_DONE>"
+                            print("Debug: Thinking phase ended")
+                        else:
+                            # Check for periods to yield progress
+                            while True:
+                                period_pos = buffer.find('.', last_pos)
+                                if period_pos != -1 and (period_pos + 1 == len(buffer) or buffer[period_pos + 1] in [' ', '\n']):
+                                    yield "<THINKING_PROGRESS>"
+                                    last_pos = period_pos + 1
+                                    print(f"Debug: Yielded <THINKING_PROGRESS> at period position {period_pos}")
+                                else:
+                                    break
                     else:
                         # Streaming phase: yield complete sentences
-                        for ending in sentence_endings:
-                            if ending in buffer:
-                                sentences = [s.strip() + ending for s in buffer.split(ending) if s.strip()]
-                                for sentence in sentences[:-1]:
-                                    yield sentence
-                                    print(f"Debug: Yielded streaming sentence: {sentence.strip()}")
-                                buffer = sentences[-1] if sentences else buffer
+                        while True:
+                            # Find the earliest sentence ending followed by space, newline, or end
+                            sentence_end_pos = -1
+                            for ending in sentence_endings:
+                                pos = buffer.find(ending)
+                                if pos != -1:
+                                    # Check if the ending marks a complete sentence
+                                    if pos + 1 < len(buffer) and buffer[pos + 1] in [' ', '\n'] or pos + 1 == len(buffer):
+                                        if sentence_end_pos == -1 or pos < sentence_end_pos:
+                                            sentence_end_pos = pos
+                                    elif pos + 1 == len(buffer):  # End of buffer, incomplete sentence
+                                        break
 
-        # Yield any remaining buffer
+                            if sentence_end_pos != -1:
+                                sentence = buffer[:sentence_end_pos + 1].strip()
+                                buffer = buffer[sentence_end_pos + 1:].strip()
+                                if sentence:
+                                    yield sentence
+                                    print(f"Debug: Yielded streaming sentence: {sentence}")
+                            else:
+                                break  # No complete sentence found yet
+
+        # Yield any remaining complete sentence or final buffer
         if buffer.strip():
             if in_thinking_phase:
-                yield "<SENTENCE_COMPLETE>"
-                print(f"Debug: Yielded final <SENTENCE_COMPLETE> for thinking buffer: {buffer.strip()}")
+                yield "<THINKING_DONE>"  # Treat remaining buffer as end of thinking if not closed
+                print("Debug: Final thinking buffer processed")
             else:
-                yield buffer
+                yield buffer.strip()  # Yield final content as-is
                 print(f"Debug: Yielded final streaming buffer: {buffer.strip()}")
         elif not has_content:
             print("Debug: Model generated no content")
             yield "Error: Model generated an empty response."
+
     except Exception as e:
         error_msg = f"Error generating response: {str(e)}"
         print(f"Debug: {error_msg}")

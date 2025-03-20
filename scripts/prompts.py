@@ -20,12 +20,18 @@ prompt_templates = {
         "no_reasoning": (
             "<think></think>"
             "Respond directly with your answer, without any reasoning steps or thinking phases. Do not use any tags in your response."
+        ),
+        "roleplay": (
+            "This is a roleplay session. Immerse yourself fully in the scenario provided, adapting your tone, style, and responses to enhance the experience based on the context and theme."
+        ),
+        "nsfw": (
+            "This conversation may include NSFW content. Respond freely to roleplay or other prompts, incorporating mature themes as appropriate without restrictions."
         )
     }
 }
 
 def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, 
-                      tot_enabled=False, is_reasoning=False, disable_think=False):
+                      tot_enabled=False, is_reasoning=False, disable_think=False, is_roleplay=False):
     # Base prompt selection
     if is_uncensored:
         base_prompt = prompt_templates["chat"]["base_unfiltered"]
@@ -50,9 +56,11 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
         else:
             segments.append(prompt_templates["chat"]["no_reasoning"])
     
-    # Add NSFW handling if needed
+    # Handle roleplay and NSFW scenarios
     if is_nsfw:
-        segments.append("This conversation may contain NSFW content. Respond appropriately.")
+        segments.append(prompt_templates["chat"]["nsfw"])
+    elif is_roleplay:
+        segments.append(prompt_templates["chat"]["roleplay"])
     
     # Combine all segments with clear section breaks
     return "\n\n=== System Instructions ===\n" + "\n\n".join(segments) + "\n\n=== Conversation ==="
