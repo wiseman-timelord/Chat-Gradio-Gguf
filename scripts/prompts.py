@@ -30,6 +30,7 @@ prompt_templates = {
     }
 }
 
+# scripts/prompts.py
 def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, 
                       tot_enabled=False, is_reasoning=False, disable_think=False, is_roleplay=False):
     # Base prompt selection
@@ -62,8 +63,8 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
     elif is_roleplay:
         segments.append(prompt_templates["chat"]["roleplay"])
     
-    # Combine all segments with clear section breaks
-    return "\n\n=== System Instructions ===\n" + "\n\n".join(segments) + "\n\n=== Conversation ==="
+    # Combine all segments without separators
+    return "\n\n".join(segments)
 
 def get_reasoning_instruction():
     return prompt_templates["chat"]["reasoning"]

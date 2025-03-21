@@ -402,7 +402,7 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         is_roleplay=settings.get("is_roleplay", False)
     )
     if web_search_enabled and search_results:
-        system_message += f"\n\n=== Web Results ===\n{search_results}"
+        system_message += f"\n\nWeb Search Results:\n{search_results}"
     messages.append({"role": "system", "content": system_message})
 
     if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
