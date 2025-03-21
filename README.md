@@ -79,6 +79,9 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
 - Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, for enhancement detection.
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
+- Rpg elements were overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. This prompts Rpg-Gradio-Gguf to be worked on.
+- Coder mode was not possible without dual model, due to needing a text to instruct conversion, so inspired project `Code-Gradio-Gguf`, TBA.
+- This project was re-branded from `Text-Gradio-Gguf`, inline with doing rpg and code in other programs.
 
 ### Model label/name Keywords...
 Keywords in model label will dynamically adapt the prompt appropriately...
@@ -132,9 +135,8 @@ project_root/
 
 ## Current Development
 With regards to the current version of the program...
-1. Output Format is incorrect.
-2. Status bar on Configuration page is not printing its messages.
-1. It is now Chat only, and streamlined as a result. This is all now do-able and has mostly/all already been working in earlier versions, just need to fix the features based on what I already figured out. To note, 6. Rpg rpg overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. To note, Coder mode was not possible without dual model, due to needing a text to instruct conversion, so removed until =>Gen2. This will require re-brand to `Chat-Gradio-Gguf`, inline with, `Rpg-Gradio-Gguf` and new project blueprint `Code-Gradio-Gguf`, 3 programs, not 1 that struggles to do all.
+1. Output Format is incorrect. ISsue with bullet points being printed correctly while using a non-think, non-tot, non-search, mode.
+1. It is now Chat only, and streamlined as a result. This is all now do-able without agentic workflows. It has mostly/all already been working in earlier versions, just need to fix the features based on what I already figured out. 
 1. Continue work on prompting system until it works soundly, check all model keywords themes with enhancement combination (note text to speak uses `PyWin32`). 
 5. Output is now brokwn. It seemed to work before as a subprocess while printing output, and stream when its the final response or for direct answers. We want streaming raw text input/output to the command window, while keeping it as subprocess, for the gradio display to update correctly.
 6. I want to go back to the `█` in the status bar for progress indication, each iteration representing one sentence, while for the session log and display to be updating for each complete sentence written, then finally when it is complete resuming normal operation. I did very much like it when I was able to see each sentence appear streaming as complete sentence as each was completely written, while a `█` in the status bar for each complete sentence be it while the model is thinking or doing tot or something, or when it is printing the final output or selected output, but this progress on the status bar should only be applicable while there is text being generated that will not be displayed, so people can see something is going on, however, if we can not do that when its actually printing the material that will be used in the session log, be it the complete output or just a selection of it, then it should not accumulate any more `█` and instead say `Streaming Response...` if its currently in a phase of streaming complete sentences to the session log.
