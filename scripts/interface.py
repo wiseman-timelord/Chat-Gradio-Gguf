@@ -324,17 +324,6 @@ def eject_file(file_list, slot_index, is_attach=True):
     updates = update_file_slot_ui(file_list, is_attach)
     return [file_list, status_msg] + updates
 
-
-def create_session_label(text):
-    first_line = text.split('\n')[0].strip()
-    if len(first_line) > 35:
-        last_space = first_line.rfind(' ', 0, 34)
-        if last_space != -1:
-            first_line = first_line[:last_space]
-        else:
-            first_line = first_line[:35]
-    return first_line
-
 def start_new_session(models_loaded):
     from scripts import temporary
     import gradio as gr
@@ -444,40 +433,24 @@ def filter_operational_content(text):
     return text.strip()
 
 def update_session_buttons():
-    sessions = utility.get_saved_sessions()[:temporary.MAX_HISTORY_SLOTS]  # Limit to MAX_HISTORY_SLOTS
+    sessions = utility.get_saved_sessions()[:temporary.MAX_HISTORY_SLOTS]
     button_updates = []
     for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS):
-        if i < len(sessions):  # Only process existing sessions up to MAX_HISTORY_SLOTS
+        if i < len(sessions):
             session_path = Path(HISTORY_DIR) / sessions[i]
             try:
                 stat = session_path.stat()
                 update_time = stat.st_mtime if stat.st_mtime else stat.st_ctime
                 formatted_time = datetime.fromtimestamp(update_time).strftime("%Y-%m-%d %H:%M")
                 session_id, label, history, attached_files, vector_files = utility.load_session_history(session_path)
-                if history and len(history) >= 2 and history[0]['role'] == 'user' and history[1]['role'] == 'assistant':
-                    user_input = history[0]['content']
-                    assistant_response = history[1]['content']
-                    user_input_clean = utility.clean_content('user', user_input)
-                    assistant_response_clean = utility.clean_content('assistant', assistant_response)
-                    text_for_yake = user_input_clean + " " + assistant_response_clean
-                else:
-                    text_for_yake = " ".join([utility.clean_content(msg['role'], msg['content']) for msg in history])
-                text_for_yake = filter_operational_content(text_for_yake)
-                kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
-                keywords = kw_extractor.extract_keywords(text_for_yake)
-                description = keywords[0][0] if keywords else "No description"
-                if len(description) > 16:
-                    description = description[:16]
-                temporary.yake_history_detail[i] = description
-                btn_label = f"{formatted_time} - {description}"
+                btn_label = f"{formatted_time} - {label}"
             except Exception as e:
                 print(f"Error loading session {session_path}: {e}")
                 btn_label = f"Session {i+1}"
-                temporary.yake_history_detail[i] = None
             visible = True
         else:
             btn_label = ""
-            visible = False  # Hide slots beyond the number of sessions
+            visible = False
         button_updates.append(gr.update(value=btn_label, visible=visible))
     return button_updates
 
@@ -500,17 +473,6 @@ def update_action_button(phase):
         return gr.update(value="Outputting Speak", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
     else:
         return gr.update(value="Unknown Phase", variant="secondary", elem_classes=["send-button-green"], interactive=False)
-
-def create_session_label(text):
-    """Generate a ~30-character summary from the first line of the input."""
-    first_line = text.split('\n')[0].strip()
-    if len(first_line) > 30:
-        last_space = first_line.rfind(' ', 0, 29)
-        if last_space != -1:
-            first_line = first_line[:last_space]
-        else:
-            first_line = first_line[:30]
-    return first_line
 
 # Async Converstation Interface
 async def conversation_interface(user_input, session_log, tot_enabled, loaded_files, enable_think,
@@ -639,6 +601,8 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
         return
     else:
         session_log[-1]['content'] = filter_operational_content(f"{prefix}\n{final_content}")
+        # Save the session with the updated log and label using the YAKE-based approach
+        utility.save_session_history(session_log, temporary.session_attached_files, temporary.session_vector_files)
 
     yield session_log, "✅ Response ready", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
 
@@ -697,7 +661,7 @@ def launch_interface():
             with gr.Tab("Interaction"):
                 with gr.Row():
                     # Expanded left column
-                    with gr.Column(visible=True, min_width=310, elem_classes=["clean-elements"]) as left_column_expanded:
+                    with gr.Column(visible=True, min_width=350, elem_classes=["clean-elements"]) as left_column_expanded:
                         toggle_button_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary")
                         panel_toggle = gr.Radio(
                             choices=["History", "Attach", "Vector"],
@@ -983,8 +947,8 @@ def launch_interface():
                 states["models_loaded"],
                 states["interaction_phase"],
                 switches["speak"],
-                states["llm"],  # Add this
-                states["models_loaded"]  # Already present, kept for clarity
+                states["llm"],
+                states["models_loaded"]
             ],
             outputs=[
                 conversation_components["session_log"],
@@ -999,6 +963,10 @@ def launch_interface():
                 switches["enable_think"],
                 switches["speak"]
             ]
+        ).then(
+            fn=update_session_buttons,
+            inputs=[],
+            outputs=buttons["session"]
         )
 
         action_buttons["copy_response"].click(

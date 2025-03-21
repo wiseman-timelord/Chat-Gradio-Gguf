@@ -3,7 +3,7 @@
 # Imports...
 import re, subprocess, json, time, random, psutil, shutil, os, zipfile, yake
 import win32com.client
-import pythoncom  # Added for COM initialization
+import pythoncom
 from pathlib import Path
 from datetime import datetime
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -11,14 +11,14 @@ from langchain_community.document_loaders import TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-from .models import context_injector, load_models
+from .models import context_injector, load_models, clean_content  # Updated import
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
     ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER, BATCH_SIZE,
     RAG_CHUNK_OVERLAP_DEVIDER, CONTEXT_SIZE
 )
 from . import temporary
-from scripts.models import clean_content, get_available_models
+from scripts.models import get_available_models
 
 # Functions...
 def filter_operational_content(text):
@@ -84,26 +84,40 @@ def speak_text(text):
         raise  # Re-raise to catch in chat_interface
     finally:
         pythoncom.CoUninitialize()  # Clean up COM initialization
-    
+
+# Add this new function
+def generate_session_label(session_log):
+    """Generate a session label using YAKE on the entire session log, up to 25 characters."""
+    if not session_log:
+        return "Untitled"
+    text_for_yake = " ".join([clean_content(msg['role'], msg['content']) for msg in session_log])
+    text_for_yake = filter_operational_content(text_for_yake)
+    kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
+    keywords = kw_extractor.extract_keywords(text_for_yake)
+    description = keywords[0][0] if keywords else "No description"
+    if len(description) > 25:
+        description = description[:25]
+    return description
+
+# Updated save_session_history
 def save_session_history(session_log, attached_files, vector_files):
+    """Save or update session history with a YAKE-generated label."""
     if not temporary.current_session_id:
         temporary.current_session_id = generate_session_id()
-    if not temporary.session_label and session_log:
-        temporary.session_label = create_session_label(session_log[0]["content"] if session_log[0]["role"] == "user" else "")
+    temporary.session_label = generate_session_label(session_log)
     os.makedirs(HISTORY_DIR, exist_ok=True)
     session_file = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}.json"
     session_data = {
         "session_id": temporary.current_session_id,
         "label": temporary.session_label,
         "history": session_log,
-        "attached_files": attached_files,  # Store original file paths
+        "attached_files": attached_files,
         "vector_files": vector_files if vector_files else []
     }
     with open(session_file, "w") as f:
         json.dump(session_data, f)
     manage_session_history()
-        
-
+    
 def load_session_history(session_file):
     try:
         with open(session_file, "r") as f:
