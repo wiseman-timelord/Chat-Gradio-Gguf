@@ -742,7 +742,7 @@ def launch_interface():
                     
                     # Collapsed left column
                     with gr.Column(visible=False, min_width=80, elem_classes=["clean-elements"]) as left_column_collapsed:
-                        toggle_button_collapsed = gr.Button("TGG", variant="secondary")
+                        toggle_button_collapsed = gr.Button("CGG", variant="secondary")
                     
                     # Main interaction column (split-screen effect)
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):

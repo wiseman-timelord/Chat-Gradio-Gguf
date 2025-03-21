@@ -390,7 +390,7 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
     print("Debug: Entering get_response_stream")
     print(f"Debug: session_log = {session_log}")
 
-    # Build messages
+    # Build messages (unchanged)
     messages = []
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
@@ -469,25 +469,25 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
                             sentence_end_pos = -1
                             for i, char in enumerate(buffer):
                                 if char in sentence_endings:
-                                    if (i + 1 < len(buffer) and buffer[i + 1] in [' ', '\n'] and (i == 0 or not buffer[i - 1].isdigit())) or (i + 1 == len(buffer) and (i == 0 or not buffer[i - 1].isdigit())):
+                                    if (i + 1 < len(buffer) and buffer[i + 1].isspace() and (i == 0 or not buffer[i - 1].isdigit())) or (i + 1 == len(buffer) and (i == 0 or not buffer[i - 1].isdigit())):
                                         sentence_end_pos = i
                                         break
                             if sentence_end_pos != -1:
-                                sentence = buffer[:sentence_end_pos + 1].strip()
-                                buffer = buffer[sentence_end_pos + 1:].strip()
+                                # Include the punctuation and trailing whitespace
+                                end_pos = sentence_end_pos + 1
+                                while end_pos < len(buffer) and buffer[end_pos].isspace():
+                                    end_pos += 1
+                                sentence = buffer[:end_pos]
+                                buffer = buffer[end_pos:].lstrip()
                                 if sentence:
                                     yield sentence
-                                    print(f"Debug: Yielded streaming sentence: {sentence}")
+                                    print(f"Debug: Yielded streaming sentence: {sentence!r}")
                             else:
                                 break
 
-        if buffer.strip():
-            if in_thinking_phase:
-                yield buffer.strip()
-                print("Debug: Thinking phase not closed, yielding entire buffer")
-            else:
-                yield buffer.strip()
-                print(f"Debug: Yielded final streaming buffer: {buffer.strip()}")
+        if buffer:
+            yield buffer
+            print(f"Debug: Yielded final streaming buffer: {buffer!r}")
         elif not has_content:
             print("Debug: Model generated no content")
             yield "Error: Model generated an empty response."
