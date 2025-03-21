@@ -381,12 +381,12 @@ def copy_last_response(session_log):
         return "AI Response copied to clipboard."
     return "No response available to copy."
 
-def shutdown_program(models_loaded):
+def shutdown_program(llm_state, models_loaded_state):
     import time, sys
-    if models_loaded:
+    if models_loaded_state:
         print("Shutting Down...")
         print("Unloading model...")
-        unload_models()
+        unload_models(llm_state, models_loaded_state)
         print("Model unloaded.")
     print("Closing Gradio server...")
     demo.close()
@@ -555,7 +555,7 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
             yield session_log, "Input cancelled.", update_action_button(interaction_phase), False, loaded_files, interaction_phase, gr.update(interactive=True, value=original_input), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-    prefix = "AI-Chat-Response:"
+    prefix = "AI-Chat:"
     interaction_phase = "generating_response"
     settings = get_model_settings(temporary.MODEL_NAME)
 
@@ -619,7 +619,13 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
             yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         else:
             final_answer.append(chunk)
-            display = "".join(final_answer).strip()
+            display_parts = []
+            for part in final_answer:
+                if re.match(r"\d+\.", part.strip()):
+                    display_parts.append("\n" + part)
+                else:
+                    display_parts.append(part)
+            display = " ".join(display_parts).strip()
             session_log[-1]['content'] = f"{prefix}\n{display}"
             current_progress = random.choice(progress_indicators)
             yield session_log, f"{current_progress} Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
@@ -815,9 +821,10 @@ def launch_interface():
                         value="Select model on Configuration page.",
                         scale=30
                     )
-                    gr.Button("Terminate", variant="stop", elem_classes=["double-height"], min_width=110).click(
+                    exit_button = gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110)
+                    exit_button.click(
                         fn=shutdown_program,
-                        inputs=[states["models_loaded"]]
+                        inputs=[states["llm"], states["models_loaded"]]
                     )
 
             # Configuration tab
@@ -917,8 +924,16 @@ def launch_interface():
                             gr.Markdown("Donations through, [Patreon](https://patreon.com/WisemanTimelord) or [Ko-fi](https://ko-fi.com/WisemanTimelord).")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
-                            status_settings=gr.Textbox(label="Status", interactive=False, scale=20),
-                            shutdown=gr.Button("Terminate", variant="stop", elem_classes=["double-height"], min_width=110).click(fn=shutdown_program, inputs=[states["models_loaded"]])
+                            status_settings=gr.Textbox(
+                                label="Status",
+                                interactive=False,
+                                value="Select model on Configuration page.",  # Added initial value
+                                scale=20
+                            ),
+                            shutdown=gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110).click(
+                                fn=shutdown_program,
+                                inputs=[states["llm"], states["models_loaded"]]
+                            )
                         )
 
         # Event handlers defined after all components are initialized
@@ -933,7 +948,7 @@ def launch_interface():
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
             inputs=[model_folder_state],
-            outputs=[config_components["status_settings"]]
+            outputs=[status_text]  # Changed from config_components["status_settings"]
         )
 
         start_new_session_btn.click(
@@ -1058,7 +1073,7 @@ def launch_interface():
         config_components["model"].change(
             fn=handle_model_selection,
             inputs=[config_components["model"], model_folder_state],
-            outputs=[model_folder_state, config_components["model"], config_components["status_settings"]]
+            outputs=[model_folder_state, config_components["model"], status_text]  # Changed to status_text
         ).then(
             fn=lambda model_name: models.get_model_settings(model_name)["is_reasoning"],
             inputs=[config_components["model"]],
@@ -1071,12 +1086,6 @@ def launch_interface():
             fn=update_panel_choices,
             inputs=[states["model_settings"], states["selected_panel"]],
             outputs=[panel_toggle, states["selected_panel"]]
-        )
-
-        states["is_reasoning_model"].change(
-            fn=lambda is_reasoning: gr.update(visible=is_reasoning),
-            inputs=[states["is_reasoning_model"]],
-            outputs=[switches["enable_think"]]
         )
 
         states["selected_panel"].change(
@@ -1093,7 +1102,7 @@ def launch_interface():
             comp.change(
                 fn=update_config_settings,
                 inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]],
-                outputs=[config_components["status_settings"]]
+                outputs=[status_text]
             )
 
         config_components["browse"].click(
@@ -1103,19 +1112,19 @@ def launch_interface():
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
             inputs=[model_folder_state],
-            outputs=[config_components["status_settings"]]
+            outputs=[status_text]
         )
 
         config_components["model"].change(
             fn=lambda model: (setattr(temporary, "MODEL_NAME", model), f"Selected model: {model}")[1],
             inputs=[config_components["model"]],
-            outputs=[config_components["status_settings"]]
+            outputs=[status_text]
         )
 
         config_components["unload"].click(
             fn=unload_models,
             inputs=[states["llm"], states["models_loaded"]],
-            outputs=[config_components["status_settings"], states["llm"], states["models_loaded"]]
+            outputs=[status_text, states["llm"], states["models_loaded"]]
         ).then(
             fn=lambda: gr.update(interactive=False),
             outputs=[conversation_components["user_input"]]
@@ -1123,25 +1132,25 @@ def launch_interface():
 
         config_components["load_models"].click(
             fn=set_loading_status,
-            outputs=[config_components["status_settings"]]
+            outputs=[status_text]
         ).then(
             fn=load_models,
             inputs=[model_folder_state, config_components["model"], config_components["vram"], states["llm"], states["models_loaded"]],
-            outputs=[config_components["status_settings"], states["models_loaded"], states["llm"], states["models_loaded"]]
+            outputs=[status_text, states["models_loaded"], states["llm"], states["models_loaded"]]
         ).then(
             fn=lambda status, ml: (status, gr.update(interactive=ml)),
-            inputs=[config_components["status_settings"], states["models_loaded"]],
-            outputs=[config_components["status_settings"], conversation_components["user_input"]]
+            inputs=[status_text, states["models_loaded"]],
+            outputs=[status_text, conversation_components["user_input"]]
         )
 
         config_components["save_settings"].click(
             fn=save_all_settings,
-            outputs=[config_components["status_settings"]]
+            outputs=[status_text]
         )
 
         custom_components["delete_all_vectorstores"].click(
             fn=utility.delete_all_history_and_vectors,
-            outputs=[config_components["status_settings"]]
+            outputs=[status_text]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1245,6 +1254,12 @@ def launch_interface():
             fn=lambda files: update_file_slot_ui(files, False),
             inputs=[states["vector_files"]],
             outputs=vector_slots + [vector_files_btn]
+        )
+
+        status_text.change(
+            fn=lambda status: status,
+            inputs=[status_text],
+            outputs=[config_components["status_settings"]]
         )
 
     demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)

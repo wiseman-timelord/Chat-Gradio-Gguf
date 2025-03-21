@@ -399,7 +399,7 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         tot_enabled=tot_enabled,
         is_reasoning=settings.get("is_reasoning", False),
         disable_think=disable_think,
-        is_roleplay=settings.get("is_roleplay", False)  # Added is_roleplay parameter
+        is_roleplay=settings.get("is_roleplay", False)
     )
     if web_search_enabled and search_results:
         system_message += f"\n\n=== Web Results ===\n{search_results}"
@@ -435,8 +435,7 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         
         buffer = ""
         has_content = False
-        in_thinking_phase = True
-        last_pos = 0  # Track the last processed position for periods in thinking phase
+        in_thinking_phase = settings.get("is_reasoning", False) and not disable_think
         sentence_endings = ['.', '!', '?']
 
         for chunk in response_stream:
@@ -453,34 +452,26 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
                         if "</think>" in buffer:
                             in_thinking_phase = False
                             parts = buffer.split("</think>", 1)
-                            buffer = parts[1].strip()  # Keep only post-thinking content
+                            buffer = parts[1].strip()
                             yield "<THINKING_DONE>"
                             print("Debug: Thinking phase ended")
                         else:
-                            # Check for periods to yield progress
                             while True:
-                                period_pos = buffer.find('.', last_pos)
+                                period_pos = buffer.find('.')
                                 if period_pos != -1 and (period_pos + 1 == len(buffer) or buffer[period_pos + 1] in [' ', '\n']):
                                     yield "<THINKING_PROGRESS>"
-                                    last_pos = period_pos + 1
+                                    buffer = buffer[period_pos + 1:].strip()
                                     print(f"Debug: Yielded <THINKING_PROGRESS> at period position {period_pos}")
                                 else:
                                     break
                     else:
-                        # Streaming phase: yield complete sentences
                         while True:
-                            # Find the earliest sentence ending followed by space, newline, or end
                             sentence_end_pos = -1
-                            for ending in sentence_endings:
-                                pos = buffer.find(ending)
-                                if pos != -1:
-                                    # Check if the ending marks a complete sentence
-                                    if pos + 1 < len(buffer) and buffer[pos + 1] in [' ', '\n'] or pos + 1 == len(buffer):
-                                        if sentence_end_pos == -1 or pos < sentence_end_pos:
-                                            sentence_end_pos = pos
-                                    elif pos + 1 == len(buffer):  # End of buffer, incomplete sentence
+                            for i, char in enumerate(buffer):
+                                if char in sentence_endings:
+                                    if (i + 1 < len(buffer) and buffer[i + 1] in [' ', '\n'] and (i == 0 or not buffer[i - 1].isdigit())) or (i + 1 == len(buffer) and (i == 0 or not buffer[i - 1].isdigit())):
+                                        sentence_end_pos = i
                                         break
-
                             if sentence_end_pos != -1:
                                 sentence = buffer[:sentence_end_pos + 1].strip()
                                 buffer = buffer[sentence_end_pos + 1:].strip()
@@ -488,15 +479,14 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
                                     yield sentence
                                     print(f"Debug: Yielded streaming sentence: {sentence}")
                             else:
-                                break  # No complete sentence found yet
+                                break
 
-        # Yield any remaining complete sentence or final buffer
         if buffer.strip():
             if in_thinking_phase:
-                yield "<THINKING_DONE>"  # Treat remaining buffer as end of thinking if not closed
-                print("Debug: Final thinking buffer processed")
+                yield buffer.strip()
+                print("Debug: Thinking phase not closed, yielding entire buffer")
             else:
-                yield buffer.strip()  # Yield final content as-is
+                yield buffer.strip()
                 print(f"Debug: Yielded final streaming buffer: {buffer.strip()}")
         elif not has_content:
             print("Debug: Model generated no content")
