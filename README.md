@@ -15,6 +15,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
 - **Highly Customizable UI**: Configurable; 10-20 Session History slots, 2-10 file slots, Session Log 400-550px height, 2-8 Lines of input. 
 - **Afterthought Countdown**: If, <25 characters then 1s or 26-100 charactrs then 3s or >100 lines then 5s, cooldown before proceeding, enabling cancelation time relative to input size.
+- **Speak Summaries**: Text to speak uses `PyWin32`.
 - **Attach or Vectorise**: Optimally for the mode, Attach Files is complete raw input, while Vectorise Files is relevance selected snippets from potentially larger source. 
 - **Collapsable Left Column**: Like one would find on modern AI interface. 
 - **ASynchronous Response Stream**: Separate thread with its own event loop, allowing chunks of response queued/processed without blocking Gradio UI event loop.
@@ -136,14 +137,10 @@ project_root/
 
 ## Current Development
 With regards to the current version of the program...
-1. Output Format is incorrect. ISsue with bullet points being printed correctly while using a non-think, non-tot, non-search, mode.
-1. It is now Chat only, and streamlined as a result. This is all now do-able without agentic workflows. It has mostly/all already been working in earlier versions, just need to fix the features based on what I already figured out. 
-1. Continue work on prompting system until it works soundly, check all model keywords themes with enhancement combination (note text to speak uses `PyWin32`). 
-5. Output is now brokwn. It seemed to work before as a subprocess while printing output, and stream when its the final response or for direct answers. We want streaming raw text input/output to the command window, while keeping it as subprocess, for the gradio display to update correctly.
-6. I want to go back to the `█` in the status bar for progress indication, each iteration representing one sentence, while for the session log and display to be updating for each complete sentence written, then finally when it is complete resuming normal operation. I did very much like it when I was able to see each sentence appear streaming as complete sentence as each was completely written, while a `█` in the status bar for each complete sentence be it while the model is thinking or doing tot or something, or when it is printing the final output or selected output, but this progress on the status bar should only be applicable while there is text being generated that will not be displayed, so people can see something is going on, however, if we can not do that when its actually printing the material that will be used in the session log, be it the complete output or just a selection of it, then it should not accumulate any more `█` and instead say `Streaming Response...` if its currently in a phase of streaming complete sentences to the session log.
-4. **Enhanced Notation Modes:**  
-   - Introduce “Chat-Notate” and “Chat-Notate-Uncensored” modes to process uploaded PDFs into both detailed and concise summaries.  
-   - Disable the THINK phase in these modes to ensure practical, notation-driven conversations.  
+1. Develop Agentic workflows for search. Search is to collect results in 1st prompt, and assemble the research into critical useful information, that then optimally needs to be used to produce informed response, suiting the nature of the user request. 
+2. Continue work on prompting system until it works soundly, Think, Tot. 
+3. With Speak, what use, overall summary or to speak each complete sentence as they stream? Could be agentic, to creade paragraph summary additional prompt to read from the complete most recent response. 
+4. Check that THINK and TOT are still using the `█` in the status bar for progress indication, each iteration representing one sentence, while for the session log and display to be updating for each complete sentence written, then finally when it is complete resuming normal operation. this progress on the status bar should only be applicable while there is text being generated that will not be displayed, so people can see something is going on, however, if we can not do that when its actually printing the material that will be used in the session log, be it the complete output or just a selection of it, then it should not accumulate any more `█` and instead say `Streaming Response...` if its currently in a phase of streaming complete sentences to the session log.
 
 ## Far Development
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
