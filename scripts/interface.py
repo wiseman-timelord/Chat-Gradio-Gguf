@@ -531,7 +531,6 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
     cancel_event = threading.Event()
     final_answer = []
     progress_blocks = ""
-    in_thinking_phase = True
 
     def run_generator():
         try:
@@ -573,37 +572,37 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
             yield session_log, f"⚠️ {chunk}", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-        if chunk == "<THINKING_PROGRESS>":
-            progress_blocks += "█"
-            yield session_log, f"{progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-        elif chunk == "<THINKING_DONE>":
-            in_thinking_phase = False
-            yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        if tot_enabled:
+            if chunk == "<TOT_PROGRESS>":
+                progress_blocks += "█"
+                yield session_log, f"{progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            elif chunk == "<TOT_ANSWER_START>":
+                yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            else:
+                final_answer.append(chunk)
+                display = " ".join(final_answer).strip()
+                session_log[-1]['content'] = f"{prefix}\n{display}"
+                yield session_log, f"{random.choice(progress_indicators)} Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         else:
-            final_answer.append(chunk)
-            display_parts = []
-            for part in final_answer:
-                if re.match(r"\d+\.", part.strip()):
-                    display_parts.append("\n" + part)
-                else:
-                    display_parts.append(part)
-            display = " ".join(display_parts).strip()
-            session_log[-1]['content'] = f"{prefix}\n{display}"
-            current_progress = random.choice(progress_indicators)
-            yield session_log, f"{current_progress} Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            if chunk == "<THINKING_PROGRESS>":
+                progress_blocks += "█"
+                yield session_log, f"{progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            elif chunk == "<THINKING_DONE>":
+                yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            else:
+                final_answer.append(chunk)
+                display = " ".join(final_answer).strip()
+                session_log[-1]['content'] = f"{prefix}\n{display}"
+                yield session_log, f"{random.choice(progress_indicators)} Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         await asyncio.sleep(0.02)
 
-    final_content = "".join(final_answer).strip()
-    if not final_content:
-        session_log[-1]['content'] = f"{prefix}\n<answer>\n(Empty response)</answer>"
-        yield session_log, "⚠️ No response generated.", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
-        return
-    else:
+    if final_answer:
+        final_content = "".join(final_answer).strip()
         session_log[-1]['content'] = filter_operational_content(f"{prefix}\n{final_content}")
-        # Save the session with the updated log and label using the YAKE-based approach
         utility.save_session_history(session_log, temporary.session_attached_files, temporary.session_vector_files)
-
+    else:
+        session_log[-1]['content'] = f"{prefix}\n<answer>\n(Empty response)</answer>"
     yield session_log, "✅ Response ready", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
 
 # Core Gradio Interface    
