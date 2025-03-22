@@ -152,7 +152,7 @@ project_root/
 ## Current Development
 With regards to the current version of the program...
 1. Develop Agentic workflows for search. Search is to collect results in 1st prompt, and assemble the research into critical useful information, that then optimally needs to be used to produce informed response, suiting the nature of the user request. 
-2. Continue work on prompting system until it works soundly, Think, Tot. 
+2. Continue work on prompting system until it works soundly, Think.
 3. With Speak, what use, overall summary or to speak each complete sentence as they stream? Could be agentic, to creade paragraph summary additional prompt to read from the complete most recent response. 
 4. Check that THINK and TOT are still using the `█` in the status bar for progress indication, each iteration representing one sentence, while for the session log and display to be updating for each complete sentence written, then finally when it is complete resuming normal operation. this progress on the status bar should only be applicable while there is text being generated that will not be displayed, so people can see something is going on, however, if we can not do that when its actually printing the material that will be used in the session log, be it the complete output or just a selection of it, then it should not accumulate any more `█` and instead say `Streaming Response...` if its currently in a phase of streaming complete sentences to the session log.
 
