@@ -390,7 +390,7 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
     print("Debug: Entering get_response_stream")
     print(f"Debug: session_log = {session_log}")
 
-    # Build messages (unchanged)
+    # Build messages
     messages = []
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
@@ -406,13 +406,19 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
     messages.append({"role": "system", "content": system_message})
 
     if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
-        user_content = clean_content('user', session_log[-2]['content'])
+        user_query = clean_content('user', session_log[-2]['content'])
+        user_content = user_query  # Keep user content unmodified
+        # Append context if available
         if context_injector.session_vectorstore:
-            query = user_content
-            docs = context_injector.session_vectorstore.similarity_search(query, k=3)
+            docs = context_injector.session_vectorstore.similarity_search(user_query, k=3)
             context = "\n".join([doc.page_content for doc in docs])
-            user_content = f"{user_content}\n\nRelevant context from attached documents:\n{context}"
+            if context:
+                user_content += "\n\nRelevant context from attached documents:\n" + context
         messages.append({"role": "user", "content": user_content})
+        
+        # Add an assistant message to signal completed thinking phase if needed
+        if settings.get("is_reasoning", False) and disable_think:
+            messages.append({"role": "assistant", "content": "<think>\n\n</think>\n\n"})
     else:
         print("Debug: No valid user message in session_log")
         yield "Error: No user input to process."

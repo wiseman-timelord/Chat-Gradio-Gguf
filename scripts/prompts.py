@@ -18,7 +18,6 @@ prompt_templates = {
             "Think step by step in <think> tags before providing your answer."
         ),
         "no_reasoning": (
-            "<think></think>"
             "Respond directly with your answer, without any reasoning steps or thinking phases. Do not use any tags in your response."
         ),
         "roleplay": (
@@ -30,7 +29,6 @@ prompt_templates = {
     }
 }
 
-# scripts/prompts.py
 def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, 
                       tot_enabled=False, is_reasoning=False, disable_think=False, is_roleplay=False):
     # Base prompt selection
@@ -39,32 +37,34 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
     else:
         base_prompt = prompt_templates["chat"]["base"]
     
-    # Initialize segments with base prompt
-    segments = [base_prompt]
+    # Initialize the system message with the base prompt
+    system_message = base_prompt
     
     # Add web search instruction if enabled
     if web_search_enabled:
-        segments.append(prompt_templates["chat"]["web_search"])
+        system_message += " " + prompt_templates["chat"]["web_search"]
     
     # Add Tree of Thought instruction if enabled
     if tot_enabled:
-        segments.append(prompt_templates["chat"]["tot"])
+        system_message += " " + prompt_templates["chat"]["tot"]
     
     # Handle reasoning requirements
     if is_reasoning:
         if not disable_think:
-            segments.append(prompt_templates["chat"]["reasoning"])
+            system_message += " " + prompt_templates["chat"]["reasoning"]
         else:
-            segments.append(prompt_templates["chat"]["no_reasoning"])
+            system_message += " " + prompt_templates["chat"]["no_reasoning"]
     
     # Handle roleplay and NSFW scenarios
     if is_nsfw:
-        segments.append(prompt_templates["chat"]["nsfw"])
+        system_message += " " + prompt_templates["chat"]["nsfw"]
     elif is_roleplay:
-        segments.append(prompt_templates["chat"]["roleplay"])
+        system_message += " " + prompt_templates["chat"]["roleplay"]
     
-    # Combine all segments without separators
-    return "\n\n".join(segments)
+    # Ensure the system message is a single line by replacing any newline characters
+    system_message = system_message.replace("\n", " ").strip()
+    
+    return system_message
 
 def get_reasoning_instruction():
     return prompt_templates["chat"]["reasoning"]
