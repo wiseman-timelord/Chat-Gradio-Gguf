@@ -92,7 +92,20 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 - `reasoning` keywords - "reason", "r1", "think".
 
 # Models
-You will of course need to have a `*.Gguf` model, use an iMatrix version of the same models if you have nVidia hardware. Here are some of the models used to test the program.. 
+You will of course need to have a `*.Gguf` model, use an iMatrix version of the same models if you have nVidia hardware. For a Comparison Table..
+
+| **Metric**         | **Qwen2.5-Dyanka-7B-Preview** | **T3Q-qwen2.5-14b-v1.0-e3** | **Early GPT-4** | **Early GPT-4o** | **calme-3.2-instruct-78b** | **qwen2.5-test-32b-it** |
+|--------------------|-------------------------------|-----------------------------|-----------------|------------------|---------------------------|-------------------------|
+| **Average**        | 37.30%                       | 47.09%                     | ~75%*           | ~80%*            | 52.08%                   | 47.37%                 |
+| **IFEval**         | 76.40%                       | 73.24%                     | N/A             | N/A              | 80.63%                   | 78.89%                 |
+| **BBH**            | 36.62%                       | 65.47%                     | ~50%*           | ~60%*            | 62.61%                   | 58.28%                 |
+| **MATH**           | 48.79%                       | 28.63%                     | 42.2%           | 52.9%*           | 40.33%                   | 59.74%                 |
+| **GPQA**           | 8.95%                        | 22.26%                     | N/A             | N/A              | 20.36%                   | 15.21%                 |
+| **MuSR**           | 15.51%                       | 38.69%                     | N/A             | N/A              | 38.53%                   | 19.13%                 |
+| **MMLU**           | 37.51% (MMLU-PRO)            | 54.27%                     | 86.4%           | 87.5%*           | 70.03%                   | 52.95%                 |
+| **CO2 Cost**       | 0.62 kg                      | 1.56 kg                    | N/A             | N/A              | 66.01 kg                 | 29.54 kg               |
+
+<br> Here are some of the models used to test the program.. 
 1. For non-iMatrix 14B models...
 - [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF) - New Best ~14B model, 14th place overall. Its Qwen but seems to work with my program.
 - [Lamarckvergence-14B-GGUF](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best ~14B model, ~65th overall beating most ~70B, tested and working.
