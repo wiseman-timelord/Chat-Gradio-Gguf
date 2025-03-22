@@ -1040,7 +1040,7 @@ def launch_interface():
         config_components["model"].change(
             fn=handle_model_selection,
             inputs=[config_components["model"], model_folder_state],
-            outputs=[model_folder_state, config_components["model"], status_text]  # Changed to status_text
+            outputs=[model_folder_state, config_components["model"], status_text]
         ).then(
             fn=lambda model_name: models.get_model_settings(model_name)["is_reasoning"],
             inputs=[config_components["model"]],
@@ -1053,6 +1053,10 @@ def launch_interface():
             fn=update_panel_choices,
             inputs=[states["model_settings"], states["selected_panel"]],
             outputs=[panel_toggle, states["selected_panel"]]
+        ).then(
+            fn=lambda is_reasoning: gr.update(visible=is_reasoning),
+            inputs=[states["is_reasoning_model"]],
+            outputs=[switches["enable_think"]]
         )
 
         states["selected_panel"].change(
