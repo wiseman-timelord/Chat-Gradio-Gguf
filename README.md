@@ -105,7 +105,7 @@ You will of course need to have a `*.Gguf` model, use an iMatrix version of the 
 | **MMLU**           | 37.51% (MMLU-PRO)                 | 54.27%                            | 52.95%                       | 70.03%                          | 86.4%           | 87.5%*           |
 | **CO2 Cost**       | 0.62 kg                           | 1.56 kg                           | 29.54 kg                     | 66.01 kg                        | N/A             | N/A              |
 
-<br> Here are some of the models used to test the program.. 
+<br> Here are some of the models verified working with Chat-Gradio-Gguf.. 
 1. For non-iMatrix 14B models...
 - [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF) - New Best ~14B model, 14th place overall. Its Qwen but seems to work with my program.
 - [Lamarckvergence-14B-GGUF](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best ~14B model, ~65th overall beating most ~70B, tested and working.
