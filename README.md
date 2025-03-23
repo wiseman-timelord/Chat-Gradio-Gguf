@@ -151,7 +151,7 @@ project_root/
 ```
 
 ## Current Development
-With regards to the current version of the program...
+Removed think enhancement a an option, as after investigation, it is impossible to stop reasoning models from thinking first, so the, vanilla chat and enhancment, options, are having special operation mode for when reasoning model is detecte. Thus, With regards to the current version of the program, we must ensure that this new design is implemented correctly, and that all the features are now working optimally...
 ```
 ### **Current Development Plan**
 
