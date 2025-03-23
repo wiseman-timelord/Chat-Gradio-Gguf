@@ -380,9 +380,9 @@ def generate_summary(text):
 
 
 # aSync Functions...
-def get_response_stream(session_log, settings, disable_think=False, tot_enabled=False, 
-                       web_search_enabled=False, search_results=None, cancel_event=None, 
-                       llm_state=None, models_loaded_state=False):
+def get_response_stream(session_log, settings, tot_enabled=False,
+                        web_search_enabled=False, search_results=None, cancel_event=None,
+                        llm_state=None, models_loaded_state=False):
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
         return
@@ -398,7 +398,6 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
         web_search_enabled=web_search_enabled,
         tot_enabled=tot_enabled,
         is_reasoning=settings.get("is_reasoning", False),
-        disable_think=disable_think,
         is_roleplay=settings.get("is_roleplay", False)
     )
     if web_search_enabled and search_results:
@@ -407,18 +406,13 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
 
     if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
         user_query = clean_content('user', session_log[-2]['content'])
-        user_content = user_query  # Keep user content unmodified
-        # Append context if available
+        user_content = user_query
         if context_injector.session_vectorstore:
             docs = context_injector.session_vectorstore.similarity_search(user_query, k=3)
             context = "\n".join([doc.page_content for doc in docs])
             if context:
                 user_content += "\n\nRelevant context from attached documents:\n" + context
         messages.append({"role": "user", "content": user_content})
-        
-        # Add an assistant message to signal completed thinking phase if needed
-        if settings.get("is_reasoning", False) and disable_think:
-            messages.append({"role": "assistant", "content": "<think>\n\n</think>\n\n"})
     else:
         print("Debug: No valid user message in session_log")
         yield "Error: No user input to process."
@@ -430,7 +424,6 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
     print("="*93 + "\n")
 
     try:
-        print("Debug: Calling llm_state.create_chat_completion")
         response_stream = llm_state.create_chat_completion(
             messages=messages,
             max_tokens=BATCH_SIZE,
@@ -438,8 +431,9 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
             repeat_penalty=REPEAT_PENALTY,
             stream=True
         )
-        
-        if tot_enabled:
+
+        if tot_enabled and not settings.get("is_reasoning", False):
+            # TOT processing for non-reasoning models when tot_enabled is True
             buffer = ""
             in_thought_process = True
             for chunk in response_stream:
@@ -484,11 +478,12 @@ def get_response_stream(session_log, settings, disable_think=False, tot_enabled=
                                 remaining_answer = parts[0]
                                 if remaining_answer:
                                     yield remaining_answer
-                                break  # Stop after </answer>
+                                break
         else:
+            # Non-TOT processing, including thinking phase for reasoning models
             buffer = ""
             has_content = False
-            in_thinking_phase = settings.get("is_reasoning", False) and not disable_think
+            in_thinking_phase = settings.get("is_reasoning", False)
             sentence_endings = ['.', '!', '?']
 
             for chunk in response_stream:

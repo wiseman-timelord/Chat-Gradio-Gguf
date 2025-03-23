@@ -475,7 +475,7 @@ def update_action_button(phase):
         return gr.update(value="Unknown Phase", variant="secondary", elem_classes=["send-button-green"], interactive=False)
 
 # Async Converstation Interface
-async def conversation_interface(user_input, session_log, tot_enabled, loaded_files, enable_think,
+async def conversation_interface(user_input, session_log, tot_enabled, loaded_files,
                                  is_reasoning_model, cancel_flag, web_search_enabled,
                                  models_loaded, interaction_phase, speak_enabled, llm_state, models_loaded_state):
     if not models_loaded_state:
@@ -537,7 +537,6 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
             for chunk in get_response_stream(
                 session_log,
                 settings=settings,
-                disable_think=not enable_think,
                 tot_enabled=tot_enabled,
                 web_search_enabled=web_search_enabled,
                 search_results=search_results,
@@ -572,7 +571,7 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
             yield session_log, f"⚠️ {chunk}", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-        if tot_enabled:
+        if tot_enabled and not settings.get("is_reasoning", False):
             if chunk == "<TOT_PROGRESS>":
                 progress_blocks += "█"
                 yield session_log, f"{progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
@@ -717,36 +716,18 @@ def launch_interface():
                                         switches = dict(
                                             web_search=gr.Checkbox(label="Search", value=False, visible=True),
                                             tot=gr.Checkbox(label="T.O.T.", value=False, visible=True),
-                                            enable_think=gr.Checkbox(label="THINK", value=False, visible=False),
                                             speak=gr.Checkbox(label="Speak", value=False, visible=True)
                                         )
                                         # Mutual exclusion logic for web_search, tot, and enable_think (Speak is independent)
                                         switches["web_search"].change(
-                                            fn=lambda search_value: [
-                                                gr.update(value=False) if search_value else gr.update(),
-                                                gr.update(value=False) if search_value else gr.update(),
-                                                gr.update()
-                                            ],
+                                            fn=lambda search_value: gr.update(value=False) if search_value else gr.update(),
                                             inputs=switches["web_search"],
-                                            outputs=[switches["tot"], switches["enable_think"], switches["speak"]]
+                                            outputs=switches["tot"]  # Only update 'tot'
                                         )
                                         switches["tot"].change(
-                                            fn=lambda tot_value: [
-                                                gr.update(value=False) if tot_value else gr.update(),
-                                                gr.update(value=False) if tot_value else gr.update(),
-                                                gr.update()
-                                            ],
+                                            fn=lambda tot_value: gr.update(value=False) if tot_value else gr.update(),
                                             inputs=switches["tot"],
-                                            outputs=[switches["web_search"], switches["enable_think"], switches["speak"]]
-                                        )
-                                        switches["enable_think"].change(
-                                            fn=lambda think_value: [
-                                                gr.update(value=False) if think_value else gr.update(),
-                                                gr.update(value=False) if think_value else gr.update(),
-                                                gr.update()
-                                            ],
-                                            inputs=switches["enable_think"],
-                                            outputs=[switches["web_search"], switches["tot"], switches["speak"]]
+                                            outputs=switches["web_search"]  # Only update 'web_search'
                                         )
                                     with gr.Row(elem_classes=["clean-elements"]):
                                         conversation_components["user_input"] = gr.Textbox(
@@ -917,7 +898,7 @@ def launch_interface():
         start_new_session_btn.click(
             fn=start_new_session,
             inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], status_text, conversation_components["user_input"], switches["web_search"], switches["tot"], switches["enable_think"], switches["speak"]]
+            outputs=[conversation_components["session_log"], status_text, conversation_components["user_input"], switches["web_search"], switches["tot"], switches["speak"]]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -939,7 +920,6 @@ def launch_interface():
                 conversation_components["session_log"],
                 switches["tot"],
                 states["attached_files"],
-                switches["enable_think"],
                 states["is_reasoning_model"],
                 states["cancel_flag"],
                 switches["web_search"],
@@ -959,13 +939,8 @@ def launch_interface():
                 conversation_components["user_input"],
                 switches["web_search"],
                 switches["tot"],
-                switches["enable_think"],
                 switches["speak"]
             ]
-        ).then(
-            fn=update_session_buttons,
-            inputs=[],
-            outputs=buttons["session"]
         )
 
         action_buttons["copy_response"].click(
@@ -1054,9 +1029,13 @@ def launch_interface():
             inputs=[states["model_settings"], states["selected_panel"]],
             outputs=[panel_toggle, states["selected_panel"]]
         ).then(
-            fn=lambda is_reasoning: gr.update(visible=is_reasoning),
+            fn=lambda is_reasoning: [
+                gr.update(visible=not is_reasoning),  # TOT hidden for reasoning models
+                gr.update(visible=True),             # Search
+                gr.update(visible=True)              # Speak
+            ],
             inputs=[states["is_reasoning_model"]],
-            outputs=[switches["enable_think"]]
+            outputs=[switches["tot"], switches["web_search"], switches["speak"]]
         )
 
         states["selected_panel"].change(
@@ -1206,13 +1185,12 @@ def launch_interface():
             outputs=[panel_toggle, states["selected_panel"]]
         ).then(
             fn=lambda is_reasoning: [
-                gr.update(visible=True),
-                gr.update(visible=True),
-                gr.update(visible=is_reasoning),
-                gr.update(visible=True)
+                gr.update(visible=not is_reasoning),  # TOT
+                gr.update(visible=True),             # Search
+                gr.update(visible=True)              # Speak
             ],
             inputs=[states["is_reasoning_model"]],
-            outputs=[switches["tot"], switches["web_search"], switches["enable_think"], switches["speak"]]
+            outputs=[switches["tot"], switches["web_search"], switches["speak"]]
         ).then(
             fn=update_session_buttons,
             inputs=[],

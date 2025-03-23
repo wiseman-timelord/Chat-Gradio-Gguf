@@ -30,30 +30,29 @@ prompt_templates = {
 }
 
 def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, 
-                      tot_enabled=False, is_reasoning=False, disable_think=False, is_roleplay=False):
+                      tot_enabled=False, is_reasoning=False, is_roleplay=False):
     # Base prompt selection
     if is_uncensored:
         base_prompt = prompt_templates["chat"]["base_unfiltered"]
     else:
         base_prompt = prompt_templates["chat"]["base"]
     
-    # Initialize the system message with the base prompt
     system_message = base_prompt
     
-    # Add web search instruction if enabled
+    # Add web search instruction based on model type
     if web_search_enabled:
-        system_message += " " + prompt_templates["chat"]["web_search"]
+        if is_reasoning:
+            system_message += " Here are some web search results related to the user's query. Use the <think> phase to analyze these results and determine how to incorporate them into your response."
+        else:
+            system_message += " When responding, use the provided web search results to gather information if necessary. Include relevant URLs in <results> tags."
     
-    # Add Tree of Thought instruction if enabled
+    # Add TOT instruction if enabled
     if tot_enabled:
         system_message += " " + prompt_templates["chat"]["tot"]
     
-    # Handle reasoning requirements
+    # Add reasoning instruction if it's a reasoning model
     if is_reasoning:
-        if not disable_think:
-            system_message += " " + prompt_templates["chat"]["reasoning"]
-        else:
-            system_message += " " + prompt_templates["chat"]["no_reasoning"]
+        system_message += " " + prompt_templates["chat"]["reasoning"]
     
     # Handle roleplay and NSFW scenarios
     if is_nsfw:
@@ -61,11 +60,9 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
     elif is_roleplay:
         system_message += " " + prompt_templates["chat"]["roleplay"]
     
-    # Ensure the system message is a single line by replacing any newline characters
     system_message = system_message.replace("\n", " ").strip()
-    
     return system_message
-
+    
 def get_reasoning_instruction():
     return prompt_templates["chat"]["reasoning"]
 
