@@ -362,27 +362,31 @@ def unload_models(llm_state, models_loaded_state):
     print("Warning: No model was loaded to unload.")
     return "No model loaded to unload.", llm_state, models_loaded_state
 
-def generate_summary(text):
-    summary_prompt = (
-        "Summarize the following response in under 256 characters, focusing on critical information and conclusions:\n\n"
-        f"{text}"
-    )
-    response = temporary.llm.create_chat_completion(
-        messages=[{"role": "user", "content": summary_prompt}],
-        max_tokens=temporary.BATCH_SIZE,  # Fixed from 512
-        temperature=temporary.TEMPERATURE,  # Fixed from 0.5
-        stream=False  # Reasonable for summary
-    )
-    summary = response['choices'][0]['message']['content'].strip()
-    if len(summary) > 256:
-        summary = summary[:253] + "..."  # Truncate with ellipsis
-    return summary
 
-
-# aSync Functions...
 def get_response_stream(session_log, settings, tot_enabled=False,
                         web_search_enabled=False, search_results=None, cancel_event=None,
                         llm_state=None, models_loaded_state=False):
+    """
+    Generate a response stream or single output based on user input, with dynamic context and batch size adjustments.
+    
+    Args:
+        session_log (list): List of conversation history.
+        settings (dict): Model settings including temperature, repeat_penalty, etc.
+        tot_enabled (bool): Whether Tree of Thought mode is active.
+        web_search_enabled (bool): Whether web search is enabled.
+        search_results (str): Results from web search, if applicable.
+        cancel_event (threading.Event): Event to cancel generation.
+        llm_state (Llama): The loaded model instance.
+        models_loaded_state (bool): Whether the model is loaded.
+    
+    Yields:
+        str: Response chunks (sentences when streaming) or full response (non-streaming).
+    """
+    import re
+    from scripts import temporary
+    from scripts.utility import clean_content
+
+    # Validate model state
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
         return
@@ -401,70 +405,113 @@ def get_response_stream(session_log, settings, tot_enabled=False,
         system_message += f"\n\nWeb Search Results:\n{search_results}"
     messages.append({"role": "system", "content": system_message})
 
+    # Extract and augment user query
     if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
         user_query = clean_content('user', session_log[-2]['content'])
         user_content = user_query
-        if context_injector.session_vectorstore:
+        if context_injector.session_vectorstore:  # Use the module-level context_injector directly
             docs = context_injector.session_vectorstore.similarity_search(user_query, k=3)
             context = "\n".join([doc.page_content for doc in docs])
             if context:
-                user_content += "\n\nRelevant context from attached documents:\n" + context
+                user_content += f"\n\nRelevant context from attached documents:\n{context}"
         messages.append({"role": "user", "content": user_content})
     else:
         yield "Error: No user input to process."
         return
 
+    # Updated should_stream function
+    def should_stream(input_text, settings, tot_enabled):
+        """
+        Determine if streaming is appropriate based on input, settings, and mode.
+        
+        Args:
+            input_text (str): The user's input text.
+            settings (dict): Model settings.
+            tot_enabled (bool): Whether TOT mode is active.
+        
+        Returns:
+            bool: True if streaming is appropriate, False otherwise.
+        """
+        stream_keywords = ["write", "generate", "story", "report", "essay", "explain", "describe"]
+        input_length = len(input_text.strip())
+        is_long_input = input_length > 100
+        is_creative_task = any(keyword in input_text.lower() for keyword in stream_keywords)
+        is_interactive_mode = settings.get("is_reasoning", False) or tot_enabled
+        return is_creative_task or is_long_input or (is_interactive_mode and input_length > 50)
+
+    # Dynamic adjustment of Context Size and Batch Size
+    stream_enabled = should_stream(user_query, settings, tot_enabled)
+    n_batch = 16 if stream_enabled else temporary.BATCH_SIZE  # Smaller for streaming
+    n_ctx = min(2048, temporary.CONTEXT_SIZE) if len(user_query) < 100 else temporary.CONTEXT_SIZE
+
     try:
-        response_stream = llm_state.create_chat_completion(
-            messages=messages,
-            max_tokens=BATCH_SIZE,
-            temperature=TEMPERATURE,
-            repeat_penalty=REPEAT_PENALTY,
-            stream=True
-        )
+        if stream_enabled:
+            # Streaming mode for long or interactive responses
+            response_stream = llm_state.create_chat_completion(
+                messages=messages,
+                max_tokens=n_batch,
+                temperature=settings.get("temperature", temporary.TEMPERATURE),
+                repeat_penalty=settings.get("repeat_penalty", temporary.REPEAT_PENALTY),
+                stream=True
+            )
 
-        buffer = ""
-        in_hidden_phase = settings.get("is_reasoning", False) or (tot_enabled and not settings.get("is_reasoning", False))
-        hidden_tag_end = "</think>" if settings.get("is_reasoning", False) else "<answer>" if tot_enabled else None
-        progress_token = "<THINKING_PROGRESS>" if settings.get("is_reasoning", False) else "<TOT_PROGRESS>"
+            buffer = ""
+            in_hidden_phase = settings.get("is_reasoning", False) or (tot_enabled and not settings.get("is_reasoning", False))
+            hidden_tag_end = "</think>" if settings.get("is_reasoning", False) else "<answer>" if tot_enabled else None
+            progress_token = "<THINKING_PROGRESS>" if settings.get("is_reasoning", False) else "<TOT_PROGRESS>"
 
-        for chunk in response_stream:
-            if cancel_event and cancel_event.is_set():
-                yield "<CANCELLED>"
-                return
-            if 'choices' in chunk and chunk['choices']:
-                content = chunk['choices'][0].get('delta', {}).get('content', '')
-                if content:
-                    buffer += content
-                    if in_hidden_phase:
-                        periods = content.count('.')
-                        for _ in range(periods):
-                            yield progress_token
-                        if hidden_tag_end and hidden_tag_end in buffer:
-                            in_hidden_phase = False
-                            parts = buffer.split(hidden_tag_end, 1)
-                            buffer = parts[1].strip()
-                            yield "<HIDDEN_DONE>"
-                    else:
-                        while True:
-                            sentence_end_pos = -1
-                            for i, char in enumerate(buffer):
-                                if char in ['.', '!', '?']:
-                                    if (i + 1 < len(buffer) and buffer[i + 1].isspace()) or (i + 1 == len(buffer)):
-                                        sentence_end_pos = i
-                                        break
-                            if sentence_end_pos != -1:
-                                end_pos = sentence_end_pos + 1
-                                while end_pos < len(buffer) and buffer[end_pos].isspace():
-                                    end_pos += 1
-                                sentence = buffer[:end_pos]
-                                buffer = buffer[end_pos:].lstrip()
-                                if sentence:
-                                    yield sentence
-                            else:
-                                break
-        if buffer:
-            yield buffer
+            for chunk in response_stream:
+                if cancel_event and cancel_event.is_set():
+                    yield "<CANCELLED>"
+                    return
+                if 'choices' in chunk and chunk['choices']:
+                    content = chunk['choices'][0].get('delta', {}).get('content', '')
+                    if content:
+                        buffer += content
+                        if in_hidden_phase:
+                            # Process hidden phase content
+                            sentences = re.split(r'(?<=[.!?])\s+', buffer)
+                            buffer_sentences = []
+                            remaining_buffer = ""
+                            for s in sentences:
+                                if s.strip() and (s[-1] in '.!?'):
+                                    buffer_sentences.append(s)
+                                else:
+                                    remaining_buffer = s
+                            buffer = remaining_buffer
+                            for _ in buffer_sentences:
+                                yield progress_token  # Yield progress for each hidden sentence
+                            if hidden_tag_end and hidden_tag_end in buffer:
+                                in_hidden_phase = False
+                                parts = buffer.split(hidden_tag_end, 1)
+                                buffer = parts[1].strip()
+                                yield "<HIDDEN_DONE>"
+                        else:
+                            # Stream visible content sentence-by-sentence
+                            sentences = re.split(r'(?<=[.!?])\s+', buffer)
+                            buffer_sentences = []
+                            remaining_buffer = ""
+                            for s in sentences:
+                                if s.strip() and (s[-1] in '.!?'):
+                                    buffer_sentences.append(s)
+                                else:
+                                    remaining_buffer = s
+                            buffer = remaining_buffer
+                            for sentence in buffer_sentences:
+                                yield sentence
+            if buffer.strip():
+                yield buffer  # Yield any remaining partial content
+
+        else:
+            # Non-streaming mode for short responses
+            response = llm_state.create_chat_completion(
+                messages=messages,
+                max_tokens=n_batch,
+                temperature=settings.get("temperature", temporary.TEMPERATURE),
+                repeat_penalty=settings.get("repeat_penalty", temporary.REPEAT_PENALTY),
+                stream=False
+            )
+            yield response['choices'][0]['message']['content']
 
     except Exception as e:
         yield f"Error generating response: {str(e)}"
