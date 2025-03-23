@@ -387,9 +387,6 @@ def get_response_stream(session_log, settings, tot_enabled=False,
         yield "Error: No model loaded. Please load a model first."
         return
 
-    print("Debug: Entering get_response_stream")
-    print(f"Debug: session_log = {session_log}")
-
     # Build messages
     messages = []
     system_message = get_system_message(
@@ -414,14 +411,8 @@ def get_response_stream(session_log, settings, tot_enabled=False,
                 user_content += "\n\nRelevant context from attached documents:\n" + context
         messages.append({"role": "user", "content": user_content})
     else:
-        print("Debug: No valid user message in session_log")
         yield "Error: No user input to process."
         return
-
-    print("\n" + "="*40 + " FULL PROMPT " + "="*40)
-    for msg in messages:
-        print(f"{msg['role'].upper()}:\n{msg['content']}\n")
-    print("="*93 + "\n")
 
     try:
         response_stream = llm_state.create_chat_completion(
@@ -432,114 +423,48 @@ def get_response_stream(session_log, settings, tot_enabled=False,
             stream=True
         )
 
-        if tot_enabled and not settings.get("is_reasoning", False):
-            # TOT processing for non-reasoning models when tot_enabled is True
-            buffer = ""
-            in_thought_process = True
-            for chunk in response_stream:
-                if 'choices' in chunk and chunk['choices']:
-                    content = chunk['choices'][0].get('delta', {}).get('content', '')
-                    if content:
-                        buffer += content
-                        if in_thought_process:
-                            if "<answer>" in buffer:
-                                parts = buffer.split("<answer>", 1)
-                                thought_process = parts[0]
-                                buffer = parts[1]
-                                in_thought_process = False
-                                periods = thought_process.count('.')
-                                for _ in range(periods):
-                                    yield "<TOT_PROGRESS>"
-                                yield "<TOT_ANSWER_START>"
-                            else:
-                                new_periods = content.count('.')
-                                for _ in range(new_periods):
-                                    yield "<TOT_PROGRESS>"
-                        else:
-                            while True:
-                                sentence_end_pos = -1
-                                for i, char in enumerate(buffer):
-                                    if char in ['.', '!', '?']:
-                                        if (i + 1 < len(buffer) and buffer[i + 1].isspace()) or (i + 1 == len(buffer)):
-                                            sentence_end_pos = i
-                                            break
-                                if sentence_end_pos != -1:
-                                    end_pos = sentence_end_pos + 1
-                                    while end_pos < len(buffer) and buffer[end_pos].isspace():
-                                        end_pos += 1
-                                    sentence = buffer[:end_pos]
-                                    buffer = buffer[end_pos:].lstrip()
-                                    if sentence:
-                                        yield sentence
-                                else:
-                                    break
-                            if "</answer>" in buffer:
-                                parts = buffer.split("</answer>", 1)
-                                remaining_answer = parts[0]
-                                if remaining_answer:
-                                    yield remaining_answer
-                                break
-        else:
-            # Non-TOT processing, including thinking phase for reasoning models
-            buffer = ""
-            has_content = False
-            in_thinking_phase = settings.get("is_reasoning", False)
-            sentence_endings = ['.', '!', '?']
+        buffer = ""
+        in_hidden_phase = settings.get("is_reasoning", False) or (tot_enabled and not settings.get("is_reasoning", False))
+        hidden_tag_end = "</think>" if settings.get("is_reasoning", False) else "<answer>" if tot_enabled else None
+        progress_token = "<THINKING_PROGRESS>" if settings.get("is_reasoning", False) else "<TOT_PROGRESS>"
 
-            for chunk in response_stream:
-                if cancel_event and cancel_event.is_set():
-                    yield "<CANCELLED>"
-                    return
-                if 'choices' in chunk and chunk['choices']:
-                    content = chunk['choices'][0].get('delta', {}).get('content', '')
-                    if content:
-                        has_content = True
-                        buffer += content
-
-                        if in_thinking_phase:
-                            if "</think>" in buffer:
-                                in_thinking_phase = False
-                                parts = buffer.split("</think>", 1)
-                                buffer = parts[1].strip()
-                                yield "<THINKING_DONE>"
-                                print("Debug: Thinking phase ended")
-                            else:
-                                while True:
-                                    period_pos = buffer.find('.')
-                                    if period_pos != -1 and (period_pos + 1 == len(buffer) or buffer[period_pos + 1] in [' ', '\n']):
-                                        yield "<THINKING_PROGRESS>"
-                                        buffer = buffer[period_pos + 1:].strip()
-                                        print(f"Debug: Yielded <THINKING_PROGRESS> at period position {period_pos}")
-                                    else:
+        for chunk in response_stream:
+            if cancel_event and cancel_event.is_set():
+                yield "<CANCELLED>"
+                return
+            if 'choices' in chunk and chunk['choices']:
+                content = chunk['choices'][0].get('delta', {}).get('content', '')
+                if content:
+                    buffer += content
+                    if in_hidden_phase:
+                        periods = content.count('.')
+                        for _ in range(periods):
+                            yield progress_token
+                        if hidden_tag_end and hidden_tag_end in buffer:
+                            in_hidden_phase = False
+                            parts = buffer.split(hidden_tag_end, 1)
+                            buffer = parts[1].strip()
+                            yield "<HIDDEN_DONE>"
+                    else:
+                        while True:
+                            sentence_end_pos = -1
+                            for i, char in enumerate(buffer):
+                                if char in ['.', '!', '?']:
+                                    if (i + 1 < len(buffer) and buffer[i + 1].isspace()) or (i + 1 == len(buffer)):
+                                        sentence_end_pos = i
                                         break
-                        else:
-                            while True:
-                                sentence_end_pos = -1
-                                for i, char in enumerate(buffer):
-                                    if char in sentence_endings:
-                                        if (i + 1 < len(buffer) and buffer[i + 1].isspace() and (i == 0 or not buffer[i - 1].isdigit())) or (i + 1 == len(buffer) and (i == 0 or not buffer[i - 1].isdigit())):
-                                            sentence_end_pos = i
-                                            break
-                                if sentence_end_pos != -1:
-                                    end_pos = sentence_end_pos + 1
-                                    while end_pos < len(buffer) and buffer[end_pos].isspace():
-                                        end_pos += 1
-                                    sentence = buffer[:end_pos]
-                                    buffer = buffer[end_pos:].lstrip()
-                                    if sentence:
-                                        yield sentence
-                                        print(f"Debug: Yielded streaming sentence: {sentence!r}")
-                                else:
-                                    break
-
-            if buffer:
-                yield buffer
-                print(f"Debug: Yielded final streaming buffer: {buffer!r}")
-            elif not has_content:
-                print("Debug: Model generated no content")
-                yield "Error: Model generated an empty response."
+                            if sentence_end_pos != -1:
+                                end_pos = sentence_end_pos + 1
+                                while end_pos < len(buffer) and buffer[end_pos].isspace():
+                                    end_pos += 1
+                                sentence = buffer[:end_pos]
+                                buffer = buffer[end_pos:].lstrip()
+                                if sentence:
+                                    yield sentence
+                            else:
+                                break
+        if buffer:
+            yield buffer
 
     except Exception as e:
-        error_msg = f"Error generating response: {str(e)}"
-        print(f"Debug: {error_msg}")
-        yield error_msg
+        yield f"Error generating response: {str(e)}"

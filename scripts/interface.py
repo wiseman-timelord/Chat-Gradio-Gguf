@@ -26,7 +26,7 @@ from scripts import utility
 from scripts.utility import (
     delete_all_session_vectorstores, create_session_vectorstore, web_search, get_saved_sessions,
     load_session_history, save_session_history, load_and_chunk_documents,
-    get_available_gpus, save_config, filter_operational_content
+    get_available_gpus, save_config, filter_operational_content, speak_text
 )
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings,
@@ -486,8 +486,6 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
         yield session_log, "No input provided.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         return
 
-    print("Debug: Starting conversation_interface with input:", user_input)
-
     original_input = user_input
     if temporary.session_attached_files:
         for file in temporary.session_attached_files:
@@ -523,13 +521,14 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
 
     search_results = None
     if web_search_enabled:
+        session_log[-1]['content'] += "\n\nWORKFLOW:\nPRODUCE WEBSEARCH ---> PRODUCE ASSESSMENT"
         yield session_log, "🔍 Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         search_results = await asyncio.to_thread(utility.web_search, user_input)
         yield session_log, "✅ Web search completed." if search_results else "⚠️ No web results.", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
     q = queue.Queue()
     cancel_event = threading.Event()
-    final_answer = []
+    full_response = ""
     progress_blocks = ""
 
     def run_generator():
@@ -549,14 +548,11 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
         except Exception as e:
             q.put(f"Error: {str(e)}")
 
-    print("Debug: Starting generator thread")
     thread = threading.Thread(target=run_generator, daemon=True)
     thread.start()
 
     while True:
-        print("Debug: Waiting for chunk")
         chunk = await asyncio.to_thread(q.get)
-        print(f"Debug: Received chunk: {chunk}")
         if chunk is None:
             break
         if cancel_flag:
@@ -571,38 +567,38 @@ async def conversation_interface(user_input, session_log, tot_enabled, loaded_fi
             yield session_log, f"⚠️ {chunk}", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
             return
 
-        if tot_enabled and not settings.get("is_reasoning", False):
-            if chunk == "<TOT_PROGRESS>":
-                progress_blocks += "█"
-                yield session_log, f"{progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-            elif chunk == "<TOT_ANSWER_START>":
-                yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-            else:
-                final_answer.append(chunk)
-                display = " ".join(final_answer).strip()
-                session_log[-1]['content'] = f"{prefix}\n{display}"
-                yield session_log, f"{random.choice(progress_indicators)} Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        if chunk in ["<THINKING_PROGRESS>", "<TOT_PROGRESS>"]:
+            progress_blocks += "█"
+            yield session_log, progress_blocks, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+        elif chunk == "<HIDDEN_DONE>":
+            yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
         else:
-            if chunk == "<THINKING_PROGRESS>":
-                progress_blocks += "█"
-                yield session_log, f"{progress_blocks}", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-            elif chunk == "<THINKING_DONE>":
-                yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-            else:
-                final_answer.append(chunk)
-                display = " ".join(final_answer).strip()
-                session_log[-1]['content'] = f"{prefix}\n{display}"
-                yield session_log, f"{random.choice(progress_indicators)} Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            full_response += chunk
+            session_log[-1]['content'] = f"{prefix}\n{full_response}"
+            yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         await asyncio.sleep(0.02)
 
-    if final_answer:
-        final_content = "".join(final_answer).strip()
-        session_log[-1]['content'] = filter_operational_content(f"{prefix}\n{final_content}")
+    if full_response:
+        session_log[-1]['content'] = filter_operational_content(f"{prefix}\n{full_response}")
         utility.save_session_history(session_log, temporary.session_attached_files, temporary.session_vector_files)
     else:
         session_log[-1]['content'] = f"{prefix}\n<answer>\n(Empty response)</answer>"
-    yield session_log, "✅ Response ready", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update(), gr.update(), gr.update(), gr.update()
+
+    if speak_enabled:
+        summary_prompt = f"Summarize the following response in under 256 characters, focusing on critical information and conclusions:\n\n{full_response}"
+        summary_response = llm_state.create_chat_completion(
+            messages=[{"role": "user", "content": summary_prompt}],
+            max_tokens=256,
+            temperature=0.5,
+            stream=False
+        )
+        summary = summary_response['choices'][0]['message']['content'].strip()
+        if len(summary) > 256:
+            summary = summary[:253] + "..."  # Truncate to 256 chars with ellipsis
+        threading.Thread(target=speak_text, args=(summary,)).start()
+
+    yield session_log, "✅ Response ready", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True, value=""), gr.update(), gr.update(), gr.update(), gr.update()
 
 # Core Gradio Interface    
 def launch_interface():

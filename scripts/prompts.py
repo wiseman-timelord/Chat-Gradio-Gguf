@@ -31,7 +31,6 @@ prompt_templates = {
 
 def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, 
                       tot_enabled=False, is_reasoning=False, is_roleplay=False):
-    # Base prompt selection
     if is_uncensored:
         base_prompt = prompt_templates["chat"]["base_unfiltered"]
     else:
@@ -39,22 +38,15 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
     
     system_message = base_prompt
     
-    # Add web search instruction based on model type
     if web_search_enabled:
-        if is_reasoning:
-            system_message += " Here are some web search results related to the user's query. Use the <think> phase to analyze these results and determine how to incorporate them into your response."
-        else:
-            system_message += " When responding, use the provided web search results to gather information if necessary. Include relevant URLs in <results> tags."
+        system_message += " When responding, first assess the provided web search results and summarize the key information. Then, use this assessment to craft your response to the user's query."
     
-    # Add TOT instruction if enabled
     if tot_enabled:
         system_message += " " + prompt_templates["chat"]["tot"]
     
-    # Add reasoning instruction if it's a reasoning model
     if is_reasoning:
         system_message += " " + prompt_templates["chat"]["reasoning"]
     
-    # Handle roleplay and NSFW scenarios
     if is_nsfw:
         system_message += " " + prompt_templates["chat"]["nsfw"]
     elif is_roleplay:
