@@ -19,6 +19,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - **Attach or Vectorise**: Optimally for the mode, Attach Files is complete raw input, while Vectorise Files is relevance selected snippets from potentially larger source. 
 - **Collapsable Left Column**: Like one would find on modern AI interface. 
 - **ASynchronous Response Stream**: Separate thread with its own event loop, allowing chunks of response queued/processed without blocking Gradio UI event loop.
+- **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, though no TOT option on a reasoning model.
 
 ### Preview
 - The "Interaction" page with Panel Mode selector, and enhancments bar. Left panel collapses by clicking `Chat-Gradio-Gguf`...
