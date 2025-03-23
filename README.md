@@ -152,10 +152,42 @@ project_root/
 
 ## Current Development
 With regards to the current version of the program...
-1. Develop Agentic workflows for search. Search is to collect results in 1st prompt, and assemble the research into critical useful information, that then optimally needs to be used to produce informed response, suiting the nature of the user request. 
-2. Continue work on prompting system until it works soundly, Think.
-3. With Speak, what use, overall summary or to speak each complete sentence as they stream? Could be agentic, to creade paragraph summary additional prompt to read from the complete most recent response. 
-4. Check that THINK and TOT are still using the `█` in the status bar for progress indication, each iteration representing one sentence, while for the session log and display to be updating for each complete sentence written, then finally when it is complete resuming normal operation. this progress on the status bar should only be applicable while there is text being generated that will not be displayed, so people can see something is going on, however, if we can not do that when its actually printing the material that will be used in the session log, be it the complete output or just a selection of it, then it should not accumulate any more `█` and instead say `Streaming Response...` if its currently in a phase of streaming complete sentences to the session log.
+```
+### **Current Development Plan**
+
+#### **1. Refinement of Reasoning and Output Handling**
+   - **1.1 Verify Reasoning and TOT Progress Indication**  
+     - Ensure that reasoning and TOT (Tree-of-Thought) models continue using `█` in the status bar to indicate progress, where each iteration represents a sentence.  
+     - Confirm that the session log updates after each complete sentence.  
+     - Once the generation is complete, normal operation should resume.  
+     - The progress bar should **only** apply when generating non-displayed text; if text is actively streaming to the session log, it should display **"Streaming Response..."** instead of accumulating `█`.  
+     - **Test Cases:**  
+       - A reasoning model responding normally.  
+       - A standard model responding with TOT.  
+
+   - **1.2 Verify "Speak" Functionality for Both Reasoning & Non-Reasoning Models**  
+     - Ensure the **Speak** feature functions correctly across both reasoning and non-reasoning models.  
+     - Implement an additional prompt to generate:  
+       - **A paragraph with key information (excluding code).**  
+       - **A summary relevant to the interaction's theme (Search/Chat/TOT).**  
+     - Decide how Speak should function:  
+       - Read an **overall summary**?  
+       - Read **each sentence as it streams**?  
+       - Use an **agentic approach** to create a summarized paragraph from the most recent response?  
+
+#### **2. Development of Agentic Workflows**
+   - **2.1 Agentic Workflow for Search**  
+     - First prompt should **collect results** efficiently.  
+     - Assemble research into **critical, useful information**.  
+     - Ensure this data is then optimally structured for a **cohesive and informed response**, tailored to the user request.  
+
+   - **2.2 Agentic Workflow for Speak**  
+     - Ensure that an **optimal section of content** is selected for reading aloud.  
+     - Improve the model’s ability to extract **key insights** for spoken output.  
+     - Consider different scenarios:  
+       - Speaking a **summary** of the entire response.  
+       - Speaking **essential details** without extra noise.  
+```
 
 ## Far Development
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
