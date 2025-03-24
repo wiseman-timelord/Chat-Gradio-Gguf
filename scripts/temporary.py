@@ -47,6 +47,7 @@ LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
 BACKEND_TYPE = "Not Configured"
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
+current_summary = ""  # Added to store the current summary text
 
 # Arrays
 session_attached_files = []

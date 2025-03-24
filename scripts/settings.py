@@ -37,6 +37,7 @@ DEFAULTS = {
 def load_config():
     """
     Load configuration from persistent.json and set in temporary.py.
+    Always scan for available models and cache the result.
     """
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH, 'r') as f:
@@ -47,15 +48,10 @@ def load_config():
         # Handle DEFAULTS keys with potential mismatches
         if "model_dir" in model_settings:
             temporary.MODEL_FOLDER = model_settings["model_dir"]
-        
-        # Validate model_name against available models
-        available_models = get_available_models()
-        if "model_name" in model_settings and model_settings["model_name"] in available_models:
-            temporary.MODEL_NAME = model_settings["model_name"]
         else:
-            # Set to first available model if possible, otherwise "Select_a_model..." or "Browse_for_model_folder..."
-            temporary.MODEL_NAME = available_models[0] if available_models else "Browse_for_model_folder..."
+            temporary.MODEL_FOLDER = DEFAULTS["MODEL_FOLDER"]
         
+        # Load other settings
         if "context_size" in model_settings:
             temporary.CONTEXT_SIZE = model_settings["context_size"]
         if "temperature" in model_settings:
@@ -102,6 +98,22 @@ def load_config():
         temporary.SELECTED_GPU = None
         temporary.SELECTED_CPU = None
         temporary.MODEL_NAME = "Browse_for_model_folder..."
+    
+    # Scan for available models and cache the result
+    available_models = get_available_models()
+    temporary.AVAILABLE_MODELS = available_models
+    
+    # Validate model_name against available models
+    if CONFIG_PATH.exists():
+        model_settings = config.get("model_settings", {})
+        if "model_name" in model_settings and model_settings["model_name"] in available_models:
+            temporary.MODEL_NAME = model_settings["model_name"]
+        else:
+            # Set to first available model if possible, otherwise "Browse_for_model_folder..."
+            temporary.MODEL_NAME = available_models[0] if available_models else "Browse_for_model_folder..."
+    else:
+        temporary.MODEL_NAME = "Browse_for_model_folder..."
+    
     return "Configuration loaded."
 
 def save_config():
