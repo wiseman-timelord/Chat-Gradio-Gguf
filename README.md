@@ -80,7 +80,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 6. When all is finished, click `Exit` on the bottom right and/or close browser-tabs/terminals, however you want to do it. 
 
 ### Notation
-- at ~96K it become difficult updating with Grok3Beta, so had to streamline for scripts become safer to work with. The rough limits of complexity this gen of ai @ 128k, putting rough figure at <96k is the realistic limit on 128k, does this create a general figure for `(n_ctx/4)*3=safe code work limit`.  
+- at ~96K it become difficult updating with Grok3Beta, so had to streamline for scripts become safer to work with. The rough limits of this gen of AI @ 128k, putting rough figure at <96k is the realistic limit for optimized code; does this create a general figure for `n_ctx * 0.75 = safe work limit`.  
 - VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
 - We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
 - Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, for enhancement detection.
