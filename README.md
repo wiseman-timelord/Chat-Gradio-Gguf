@@ -157,7 +157,7 @@ project_root/
 1. Need to streamline requisites.py in relevance to streamlining in main program. where vectorization and TOT, were effectively removed.
 2. Need to get streaming, sentence by sentence, working again.
 3. Test and bugfix, search.
-1. I need to ensure that context from the session log is, intelligently and optimally, injected into the prompt, ensure extensive AI research in process. 
+1. I need to ensure that context from the session log is, intelligently and optimally, injected into the prompt, to ensure contextual awareness within conversation. produce extensive AI research into most effective techniques (this may require re-implementation of vectorization, but a simpler version where one cannot add files to the database). 
 2. Test and bugfix, all features, and improve if possible.
 3. Complete Gen1.
 
