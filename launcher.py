@@ -1,10 +1,10 @@
-# Script: `.\launcher.py`
+# launcher.py
 
 print("Starting `launcher` Imports.")
 from pathlib import Path
 import os
 from scripts import temporary
-from scripts.utility import load_config
+from scripts.settings import load_config  # Corrected import
 from scripts.interface import launch_interface
 print("`launcher` Imports Complete.")
 
@@ -17,8 +17,7 @@ def main():
         temporary.DATA_DIR = str(script_dir / "data")
         print(f"Data directory: {temporary.DATA_DIR}")
         Path(temporary.DATA_DIR).mkdir(parents=True, exist_ok=True)
-        Path(temporary.HISTORY_DIR).mkdir(parents=True, exist_ok=True)  # Added
-        Path(temporary.VECTORSTORE_DIR).mkdir(parents=True, exist_ok=True)  # Added
+        Path(temporary.HISTORY_DIR).mkdir(parents=True, exist_ok=True)
         
         print("Loading persistent config...")
         load_config()
