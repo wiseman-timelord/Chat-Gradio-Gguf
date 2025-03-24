@@ -152,9 +152,9 @@ project_root/
 ## Current Development
 1. Make the speak enhancement into a button `Say Summary` after `Copy Output` button. It will no longer be a `On/off` type of thing, instead when the button is pressed on, it will use the speak prompt to generate speak text from the model, then use the current implementation of tts to create and play the speech. if possible it should input the generated tts text into a global to store the current generated text, in which case if the user clicks speak again without creating new input or starting a new session, then it should be able to re-play the same generated text, which obviously would all require for this global to be cleared upon submitting new input or starting new session.
 2. Make Session log above User Input again, and make user input 3 lines, plus search enhancment row, plus buttons row. Ensure User input box expands dynamically to a maximum of 15 lines. So user input box is 3-15 lines, and when it exceeds 15 lines, then we need the user input box to be scrollable.
+3. Need to streamline requisites.py in relevance to streamlinng in main program. Also in relevance to the streamlining, need to ensure that context from the session log is, intelligently and optimally, injected into the prompt, ensure extensive AI research in process.
 2. Test and bugfix and improve.
 3. Complete Gen1.
-
 
 ## Far Development
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
