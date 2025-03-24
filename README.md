@@ -153,10 +153,11 @@ project_root/
 ```
 
 ## Current Development
-1. In relevance to the streamlining, where vectorization and TOT, were effectively removed...
-- I need to ensure that context from the session log is, intelligently and optimally, injected into the prompt, ensure extensive AI research in process. 
-- Need to streamline requisites.py in relevance to streamlinng in main program. 
-2. Test and bugfix and improve.
+1. Need to streamline requisites.py in relevance to streamlining in main program. where vectorization and TOT, were effectively removed.
+2. Need to get streaming, sentence by sentence, working again.
+3. Test and bugfix, search.
+1. I need to ensure that context from the session log is, intelligently and optimally, injected into the prompt, ensure extensive AI research in process. 
+2. Test and bugfix, all features, and improve if possible.
 3. Complete Gen1.
 
 ## Far Development
