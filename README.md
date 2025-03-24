@@ -134,6 +134,7 @@ project_root/
 │ └── interface.py
 │ └── models.py
 │ └── prompts.py
+│ └── settings.py
 │ └── temporary.py
 │ └── utlity.py
 ```
