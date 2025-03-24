@@ -150,17 +150,14 @@ project_root/
 ```
 
 ## Current Development
-1. Its a lot of code, anything we can do to reduce characters should be attempted....
-- Full logic and sanity check, find redundant code, determine correct implementations, and produce any required solutions, and/or remove redundant code. 
-- Full review of functions and how they interact, determine if there are any functions, that are inefficiently programmed, or could be programmed more or equally effectively with, less or same, amount of characters.
+1. Make the speak enhancement into a button `Say Summary` after `Copy Output` button. It will no longer be a `On/off` type of thing, instead when the button is pressed on, it will use the speak prompt to generate speak text from the model, then use the current implementation of tts to create and play the speech. if possible it should input the generated tts text into a global to store the current generated text, in which case if the user clicks speak again without creating new input or starting a new session, then it should be able to re-play the same generated text, which obviously would all require for this global to be cleared upon submitting new input or starting new session.
+2. Make Session log above User Input again, and make user input 3 lines, plus search enhancment row, plus buttons row. Ensure User input box expands dynamically to a maximum of 15 lines. So user input box is 3-15 lines, and when it exceeds 15 lines, then we need the user input box to be scrollable.
 2. Test and bugfix and improve.
 3. Complete Gen1.
 
+
 ## Far Development
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-7. re-attempt left column collapse switch with two images in `.\media` instead of text, so as to be in-line with quality graphic I made for this readme.md. 
-8. Research local and online AI programs, what kinds of enhancements are common, what would be simple to implement, and would be better way of donig things or add something. Someone mentioned Manu, one to check out does some kind of webscrape or internet research, producing reports.
-- Use something like llama-box to Integrate vision capabilities for image recognition on web searches and convert images into contextually relevant thumbnails (with full images accessible via pop-up).   
 2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
 3. **User Interface and Notification Enhancements:**  
    - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").   
