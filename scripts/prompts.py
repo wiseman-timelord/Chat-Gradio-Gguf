@@ -11,9 +11,6 @@ prompt_templates = {
         "web_search": (
             "When responding, use web search to gather information if necessary. Include relevant URLs in <results> tags."
         ),
-        "tot": (
-            "Use the Tree of Thought approach: consider multiple answers or approaches, outline them step-by-step, then select the best one and present it in <answer> tags."
-        ),
         "reasoning": (
             "Think step by step in <think> tags before providing your answer."
         ),
@@ -30,7 +27,7 @@ prompt_templates = {
 }
 
 def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, 
-                      tot_enabled=False, is_reasoning=False, is_roleplay=False):
+                      is_reasoning=False, is_roleplay=False):
     if is_uncensored:
         base_prompt = prompt_templates["chat"]["base_unfiltered"]
     else:
@@ -40,9 +37,6 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
     
     if web_search_enabled:
         system_message += " When responding, first assess the provided web search results and summarize the key information. Then, use this assessment to craft your response to the user's query."
-    
-    if tot_enabled:
-        system_message += " " + prompt_templates["chat"]["tot"]
     
     if is_reasoning:
         system_message += " " + prompt_templates["chat"]["reasoning"]
@@ -57,6 +51,3 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
     
 def get_reasoning_instruction():
     return prompt_templates["chat"]["reasoning"]
-
-def get_tot_instruction():
-    return prompt_templates["chat"]["tot"]

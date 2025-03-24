@@ -6,19 +6,14 @@ import win32com.client
 import pythoncom
 from pathlib import Path
 from datetime import datetime
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-from .models import context_injector, load_models, clean_content  # Updated import
+from .models import load_models, clean_content
+import scripts.settings as settings
 from .temporary import (
-    TEMP_DIR, HISTORY_DIR, VECTORSTORE_DIR, SESSION_FILE_FORMAT,
-    ALLOWED_EXTENSIONS, current_session_id, session_label, RAG_CHUNK_SIZE_DEVIDER, BATCH_SIZE,
-    RAG_CHUNK_OVERLAP_DEVIDER, CONTEXT_SIZE
+    TEMP_DIR, HISTORY_DIR, SESSION_FILE_FORMAT, ALLOWED_EXTENSIONS, 
+    current_session_id, session_label
 )
 from . import temporary
-from scripts.models import get_available_models
 
 # Functions...
 def filter_operational_content(text):
@@ -100,91 +95,44 @@ def generate_session_label(session_log):
     return description
 
 # Updated save_session_history
-def save_session_history(session_log, attached_files, vector_files):
-    """Save or update session history with a YAKE-generated label."""
+def save_session_history(session_log, attached_files):
     if not temporary.current_session_id:
         temporary.current_session_id = generate_session_id()
     temporary.session_label = generate_session_label(session_log)
     os.makedirs(HISTORY_DIR, exist_ok=True)
     session_file = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}.json"
+    temp_file = session_file.with_suffix('.tmp')
     session_data = {
         "session_id": temporary.current_session_id,
         "label": temporary.session_label,
         "history": session_log,
-        "attached_files": attached_files,
-        "vector_files": vector_files if vector_files else []
+        "attached_files": attached_files
     }
-    with open(session_file, "w") as f:
+    with open(temp_file, "w") as f:
         json.dump(session_data, f)
+    os.replace(temp_file, session_file)  # Replace rename with os.replace to overwrite if needed
     manage_session_history()
     
 def load_session_history(session_file):
+    """Load session history from a file."""
     try:
         with open(session_file, "r") as f:
             data = json.load(f)
     except Exception as e:
         print(f"Error loading session file {session_file}: {e}")
-        return None, "Error", [], [], []
+        return None, "Error", [], []
 
     session_id = data.get("session_id", session_file.stem.replace('session_', ''))
     label = data.get("label", "Untitled")
     history = data.get("history", [])
     attached_files = data.get("attached_files", [])
-    vector_files = data.get("vector_files", [])
 
-    # Check and filter attached files
     attached_files = [file for file in attached_files if Path(file).exists()]
     if len(attached_files) != len(data.get("attached_files", [])):
         print(f"Removed missing attached files from session {session_id}")
 
-    try:
-        unzip_session_files(session_id)
-        attach_dir = Path(TEMP_DIR) / f"session_{session_id}" / "attach"
-        vector_dir = Path(TEMP_DIR) / f"session_{session_id}" / "vector"
-        if attach_dir.exists():
-            attached_files = [str(f) for f in attach_dir.glob("*") if f.is_file()]
-        if vector_dir.exists():
-            vector_files = [str(f) for f in vector_dir.glob("*") if f.is_file()]
-        else:
-            vector_files = []
-            print("No VectorStore found for Session History slot.")  # Print message when no vectorstore exists
-            # If no vector files but needed, a temporary vectorstore could be created here if required
-            # For now, we leave it empty as per requirement to handle absence gracefully
-    except Exception as e:
-        print(f"Error unzipping session files for {session_id}: {e}")
-
     temporary.session_attached_files = attached_files
-    temporary.session_vector_files = vector_files
-
-    return session_id, label, history, attached_files, vector_files
-
-def zip_session_files(session_id, attached_files, vector_files):
-    temp_dir = Path(TEMP_DIR) / f"session_{session_id}"
-    vector_dir = Path(VECTORSTORE_DIR)  # Change to VECTORSTORE_DIR
-    os.makedirs(vector_dir, exist_ok=True)
-    if temp_dir.exists():
-        attach_zip = Path(TEMP_DIR) / f"session_{session_id}_attach.zip"
-        vector_zip = vector_dir / f"session_{session_id}_vector.zip"  # Updated path
-        if attached_files:
-            with zipfile.ZipFile(attach_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-                for file in attached_files:
-                    zf.write(file, Path(file).name)
-        if vector_files:
-            with zipfile.ZipFile(vector_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-                for file in vector_files:
-                    zf.write(file, Path(file).name)
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-def unzip_session_files(session_id):
-    temp_dir = Path(TEMP_DIR) / f"session_{session_id}"
-    attach_zip = Path(TEMP_DIR) / f"session_{session_id}_attach.zip"
-    vector_zip = Path(VECTORSTORE_DIR) / f"session_{session_id}_vector.zip"  # Updated path
-    if attach_zip.exists():
-        with zipfile.ZipFile(attach_zip, "r") as zf:
-            zf.extractall(temp_dir / "attach")
-    if vector_zip.exists():
-        with zipfile.ZipFile(vector_zip, "r") as zf:
-            zf.extractall(temp_dir / "vector")
+    return session_id, label, history, attached_files
 
 def manage_session_history():
     """Limit saved sessions to MAX_HISTORY_SLOTS."""
@@ -194,49 +142,6 @@ def manage_session_history():
         oldest_file = session_files.pop()
         oldest_file.unlink()
         print(f"Deleted oldest session: {oldest_file}")
-        
-def load_session_history(session_file):
-    """
-    Load session history from a JSON file, returning five values with defaults for missing keys.
-
-    Args:
-        session_file (Path): Path to the session JSON file.
-
-    Returns:
-        tuple: (session_id, label, history, attached_files, vector_files)
-    """
-    try:
-        with open(session_file, "r") as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"Error loading session file {session_file}: {e}")
-        return None, "Error", [], [], []  # Always return 5 values
-
-    session_id = data.get("session_id", session_file.stem.replace('session_', ''))
-    label = data.get("label", "Untitled")
-    history = data.get("history", [])
-    attached_files = data.get("attached_files", [])
-    vector_files = data.get("vector_files", [])
-
-    try:
-        unzip_session_files(session_id)
-        attach_dir = Path(TEMP_DIR) / f"session_{session_id}" / "attach"
-        vector_dir = Path(TEMP_DIR) / f"session_{session_id}" / "vector"
-        if attach_dir.exists():
-            attached_files = [str(f) for f in attach_dir.glob("*") if f.is_file()]
-        if vector_dir.exists():
-            vector_files = [str(f) for f in vector_dir.glob("*") if f.is_file()]
-        else:
-            vector_files = []  # Empty list if no vector directory
-    except Exception as e:
-        print(f"Error unzipping session files for {session_id}: {e}")
-
-    temporary.session_attached_files = attached_files
-    temporary.session_vector_files = vector_files
-
-    # Debugging print to confirm 5 values
-    print(f"load_session_history returning: {session_id}, {label}, {len(history)}, {len(attached_files)}, {len(vector_files)}")
-    return session_id, label, history, attached_files, vector_files
 
 def process_uploaded_files(files):
     """Process uploaded files (if needed beyond copying)."""
@@ -306,40 +211,12 @@ def load_and_chunk_documents(file_paths: list) -> list:
         print(f"Error loading documents: {e}")
     return documents
 
-def create_session_vectorstore(file_paths, session_id):
-    if not file_paths:
-        return None
-    docs = load_and_chunk_documents(file_paths)
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    try:
-        vectorstore = FAISS.from_documents(docs, embeddings)
-        save_dir = Path(VECTORSTORE_DIR) / f"session_{session_id}"
-        save_dir.mkdir(parents=True, exist_ok=True)
-        vectorstore.save_local(str(save_dir))
-        return vectorstore
-    except Exception as e:
-        print(f"Error creating vectorstore: {e}")
-        return None
-
-def delete_all_session_vectorstores() -> str:
-    """Delete all session-specific vectorstore directories."""
-    session_vs_dir = Path("data/vectors")  # Updated path
-    if session_vs_dir.exists():
-        for vs_dir in session_vs_dir.iterdir():
-            if vs_dir.is_dir() and vs_dir.name.startswith("session_"):
-                shutil.rmtree(vs_dir)
-                print(f"Deleted session vectorstore: {vs_dir}")
-        return "All session vectorstores deleted."
-    else:
-        return "No session vectorstores found to delete."
-
-def delete_all_history_and_vectors():
+def delete_all_session_histories():
     """
-    Delete all history JSON files in HISTORY_DIR and all vectorstores in VECTORSTORE_DIR.
+    Delete all history JSON files in HISTORY_DIR.
     Returns a status message indicating the result.
     """
     history_dir = Path(HISTORY_DIR)
-    vectorstore_dir = Path(VECTORSTORE_DIR)
     
     # Delete all history JSON files
     for file in history_dir.glob('*.json'):
@@ -349,15 +226,7 @@ def delete_all_history_and_vectors():
         except Exception as e:
             print(f"Error deleting {file}: {e}")
     
-    # Delete the entire vectorstore directory
-    if vectorstore_dir.exists():
-        try:
-            shutil.rmtree(vectorstore_dir)
-            print(f"Deleted vectorstore directory: {vectorstore_dir}")
-        except Exception as e:
-            print(f"Error deleting {vectorstore_dir}: {e}")
-    
-    return "All history and vectorstores deleted."
+    return "All session histories deleted."
 
 def extract_links_with_descriptions(text):
     """Extract URLs from text and generate concise descriptions."""
@@ -386,6 +255,43 @@ def get_saved_sessions():
     history_dir = Path(HISTORY_DIR)  # Updated to use HISTORY_DIR
     session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
     return [f.name for f in session_files]
+
+def process_files(files, existing_files, max_files, is_attach=True):
+    """
+    Process uploaded files for attach or vector, ensuring no duplicates and respecting max file limits.
+    
+    Args:
+        files (list): List of new file paths.
+        existing_files (list): List of currently attached or vector files.
+        max_files (int): Maximum number of files allowed.
+        is_attach (bool): True for attach files, False for vector files.
+    
+    Returns:
+        tuple: (status_message, updated_file_list)
+    """
+    if not files:
+        return "No files uploaded.", existing_files
+
+    new_files = [f for f in files if os.path.isfile(f) and f not in existing_files]
+    if not new_files:
+        return "No new files to add.", existing_files
+
+    # Remove older versions with the same name
+    for f in new_files:
+        file_name = Path(f).name
+        existing_files = [ef for ef in existing_files if Path(ef).name != file_name]
+
+    available_slots = max_files - len(existing_files)
+    processed_files = new_files[:available_slots]
+    updated_files = processed_files + existing_files  # New files added to the front
+
+    if is_attach:
+        temporary.session_attached_files = updated_files
+    else:
+        temporary.session_vector_files = updated_files
+
+    status = f"Processed {len(processed_files)} new {'attach' if is_attach else 'vector'} files."
+    return status, updated_files
 
 def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary, with a confirmation message."""
@@ -439,137 +345,3 @@ def update_setting(key, value):
     except Exception as e:
         message = f"Error updating setting '{key}': {str(e)}"
         return message, None, None
-    
-def load_config():
-    config_path = Path("data/persistent.json")
-    try:
-        if config_path.exists():
-            with open(config_path) as f:
-                config = json.load(f)
-                
-                if "backend_config" not in config:
-                    config["backend_config"] = {
-                        "backend_type": "Not Configured",
-                        "llama_bin_path": ""
-                    }
-
-                temporary.MODEL_FOLDER = config["model_settings"].get("model_dir", ".\models")
-                temporary.AVAILABLE_MODELS = get_available_models()
-                
-                if "model_name" in config["model_settings"]:
-                    temporary.MODEL_NAME = config["model_settings"]["model_name"]
-                if "context_size" in config["model_settings"]:
-                    temporary.CONTEXT_SIZE = int(config["model_settings"]["context_size"])
-                if "temperature" in config["model_settings"]:
-                    temporary.TEMPERATURE = float(config["model_settings"]["temperature"])
-                if "repeat_penalty" in config["model_settings"]:
-                    temporary.REPEAT_PENALTY = float(config["model_settings"]["repeat_penalty"])
-                if "llama_cli_path" in config["model_settings"]:
-                    temporary.LLAMA_CLI_PATH = config["model_settings"]["llama_cli_path"]
-                if "vram_size" in config["model_settings"]:
-                    temporary.VRAM_SIZE = int(config["model_settings"]["vram_size"])
-                if "selected_gpu" in config["model_settings"]:
-                    temporary.SELECTED_GPU = config["model_settings"]["selected_gpu"]
-                if "selected_cpu" in config["model_settings"]:
-                    temporary.SELECTED_CPU = config["model_settings"]["selected_cpu"]
-                if "mmap" in config["model_settings"]:
-                    temporary.MMAP = bool(config["model_settings"]["mmap"])
-                if "mlock" in config["model_settings"]:
-                    temporary.MLOCK = bool(config["model_settings"]["mlock"])
-                if "n_batch" in config["model_settings"]:
-                    temporary.BATCH_SIZE = int(config["model_settings"]["n_batch"])
-                if "dynamic_gpu_layers" in config["model_settings"]:
-                    temporary.DYNAMIC_GPU_LAYERS = bool(config["model_settings"]["dynamic_gpu_layers"])
-                if "max_history_slots" in config["model_settings"]:
-                    temporary.MAX_HISTORY_SLOTS = int(config["model_settings"]["max_history_slots"])
-                if "max_attach_slots" in config["model_settings"]:
-                    temporary.MAX_ATTACH_SLOTS = int(config["model_settings"]["max_attach_slots"])
-                if "session_log_height" in config["model_settings"]:
-                    temporary.SESSION_LOG_HEIGHT = int(config["model_settings"]["session_log_height"])
-                if "input_lines" in config["model_settings"]:
-                    temporary.INPUT_LINES = int(config["model_settings"]["input_lines"])
-                
-                if "backend_type" in config["backend_config"]:
-                    temporary.BACKEND_TYPE = config["backend_config"]["backend_type"]
-                if "llama_bin_path" in config["backend_config"]:
-                    temporary.LLAMA_BIN_PATH = config["backend_config"]["llama_bin_path"]
-                
-                # Ensure loaded values are in allowed options
-                if temporary.MAX_ATTACH_SLOTS not in temporary.ATTACH_SLOT_OPTIONS:
-                    temporary.MAX_ATTACH_SLOTS = temporary.ATTACH_SLOT_OPTIONS[0]
-                if temporary.INPUT_LINES not in temporary.INPUT_LINES_OPTIONS:
-                    temporary.INPUT_LINES = temporary.INPUT_LINES_OPTIONS[0]
-                if temporary.MAX_HISTORY_SLOTS not in temporary.HISTORY_SLOT_OPTIONS:
-                    temporary.MAX_HISTORY_SLOTS = temporary.HISTORY_SLOT_OPTIONS[0]
-                if temporary.SESSION_LOG_HEIGHT not in temporary.SESSION_LOG_HEIGHT_OPTIONS:
-                    temporary.SESSION_LOG_HEIGHT = temporary.SESSION_LOG_HEIGHT_OPTIONS[0]
-                
-                if temporary.MODEL_NAME not in temporary.AVAILABLE_MODELS:
-                    temporary.MODEL_NAME = "Browse_for_model_folder..." if not temporary.AVAILABLE_MODELS else temporary.AVAILABLE_MODELS[0]
-                
-                temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER).resolve())
-                return "Configuration loaded successfully."
-        else:
-            temporary.MODEL_FOLDER = str(Path(".\models").resolve())
-            temporary.AVAILABLE_MODELS = get_available_models()
-            return "Config file not found, using default settings from temporary.py."
-    except Exception as e:
-        temporary.MODEL_FOLDER = str(Path(temporary.MODEL_FOLDER if 'temporary.MODEL_FOLDER' in globals() else ".\models").resolve())
-        temporary.AVAILABLE_MODELS = get_available_models()
-        return f"Error loading configuration: {str(e)}"
-    
-def save_config():
-    config_path = Path("data/persistent.json")
-    try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config = {
-            "model_settings": {
-                "model_dir": str(Path(temporary.MODEL_FOLDER).resolve()),
-                "model_name": temporary.MODEL_NAME,
-                "context_size": temporary.CONTEXT_SIZE,
-                "temperature": temporary.TEMPERATURE,
-                "repeat_penalty": temporary.REPEAT_PENALTY,
-                "llama_cli_path": temporary.LLAMA_CLI_PATH,
-                "vram_size": temporary.VRAM_SIZE,
-                "selected_gpu": temporary.SELECTED_GPU,
-                "selected_cpu": temporary.SELECTED_CPU,
-                "mmap": temporary.MMAP,
-                "mlock": temporary.MLOCK,
-                "n_batch": temporary.BATCH_SIZE,
-                "dynamic_gpu_layers": temporary.DYNAMIC_GPU_LAYERS,
-                "max_history_slots": temporary.MAX_HISTORY_SLOTS,
-                "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
-                "session_log_height": temporary.SESSION_LOG_HEIGHT,
-                "input_lines": temporary.INPUT_LINES
-            },
-            "backend_config": {
-                "backend_type": temporary.BACKEND_TYPE,
-                "llama_bin_path": temporary.LLAMA_BIN_PATH
-            }
-        }
-        with open(config_path, 'w') as f:
-            json.dump(config, f, indent=4)
-        print(f"Saved MODEL_FOLDER: {temporary.MODEL_FOLDER}")
-        print(f"Saved MODEL_NAME: {temporary.MODEL_NAME}")
-        print(f"Saved CONTEXT_SIZE: {temporary.CONTEXT_SIZE}")
-        print(f"Saved TEMPERATURE: {temporary.TEMPERATURE}")
-        print(f"Saved REPEAT_PENALTY: {temporary.REPEAT_PENALTY}")
-        print(f"Saved LLAMA_CLI_PATH: {temporary.LLAMA_CLI_PATH}")
-        print(f"Saved VRAM_SIZE: {temporary.VRAM_SIZE}")
-        print(f"Saved SELECTED_GPU: {temporary.SELECTED_GPU}")
-        print(f"Saved SELECTED_CPU: {temporary.SELECTED_CPU}")
-        print(f"Saved MMAP: {temporary.MMAP}")
-        print(f"Saved MLOCK: {temporary.MLOCK}")
-        print(f"Saved BATCH_SIZE: {temporary.BATCH_SIZE}")
-        print(f"Saved DYNAMIC_GPU_LAYERS: {temporary.DYNAMIC_GPU_LAYERS}")
-        print(f"Saved MAX_HISTORY_SLOTS: {temporary.MAX_HISTORY_SLOTS}")
-        print(f"Saved MAX_ATTACH_SLOTS: {temporary.MAX_ATTACH_SLOTS}")
-        print(f"Saved SESSION_LOG_HEIGHT: {temporary.SESSION_LOG_HEIGHT}")
-        print(f"Saved INPUT_LINES: {temporary.INPUT_LINES}")
-        print(f"Saved BACKEND_TYPE: {temporary.BACKEND_TYPE}")
-        print(f"Saved LLAMA_BIN_PATH: {temporary.LLAMA_BIN_PATH}")
-        print("Settings saved successfully to persistent.json")
-        return "Settings saved successfully."
-    except Exception as e:
-        print(f"Error saving config: {str(e)}")
-        return f"Error saving configuration: {str(e)}"

@@ -1,50 +1,55 @@
-# Script: .\scripts\temporary.py
+# scripts/temporary.py
 
 # Imports...
 import time
 from scripts.prompts import prompt_templates 
 
-# General Constants/Variables/Lists/Maps/Arrays
+# Configuration variables with defaults
 MODEL_FOLDER = "path/to/your/models"
-VECTORSTORE_DIR = "data/vectors"
-TEMP_DIR = "data/temp"
-HISTORY_DIR = "data/history"  # Updated to separate from vectors
-SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"
-session_label = ""
-current_session_id = None
-RAG_CHUNK_SIZE_DEVIDER = 4
-RAG_CHUNK_OVERLAP_DEVIDER = 32
-MODELS_LOADED = False
-AVAILABLE_MODELS = None
-SESSION_ACTIVE = False
-MAX_HISTORY_SLOTS = 10
-yake_history_detail = [None] * MAX_HISTORY_SLOTS
-MAX_ATTACH_SLOTS = 8
-MODEL_NAME = "Browse_for_model_folder..."
 CONTEXT_SIZE = 8192
 VRAM_SIZE = 8192
-GPU_LAYERS = 0
 BATCH_SIZE = 1024
-SELECTED_GPU = None
-SELECTED_CPU = None
+TEMPERATURE = 0.66
+REPEAT_PENALTY = 1.0
 DYNAMIC_GPU_LAYERS = True
 MMAP = True
 MLOCK = True
+MAX_HISTORY_SLOTS = 10
+MAX_ATTACH_SLOTS = 8
+SESSION_LOG_HEIGHT = 650
+INPUT_LINES = 27
+VRAM_OPTIONS = [2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536]
+CTX_OPTIONS = [8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072]
+BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096]
+TEMP_OPTIONS = [0.0, 0.1, 0.25, 0.33, 0.5, 0.66, 0.75, 1.0]
+REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
+HISTORY_SLOT_OPTIONS = [4, 8, 10, 12, 16]
+ATTACH_SLOT_OPTIONS = [2, 4, 6, 8, 10]
+SESSION_LOG_HEIGHT_OPTIONS = [400, 550, 650, 700, 750, 850, 1000, 1200, 1450, 1750]
+INPUT_LINES_OPTIONS = [15, 21, 25, 27, 29, 33, 39, 47, 57, 69]
+
+# General Constants/Variables/Lists/Maps/Arrays
+TEMP_DIR = "data/temp"
+HISTORY_DIR = "data/history"
+SESSION_FILE_FORMAT = "%Y%m%d_%H%M%S"
+session_label = ""
+current_session_id = None
+MODELS_LOADED = False
+AVAILABLE_MODELS = None
+SESSION_ACTIVE = False
+MODEL_NAME = "Browse_for_model_folder..."
+GPU_LAYERS = 0
+SELECTED_GPU = None
+SELECTED_CPU = None
 STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True
 LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
 BACKEND_TYPE = "Not Configured"
-RAG_AUTO_LOAD = ["general_knowledge"]
-REPEAT_PENALTY = 1.0
-TEMPERATURE = 0.66
-SESSION_LOG_HEIGHT = 650
-INPUT_LINES = 27
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
 
 # Arrays
 session_attached_files = []
-session_vector_files = []
 
 # UI Constants
 USER_COLOR = "#ffffff"
@@ -55,24 +60,8 @@ MID_SEPARATOR = "-" * 30
 
 # Options for Dropdowns
 ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}
-CTX_OPTIONS = [8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072]
-VRAM_OPTIONS = [2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536]
-REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
-BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096]
-TEMP_OPTIONS = [0.0, 0.1, 0.25, 0.33, 0.5, 0.66, 0.75, 1.0] 
 MAX_POSSIBLE_HISTORY_SLOTS = 16
-HISTORY_SLOT_OPTIONS = [4, 8, 10, 12, 16]
 MAX_POSSIBLE_ATTACH_SLOTS = 10
-ATTACH_SLOT_OPTIONS = [2, 4, 6, 8, 10]
-SESSION_LOG_HEIGHT_OPTIONS = [400, 550, 650, 700, 750, 850, 1000, 1200, 1450, 1750]
-INPUT_LINES_OPTIONS = [15, 21, 25, 27, 29, 33, 39, 47, 57, 69]
-
-# TOT Settings
-TOT_VARIATIONS = [
-    "Please provide a detailed answer.",
-    "Be concise.",
-    "Think step by step."
-]
 
 # Status text entries
 STATUS_TEXTS = {
