@@ -160,11 +160,6 @@ def update_session_log_height(h):
     temporary.SESSION_LOG_HEIGHT = int(h)
     return gr.update(height=h)
 
-def update_input_lines(l):
-    temporary.INPUT_LINES = int(l)
-    print(f"Updated INPUT_LINES to {l}")  # Debugging
-    return gr.update(lines=l)
-
 def format_response(output: str) -> str:
     formatted = []
     # Preserve think blocks during streaming
@@ -633,12 +628,12 @@ def launch_interface():
     from scripts import temporary, utility, models
     from scripts.temporary import (
         STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE,
-        MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, INPUT_LINES,
+        MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, 
         MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
         VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
         ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
         REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
-        INPUT_LINES_OPTIONS, ATTACH_SLOT_OPTIONS
+        ATTACH_SLOT_OPTIONS
     )
 
     with gr.Blocks(
@@ -846,7 +841,6 @@ def launch_interface():
                         custom_components.update(
                             max_history_slots=gr.Dropdown(choices=temporary.HISTORY_SLOT_OPTIONS, label="Max History Slots", value=temporary.MAX_HISTORY_SLOTS, scale=5),
                             session_log_height=gr.Dropdown(choices=temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Session Log Height", value=temporary.SESSION_LOG_HEIGHT, scale=5),
-                            input_lines=gr.Dropdown(choices=temporary.INPUT_LINES_OPTIONS, label="Input Lines", value=temporary.INPUT_LINES, scale=5),
                             max_attach_slots=gr.Dropdown(choices=temporary.ATTACH_SLOT_OPTIONS, label="Max Attach Slots", value=temporary.MAX_ATTACH_SLOTS, scale=5)
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -1115,12 +1109,6 @@ def launch_interface():
             fn=update_session_log_height,
             inputs=[custom_components["session_log_height"]],
             outputs=[conversation_components["session_log"]]
-        )
-
-        custom_components["input_lines"].change(
-            fn=update_input_lines,
-            inputs=[custom_components["input_lines"]],
-            outputs=[conversation_components["user_input"]]
         )
 
         custom_components["max_history_slots"].change(

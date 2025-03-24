@@ -331,9 +331,6 @@ def update_setting(key, value):
             temporary.MAX_ATTACH_SLOTS = int(value)
         elif key == "session_log_height":
             temporary.SESSION_LOG_HEIGHT = int(value)
-        elif key == "input_lines":
-            temporary.INPUT_LINES = int(value)
-        # RPG settings
 
         if reload_required:
             reload_result = change_model(temporary.MODEL_NAME.split('/')[-1])

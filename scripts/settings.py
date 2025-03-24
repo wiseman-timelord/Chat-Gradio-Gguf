@@ -30,8 +30,7 @@ DEFAULTS = {
     "REPEAT_OPTIONS": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
     "HISTORY_SLOT_OPTIONS": [4, 8, 10, 12, 16],
     "ATTACH_SLOT_OPTIONS": [2, 4, 6, 8, 10],
-    "SESSION_LOG_HEIGHT_OPTIONS": [400, 550, 650, 700, 750, 850, 1000, 1200, 1450, 1750],
-    "INPUT_LINES_OPTIONS": [15, 21, 25, 27, 29, 33, 39, 47, 57, 69],
+    "SESSION_LOG_HEIGHT_OPTIONS": [450, 475, 500, 550, 650, 800, 1050, 1300],
 }
 
 def load_config():
@@ -80,8 +79,6 @@ def load_config():
             temporary.MAX_ATTACH_SLOTS = model_settings["max_attach_slots"]
         if "session_log_height" in model_settings:
             temporary.SESSION_LOG_HEIGHT = model_settings["session_log_height"]
-        if "input_lines" in model_settings:
-            temporary.INPUT_LINES = model_settings["input_lines"]
         
         # Load backend_config
         backend_config = config.get("backend_config", {})
@@ -138,7 +135,6 @@ def save_config():
             "max_history_slots": temporary.MAX_HISTORY_SLOTS,
             "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
             "session_log_height": temporary.SESSION_LOG_HEIGHT,
-            "input_lines": temporary.INPUT_LINES,
         },
         "backend_config": {
             "backend_type": temporary.BACKEND_TYPE,
