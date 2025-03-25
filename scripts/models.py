@@ -308,7 +308,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         web_search_enabled=web_search_enabled,
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False)
-    )
+    ) + "\nDo not include 'AI-Chat:' or any prefixes in your responses."
     if not isinstance(system_message, str):
         yield f"Error: system_message from get_system_message is not a string, got {type(system_message)}: {system_message}"
         return
@@ -365,8 +365,8 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         yield "Error: No user input to process."
         return
 
-    # Reserve tokens for the assistant’s response
-    response_reserve_tokens = 512  # Adjust based on expected response length
+    # Reserve tokens for the assistant’s response, scaled to batch size
+    response_reserve_tokens = temporary.BATCH_SIZE // 8  # e.g., 512 for batch size 4096
 
     # Calculate available tokens for history
     available_tokens = n_ctx - system_tokens - user_tokens - response_reserve_tokens
@@ -414,7 +414,9 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         return is_creative_task or is_long_input or (is_interactive_mode and input_length > 50)
 
     stream_enabled = should_stream(user_query, settings)
-    n_batch = 16 if stream_enabled else temporary.BATCH_SIZE
+
+    # Set max_tokens based on streaming, scaled to batch size
+    max_tokens = temporary.BATCH_SIZE // 2 if stream_enabled else temporary.BATCH_SIZE  # e.g., 2048 or 4096
 
     # Validate and cast settings to float
     try:
@@ -429,41 +431,35 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         if stream_enabled:
             response_stream = llm_state.create_chat_completion(
                 messages=messages,
-                max_tokens=n_batch,
+                max_tokens=4096,  # Temporary for testing
                 temperature=temperature,
                 repeat_penalty=repeat_penalty,
-                stream=True
+                stream=True,
+                stop=None
             )
-            buffer = ""
+            print(f"Debug: Starting streaming with max_tokens=4096")
+            chunk_count = 0
             for chunk in response_stream:
                 if cancel_event and cancel_event.is_set():
+                    print("Debug: Stream cancelled")
                     yield "<CANCELLED>"
                     return
                 if 'choices' in chunk and chunk['choices']:
                     content = chunk['choices'][0].get('delta', {}).get('content', '')
                     if content:
-                        buffer += content
-                        sentences = re.split(r'(?<=[.!?])\s+', buffer)
-                        buffer_sentences = []
-                        remaining_buffer = ""
-                        for s in sentences:
-                            if s.strip() and (s[-1] in '.!?'):
-                                buffer_sentences.append(s)
-                            else:
-                                remaining_buffer = s
-                        buffer = remaining_buffer
-                        for sentence in buffer_sentences:
-                            yield sentence
-            if buffer.strip():
-                yield buffer
+                        chunk_count += 1
+                        print(f"Debug: Chunk {chunk_count}: {repr(content)}")
+                        yield content
+            print(f"Debug: Stream ended after {chunk_count} chunks")
         else:
             response = llm_state.create_chat_completion(
                 messages=messages,
-                max_tokens=n_batch,
+                max_tokens=max_tokens,
                 temperature=temperature,
                 repeat_penalty=repeat_penalty,
                 stream=False
             )
-            yield response['choices'][0]['message']['content']
+            yield response['choices'][0]['message']['content']  # Moved inside else
     except Exception as e:
+        print(f"Debug: Exception: {str(e)}")
         yield f"Error generating response: {str(e)}\n{traceback.format_exc()}"
