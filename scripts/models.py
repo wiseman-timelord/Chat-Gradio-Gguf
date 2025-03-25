@@ -288,14 +288,20 @@ def unload_models(llm_state, models_loaded_state):
 
 def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None, cancel_event=None, llm_state=None, models_loaded_state=False):
     import re
+    import traceback
     from scripts import temporary
     from scripts.utility import clean_content
+    from scripts.prompts import get_system_message
 
+    # Initial model state validation
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
         return
 
-    messages = []
+    # Get the model’s context size
+    n_ctx = temporary.CONTEXT_SIZE
+
+    # Prepare the system message with type enforcement
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
         is_nsfw=settings.get("is_nsfw", False),
@@ -303,17 +309,102 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False)
     )
-    if web_search_enabled and search_results:
-        system_message += f"\n\nWeb Search Results:\n{search_results}"
-    messages.append({"role": "system", "content": system_message})
+    if not isinstance(system_message, str):
+        yield f"Error: system_message from get_system_message is not a string, got {type(system_message)}: {system_message}"
+        return
 
+    if web_search_enabled and search_results is not None:  # Explicit None check
+        if not isinstance(search_results, str):
+            search_message = f"search_results is not a string, got {type(search_results)}: {search_results}. Converting to string."
+            print(search_message)  # Log for debugging
+            search_results = str(search_results)
+        system_message += f"\n\nWeb Search Results:\n{search_results}"
+
+    # Debug: Inspect the system_message
+    print(f"system_message: {repr(system_message)}")
+
+    # Sanitize: Ensure UTF-8 encoding
+    try:
+        system_message = system_message.encode('utf-8').decode('utf-8')
+    except UnicodeDecodeError as e:
+        yield f"Error: system_message contains invalid UTF-8 characters: {str(e)}"
+        return
+
+    # Preprocess: Remove tags and normalize
+    system_message = re.sub(r'<[^>]+>', '', system_message)
+    system_message = system_message.replace('\n', ' ').strip()
+
+    # Test tokenization with a simple string to ensure tokenizer works
+    try:
+        test_tokens = llm_state.tokenize("Hello, world!".encode('utf-8'))
+        print(f"Debug: Test tokenization successful: {test_tokens}")
+    except Exception as e:
+        yield f"Error: Test tokenization failed: {str(e)}"
+        return
+
+    # Calculate token count for the system message
+    try:
+        system_tokens = len(llm_state.tokenize(system_message.encode('utf-8')))
+        print(f"Debug: System message tokens: {system_tokens}")
+    except Exception as e:
+        yield f"Error tokenizing system message: {str(e)}. Type: {type(system_message)}, Value: {system_message[:50]}..."
+        return
+
+    # Get the latest user input
     if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
         user_query = clean_content('user', session_log[-2]['content'])
-        messages.append({"role": "user", "content": user_query})
+        if not isinstance(user_query, str):
+            yield f"Error: user_query is not a string, got {type(user_query)}: {user_query}"
+            return
+        try:
+            user_tokens = len(llm_state.tokenize(user_query.encode('utf-8')))
+        except Exception as e:
+            yield f"Error tokenizing user query: {str(e)}. Type: {type(user_query)}, Value: {user_query[:50]}..."
+            return
     else:
         yield "Error: No user input to process."
         return
 
+    # Reserve tokens for the assistant’s response
+    response_reserve_tokens = 512  # Adjust based on expected response length
+
+    # Calculate available tokens for history
+    available_tokens = n_ctx - system_tokens - user_tokens - response_reserve_tokens
+    if available_tokens < 0:
+        yield "Error: Context size exceeded with system message and user input."
+        return
+
+    # Build the prompt dynamically
+    messages = [
+        {"role": "system", "content": system_message},
+    ]
+
+    # Add history messages, most recent first, until token limit is reached
+    history_messages = []
+    current_tokens = 0
+    for msg in reversed(session_log[:-2]):  # Exclude latest user input and empty assistant slot
+        role = msg['role']
+        content = clean_content(role, msg['content'])
+        if not isinstance(content, str):
+            yield f"Error: History message content is not a string, got {type(content)}: {content}"
+            return
+        try:
+            msg_tokens = len(llm_state.tokenize(content.encode('utf-8')))
+        except Exception as e:
+            yield f"Error tokenizing history message: {str(e)}. Type: {type(content)}, Value: {content[:50]}..."
+            return
+        if current_tokens + msg_tokens > available_tokens:
+            break  # Stop if adding this message exceeds the limit
+        history_messages.insert(0, {"role": role, "content": content})  # Maintain order
+        current_tokens += msg_tokens
+
+    # Add history to the prompt
+    messages.extend(history_messages)
+
+    # Add the latest user input
+    messages.append({"role": "user", "content": user_query})
+
+    # Determine if streaming is appropriate
     def should_stream(input_text, settings):
         stream_keywords = ["write", "generate", "story", "report", "essay", "explain", "describe"]
         input_length = len(input_text.strip())
@@ -324,18 +415,25 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
     stream_enabled = should_stream(user_query, settings)
     n_batch = 16 if stream_enabled else temporary.BATCH_SIZE
-    n_ctx = min(2048, temporary.CONTEXT_SIZE) if len(user_query) < 100 else temporary.CONTEXT_SIZE
 
+    # Validate and cast settings to float
+    try:
+        temperature = float(settings.get("temperature", temporary.TEMPERATURE))
+        repeat_penalty = float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY))
+    except (ValueError, TypeError) as e:
+        yield f"Error: Invalid temperature or repeat_penalty: {str(e)}"
+        return
+
+    # Generate the response
     try:
         if stream_enabled:
             response_stream = llm_state.create_chat_completion(
                 messages=messages,
                 max_tokens=n_batch,
-                temperature=settings.get("temperature", temporary.TEMPERATURE),
-                repeat_penalty=settings.get("repeat_penalty", temporary.REPEAT_PENALTY),
+                temperature=temperature,
+                repeat_penalty=repeat_penalty,
                 stream=True
             )
-
             buffer = ""
             for chunk in response_stream:
                 if cancel_event and cancel_event.is_set():
@@ -358,16 +456,14 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                             yield sentence
             if buffer.strip():
                 yield buffer
-
         else:
             response = llm_state.create_chat_completion(
                 messages=messages,
                 max_tokens=n_batch,
-                temperature=settings.get("temperature", temporary.TEMPERATURE),
-                repeat_penalty=settings.get("repeat_penalty", temporary.REPEAT_PENALTY),
+                temperature=temperature,
+                repeat_penalty=repeat_penalty,
                 stream=False
             )
             yield response['choices'][0]['message']['content']
-
     except Exception as e:
-        yield f"Error generating response: {str(e)}"
+        yield f"Error generating response: {str(e)}\n{traceback.format_exc()}"

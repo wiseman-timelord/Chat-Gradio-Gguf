@@ -321,8 +321,7 @@ def start_new_session(models_loaded):
             [],                                # session_log
             "Load model first on Configuration page...",  # status_text
             gr.update(interactive=False),     # user_input
-            gr.update(),                       # web_search
-            gr.update()                        # speak
+            gr.update()                       # web_search
         )
     temporary.current_session_id = None
     temporary.session_label = ""
@@ -331,8 +330,7 @@ def start_new_session(models_loaded):
         [],                                # session_log
         "Type input and click Send to begin...",  # status_text
         gr.update(interactive=True),      # user_input
-        gr.update(),                       # web_search
-        gr.update()                        # speak
+        gr.update()                       # web_search
     )
 
 def load_session_by_index(index):
@@ -670,7 +668,7 @@ def launch_interface():
             with gr.Tab("Interaction"):
                 with gr.Row():
                     # Expanded left column
-                    with gr.Column(visible=True, min_width=350, elem_classes=["clean-elements"]) as left_column_expanded:
+                    with gr.Column(visible=True, min_width=325, elem_classes=["clean-elements"]) as left_column_expanded:
                         toggle_button_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary")
                         panel_toggle = gr.Radio(
                             choices=["History", "Attach"],
