@@ -154,7 +154,7 @@ project_root/
 
 ## Current Development
 1. Need to streamline requisites.py in relevance to streamlining in main program. where vectorization and TOT, were effectively removed.
-2. Need to get streaming, sentence by sentence, working again.
+2. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word?
 3. Test and bugfix, search.
 2. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
 3. Complete Gen1.
