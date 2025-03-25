@@ -10,16 +10,15 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, TOT, no-THINK, and code formatting, and with file attachments. 
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
-- **Configurable Context Window**: Set `n_ctx` to 8192, 16384, 24576, or 32768 via dropdown.
+- **Configurable Context**: Set model context to 8192-138072, and batch output to 1028-4096.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
-- **FAISS Vector Database**: Stores numerical vectors, and retrieves based on proximity in meaning, enabling pulling context from documents.
 - **Highly Customizable UI**: Configurable; 10-20 Session History slots, 2-10 file slots, Session Log 400-550px height, 2-8 Lines of input. 
 - **Afterthought Countdown**: If, <25 characters then 1s or 26-100 charactrs then 3s or >100 lines then 5s, cooldown before proceeding, enabling cancelation time relative to input size.
 - **Speak Summaries**: Text to speak uses `PyWin32`.
-- **Attach or Vectorise**: Optimally for the mode, Attach Files is complete raw input, while Vectorise Files is relevance selected snippets from potentially larger source. 
-- **Collapsable Left Column**: Like one would find on modern AI interface. 
+- **Attach Files**: Attach Files is complete raw input, there is no Vectorise Files anymore, so the files should ideally be small enough to fit in context. 
+- **Collapsable Left Column**: Like one would find on modern AI interface, but with concise 3 button interface for commonly used buttons. 
 - **ASynchronous Response Stream**: Separate thread with its own event loop, allowing chunks of response queued/processed without blocking Gradio UI event loop.
-- **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, though no TOT option on a reasoning model.
+- **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, ie, uncensored, nsfw, chat, code.
 
 ### Preview
 - The "Interaction" page with Expanded Left Panel...
