@@ -79,6 +79,12 @@ STATUS_TEXTS = {
     "error": "An error occurred"
 }
 
+CHAT_FORMAT_MAP = {
+    'qwen2': 'chatml',  # Qwen2 uses a ChatML-like format
+    'llama': 'llama2',  # Llama models use llama2 format
+    # Add more mappings as needed for other architectures
+}
+
 # Handling Keywords for Special Model Behaviors
 handling_keywords = {
     "code": ["code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell"],

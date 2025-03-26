@@ -10,10 +10,23 @@ from scripts.prompts import prompt_templates
 from scripts.temporary import (
     CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, handling_keywords, llm,
-    MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED
+    MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED, CHAT_FORMAT_MAP
 )
 
 # Functions...
+def get_chat_format(metadata):
+    """
+    Determine the chat format based on the model's architecture.
+    
+    Args:
+        metadata (dict): Metadata of the model.
+    
+    Returns:
+        str: The chat format to use.
+    """
+    architecture = metadata.get('general.architecture', 'unknown')
+    return CHAT_FORMAT_MAP.get(architecture, 'llama2') 
+
 def get_model_metadata(model_path: str) -> dict:
     """
     Retrieve metadata from a GGUF model, including the number of layers.
@@ -202,6 +215,10 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     if not model_path.exists():
         return f"Error: Model file '{model_path}' not found.", False, llm_state, models_loaded_state
 
+    # Get metadata to determine chat_format
+    metadata = get_model_metadata(str(model_path))
+    chat_format = get_chat_format(metadata)
+
     num_layers = get_model_layers(str(model_path))
     if num_layers <= 0:
         return f"Error: Could not determine layer count for model '{model}'.", False, llm_state, models_loaded_state
@@ -219,7 +236,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         if models_loaded_state:
             unload_models(llm_state, models_loaded_state)
 
-        print(f"Debug: Loading model '{model}' from '{model_folder}' with Python bindings")
+        print(f"Debug: Loading model '{model}' from '{model_folder}' with Python bindings and chat_format '{chat_format}'")
         new_llm = Llama(
             model_path=str(model_path),
             n_ctx=temporary.CONTEXT_SIZE,
@@ -227,7 +244,8 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             n_batch=temporary.BATCH_SIZE,
             mmap=temporary.MMAP,
             mlock=temporary.MLOCK,
-            verbose=True
+            verbose=True,
+            chat_format=chat_format  # Set the chat_format based on architecture
         )
 
         test_output = new_llm.create_chat_completion(
@@ -238,7 +256,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         print(f"Debug: Test inference successful: {test_output}")
 
         temporary.MODEL_NAME = model  # Keep for settings
-        status = f"Model '{model}' loaded successfully. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
+        status = f"Model '{model}' loaded successfully with chat_format '{chat_format}'. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
         return status, True, new_llm, True
 
     except Exception as e:
