@@ -764,7 +764,7 @@ def launch_interface():
                         gr.Markdown("Model Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
                         model_path_display = gr.Textbox(
-                            label="Model Folder (click to browse)",
+                            label="Set Model Folder (click here)",
                             value=temporary.MODEL_FOLDER,  # Initial value
                             interactive=True,  # Allow clicking to trigger focus
                             scale=10,
@@ -789,7 +789,7 @@ def launch_interface():
                         config_components.update(
                             model=gr.Dropdown(
                                 choices=available_models,
-                                label="Select Model",
+                                label="Select Model File",
                                 value=default_model,
                                 allow_custom_value=False,
                                 scale=10
