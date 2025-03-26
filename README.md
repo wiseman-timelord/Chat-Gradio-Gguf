@@ -156,11 +156,10 @@ project_root/
 ```
 
 ## Current Development
-1. try to put back in `Model Path` non-editable text box, showing the full path to the folder where the models are currently listed. It should display value of `model_dir`, that should be already defaulting to `.\models`. This will fill out the space better on the `Configuration` page.
-2. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
-3. when the `User Input` box is dynamically becoming larger, due to being filled with contents, then it seems to be become too large, and push input buttons off the page sometimes, so I want it so that for each 2 lines that the `User Input` box expands, then the Session Log height has 10px deducted, which will then move the `User Input` box up, so as to give the illusion, that the User input box expands both up and down at the same time. This will require optimal refresh of screen elements after the final height of the Session log is altered each time. Reason how to to it best and optimally. 
-4. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
-5. Complete Gen1.
+1. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
+2. when the `User Input` box is dynamically becoming larger, due to being filled with contents, then it seems to be become too large, and push input buttons off the page sometimes, so I want it so that for each 2 lines that the `User Input` box expands, then the Session Log height has 10px deducted, which will then move the `User Input` box up, so as to give the illusion, that the User input box expands both up and down at the same time. This will require optimal refresh of screen elements after the final height of the Session log is altered each time. Reason how to to it best and optimally. 
+3. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
+4. Complete Gen1.
 
 ## Far Development
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
