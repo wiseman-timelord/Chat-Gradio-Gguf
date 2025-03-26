@@ -16,7 +16,7 @@ LLAMACPP_TARGET_VERSION = "b4873"
 BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
     "data", "scripts", "models",
-    "data/vectors", "data/history", "data/temp"
+    "data/history", "data/temp"
 ]
 VULKAN_PATHS = [
     Path("C:/VulkanSDK"),
@@ -30,20 +30,14 @@ VULKAN_PATHS = [
 ]
 REQUIREMENTS = [
     "gradio>=4.25.0",
-    "langchain==0.3.19",
-    "langchain-core>=0.3.35",
-    "faiss-cpu==1.8.0",
     "requests==2.31.0",
-    "tqdm==4.66.1",
     "pyperclip",
     "yake",
     "psutil",
-    "pywin32", 
+    "pywin32",
     "llama-cpp-python",
     "langchain-community==0.3.18",
     "pygments==2.17.2",
-    "sentence-transformers==2.6.0",
-    "langchain_huggingface==0.1.2"
 ]
 BACKEND_OPTIONS = {
     "CPU Only - AVX2": {
@@ -104,8 +98,8 @@ CONFIG_TEMPLATE = """{
 	  "model_dir": "models",
 	  "model_name": "",
 	  "context_size": 8192,
-	  "temperature": 0.75,
-	  "repeat_penalty": 1.0,
+	  "temperature": 0.66,
+	  "repeat_penalty": 1.1,
 	  "use_python_bindings": false,
 	  "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
 	  "vram_size": 8192,
@@ -113,12 +107,11 @@ CONFIG_TEMPLATE = """{
 	  "selected_cpu": "null",
 	  "mmap": true,
 	  "mlock": true,
-	  "n_batch": 1024,
+	  "n_batch": 2048,
 	  "dynamic_gpu_layers": true,
-	  "max_history_slots": 10,
+	  "max_history_slots": 12,
 	  "max_attach_slots": 6,
-      "session_log_height": 650,
-      "input_lines": 27
+      "session_log_height": 500
 	},
   "backend_config": {
     "backend_type": "GPU/CPU - Vulkan",
@@ -402,16 +395,6 @@ def install_python_deps(backend: str) -> bool:
         print(result.stdout)
         if result.stderr:
             print(f"Installation warnings/errors: {result.stderr}")
-        print_status("Verifying sentence-transformers installation...")
-        check_result = subprocess.run(
-            [python_exe, "-c", "import sentence_transformers; print('sentence-transformers installed')"],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        print(check_result.stdout)
-        if check_result.stderr:
-            print(f"Verification warnings/errors: {check_result.stderr}")
         print_status("Dependencies installed in venv")
         return True
     except subprocess.CalledProcessError as e:

@@ -178,8 +178,8 @@ def format_response(output: str) -> str:
 
 def get_initial_model_value():
     available_models = temporary.AVAILABLE_MODELS or get_available_models()
-    base_choices = ["Select_a_model...", "Browse_for_model_folder..."]
-    if available_models and available_models != ["Browse_for_model_folder..."]:
+    base_choices = ["Select_a_model..."]
+    if available_models and available_models != ["Select_a_model..."]:
         available_models = [m for m in available_models if m not in base_choices]
         available_models = base_choices + available_models
     else:
@@ -197,11 +197,11 @@ def update_model_list(new_dir):
     print(f"Updating model list with new_dir: {new_dir}")
     temporary.MODEL_FOLDER = new_dir
     choices = get_available_models()  # Scan the directory for models
-    if choices and choices[0] != "Browse_for_model_folder...":  # If models are found
+    if choices and choices[0] != "Select_a_model...":  # If models are found
         value = choices[0]  # Default to the first model
     else:  # If no models are found
-        choices = ["Browse_for_model_folder..."]  # Ensure this is in choices
-        value = "Browse_for_model_folder..."  # Set value accordingly
+        choices = ["Select_a_model..."]  # Ensure this is in choices
+        value = "Select_a_model..."  # Set value accordingly
     print(f"Choices returned: {choices}, Setting value to: {value}")
     return gr.update(choices=choices, value=value)
 
@@ -244,14 +244,14 @@ def browse_for_model_folder(model_folder_state):
         model_folder_state = new_folder
         temporary.MODEL_FOLDER = new_folder
         choices = get_available_models()  # Corrected
-        if choices and choices[0] != "Browse_for_model_folder...":
+        if choices and choices[0] != "Select_a_model...":
             selected_model = choices[0]
         else:
-            selected_model = "Browse_for_model_folder..."
+            selected_model = "Select_a_model..."
         temporary.MODEL_NAME = selected_model
         return model_folder_state, gr.update(choices=choices, value=selected_model)
     else:
-        return model_folder_state, gr.update(choices=["Browse_for_model_folder..."], value="Browse_for_model_folder...")
+        return model_folder_state, gr.update(choices=["Select_a_model..."], value="Select_a_model...")
 
 def web_search_trigger(query):
     try:
@@ -799,13 +799,13 @@ def launch_interface():
                         if available_models is None:
                             available_models = models.get_available_models()
                             print("Warning: AVAILABLE_MODELS was None, scanned models directory as fallback.")
-                        base_choices = ["Select_a_model...", "Browse_for_model_folder..."]
-                        if available_models and available_models != ["Browse_for_model_folder..."]:
+                        base_choices = ["Select_a_model..."]
+                        if available_models and available_models != ["Select_a_model..."]:
                             available_models = [m for m in available_models if m not in base_choices]
                             available_models = base_choices + available_models
                         else:
                             available_models = base_choices
-                        if temporary.MODEL_NAME in available_models and temporary.MODEL_NAME not in ["Select_a_model...", "Browse_for_model_folder..."]:
+                        if temporary.MODEL_NAME in available_models and temporary.MODEL_NAME not in ["Select_a_model..."]:
                             default_model = temporary.MODEL_NAME
                         elif len(available_models) > 2:
                             default_model = available_models[2]
@@ -818,19 +818,27 @@ def launch_interface():
                                 value=default_model,
                                 allow_custom_value=False,
                                 scale=10
-                            ),
+                            )
+                        )    
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        config_components.update(
                             ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size (Input/Aware)", value=temporary.CONTEXT_SIZE, scale=5),
                             batch=gr.Dropdown(choices=temporary.BATCH_OPTIONS, label="Batch Size (Output)", value=temporary.BATCH_SIZE, scale=5),
                             temp=gr.Dropdown(choices=temporary.TEMP_OPTIONS, label="Temperature (Creativity)", value=temporary.TEMPERATURE, scale=5),
-                            repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=temporary.REPEAT_PENALTY, scale=5),
+                            repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=temporary.REPEAT_PENALTY, scale=5)
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             browse=gr.Button("Browse", variant="secondary"), 
                             load_models=gr.Button("Load Model", variant="secondary"),
+                        )
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        config_components.update(
                             inspect_model=gr.Button("Inspect Model", variant="huggingface"),
                             unload=gr.Button("Unload Model", variant="huggingface"),
                         )
+
+
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Program Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -857,7 +865,7 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             status_settings=gr.Textbox(
-                                label="Status",
+                                label="",
                                 interactive=False,
                                 value="Select model on Configuration page.",
                                 scale=20

@@ -94,7 +94,7 @@ def load_config():
         temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
         temporary.SELECTED_GPU = None
         temporary.SELECTED_CPU = None
-        temporary.MODEL_NAME = "Browse_for_model_folder..."
+        temporary.MODEL_NAME = "Select_a_model..."
     
     # Scan for available models and cache the result
     available_models = get_available_models()
@@ -106,10 +106,10 @@ def load_config():
         if "model_name" in model_settings and model_settings["model_name"] in available_models:
             temporary.MODEL_NAME = model_settings["model_name"]
         else:
-            # Set to first available model if possible, otherwise "Browse_for_model_folder..."
-            temporary.MODEL_NAME = available_models[0] if available_models else "Browse_for_model_folder..."
+            # Set to first available model if possible, otherwise "Select_a_model..."
+            temporary.MODEL_NAME = available_models[0] if available_models else "Select_a_model..."
     else:
-        temporary.MODEL_NAME = "Browse_for_model_folder..."
+        temporary.MODEL_NAME = "Select_a_model..."
     
     return "Configuration loaded."
 

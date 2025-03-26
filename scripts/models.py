@@ -116,7 +116,7 @@ def get_available_models():
     if models:
         choices = models
     else:
-        choices = ["Browse_for_model_folder..."]
+        choices = ["Select_a_model..."]
     print(f"Models Found: {choices}")
     return choices
 
@@ -141,16 +141,16 @@ def calculate_gpu_layers(models, available_vram):
     from math import floor
     if not models or available_vram <= 0:
         return {model: 0 for model in models}
-    total_size = sum(get_model_size(Path(MODEL_FOLDER) / model) for model in models if model != "Browse_for_model_folder...")
+    total_size = sum(get_model_size(Path(MODEL_FOLDER) / model) for model in models if model != "Select_a_model...")
     if total_size == 0:
         return {model: 0 for model in models}
     vram_allocations = {
         model: (get_model_size(Path(MODEL_FOLDER) / model) / total_size) * available_vram
-        for model in models if model != "Browse_for_model_folder..."
+        for model in models if model != "Select_a_model..."
     }
     gpu_layers = {}
     for model in models:
-        if model == "Browse_for_model_folder...":
+        if model == "Select_a_model...":
             gpu_layers[model] = 0
             continue
         model_path = Path(MODEL_FOLDER) / model
@@ -167,7 +167,7 @@ def calculate_gpu_layers(models, available_vram):
 
 def inspect_model(model_dir, model_name, vram_size):
     from scripts.settings import save_config
-    if model_name == "Browse_for_model_folder...":
+    if model_name == "Select_a_model...":
         return "Select a model to inspect."
     model_path = Path(model_dir) / model_name
     if not model_path.exists():
@@ -208,7 +208,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     save_config()
 
-    if model in ["Browse_for_model_folder...", "No models found"]:
+    if model in ["Select_a_model...", "No models found"]:
         return "Select a model to load.", False, llm_state, models_loaded_state
 
     model_path = Path(model_folder) / model
