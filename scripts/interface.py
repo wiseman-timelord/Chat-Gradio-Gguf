@@ -210,48 +210,15 @@ def handle_model_selection(model_name, model_folder_state):
         return model_folder_state, model_name, "No model selected."
     return model_folder_state, model_name, f"Selected model: {model_name}"
 
-def select_directory(current_model_folder):
-    """
-    Open a directory selection dialog and return the selected path.
-
-    Args:
-        current_model_folder (str): The current model folder path.
-
-    Returns:
-        str: The selected directory path or the current path if none selected.
-    """
-    print("Opening directory selection dialog...")
+def browse_on_click(current_path):
     root = tk.Tk()
     root.withdraw()
-    # Force the window to the foreground
-    root.attributes('-topmost', True)
-    root.update_idletasks()
-    initial_dir = current_model_folder if current_model_folder and os.path.exists(current_model_folder) else os.path.expanduser("~")
-    path = filedialog.askdirectory(initialdir=initial_dir)
-    # Cleanup attributes after selection
-    root.attributes('-topmost', False)
+    root.attributes('-topmost', True)  # Optional enhancement
+    root.update_idletasks()            # Optional enhancement
+    folder_selected = filedialog.askdirectory(initialdir=current_path or os.path.expanduser("~"))
+    root.attributes('-topmost', False) # Optional enhancement
     root.destroy()
-    if path:
-        print(f"Selected path: {path}")
-        return path
-    else:
-        print("No directory selected")
-        return current_model_folder
-
-def browse_for_model_folder(model_folder_state):
-    new_folder = select_directory(model_folder_state)
-    if new_folder:
-        model_folder_state = new_folder
-        temporary.MODEL_FOLDER = new_folder
-        choices = get_available_models()  # Corrected
-        if choices and choices[0] != "Select_a_model...":
-            selected_model = choices[0]
-        else:
-            selected_model = "Select_a_model..."
-        temporary.MODEL_NAME = selected_model
-        return model_folder_state, gr.update(choices=choices, value=selected_model)
-    else:
-        return model_folder_state, gr.update(choices=["Select_a_model..."], value="Select_a_model...")
+    return folder_selected if folder_selected else current_path
 
 def web_search_trigger(query):
     try:
@@ -792,9 +759,17 @@ def launch_interface():
                         config_components.update(
                             cpu=gr.Dropdown(choices=cpu_choices, label="Select CPU", value=default_cpu, scale=4),
                         )
+
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Model Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
+                        model_path_display = gr.Textbox(
+                            label="Model Folder (click to browse)",
+                            value=temporary.MODEL_FOLDER,  # Initial value
+                            interactive=True,  # Allow clicking to trigger focus
+                            scale=10,
+                            placeholder="Select a model folder..."
+                        )
                         available_models = temporary.AVAILABLE_MODELS
                         if available_models is None:
                             available_models = models.get_available_models()
@@ -829,11 +804,7 @@ def launch_interface():
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
-                            browse=gr.Button("Browse", variant="secondary"), 
                             load_models=gr.Button("Load Model", variant="secondary"),
-                        )
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        config_components.update(
                             inspect_model=gr.Button("Inspect Model", variant="huggingface"),
                             unload=gr.Button("Unload Model", variant="huggingface"),
                         )
@@ -1058,10 +1029,18 @@ def launch_interface():
                 outputs=[status_text]
             )
 
-        config_components["browse"].click(
-            fn=browse_for_model_folder,
+        model_path_display.focus(
+            fn=browse_on_click,
             inputs=[model_folder_state],
-            outputs=[model_folder_state, config_components["model"]]
+            outputs=[model_folder_state]
+        ).then(
+            fn=update_model_list,
+            inputs=[model_folder_state],
+            outputs=[config_components["model"]]
+        ).then(
+            fn=lambda f: f,
+            inputs=[model_folder_state],
+            outputs=[model_path_display]
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
             inputs=[model_folder_state],
