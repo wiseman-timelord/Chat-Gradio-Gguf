@@ -8,7 +8,7 @@ from scripts.prompts import prompt_templates
 MODEL_FOLDER = "path/to/your/models"
 CONTEXT_SIZE = 8192
 VRAM_SIZE = 8192
-BATCH_SIZE = 1024
+BATCH_SIZE = 2048
 TEMPERATURE = 0.66
 REPEAT_PENALTY = 1.1
 DYNAMIC_GPU_LAYERS = True
@@ -80,9 +80,8 @@ STATUS_TEXTS = {
 }
 
 CHAT_FORMAT_MAP = {
-    'qwen2': 'chatml',  # Qwen2 uses a ChatML-like format
-    'llama': 'llama2',  # Llama models use llama2 format
-    # Add more mappings as needed for other architectures
+    'qwen2': 'chatml',   # Qwen2 uses a ChatML-like format
+    'llama': 'llama-2',  # Llama models use llama-2 format
 }
 
 # Handling Keywords for Special Model Behaviors

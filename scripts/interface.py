@@ -147,6 +147,10 @@ def save_all_settings():
     settings.save_config()
     return "Settings saved successfully."
 
+def set_session_log_base_height(new_height):
+    """Set the base session log height from the Configuration page dropdown."""
+    temporary.SESSION_LOG_HEIGHT = int(new_height)
+    return gr.update(height=temporary.SESSION_LOG_HEIGHT)
 
 def estimate_lines(text, chars_per_line=80):
     """Estimate the number of lines in the textbox based on content."""
@@ -711,7 +715,6 @@ def launch_interface():
                             interactive=False,
                             placeholder="Enter text here..."
                         )
-                        # Add the event handler here
                         conversation_components["user_input"].change(
                             fn=update_session_log_height,
                             inputs=[conversation_components["user_input"]],
@@ -783,23 +786,19 @@ def launch_interface():
                         gr.Markdown("Model Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
                         model_path_display = gr.Textbox(
-                            label="Set Model Folder (click here)",
-                            value=temporary.MODEL_FOLDER,  # Initial value
-                            interactive=True,  # Allow clicking to trigger focus
-                            scale=10,
-                            placeholder="Select a model folder..."
+                            label="Model Folder",
+                            value=temporary.MODEL_FOLDER,
+                            interactive=False,
+                            scale=10
                         )
-                        available_models = temporary.AVAILABLE_MODELS
-                        if available_models is None:
-                            available_models = models.get_available_models()
-                            print("Warning: AVAILABLE_MODELS was None, scanned models directory as fallback.")
+                        available_models = temporary.AVAILABLE_MODELS or get_available_models()
                         base_choices = ["Select_a_model..."]
                         if available_models and available_models != ["Select_a_model..."]:
                             available_models = [m for m in available_models if m not in base_choices]
                             available_models = base_choices + available_models
                         else:
                             available_models = base_choices
-                        if temporary.MODEL_NAME in available_models and temporary.MODEL_NAME not in ["Select_a_model..."]:
+                        if temporary.MODEL_NAME in available_models and temporary.MODEL_NAME not in base_choices:
                             default_model = temporary.MODEL_NAME
                         elif len(available_models) > 2:
                             default_model = available_models[2]
@@ -813,7 +812,13 @@ def launch_interface():
                                 allow_custom_value=False,
                                 scale=10
                             )
-                        )    
+                        ) 
+                        keywords_display = gr.Textbox(
+                            label="Keywords Detected",
+                            interactive=False,
+                            value="",
+                            scale=10
+                        )                        
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
                             ctx=gr.Dropdown(choices=temporary.CTX_OPTIONS, label="Context Size (Input/Aware)", value=temporary.CONTEXT_SIZE, scale=5),
@@ -822,6 +827,7 @@ def launch_interface():
                             repeat=gr.Dropdown(choices=temporary.REPEAT_OPTIONS, label="Repeat Penalty (Restraint)", value=temporary.REPEAT_PENALTY, scale=5)
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
+                        browse_button = gr.Button("Browse Folder", variant="secondary")
                         config_components.update(
                             load_models=gr.Button("Load Model", variant="secondary"),
                             inspect_model=gr.Button("Inspect Model", variant="huggingface"),
@@ -931,6 +937,24 @@ def launch_interface():
             outputs=attach_slots + [add_attach_files_collapsed]
         )
 
+        browse_button.click(
+            fn=browse_on_click,
+            inputs=[model_folder_state],
+            outputs=[model_folder_state]
+        ).then(
+            fn=update_model_list,
+            inputs=[model_folder_state],
+            outputs=[config_components["model"]]
+        ).then(
+            fn=lambda f: f,
+            inputs=[model_folder_state],
+            outputs=[model_path_display]
+        ).then(
+            fn=lambda f: f"Model directory updated to: {f}",
+            inputs=[model_folder_state],
+            outputs=[status_text]
+        )
+
         action_buttons["action"].click(
             fn=lambda phase: True if phase == "generating_response" else False,
             inputs=[states["interaction_phase"]],
@@ -1030,6 +1054,10 @@ def launch_interface():
             fn=update_panel_choices,
             inputs=[states["model_settings"], states["selected_panel"]],
             outputs=[panel_toggle, states["selected_panel"]]
+        ).then(
+            fn=lambda model_settings: "\n".join(model_settings.get("detected_keywords", [])),
+            inputs=[states["model_settings"]],
+            outputs=[keywords_display]
         )
 
         states["selected_panel"].change(
@@ -1047,24 +1075,6 @@ def launch_interface():
                 inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]],
                 outputs=[status_text]
             )
-
-        model_path_display.focus(
-            fn=browse_on_click,
-            inputs=[model_folder_state],
-            outputs=[model_folder_state]
-        ).then(
-            fn=update_model_list,
-            inputs=[model_folder_state],
-            outputs=[config_components["model"]]
-        ).then(
-            fn=lambda f: f,
-            inputs=[model_folder_state],
-            outputs=[model_path_display]
-        ).then(
-            fn=lambda f: f"Model directory updated to: {f}",
-            inputs=[model_folder_state],
-            outputs=[status_text]
-        )
 
         config_components["model"].change(
             fn=lambda model: (setattr(temporary, "MODEL_NAME", model), f"Selected model: {model}")[1],
@@ -1109,7 +1119,7 @@ def launch_interface():
         )
 
         custom_components["session_log_height"].change(
-            fn=update_session_log_height,
+            fn=set_session_log_base_height,
             inputs=[custom_components["session_log_height"]],
             outputs=[conversation_components["session_log"]]
         )
@@ -1182,6 +1192,10 @@ def launch_interface():
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
             outputs=attach_slots + [attach_files]
+        ).then(
+            fn=lambda model_settings: ", ".join(model_settings.get("detected_keywords", [])),
+            inputs=[states["model_settings"]],
+            outputs=[keywords_display]
         )
 
         status_text.change(

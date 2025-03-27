@@ -5,7 +5,7 @@ import time, re
 from pathlib import Path
 import gradio as gr
 from scripts.prompts import get_system_message, get_reasoning_instruction
-import scripts.temporary as temporary  # Import module instead of specific variables
+import scripts.temporary as temporary
 from scripts.prompts import prompt_templates
 from scripts.temporary import (
     CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
@@ -25,7 +25,7 @@ def get_chat_format(metadata):
         str: The chat format to use.
     """
     architecture = metadata.get('general.architecture', 'unknown')
-    return CHAT_FORMAT_MAP.get(architecture, 'llama2') 
+    return CHAT_FORMAT_MAP.get(architecture, 'llama2')
 
 def get_model_metadata(model_path: str) -> dict:
     """
@@ -39,36 +39,41 @@ def get_model_metadata(model_path: str) -> dict:
     """
     try:
         from llama_cpp import Llama
+        # Attempt loading with architecture-specific chat_format if known
+        chat_format = 'chatml' if 'qwen' in model_path.lower() else None
         model = Llama(
             model_path=model_path,
-            n_ctx=512,
+            n_ctx=4096,  # Increased from 512 to match Qwen non-GGUF config
             n_batch=1,
             n_gpu_layers=0,
-            verbose=False
+            verbose=True,  # Enable verbose output for debugging
+            chat_format=chat_format  # Set early for Qwen models
         )
         metadata = model.metadata
-        del model
         print(f"Debug: Metadata keys for '{model_path}': {list(metadata.keys())}")
-
+        
         architecture = metadata.get('general.architecture', 'unknown')
         layers = metadata.get(f'{architecture}.block_count', 0)
-
-        # Search for layer count in alternative keys
+        
+        # Enhanced fallback for layer count
         if layers == 0:
+            possible_keys = ['block_count', 'layer_count', 'num_hidden_layers', 'num_layers']
             for key in metadata:
-                if 'block_count' in key or 'layer_count' in key:
+                if any(pk in key for pk in possible_keys):
                     layers = metadata[key]
                     print(f"Debug: Found layers ({layers}) in key '{key}'")
                     break
             else:
                 print(f"Warning: Could not find layer count for '{model_path}' in metadata.")
                 layers = 0
-
+        
         metadata['layers'] = layers
+        del model
         return metadata
 
     except Exception as e:
-        print(f"Error reading model metadata for '{model_path}': {e}")
+        import traceback
+        print(f"Error reading model metadata for '{model_path}': {str(e)}\n{traceback.format_exc()}")
         return {}
 
 def get_model_layers(model_path: str) -> int:
@@ -83,7 +88,7 @@ def get_model_layers(model_path: str) -> int:
     """
     metadata = get_model_metadata(model_path)
     layers = metadata.get('layers', 0)
-    return int(layers)  # Ensure conversion to integer
+    return int(layers)
 
 def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
@@ -141,11 +146,11 @@ def calculate_gpu_layers(models, available_vram):
     from math import floor
     if not models or available_vram <= 0:
         return {model: 0 for model in models}
-    total_size = sum(get_model_size(Path(MODEL_FOLDER) / model) for model in models if model != "Select_a_model...")
+    total_size = sum(get_model_size(Path(temporary.MODEL_FOLDER) / model) for model in models if model != "Select_a_model...")
     if total_size == 0:
         return {model: 0 for model in models}
     vram_allocations = {
-        model: (get_model_size(Path(MODEL_FOLDER) / model) / total_size) * available_vram
+        model: (get_model_size(Path(temporary.MODEL_FOLDER) / model) / total_size) * available_vram
         for model in models if model != "Select_a_model..."
     }
     gpu_layers = {}
@@ -153,13 +158,13 @@ def calculate_gpu_layers(models, available_vram):
         if model == "Select_a_model...":
             gpu_layers[model] = 0
             continue
-        model_path = Path(MODEL_FOLDER) / model
+        model_path = Path(temporary.MODEL_FOLDER) / model
         num_layers = get_model_layers(str(model_path))
         if num_layers == 0:
             gpu_layers[model] = 0
             continue
         model_file_size = get_model_size(str(model_path))
-        adjusted_model_size = model_file_size * 1.1
+        adjusted_model_size = model_file_size * 1.125
         layer_size = adjusted_model_size / num_layers if num_layers > 0 else 0
         max_layers = floor(vram_allocations[model] / layer_size) if layer_size > 0 else 0
         gpu_layers[model] = min(max_layers, num_layers) if DYNAMIC_GPU_LAYERS else num_layers
@@ -215,7 +220,6 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     if not model_path.exists():
         return f"Error: Model file '{model_path}' not found.", False, llm_state, models_loaded_state
 
-    # Get metadata to determine chat_format
     metadata = get_model_metadata(str(model_path))
     chat_format = get_chat_format(metadata)
 
@@ -245,7 +249,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             mmap=temporary.MMAP,
             mlock=temporary.MLOCK,
             verbose=True,
-            chat_format=chat_format  # Set the chat_format based on architecture
+            chat_format=chat_format
         )
 
         test_output = new_llm.create_chat_completion(
@@ -255,7 +259,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         )
         print(f"Debug: Test inference successful: {test_output}")
 
-        temporary.MODEL_NAME = model  # Keep for settings
+        temporary.MODEL_NAME = model
         status = f"Model '{model}' loaded successfully with chat_format '{chat_format}'. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
         return status, True, new_llm, True
 
@@ -265,25 +269,12 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         return error_msg, False, None, False
 
 def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vram: int, num_layers: int, dynamic_gpu_layers: bool = True) -> int:
-    """
-    Calculate how many layers can be offloaded to the GPU based on available VRAM.
-    
-    Args:
-        model_path (str): Path to the GGUF model file.
-        available_vram (int): Available VRAM in MB.
-        num_layers (int): Total number of layers in the model.
-        dynamic_gpu_layers (bool): Whether to dynamically adjust layers based on VRAM.
-    
-    Returns:
-        int: Number of layers to offload to GPU.
-    """
     from math import floor
     if num_layers <= 0 or available_vram <= 0:
         print("Debug: Invalid input (layers or VRAM), returning 0 layers")
         return 0
     model_file_size = get_model_size(model_path)
     metadata = get_model_metadata(model_path)
-    # Adjust factor based on model architecture
     factor = 1.2 if metadata.get('general.architecture') == 'llama' else 1.1
     adjusted_model_size = model_file_size * factor
     layer_size = adjusted_model_size / num_layers if num_layers > 0 else 0
@@ -311,15 +302,12 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     from scripts.utility import clean_content
     from scripts.prompts import get_system_message
 
-    # Initial model state validation
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
         return
 
-    # Get the model’s context size
     n_ctx = temporary.CONTEXT_SIZE
 
-    # Prepare the system message with type enforcement
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
         is_nsfw=settings.get("is_nsfw", False),
@@ -331,36 +319,19 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         yield f"Error: system_message from get_system_message is not a string, got {type(system_message)}: {system_message}"
         return
 
-    if web_search_enabled and search_results is not None:  # Explicit None check
+    if web_search_enabled and search_results is not None:
         if not isinstance(search_results, str):
             search_message = f"search_results is not a string, got {type(search_results)}: {search_results}. Converting to string."
-            print(search_message)  # Log for debugging
+            print(search_message)
             search_results = str(search_results)
         system_message += f"\n\nWeb Search Results:\n{search_results}"
 
-    # Debug: Inspect the system_message
     print(f"system_message: {repr(system_message)}")
 
-    # Sanitize: Ensure UTF-8 encoding
-    try:
-        system_message = system_message.encode('utf-8').decode('utf-8')
-    except UnicodeDecodeError as e:
-        yield f"Error: system_message contains invalid UTF-8 characters: {str(e)}"
-        return
-
-    # Preprocess: Remove tags and normalize
+    system_message = system_message.encode('utf-8').decode('utf-8')
     system_message = re.sub(r'<[^>]+>', '', system_message)
     system_message = system_message.replace('\n', ' ').strip()
 
-    # Test tokenization with a simple string to ensure tokenizer works
-    try:
-        test_tokens = llm_state.tokenize("Hello, world!".encode('utf-8'))
-        print(f"Debug: Test tokenization successful: {test_tokens}")
-    except Exception as e:
-        yield f"Error: Test tokenization failed: {str(e)}"
-        return
-
-    # Calculate token count for the system message
     try:
         system_tokens = len(llm_state.tokenize(system_message.encode('utf-8')))
         print(f"Debug: System message tokens: {system_tokens}")
@@ -368,7 +339,6 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         yield f"Error tokenizing system message: {str(e)}. Type: {type(system_message)}, Value: {system_message[:50]}..."
         return
 
-    # Get the latest user input
     if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
         user_query = clean_content('user', session_log[-2]['content'])
         if not isinstance(user_query, str):
@@ -383,24 +353,17 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         yield "Error: No user input to process."
         return
 
-    # Reserve tokens for the assistant’s response, scaled to batch size
-    response_reserve_tokens = temporary.BATCH_SIZE // 8  # e.g., 512 for batch size 4096
-
-    # Calculate available tokens for history
+    response_reserve_tokens = temporary.BATCH_SIZE // 8
     available_tokens = n_ctx - system_tokens - user_tokens - response_reserve_tokens
     if available_tokens < 0:
         yield "Error: Context size exceeded with system message and user input."
         return
 
-    # Build the prompt dynamically
-    messages = [
-        {"role": "system", "content": system_message},
-    ]
+    messages = [{"role": "system", "content": system_message}]
 
-    # Add history messages, most recent first, until token limit is reached
     history_messages = []
     current_tokens = 0
-    for msg in reversed(session_log[:-2]):  # Exclude latest user input and empty assistant slot
+    for msg in reversed(session_log[:-2]):
         role = msg['role']
         content = clean_content(role, msg['content'])
         if not isinstance(content, str):
@@ -412,17 +375,13 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             yield f"Error tokenizing history message: {str(e)}. Type: {type(content)}, Value: {content[:50]}..."
             return
         if current_tokens + msg_tokens > available_tokens:
-            break  # Stop if adding this message exceeds the limit
-        history_messages.insert(0, {"role": role, "content": content})  # Maintain order
+            break
+        history_messages.insert(0, {"role": role, "content": content})
         current_tokens += msg_tokens
 
-    # Add history to the prompt
     messages.extend(history_messages)
-
-    # Add the latest user input
     messages.append({"role": "user", "content": user_query})
 
-    # Determine if streaming is appropriate
     def should_stream(input_text, settings):
         stream_keywords = ["write", "generate", "story", "report", "essay", "explain", "describe"]
         input_length = len(input_text.strip())
@@ -432,11 +391,8 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         return is_creative_task or is_long_input or (is_interactive_mode and input_length > 50)
 
     stream_enabled = should_stream(user_query, settings)
+    max_tokens = temporary.BATCH_SIZE // 2 if stream_enabled else temporary.BATCH_SIZE
 
-    # Set max_tokens based on streaming, scaled to batch size
-    max_tokens = temporary.BATCH_SIZE // 2 if stream_enabled else temporary.BATCH_SIZE  # e.g., 2048 or 4096
-
-    # Validate and cast settings to float
     try:
         temperature = float(settings.get("temperature", temporary.TEMPERATURE))
         repeat_penalty = float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY))
@@ -444,12 +400,11 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         yield f"Error: Invalid temperature or repeat_penalty: {str(e)}"
         return
 
-    # Generate the response
     try:
         if stream_enabled:
             response_stream = llm_state.create_chat_completion(
                 messages=messages,
-                max_tokens=4096,  # Temporary for testing
+                max_tokens=4096,
                 temperature=temperature,
                 repeat_penalty=repeat_penalty,
                 stream=True,
@@ -477,7 +432,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 repeat_penalty=repeat_penalty,
                 stream=False
             )
-            yield response['choices'][0]['message']['content']  # Moved inside else
+            yield response['choices'][0]['message']['content']
     except Exception as e:
         print(f"Debug: Exception: {str(e)}")
         yield f"Error generating response: {str(e)}\n{traceback.format_exc()}"
