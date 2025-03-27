@@ -766,7 +766,7 @@ def launch_interface():
                             default_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in gpu_choices else "Select_processing_device..."
                         config_components.update(
                             gpu=gr.Dropdown(choices=gpu_choices, label="Select GPU", value=default_gpu, scale=4),
-                            vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=2),
+                            vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=3),
                         )
                     with gr.Row(visible=is_cpu_only, elem_classes=["clean-elements"]):
                         config_components.update(
@@ -1055,7 +1055,7 @@ def launch_interface():
             inputs=[states["model_settings"], states["selected_panel"]],
             outputs=[panel_toggle, states["selected_panel"]]
         ).then(
-            fn=lambda model_settings: "\n".join(model_settings.get("detected_keywords", [])),
+            fn=lambda model_settings: "none" if not model_settings.get("detected_keywords", []) else ", ".join(model_settings.get("detected_keywords", [])),
             inputs=[states["model_settings"]],
             outputs=[keywords_display]
         )
@@ -1193,7 +1193,7 @@ def launch_interface():
             inputs=[states["attached_files"]],
             outputs=attach_slots + [attach_files]
         ).then(
-            fn=lambda model_settings: ", ".join(model_settings.get("detected_keywords", [])),
+            fn=lambda model_settings: "none" if not model_settings.get("detected_keywords", []) else ", ".join(model_settings.get("detected_keywords", [])),
             inputs=[states["model_settings"]],
             outputs=[keywords_display]
         )
