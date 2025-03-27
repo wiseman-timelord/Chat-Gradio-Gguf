@@ -106,6 +106,7 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
 | [Q2.5-R1-3B-GGUF](https://huggingface.co/mradermacher/Q2.5-R1-3B-GGUF) (3B)                    | 42.14%   | 27.20%   | 26.74%   | 7.94%    | 12.73%   | 31.26% (MMLU-PRO) | N/A       |
 <details>
   <summary>Table Key ></summary>
+
     - IFEval (Instruction-Following Evaluation) - Measures how well an AI model understands and follows natural language instructions.
     - BBH (Big-Bench Hard) - A challenging benchmark testing advanced reasoning and language skills with difficult tasks.
     - MATH - Evaluates an AI model’s ability to solve mathematical problems, from basic to advanced levels.
