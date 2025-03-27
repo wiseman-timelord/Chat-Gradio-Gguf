@@ -30,7 +30,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - The "Configuration" page - for configuration of, models and hardware, and relevant components, as well as ui customization...
 ![preview_image](media/configuration_page.jpg)
 
-- Wide Llama.Cpp support in the installer, thanks to latest ~128k ai systems, no longer having to streamline such things...
+- Wide Llama.Cpp support in the installer...
 ```
 ========================================================================================================================
     Chat-Gradio-Gguf: Install Options
@@ -79,26 +79,30 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 6. When all is finished, click `Exit` on the bottom right and/or close browser-tabs/terminals, however you want to do it. 
 
 ### Notation
-- at ~96K it become difficult updating with Grok3Beta, so had to streamline for scripts become safer to work with. The rough limits of this gen of AI @ 128k, putting rough figure at <96k is the realistic limit for optimized code; does this create a general figure for `n_ctx * 0.75 = safe work limit`.  
-- VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
-- We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
-- Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, for enhancement detection.
-- For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
-- Rpg elements were overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. This prompts Rpg-Gradio-Gguf to be worked on.
-- Coder mode was not possible without dual model, due to needing a text to instruct conversion, so inspired project `Code-Gradio-Gguf`, TBA.
-- This project was re-branded from `Text-Gradio-Gguf`, inline with doing rpg and code in other programs.
-
-### Model label/name Keywords...
 <details>
   <summary>Click to expand</summary>
+    - at ~96K it become difficult updating with Grok3Beta, so had to streamline for scripts become safer to work with. The rough limits of this gen of AI @ 128k, putting rough figure at <96k is the realistic limit for optimized code; does this create a general figure for `n_ctx * 0.75 = safe work limit`.  
+    - VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
+    - We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
+    - Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, for enhancement detection.
+    - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
+    - Rpg elements were overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. This prompts Rpg-Gradio-Gguf to be worked on.
+    - Coder mode was not possible without dual model, due to needing a text to instruct conversion, so inspired project `Code-Gradio-Gguf`, TBA.
+    - This project was re-branded from `Text-Gradio-Gguf`, inline with doing rpg and code in other programs.
+</details>
+
+## Models
+<details>
+  <summary>Click to expand</summary>
+    ### Model Filename Keywords...
     Keywords in model label will dynamically adapt the prompt appropriately...
     - `Vanilla Chat` keywords - none of the below.
     - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
     - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
     - `reasoning` keywords - "reason", "r1", "think".
-    
-    # Models
-    You will of course need to have a `*.Gguf` model, use an iMatrix version of the same models if you have nVidia hardware. For a Comparison Table..
+
+    ### Performance Metrics
+    You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..
     
     | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
     |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
