@@ -91,7 +91,7 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
 - `reasoning` keywords - "reason", "r1", "think".
 
-## Models
+### Models
 You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..    
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
