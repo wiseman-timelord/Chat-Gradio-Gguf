@@ -117,9 +117,9 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     - CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
 </details>
 
-## File Structure
+## Development
 <details>
-  <summary>Click to expand</summary>
+  <summary>Structure</summary>
     
     - Core Project files...
     project_root/
@@ -148,8 +148,6 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     ├── .venv/
     └────── *
 </details>
-
-## Development
 <details>
   <summary>Current</summary>
 
