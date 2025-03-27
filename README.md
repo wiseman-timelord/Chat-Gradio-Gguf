@@ -186,6 +186,7 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 ## Credits
 <details>
   <summary>Click to expand</summary>
+
     Thanks to all the following teams, for their parts...
     - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - Core interference with models.
     - [Yake](https://github.com/LIAAD/yake) - Library used for generating 
