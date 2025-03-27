@@ -188,10 +188,13 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 </details>
 
 ## Credits
-- [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
-- [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
-- [Claude_Sonnet](https://claude.ai) - For a smaller amount of the work on this project, useually when there was issue with the other 2 above.
-- [Perplexity](https://www.perplexity.ai) - For research to look at more sites than normal, also notice its agentic now.
+<details>
+  <summary>Click to expand</summary>
+    - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
+    - [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
+    - [Claude_Sonnet](https://claude.ai) - For a smaller amount of the work on this project, useually when there was issue with the other 2 above.
+    - [Perplexity](https://www.perplexity.ai) - For research to look at more sites than normal, also notice its agentic now.
+</details>
 
 ## License
 This repository features **Wiseman-Timelord's Glorified License** in the file `.\Licence.txt`, in short, `if you wish to use most of the code, then you should fork` or `if you want to use a section of the code from one of the scripts, as an example, to make something work you mostly already have implemented, then go ahead`.
