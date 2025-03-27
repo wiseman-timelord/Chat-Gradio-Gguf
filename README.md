@@ -109,7 +109,7 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     - CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
 </details>
 <details>
-  <summary>Model Keywords ></summary>
+  <summary>Keyword Info ></summary>
     
     Keywords in model label will dynamically adapt the prompt appropriately...
     - `Vanilla Chat` keywords - none of the below.
