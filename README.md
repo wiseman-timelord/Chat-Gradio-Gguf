@@ -116,6 +116,7 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     - MMLU (Massive Multitask Language Understanding) - A broad test of general knowledge and understanding across 57 subjects, like STEM and humanities.
     - CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
 </details>
+
 Here are some of the models detailed on the chart, verified working with Chat-Gradio-Gguf.. 
 1. For non-iMatrix 14B models...
 - [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF) - New Best ~14B model, 14th place overall. Its Qwen but seems to work with my program.
