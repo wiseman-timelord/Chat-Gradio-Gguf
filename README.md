@@ -133,36 +133,36 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 </details>
 
 ## File Structure
-- Core Project files...
-```
-project_root/
-│ Chat-Gradio-Gguf.bat
-│ requisites.py
-│ launcher.py
-├── media/
-│ └── project_banner.jpg
-├── scripts/
-│ └── interface.py
-│ └── models.py
-│ └── prompts.py
-│ └── settings.py
-│ └── temporary.py
-│ └── utlity.py
-```
-- Installed/Temporary files...
-```
-project_root/
-├── data/
-│ └── persistence.json
-├── data/vectors/
-└─────── *
-├── data/temp/
-└────── *
-├── data/history
-└────── *
-├── .venv/
-└────── *
-```
+<details>
+  <summary>Click to expand</summary>
+    
+    - Core Project files...
+    project_root/
+    │ Chat-Gradio-Gguf.bat
+    │ requisites.py
+    │ launcher.py
+    ├── media/
+    │ └── project_banner.jpg
+    ├── scripts/
+    │ └── interface.py
+    │ └── models.py
+    │ └── prompts.py
+    │ └── settings.py
+    │ └── temporary.py
+    │ └── utlity.py
+    - Installed/Temporary files...
+    project_root/
+    ├── data/
+    │ └── persistence.json
+    ├── data/vectors/
+    └─────── *
+    ├── data/temp/
+    └────── *
+    ├── data/history
+    └────── *
+    ├── .venv/
+    └────── *
+</details>
 
 ## Development
 <details>
