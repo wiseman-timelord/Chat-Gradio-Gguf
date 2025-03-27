@@ -76,7 +76,14 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. 
 4. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
 5. Go back to the `Interaction` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
-6. When all is finished, click `Exit` on the bottom right and/or close browser-tabs/terminals, however you want to do it. 
+6. When all is finished, click `Exit` on the bottom right and/or close browser-tabs/terminals, however you want to do it.
+
+### Model Label Keywords...
+Keywords in model label will dynamically adapt the prompt appropriately...
+- `Vanilla Chat` keywords - none of the below.
+- `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
+- `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
+- `reasoning` keywords - "reason", "r1", "think".
 
 ### Notation
 <details>
@@ -94,15 +101,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 ## Models
 <details>
   <summary>Click to expand</summary>
-    ### Model Filename Keywords...
-    Keywords in model label will dynamically adapt the prompt appropriately...
-    - `Vanilla Chat` keywords - none of the below.
-    - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
-    - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
-    - `reasoning` keywords - "reason", "r1", "think".
-
-    ### Performance Metrics
-    You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..
+    <br> You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..
     
     | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
     |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
@@ -116,6 +115,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
     | qwen2.5-7b-cabs-v0.4 (7B)              | 75.83%   | 36.36%   | 48.39%   | 7.72%    | 15.17%   | 37.73% (MMLU-PRO) | N/A       |
     | Q2.5-R1-3B (3B)                        | 42.14%   | 27.20%   | 26.74%   | 7.94%    | 12.73%   | 31.26% (MMLU-PRO) | N/A       |
     
+    <br>Key...
     - IFEval (Instruction-Following Evaluation) - Measures how well an AI model understands and follows natural language instructions.
     - BBH (Big-Bench Hard) - A challenging benchmark testing advanced reasoning and language skills with difficult tasks.
     - MATH - Evaluates an AI model’s ability to solve mathematical problems, from basic to advanced levels.
@@ -177,13 +177,12 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 ## Development
 <details>
   <summary>Click to expand</summary>
-    ### Current
+    - Current
     1. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
     2. when the `User Input` box is dynamically becoming larger, due to being filled with contents, then it seems to be become too large, and push input buttons off the page sometimes, so I want it so that for each 2 lines that the `User Input` box expands, then the Session Log height has 10px deducted, which will then move the `User Input` box up, so as to give the illusion, that the User input box expands both up and down at the same time. This will require optimal refresh of screen elements after the final height of the Session log is altered each time. Reason how to to it best and optimally. 
     3. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
-    4. Complete Gen1.
-    
-    ### Distant
+    4. Complete Gen1.    
+    - Distant
     1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
     2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
     3. **User Interface and Notification Enhancements:**  
