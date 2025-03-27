@@ -84,13 +84,6 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - This project is for a chat interface, and is not intended to overlap with my other projects, `Rpg-Gradio-Gguf`, or the blueprints for, `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
 - Afterthought Countdown is, <25 characters then 1s or 26-100 charactrs then 3s or >100 lines then 5s, cooldown before proceeding, enabling cancelation relative to input.
 
-### Model Label Keywords...
-Keywords in model label will dynamically adapt the prompt appropriately...
-- `Vanilla Chat` keywords - none of the below.
-- `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
-- `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
-- `reasoning` keywords - "reason", "r1", "think".
-
 ### Models
 You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..    
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
@@ -114,6 +107,15 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     - MuSR (Multi-Step Reasoning) - Assesses an AI’s capability to handle tasks needing multiple logical or reasoning steps.
     - MMLU (Massive Multitask Language Understanding) - A broad test of general knowledge and understanding across 57 subjects, like STEM and humanities.
     - CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
+</details>
+<details>
+  <summary>Model Keywords ></summary>
+    
+    Keywords in model label will dynamically adapt the prompt appropriately...
+    - `Vanilla Chat` keywords - none of the below.
+    - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
+    - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
+    - `reasoning` keywords - "reason", "r1", "think".
 </details>
 
 ## Development
