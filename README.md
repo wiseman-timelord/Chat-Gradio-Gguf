@@ -89,48 +89,51 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - This project was re-branded from `Text-Gradio-Gguf`, inline with doing rpg and code in other programs.
 
 ### Model label/name Keywords...
-Keywords in model label will dynamically adapt the prompt appropriately...
-- `Vanilla Chat` keywords - none of the below.
-- `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
-- `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
-- `reasoning` keywords - "reason", "r1", "think".
-
-# Models
-You will of course need to have a `*.Gguf` model, use an iMatrix version of the same models if you have nVidia hardware. For a Comparison Table..
-
-| Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
-|----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
-| T3Q-qwen2.5-14b-v1.0-e3 (14B)          | 73.24%   | 65.47%   | 28.63%   | 22.26%   | 38.69%   | 54.27%            | 1.56 kg   |
-| calme-3.2-instruct-78b (78B)           | 80.63%   | 62.61%   | 40.33%   | 20.36%   | 38.53%   | 70.03%            | 66.01 kg  |
-| Early GPT-4o                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
-| qwen2.5-test-32b-it (32B)              | 78.89%   | 58.28%   | 59.74%   | 15.21%   | 19.13%   | 52.95%            | 29.54 kg  |
-| Lamarckvergence-14B (14B)              | 76.56%   | 50.33%   | 54.00%   | 15.10%   | 16.34%   | 47.59% (MMLU-PRO) | N/A       |
-| Early GPT-4                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
-| Qwen2.5-Dyanka-7B-Preview (7B)         | 76.40%   | 36.62%   | 48.79%   | 8.95%    | 15.51%   | 37.51% (MMLU-PRO) | 0.62 kg   |
-| qwen2.5-7b-cabs-v0.4 (7B)              | 75.83%   | 36.36%   | 48.39%   | 7.72%    | 15.17%   | 37.73% (MMLU-PRO) | N/A       |
-| Q2.5-R1-3B (3B)                        | 42.14%   | 27.20%   | 26.74%   | 7.94%    | 12.73%   | 31.26% (MMLU-PRO) | N/A       |
-
-- IFEval (Instruction-Following Evaluation) - Measures how well an AI model understands and follows natural language instructions.
-- BBH (Big-Bench Hard) - A challenging benchmark testing advanced reasoning and language skills with difficult tasks.
-- MATH - Evaluates an AI model’s ability to solve mathematical problems, from basic to advanced levels.
-- GPQA (Graduate-Level Google-Proof Q&A) - Tests an AI’s ability to answer tough, graduate-level questions that require deep reasoning, not just web lookups.
-- MuSR (Multi-Step Reasoning) - Assesses an AI’s capability to handle tasks needing multiple logical or reasoning steps.
-- MMLU (Massive Multitask Language Understanding) - A broad test of general knowledge and understanding across 57 subjects, like STEM and humanities.
-- CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
-
-<br> Here are some of the models detailed on the chart, verified working with Chat-Gradio-Gguf.. 
-1. For non-iMatrix 14B models...
-- [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF) - New Best ~14B model, 14th place overall. Its Qwen but seems to work with my program.
-- [Lamarckvergence-14B-GGUF](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best ~14B model, ~65th overall beating most ~70B, tested and working.
-2. For non-iMatrix ~7B models...
-- Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) 8GB cutdown but somewhat compitent - Uncensored.
-- [Qwen2.5-Dyanka-7B-Preview-GGUF](https://huggingface.co/mradermacher/Qwen2.5-Dyanka-7B-Preview-GGUF)` - 7th best ~8b model, 455 overall.
-- [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Supposedly one of the better ones, it did ok, not great.
-3. For Blazing fast non-iMatrix <3b models...
-- [Q2.5-R1-3B-GGUF](https://huggingface.co/mradermacher/Q2.5-R1-3B-GGUF) - Compitent but lacking frame of reference required for accuracy.
-- [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Even faster, but unreliable.
-4. Models that are likely unsuitable, but, are seemingly interesting and will be tested later for agentic...
-- Instruct based models, such as [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) and [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF).
+<details>
+  <summary>Click to expand</summary>
+    Keywords in model label will dynamically adapt the prompt appropriately...
+    - `Vanilla Chat` keywords - none of the below.
+    - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
+    - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
+    - `reasoning` keywords - "reason", "r1", "think".
+    
+    # Models
+    You will of course need to have a `*.Gguf` model, use an iMatrix version of the same models if you have nVidia hardware. For a Comparison Table..
+    
+    | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
+    |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
+    | T3Q-qwen2.5-14b-v1.0-e3 (14B)          | 73.24%   | 65.47%   | 28.63%   | 22.26%   | 38.69%   | 54.27%            | 1.56 kg   |
+    | calme-3.2-instruct-78b (78B)           | 80.63%   | 62.61%   | 40.33%   | 20.36%   | 38.53%   | 70.03%            | 66.01 kg  |
+    | Early GPT-4o                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
+    | qwen2.5-test-32b-it (32B)              | 78.89%   | 58.28%   | 59.74%   | 15.21%   | 19.13%   | 52.95%            | 29.54 kg  |
+    | Lamarckvergence-14B (14B)              | 76.56%   | 50.33%   | 54.00%   | 15.10%   | 16.34%   | 47.59% (MMLU-PRO) | N/A       |
+    | Early GPT-4                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
+    | Qwen2.5-Dyanka-7B-Preview (7B)         | 76.40%   | 36.62%   | 48.79%   | 8.95%    | 15.51%   | 37.51% (MMLU-PRO) | 0.62 kg   |
+    | qwen2.5-7b-cabs-v0.4 (7B)              | 75.83%   | 36.36%   | 48.39%   | 7.72%    | 15.17%   | 37.73% (MMLU-PRO) | N/A       |
+    | Q2.5-R1-3B (3B)                        | 42.14%   | 27.20%   | 26.74%   | 7.94%    | 12.73%   | 31.26% (MMLU-PRO) | N/A       |
+    
+    - IFEval (Instruction-Following Evaluation) - Measures how well an AI model understands and follows natural language instructions.
+    - BBH (Big-Bench Hard) - A challenging benchmark testing advanced reasoning and language skills with difficult tasks.
+    - MATH - Evaluates an AI model’s ability to solve mathematical problems, from basic to advanced levels.
+    - GPQA (Graduate-Level Google-Proof Q&A) - Tests an AI’s ability to answer tough, graduate-level questions that require deep reasoning, not just web lookups.
+    - MuSR (Multi-Step Reasoning) - Assesses an AI’s capability to handle tasks needing multiple logical or reasoning steps.
+    - MMLU (Massive Multitask Language Understanding) - A broad test of general knowledge and understanding across 57 subjects, like STEM and humanities.
+    - CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
+    
+    <br> Here are some of the models detailed on the chart, verified working with Chat-Gradio-Gguf.. 
+    1. For non-iMatrix 14B models...
+    - [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF) - New Best ~14B model, 14th place overall. Its Qwen but seems to work with my program.
+    - [Lamarckvergence-14B-GGUF](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best ~14B model, ~65th overall beating most ~70B, tested and working.
+    2. For non-iMatrix ~7B models...
+    - Llama [DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Uncensored-GGUF) 8GB cutdown but somewhat compitent - Uncensored.
+    - [Qwen2.5-Dyanka-7B-Preview-GGUF](https://huggingface.co/mradermacher/Qwen2.5-Dyanka-7B-Preview-GGUF)` - 7th best ~8b model, 455 overall.
+    - [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) - Supposedly one of the better ones, it did ok, not great.
+    3. For Blazing fast non-iMatrix <3b models...
+    - [Q2.5-R1-3B-GGUF](https://huggingface.co/mradermacher/Q2.5-R1-3B-GGUF) - Compitent but lacking frame of reference required for accuracy.
+    - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Even faster, but unreliable.
+    4. Models that are likely unsuitable, but, are seemingly interesting and will be tested later for agentic...
+    - Instruct based models, such as [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) and [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF).
+</details>
 
 ## File Structure
 - Core Project files...
@@ -164,18 +167,22 @@ project_root/
 └────── *
 ```
 
-## Current Development
-1. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
-2. when the `User Input` box is dynamically becoming larger, due to being filled with contents, then it seems to be become too large, and push input buttons off the page sometimes, so I want it so that for each 2 lines that the `User Input` box expands, then the Session Log height has 10px deducted, which will then move the `User Input` box up, so as to give the illusion, that the User input box expands both up and down at the same time. This will require optimal refresh of screen elements after the final height of the Session log is altered each time. Reason how to to it best and optimally. 
-3. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
-4. Complete Gen1.
-
-## Far Development
-1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
-3. **User Interface and Notification Enhancements:**  
-   - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").   
-   - maintain critical inclusion of Debug notification for terminal, as each are needed to be worked through.
+## Development
+<details>
+  <summary>Click to expand</summary>
+    ### Current
+    1. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
+    2. when the `User Input` box is dynamically becoming larger, due to being filled with contents, then it seems to be become too large, and push input buttons off the page sometimes, so I want it so that for each 2 lines that the `User Input` box expands, then the Session Log height has 10px deducted, which will then move the `User Input` box up, so as to give the illusion, that the User input box expands both up and down at the same time. This will require optimal refresh of screen elements after the final height of the Session log is altered each time. Reason how to to it best and optimally. 
+    3. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
+    4. Complete Gen1.
+    
+    ### Distant
+    1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
+    2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
+    3. **User Interface and Notification Enhancements:**  
+       - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").   
+       - maintain critical inclusion of Debug notification for terminal, as each are needed to be worked through.
+</details>
 
 ## Credits
 - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
