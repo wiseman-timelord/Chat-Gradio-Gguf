@@ -147,18 +147,29 @@ def save_all_settings():
     settings.save_config()
     return "Settings saved successfully."
 
-def update_session_log_height(h):
-    """
-    Update the session log height in the UI.
-    
-    Args:
-        h (int): New height value.
-    
-    Returns:
-        gr.update: Updated UI component.
-    """
-    temporary.SESSION_LOG_HEIGHT = int(h)
-    return gr.update(height=h)
+
+def estimate_lines(text, chars_per_line=80):
+    """Estimate the number of lines in the textbox based on content."""
+    if not text:
+        return 0
+    segments = text.split('\n')
+    total_lines = 0
+    for segment in segments:
+        total_lines += max(1, (len(segment) + chars_per_line - 1) // chars_per_line)
+    return total_lines
+
+def update_session_log_height(text):
+    """Adjust the Session Log height based on the number of lines in User Input, capped at max_lines."""
+    lines = estimate_lines(text)
+    initial_lines = 3
+    max_lines = temporary.USER_INPUT_MAX_LINES
+    if lines <= initial_lines:
+        adjustment = 0
+    else:
+        effective_extra_lines = min(lines - initial_lines, max_lines - initial_lines)
+        adjustment = effective_extra_lines * 20
+    new_height = max(100, temporary.SESSION_LOG_HEIGHT - adjustment)
+    return gr.update(height=new_height)
 
 def format_response(output: str) -> str:
     formatted = []
@@ -691,12 +702,20 @@ def launch_interface():
                                 web_search=gr.Checkbox(label="Search", value=False, visible=True)
                             )
                         # User input (3 lines, max 15)
+                        initial_max_lines = max(3, int(((temporary.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
+                        temporary.USER_INPUT_MAX_LINES = initial_max_lines  # Add this line
                         conversation_components["user_input"] = gr.Textbox(
                             label="User Input",
                             lines=3,
-                            max_lines=15,
+                            max_lines=initial_max_lines,
                             interactive=False,
                             placeholder="Enter text here..."
+                        )
+                        # Add the event handler here
+                        conversation_components["user_input"].change(
+                            fn=update_session_log_height,
+                            inputs=[conversation_components["user_input"]],
+                            outputs=[conversation_components["session_log"]]
                         )
                         # Buttons row
                         with gr.Row(elem_classes=["clean-elements"]):
