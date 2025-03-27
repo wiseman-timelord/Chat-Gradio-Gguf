@@ -75,8 +75,14 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 2. Right click the file `Chat-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
 3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. 
 4. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
+- VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
 5. Go back to the `Interaction` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
 6. When all is finished, click `Exit` on the bottom right and/or close browser-tabs/terminals, however you want to do it.
+
+### Notation 
+- We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
+- For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
+- This project is for a chat interface, and is not intended to overlap with my other projects, `Rpg-Gradio-Gguf`, or the blueprints for, `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
 
 ### Model Label Keywords...
 Keywords in model label will dynamically adapt the prompt appropriately...
@@ -85,17 +91,10 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
 - `reasoning` keywords - "reason", "r1", "think".
 
-### Notation 
-- VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
-- We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
-- For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
-- This project is for a chat interface, and is not intended to overlap with my other projects, `Rpg-Gradio-Gguf`, or the blueprints for, `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
-
 ## Models
 <details>
   <summary>Click to expand</summary>
-    You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..
-    
+    You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..    
     | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
     |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
     | T3Q-qwen2.5-14b-v1.0-e3 (14B)          | 73.24%   | 65.47%   | 28.63%   | 22.26%   | 38.69%   | 54.27%            | 1.56 kg   |
