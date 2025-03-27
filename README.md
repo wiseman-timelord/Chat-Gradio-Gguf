@@ -136,36 +136,39 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 </details>
 
 ## File Structure
-- Core Project files...
-```
-project_root/
-│ Chat-Gradio-Gguf.bat
-│ requisites.py
-│ launcher.py
-├── media/
-│ └── project_banner.jpg
-├── scripts/
-│ └── interface.py
-│ └── models.py
-│ └── prompts.py
-│ └── settings.py
-│ └── temporary.py
-│ └── utlity.py
-```
-- Installed/Temporary files...
-```
-project_root/
-├── data/
-│ └── persistence.json
-├── data/vectors/
-└─────── *
-├── data/temp/
-└────── *
-├── data/history
-└────── *
-├── .venv/
-└────── *
-```
+<details>
+  <summary>Click to expand</summary>
+    - Core Project files...
+    ```
+    project_root/
+    │ Chat-Gradio-Gguf.bat
+    │ requisites.py
+    │ launcher.py
+    ├── media/
+    │ └── project_banner.jpg
+    ├── scripts/
+    │ └── interface.py
+    │ └── models.py
+    │ └── prompts.py
+    │ └── settings.py
+    │ └── temporary.py
+    │ └── utlity.py
+    ```
+    - Installed/Temporary files...
+    ```
+    project_root/
+    ├── data/
+    │ └── persistence.json
+    ├── data/vectors/
+    └─────── *
+    ├── data/temp/
+    └────── *
+    ├── data/history
+    └────── *
+    ├── .venv/
+    └────── *
+    ```
+</details>
 
 ## Development
 <details>
