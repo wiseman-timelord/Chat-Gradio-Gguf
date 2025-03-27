@@ -110,7 +110,15 @@ You will of course need to have a `*.Gguf` model, use an iMatrix version of the 
 | Early GPT-4                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
 | Early GPT-4o                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
 
-<br> Here are some of the models verified working with Chat-Gradio-Gguf.. 
+- IFEval (Instruction-Following Evaluation) - Measures how well an AI model understands and follows natural language instructions.
+- BBH (Big-Bench Hard) - A challenging benchmark testing advanced reasoning and language skills with difficult tasks.
+- MATH - Evaluates an AI model’s ability to solve mathematical problems, from basic to advanced levels.
+- GPQA (Graduate-Level Google-Proof Q&A) - Tests an AI’s ability to answer tough, graduate-level questions that require deep reasoning, not just web lookups.
+- MuSR (Multi-Step Reasoning) - Assesses an AI’s capability to handle tasks needing multiple logical or reasoning steps.
+- MMLU (Massive Multitask Language Understanding) - A broad test of general knowledge and understanding across 57 subjects, like STEM and humanities.
+- CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
+
+<br> Here are some of the models detailed on the chart, verified working with Chat-Gradio-Gguf.. 
 1. For non-iMatrix 14B models...
 - [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF) - New Best ~14B model, 14th place overall. Its Qwen but seems to work with my program.
 - [Lamarckvergence-14B-GGUF](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) - Best ~14B model, ~65th overall beating most ~70B, tested and working.
@@ -121,8 +129,7 @@ You will of course need to have a `*.Gguf` model, use an iMatrix version of the 
 3. For Blazing fast non-iMatrix <3b models...
 - [Q2.5-R1-3B-GGUF](https://huggingface.co/mradermacher/Q2.5-R1-3B-GGUF) - Compitent but lacking frame of reference required for accuracy.
 - [DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF](https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Qwen-1.5B-uncensored-GGUF) - Even faster, but unreliable.
-4. Models that are likely unsuitable, but, are seemingly interesting and will be tested later...
-- [Ninja-v1-NSFW-RP-GGUF](https://huggingface.co/mradermacher/Ninja-v1-NSFW-RP-GGUF) - Most downloaded RP NSFW on huggingface at the time.
+4. Models that are likely unsuitable, but, are seemingly interesting and will be tested later for agentic...
 - Instruct based models, such as [Nxcode-CQ-7B-orpol-Gguf](https://huggingface.co/tensorblock/Nxcode-CQ-7B-orpo-GGUF) and [Llama-3.2-3B-Instruct-uncensored-GGUF](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF).
 
 ## File Structure
