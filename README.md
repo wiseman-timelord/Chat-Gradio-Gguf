@@ -29,39 +29,6 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - The "Configuration" page - for configuration of, models and hardware, and relevant components, as well as ui customization...
 ![preview_image](media/configuration_page.jpg)
 
-- Wide Llama.Cpp support in the installer...
-```
-========================================================================================================================
-    Chat-Gradio-Gguf: Install Options
-========================================================================================================================
-
-
-
- Select the Llama.Cpp type:
-
-    1. AVX2 - CPU Only - Must be compatible with AVX2
-
-    2. AVX512 - CPU Only - Must be compatible with AVX512
-
-    3. NoAVX - CPU Only - For older CPUs without AVX support
-
-    4. OpenBLAS - CPU Only - Optimized for linear algebra operations
-
-    5. Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU
-
-    6. Kompute - GPU/CPU - Experimental Vulkan with with CPU fallback
-
-    7. CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback
-
-    8. CUDA 12.4 - GPU/CPU - For CUDA 12.4 GPUs with CPU fallback
-
-
-
-========================================================================================================================
- Selection; Menu Options = 1-8, Exit Installer = X:
-
-```
-
 ## Requirements
 - Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
