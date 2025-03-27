@@ -94,7 +94,7 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 ## Models
 <details>
   <summary>Click to expand</summary>
-    <br> You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..
+    You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..
     
     | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
     |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
@@ -186,7 +186,9 @@ project_root/
 ## Credits
 <details>
   <summary>Click to expand</summary>
-
+    Thanks to all the following teams, for their parts...
+    - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - Core interference with models.
+    - [Yake](https://github.com/LIAAD/yake) - Library used for generating 
     - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
     - [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
     - [Claude_Sonnet](https://claude.ai) - For a smaller amount of the work on this project, useually when there was issue with the other 2 above.
