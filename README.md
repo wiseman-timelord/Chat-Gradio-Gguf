@@ -86,17 +86,14 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 - `reasoning` keywords - "reason", "r1", "think".
 
 ### Notation
-<details>
-  <summary>Click to expand</summary>
-    - at ~96K it become difficult updating with Grok3Beta, so had to streamline for scripts become safer to work with. The rough limits of this gen of AI @ 128k, putting rough figure at <96k is the realistic limit for optimized code; does this create a general figure for `n_ctx * 0.75 = safe work limit`.  
-    - VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
-    - We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
-    - Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, for enhancement detection.
-    - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
-    - Rpg elements were overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. This prompts Rpg-Gradio-Gguf to be worked on.
-    - Coder mode was not possible without dual model, due to needing a text to instruct conversion, so inspired project `Code-Gradio-Gguf`, TBA.
-    - This project was re-branded from `Text-Gradio-Gguf`, inline with doing rpg and code in other programs.
-</details>
+- at ~96K it become difficult updating with Grok3Beta, so had to streamline for scripts become safer to work with. The rough limits of this gen of AI @ 128k, putting rough figure at <96k is the realistic limit for optimized code; does this create a general figure for `n_ctx * 0.75 = safe work limit`.  
+- VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
+- We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
+- Most GGUF text models will work, keep in mind the applicable keywords shown in `Model Label Keywords` section, for enhancement detection.
+- For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
+- Rpg elements were overlapping with `Rpg-Gradio-Gguf`, so removed Rpg elements. This prompts Rpg-Gradio-Gguf to be worked on.
+- Coder mode was not possible without dual model, due to needing a text to instruct conversion, so inspired project `Code-Gradio-Gguf`, TBA.
+- This project was re-branded from `Text-Gradio-Gguf`, inline with doing rpg and code in other programs.
 
 ## Models
 <details>
