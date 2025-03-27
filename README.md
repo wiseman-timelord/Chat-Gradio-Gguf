@@ -105,7 +105,7 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
 | [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) (7B)          | 75.83%   | 36.36%   | 48.39%   | 7.72%    | 15.17%   | 37.73% (MMLU-PRO) | N/A       |
 | [Q2.5-R1-3B-GGUF](https://huggingface.co/mradermacher/Q2.5-R1-3B-GGUF) (3B)                    | 42.14%   | 27.20%   | 26.74%   | 7.94%    | 12.73%   | 31.26% (MMLU-PRO) | N/A       |
 <details>
-  <summary>Key\></summary>
+  <summary>Key></summary>
     - IFEval (Instruction-Following Evaluation) - Measures how well an AI model understands and follows natural language instructions.
     - BBH (Big-Bench Hard) - A challenging benchmark testing advanced reasoning and language skills with difficult tasks.
     - MATH - Evaluates an AI model’s ability to solve mathematical problems, from basic to advanced levels.
@@ -117,7 +117,7 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
 
 ## Development
 <details>
-  <summary>Structure</summary>
+  <summary>Structure></summary>
     
     - Core Project files...
     project_root/
@@ -147,7 +147,7 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     └────── *
 </details>
 <details>
-  <summary>Current</summary>
+  <summary>Current></summary>
 
     1. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
     2. when the `User Input` box is dynamically becoming larger, due to being filled with contents, then it seems to be become too large, and push input buttons off the page sometimes, so I want it so that for each 2 lines that the `User Input` box expands, then the Session Log height has 10px deducted, which will then move the `User Input` box up, so as to give the illusion, that the User input box expands both up and down at the same time. This will require optimal refresh of screen elements after the final height of the Session log is altered each time. Reason how to to it best and optimally. 
@@ -155,7 +155,7 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     4. Complete Gen1.    
 </details>
 <details>
-    <summary>Distant</summary>
+    <summary>Distant></summary>
 
     1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
     2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
