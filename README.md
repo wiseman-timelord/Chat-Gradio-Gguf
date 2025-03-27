@@ -188,12 +188,12 @@ Keywords in model label will dynamically adapt the prompt appropriately...
   <summary>Click to expand</summary>
 
     Thanks to all the following teams, for their parts...
-    - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - Core interference with models.
-    - [Yake](https://github.com/LIAAD/yake) - Library used for generating 
+    - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - Core library for interference with models.
+    - [Yake](https://github.com/LIAAD/yake) - Library used for generating the labels for the history slots.
     - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
     - [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
-    - [Claude_Sonnet](https://claude.ai) - For a smaller amount of the work on this project, useually when there was issue with the other 2 above.
-    - [Perplexity](https://www.perplexity.ai) - For research to look at more sites than normal, also notice its agentic now.
+    - [Claude_Sonnet](https://claude.ai) - For a smaller amount of the work, if issue with the other services.
+    - [Perplexity](https://www.perplexity.ai) - For circumstances of extensive web research requierd.
 </details>
 
 ## License
