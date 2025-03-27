@@ -98,7 +98,7 @@ Keywords in model label will dynamically adapt the prompt appropriately...
 # Models
 You will of course need to have a `*.Gguf` model, use an iMatrix version of the same models if you have nVidia hardware. For a Comparison Table..
 
-| Model                                  | IFEval   | BBH      | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
+| Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
 | T3Q-qwen2.5-14b-v1.0-e3 (14B)          | 73.24%   | 65.47%   | 28.63%   | 22.26%   | 38.69%   | 54.27%            | 1.56 kg   |
 | calme-3.2-instruct-78b (78B)           | 80.63%   | 62.61%   | 40.33%   | 20.36%   | 38.53%   | 70.03%            | 66.01 kg  |
