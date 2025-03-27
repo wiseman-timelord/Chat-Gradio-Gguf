@@ -107,8 +107,6 @@ You will of course need to have a `*.Gguf` model, use an iMatrix version of the 
 | qwen2.5-7b-cabs-v0.4 (7B)              | 75.83%   | 36.36%   | 48.39%   | 7.72%    | 15.17%   | 37.73% (MMLU-PRO) | N/A       |
 | T3Q-qwen2.5-14b-v1.0-e3 (14B)          | 73.24%   | 65.47%   | 28.63%   | 22.26%   | 38.69%   | 54.27%            | 1.56 kg   |
 | Q2.5-R1-3B (3B)                        | 42.14%   | 27.20%   | 26.74%   | 7.94%    | 12.73%   | 31.26% (MMLU-PRO) | N/A       |
-| DeepSeek-R1-Distill-Llama-8B (8B)      | N/A      | N/A      | 89.1%    | 49.0%    | N/A      | N/A               | N/A       |
-| DeepSeek-R1-Distill-Qwen-1.5B (1.5B)   | N/A      | N/A      | 83.9%    | 33.8%    | N/A      | N/A               | N/A       |
 | Early GPT-4                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
 | Early GPT-4o                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
 
