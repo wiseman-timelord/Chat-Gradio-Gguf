@@ -103,6 +103,7 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     │ └── settings.py
     │ └── temporary.py
     │ └── utlity.py
+
     - Installed/Temporary files...
     project_root/
     ├── data/
