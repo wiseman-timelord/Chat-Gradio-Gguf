@@ -55,7 +55,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..    
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
-| [Qwen3-30B-A3B-GGUF]([https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF)) (30B)      | N/A  | N/A   | 80.4%   | 65.8%   | 72.2%   | N/A           | N/A   |
+| [Qwen3-30B-A3B-GGUF](https://huggingface.co/bartowski/Qwen_Qwen3-30B-A3B-GGUF) (30B)      | N/A  | N/A   | 80.4%   | 65.8%   | 72.2%   | N/A           | N/A   |
 | [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF) (14B)      | 73.24%   | 65.47%   | 28.63%   | 22.26%   | 38.69%   | 54.27%            | 1.56 kg   |
 | calme-3.2-instruct-78b (78B)           | 80.63%   | 62.61%   | 40.33%   | 20.36%   | 38.53%   | 70.03%            | 66.01 kg  |
 | Early GPT-4o                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
