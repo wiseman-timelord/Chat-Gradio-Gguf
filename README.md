@@ -121,67 +121,60 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
 </details>
 
 ## Development
-<details>
-  <summary>Structure ></summary>
-    
-    - Core Project files...
-    project_root/
-    │ Chat-Gradio-Gguf.bat
-    │ requisites.py
-    │ launcher.py
-    ├── media/
-    │ └── project_banner.jpg
-    ├── scripts/
-    │ └── interface.py
-    │ └── models.py
-    │ └── prompts.py
-    │ └── settings.py
-    │ └── temporary.py
-    │ └── utlity.py
+- Core Project files...
+```
+project_root/
+│ Chat-Gradio-Gguf.bat
+│ requisites.py
+│ launcher.py
+├── media/
+│ └── project_banner.jpg
+├── scripts/
+│ └── interface.py
+│ └── models.py
+│ └── prompts.py
+│ └── settings.py
+│ └── temporary.py
+│ └── utlity.py
+```
+- Installed/Temporary files...
+```
+project_root/
+├── data/
+│ └── persistence.json
+├── data/vectors/
+└─────── *
+├── data/temp/
+└────── *
+├── data/history
+└────── *
+├── .venv/
+└────── *
+```
 
-    - Installed/Temporary files...
-    project_root/
-    ├── data/
-    │ └── persistence.json
-    ├── data/vectors/
-    └─────── *
-    ├── data/temp/
-    └────── *
-    ├── data/history
-    └────── *
-    ├── .venv/
-    └────── *
-</details>
-<details>
-  <summary>Current ></summary>
+# Current
+1. Websearch needs fixing, grok was saying some SearxNG solution was best idea for non-api implementation.
+2. Qwen 3 integration.
+3. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
+4. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
+5. Complete Gen1.    
 
-    1. Websearch needs fixing, grok was saying some SearxNG solution was best idea for non-api implementation.
-    2. Qwen 3 integration.
-    3. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
-    4. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
-    5. Complete Gen1.    
-</details>
-<details>
-    <summary>Distant ></summary>
+# Distant
+1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
+2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
+3. **User Interface and Notification Enhancements:**  
+   - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").   
+   - maintain critical inclusion of Debug notification for terminal, as each are needed to be worked through.
 
-    1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-    2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
-    3. **User Interface and Notification Enhancements:**  
-       - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").   
-       - maintain critical inclusion of Debug notification for terminal, as each are needed to be worked through.
-</details>
 
 ## Credits
-<details>
-  <summary>Click to expand</summary>
+Thanks to all the following teams, for their parts...
+- [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - Core library for interference with models.
+- [Yake](https://github.com/LIAAD/yake) - Library used for generating the labels for the history slots.
+- [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
+- [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
+- [Perplexity](https://www.perplexity.ai) - For circumstances of extensive web research requierd.
 
-    Thanks to all the following teams, for their parts...
-    - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - Core library for interference with models.
-    - [Yake](https://github.com/LIAAD/yake) - Library used for generating the labels for the history slots.
-    - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
-    - [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
-    - [Perplexity](https://www.perplexity.ai) - For circumstances of extensive web research requierd.
-</details>
 
 ## License
 This repository features **Wiseman-Timelord's Glorified License** in the file `.\Licence.txt`, in short, `if you wish to use most of the code, then you should fork` or `if you want to use a section of the code from one of the scripts, as an example, to make something work you mostly already have implemented, then go ahead`.
