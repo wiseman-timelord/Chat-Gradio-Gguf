@@ -12,7 +12,7 @@ BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
 VULKAN_TARGET_VERSION = "1.4.304.1"
-LLAMACPP_TARGET_VERSION = "b4873"
+LLAMACPP_TARGET_VERSION = "b5269"
 BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
     "data", "scripts", "models",
@@ -35,9 +35,12 @@ REQUIREMENTS = [
     "yake",
     "psutil",
     "pywin32",
+    "duckduckgo-search",
+    "newspaper3k",
     "llama-cpp-python",
     "langchain-community==0.3.18",
     "pygments==2.17.2",
+    "lxml_html_clean",  # Added to support newspaper3k's HTML cleaning
 ]
 BACKEND_OPTIONS = {
     "CPU Only - AVX2": {
@@ -221,6 +224,38 @@ def find_vulkan_versions() -> Dict[str, Path]:
     print(f"Detected Vulkan versions: {vulkan_versions}")
     return vulkan_versions
 
+def check_vulkan_support() -> bool:
+    """
+    Check if a Vulkan SDK version 1.4.x is installed or prompt user to install it.
+    
+    Returns:
+        bool: True if Vulkan 1.4.x is found or user accepts an existing version, False otherwise.
+    """
+    vulkan_versions = find_vulkan_versions()
+    for version in vulkan_versions.keys():
+        if version.startswith("1.4."):
+            print_status(f"Confirmed Vulkan SDK 1.4.x version: {version}")
+            return True
+    
+    if vulkan_versions:
+        print("\nWARNING: Found Vulkan SDK versions but not 1.4.x:")
+        for i, (ver, path) in enumerate(vulkan_versions.items(), 1):
+            print(f" {i}. {ver} at {path}")
+        while True:
+            choice = input("\nChoose: [1-{}] to use existing, [I] to install 1.4.x, [Q] to quit: ".format(len(vulkan_versions))).strip().upper()
+            if choice == "Q":
+                print_status("User chose to exit due to Vulkan version mismatch", False)
+                sys.exit(0)
+            elif choice == "I":
+                return False
+            elif choice.isdigit() and 1 <= int(choice) <= len(vulkan_versions):
+                selected_version = list(vulkan_versions.keys())[int(choice)-1]
+                print_status(f"Using Vulkan SDK version {selected_version} - compatibility not guaranteed!", False)
+                time.sleep(2)
+                return True  # Allow proceeding with non-1.4.x version
+    print_status("No Vulkan SDK found", False)
+    return False
+
 # Installation Functions
 def create_directories() -> None:
     for dir_path in DIRECTORIES:
@@ -240,7 +275,7 @@ def create_config(backend: str) -> None:
     config_path = BASE_DIR / "data" / "persistent.json"
     config = json.loads(CONFIG_TEMPLATE)
     backend_info = BACKEND_OPTIONS[backend]
-    config["backend_config"]["backend_type"] = backend  # Changed from "type" to "backend_type"
+    config["backend_config"]["backend_type"] = backend
     config["backend_config"]["llama_bin_path"] = backend_info["dest"]
     config["model_settings"]["llama_cli_path"] = backend_info["cli_path"]
     config["model_settings"]["use_python_bindings"] = backend_info["needs_python_bindings"]
@@ -272,101 +307,132 @@ def create_venv() -> bool:
         print_status(f"Unexpected error: {str(e)}", False)
         return False
 
-def check_vulkan_support() -> bool:
-    vulkan_versions = find_vulkan_versions()
-    for version in vulkan_versions.keys():
-        if version.startswith("1.4."):
-            print(f"Confirmed Vulkan SDK 1.4.x version: {version}")
-            return True
-    
-    if vulkan_versions:
-        print("\nWARNING: Found Vulkan SDK versions but not 1.4.x:")
-        for i, (ver, path) in enumerate(vulkan_versions.items(), 1):
-            print(f" {i}. {ver} at {path}")
-        while True:
-            choice = input("\nChoose: [1-{}] to use existing, [I] to install 1.4.x, [Q] to quit: ".format(len(vulkan_versions))).strip().upper()
-            if choice == "Q":
-                sys.exit(0)
-            elif choice == "I":
-                return False
-            elif choice.isdigit() and 1 <= int(choice) <= len(vulkan_versions):
-                selected_version = list(vulkan_versions.keys())[int(choice)-1]
-                print(f"Using Vulkan SDK version {selected_version} - compatibility not guaranteed!")
-                time.sleep(2)
-                return False
-    return False
-
-def download_extract_backend(backend: str) -> bool:
-    print_status(f"Downloading llama.cpp ({backend})...")
-    backend_info = BACKEND_OPTIONS[backend]
-    try:
-        TEMP_DIR.mkdir(exist_ok=True)
-        temp_zip = TEMP_DIR / "llama.zip"
-        import requests
-        from tqdm import tqdm
-        response = requests.get(backend_info["url"], stream=True)
-        response.raise_for_status()
-        with open(temp_zip, 'wb') as f:
-            with tqdm(total=int(response.headers.get('content-length', 0)),
-                      unit='B', unit_scale=True) as pbar:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        pbar.update(len(chunk))
-        import zipfile
-        with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
-            zip_ref.extractall(BASE_DIR / backend_info["dest"])
-        if temp_zip.exists():
-            temp_zip.unlink()
-        if not (BASE_DIR / backend_info["cli_path"]).exists():
-            raise FileNotFoundError(f"llama-cli.exe not found at {backend_info['cli_path']}")
-        print_status("llama.cpp installed successfully")
-        return True
-    except requests.exceptions.RequestException as e:
-        print_status(f"Download failed: {str(e)}", False)
-        return False
-    except zipfile.BadZipFile:
-        print_status("Downloaded file is not a valid ZIP archive", False)
-        return False
-    except Exception as e:
-        print_status(f"Unexpected error: {str(e)}", False)
-        return False
-
 def install_vulkan_sdk() -> bool:
-    print_status("Installing Vulkan SDK...")
+    """
+    Download and install Vulkan SDK version 1.4.x.
+    
+    Returns:
+        bool: True if installation succeeds, False otherwise.
+    """
+    print_status("Preparing to install Vulkan SDK...")
     vulkan_url = f"https://sdk.lunarg.com/sdk/download/{VULKAN_TARGET_VERSION}/windows/VulkanSDK-{VULKAN_TARGET_VERSION}-Installer.exe?Human=true"
     TEMP_DIR.mkdir(exist_ok=True)
     installer_path = TEMP_DIR / "VulkanSDK.exe"
     try:
         import requests
         from tqdm import tqdm
-        response = requests.get(vulkan_url, stream=True)
-        response.raise_for_status()
-        total_size = int(response.headers.get('content-length', 0))
-        with open(installer_path, 'wb') as f:
-            with tqdm(total=total_size, unit='B', unit_scale=True, desc="Downloading Vulkan SDK") as pbar:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        pbar.update(len(chunk))
-        result = subprocess.run([str(installer_path), "/S"], check=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise Exception(f"Installer exited with code {result.returncode}")
-        print_status("Vulkan SDK installation completed")
-        installer_path.unlink(missing_ok=True)
+        print_status("Downloading Vulkan SDK...")
+        for attempt in range(3):  # Retry up to 3 times
+            try:
+                response = requests.get(vulkan_url, stream=True, timeout=30)
+                response.raise_for_status()
+                total_size = int(response.headers.get('content-length', 0))
+                with open(installer_path, 'wb') as f:
+                    with tqdm(total=total_size, unit='B', unit_scale=True, desc="Downloading Vulkan SDK") as pbar:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                pbar.update(len(chunk))
+                break
+            except requests.exceptions.RequestException as e:
+                print_status(f"Download attempt {attempt + 1} failed: {str(e)}", False)
+                if attempt == 2:
+                    print_status("All download attempts failed", False)
+                    return False
+                time.sleep(5)
+        
+        print_status("Running Vulkan SDK installer...")
+        try:
+            result = subprocess.run([str(installer_path), "/S"], check=True, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise Exception(f"Installer exited with code {result.returncode}")
+            print_status("Vulkan SDK installation completed")
+        except PermissionError:
+            print_status("Permission denied: Run installer as administrator", False)
+            return False
+        finally:
+            installer_path.unlink(missing_ok=True)
         return True
     except Exception as e:
-        print_status(f"Installation failed: {str(e)}", False)
+        print_status(f"Vulkan SDK installation failed: {str(e)}", False)
+        installer_path.unlink(missing_ok=True)
+        return False
+
+def download_extract_backend(backend: str) -> bool:
+    """
+    Download and extract the llama.cpp backend binary for the specified backend.
+    
+    Args:
+        backend (str): The selected backend type (e.g., "GPU/CPU - Vulkan").
+    
+    Returns:
+        bool: True if download and extraction succeed, False otherwise.
+    """
+    print_status(f"Downloading llama.cpp ({backend})...")
+    backend_info = BACKEND_OPTIONS[backend]
+    TEMP_DIR.mkdir(exist_ok=True)
+    temp_zip = TEMP_DIR / "llama.zip"
+    try:
+        import requests
+        from tqdm import tqdm
+        for attempt in range(3):  # Retry up to 3 times
+            try:
+                response = requests.get(backend_info["url"], stream=True, timeout=30)
+                response.raise_for_status()
+                total_size = int(response.headers.get('content-length', 0))
+                with open(temp_zip, 'wb') as f:
+                    with tqdm(total=total_size, unit='B', unit_scale=True, desc=f"Downloading {backend}") as pbar:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                pbar.update(len(chunk))
+                break
+            except requests.exceptions.RequestException as e:
+                print_status(f"Download attempt {attempt + 1} failed: {str(e)}", False)
+                if attempt == 2:
+                    print_status("All download attempts failed", False)
+                    return False
+                time.sleep(5)
+        
+        import zipfile
+        dest_path = BASE_DIR / backend_info["dest"]
+        dest_path.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
+            zip_ref.extractall(dest_path)
+        temp_zip.unlink(missing_ok=True)
+        
+        cli_path = BASE_DIR / backend_info["cli_path"]
+        if not cli_path.exists():
+            raise FileNotFoundError(f"llama-cli.exe not found at {cli_path}")
+        print_status(f"llama.cpp ({backend}) installed successfully")
+        return True
+    except zipfile.BadZipFile:
+        print_status("Downloaded file is not a valid ZIP archive", False)
+        temp_zip.unlink(missing_ok=True)
+        return False
+    except Exception as e:
+        print_status(f"Unexpected error: {str(e)}", False)
+        temp_zip.unlink(missing_ok=True)
         return False
 
 def install_python_deps(backend: str) -> bool:
-    print_status("Installing Python Dependencies...")
+    """
+    Install Python dependencies in the virtual environment.
+    
+    Args:
+        backend (str): The selected backend type (e.g., "GPU/CPU - Vulkan").
+    
+    Returns:
+        bool: True if all dependencies are installed successfully, False otherwise.
+    """
+    print_status("Installing Python dependencies...")
     try:
         python_exe = str(VENV_DIR / "Scripts" / "python.exe")
         pip_exe = str(VENV_DIR / "Scripts" / "pip.exe")
         if not os.path.exists(pip_exe):
-            raise FileNotFoundError(f"Pip not found at {pip_exe}. Venv creation may have failed.")
-        print_status("Upgrading pip in venv...")
+            raise FileNotFoundError(f"Pip not found at {pip_exe}. Virtual environment creation may have failed.")
+        
+        print_status("Upgrading pip in virtual environment...")
         result = subprocess.run(
             [python_exe, "-m", "pip", "install", "--upgrade", "pip"],
             check=True,
@@ -375,16 +441,17 @@ def install_python_deps(backend: str) -> bool:
         )
         print(result.stdout)
         if result.stderr:
-            print(f"Pip upgrade warnings/errors: {result.stderr}")
+            print(f"Pip upgrade warnings: {result.stderr}")
         print_status("Pip upgraded successfully")
-        print_status("Installing dependencies with custom wheel index...")
-        cmd = (
-            [pip_exe, "install"] + REQUIREMENTS + [
-                "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu",
-                "--prefer-binary",
-                "--verbose"
-            ]
-        )
+        
+        print_status("Installing dependencies...")
+        cmd = [
+            pip_exe, "install",
+            "--no-warn-script-location",  # Suppress script location warnings
+            "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu",
+            "--prefer-binary",
+            "--verbose"
+        ] + REQUIREMENTS
         print(f"Running command: {' '.join(cmd)}")
         result = subprocess.run(
             cmd,
@@ -394,28 +461,117 @@ def install_python_deps(backend: str) -> bool:
         )
         print(result.stdout)
         if result.stderr:
-            print(f"Installation warnings/errors: {result.stderr}")
-        print_status("Dependencies installed in venv")
-        return True
+            print(f"Installation warnings: {result.stderr}")
+        print_status("All dependencies installed successfully")
+        
+        # Verify critical dependencies with retries
+        print_status("Verifying critical dependencies...")
+        with activate_venv():
+            import site
+            import sys
+            # Ensure site-packages is in sys.path
+            site.addsitedir(str(VENV_DIR / "Lib" / "site-packages"))
+            print(f"sys.path during verification: {sys.path}")
+            
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    import duckduckgo_search
+                    import newspaper
+                    import llama_cpp
+                    print_status("Verified critical dependencies: duckduckgo-search, newspaper3k, llama-cpp-python")
+                    return True
+                except ImportError as e:
+                    print(f"Verification attempt {attempt + 1}/{max_attempts} failed: {str(e)}")
+                    if attempt < max_attempts - 1:
+                        time.sleep(1)  # Wait before retrying
+                        continue
+                    # Final failure
+                    site_packages = str(VENV_DIR / "Lib" / "site-packages")
+                    print_status(
+                        f"Critical dependency verification failed: {str(e)}\n"
+                        f"sys.path: {sys.path}\n"
+                        f"Expected site-packages: {site_packages}\n"
+                        f"Check if packages are installed in {site_packages} with: {pip_exe} list",
+                        False
+                    )
+                    return False
     except subprocess.CalledProcessError as e:
-        print_status(f"Dependency install failed: {e}", False)
+        print_status(f"Dependency installation failed: {e}", False)
         print(f"Command output: {e.stdout}")
         print(f"Command error: {e.stderr}")
+        print("Solutions:")
+        print("- Ensure a stable internet connection.")
+        print("- Verify Python version is 3.8-3.11.")
+        print(f"- Run manually: {pip_exe} install {' '.join(REQUIREMENTS)}")
         if "llama_cpp_python" in str(e.stderr):
-            print("Error: Could not install llama-cpp-python from pre-built wheels.")
-            print(f"Python version: {sys.version}")
-            print("Solutions:")
-            print("- Ensure Python is 3.8-3.11.")
             print("- Install Visual Studio Build Tools for source build if needed.")
-        elif "sentence-transformers" in str(e.stderr):
-            print("Error: Could not install sentence-transformers.")
-            print("Solutions:")
-            print("- Check internet connection.")
-            print(f"- Run manually: {pip_exe} install sentence-transformers==2.6.0")
         return False
     except Exception as e:
-        print_status(f"Unexpected error: {str(e)}", False)
+        print_status(f"Unexpected error during dependency installation: {str(e)}", False)
         return False
+
+# Main Installation Flow
+def install():
+    """
+    Main installation function to set up the Chat-Gradio-Gguf application.
+    """
+    print_header("Installation")
+    print(f"Installing {APP_NAME}...")
+    if platform.system() != "Windows":
+        print_status("This installer is intended for Windows only.", False)
+        time.sleep(2)
+        sys.exit(1)
+    if sys.version_info < (3, 8):
+        print_status("Python 3.8 or higher required", False)
+        time.sleep(2)
+        sys.exit(1)
+    
+    print_status("Selected backend: " + BACKEND_TYPE)
+    backend_info = BACKEND_OPTIONS[BACKEND_TYPE]
+    requires_vulkan = backend_info.get("vulkan_required", False)
+    
+    if requires_vulkan and not check_vulkan_support():
+        if not install_vulkan_sdk():
+            print_status("Vulkan SDK installation failed!", False)
+            time.sleep(2)
+            sys.exit(1)
+        else:
+            print_status("Vulkan SDK installed successfully")
+    
+    print_status("Creating required directories...")
+    create_directories()
+    
+    print_status("Setting up virtual environment...")
+    if not create_venv():
+        print_status("Virtual environment creation failed!", False)
+        time.sleep(2)
+        sys.exit(1)
+    
+    print_status("Installing Python dependencies...")
+    with activate_venv():
+        if not install_python_deps(BACKEND_TYPE):
+            print_status("Python dependency installation failed!", False)
+            time.sleep(2)
+            sys.exit(1)
+        if backend_info.get("needs_python_bindings", False):
+            print_status("Verifying llama-cpp-python compatibility...")
+            if not check_llama_conflicts():
+                print_status("llama-cpp-python verification failed!", False)
+                time.sleep(2)
+                sys.exit(1)
+    
+    print_status("Downloading and installing llama.cpp backend...")
+    if not download_extract_backend(BACKEND_TYPE):
+        print_status("llama.cpp backend installation failed!", False)
+        time.sleep(2)
+        sys.exit(1)
+    
+    print_status("Creating configuration file...")
+    create_config(BACKEND_TYPE)
+    
+    print_status(f"\n{APP_NAME} installation completed successfully!")
+    time.sleep(2)
 
 # Menu Functions
 def select_backend_type() -> None:
@@ -443,69 +599,39 @@ def select_backend_type() -> None:
     choice = get_user_choice("Select the Llama.Cpp type:", options)
     BACKEND_TYPE = mapping[choice]
 
-# Main Installation Flow
-def install():
-    print_header("Installation")
-    print(f"Installing {APP_NAME}...")
-    if platform.system() != "Windows":
-        print_status("This installer is intended for Windows only.", False)
-        time.sleep(2)
-        sys.exit(1)
-    if sys.version_info < (3, 8):
-        print_status("Python 3.8 or higher required", False)
-        time.sleep(2)
-        sys.exit(1)
-    backend_info = BACKEND_OPTIONS[BACKEND_TYPE]
-    requires_vulkan = backend_info.get("vulkan_required", False)
-    if requires_vulkan and not check_vulkan_support():
-        if not install_vulkan_sdk():
-            print_status("Vulkan installation failed!", False)
-            time.sleep(2)
-            sys.exit(1)
-    create_directories()
-    if not create_venv():
-        time.sleep(2)
-        sys.exit(1)
-    with activate_venv():
-        if not install_python_deps(BACKEND_TYPE):
-            time.sleep(2)
-            sys.exit(1)
-        if backend_info.get("needs_python_bindings", False):
-            if not check_llama_conflicts():
-                time.sleep(2)
-                sys.exit(1)
-    if not download_extract_backend(BACKEND_TYPE):
-        time.sleep(2)
-        sys.exit(1)
-    create_config(BACKEND_TYPE)
-    print_status("Install processes completed.")
-
 # Test Libraries Function
 def test_libraries():
     """
-    Tests if each library in REQUIREMENTS is installed in the virtual environment.
+    Test if each library in REQUIREMENTS is installed in the virtual environment.
     Prints library name with [GOOD] or [FAIL], then a final status message.
     Exits with code 0 if all succeed, 1 if any fail.
     """
     failed = False
+    pip_exe = str(VENV_DIR / "Scripts" / "pip.exe")
     for req in REQUIREMENTS:
         try:
             pkg_resources.require(req)
-            # do nothing 
-        except (pkg_resources.DistributionNotFound, pkg_resources.VersionConflict):
-            print(f"{req} [FAIL]")
+            print_status(f"{req}")
+        except pkg_resources.DistributionNotFound:
+            print_status(f"{req} not found", False)
+            print(f"Install it with: {pip_exe} install {req}")
+            failed = True
+        except pkg_resources.VersionConflict as e:
+            print_status(f"{req} version mismatch: {str(e)}", False)
+            print(f"Install correct version with: {pip_exe} install {req}")
             failed = True
     if failed:
-        print("Error: Libraries incomplete (re-run installer).")
+        print_status("Error: Some libraries are missing or have incorrect versions", False)
+        print("Re-run the installer with: python requisites.py installer")
         sys.exit(1)
     else:
-        print("Success: Python libraries verified.")
+        print_status("Success: All Python libraries verified")
         sys.exit(0)
 
 # Main Entry Point
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python requisite.py [installer|testlibs]")
+        print("Usage: python requisites.py [installer|testlibs]")
         sys.exit(1)
     arg = sys.argv[1]
     if arg == "installer":
