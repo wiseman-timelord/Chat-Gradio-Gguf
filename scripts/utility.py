@@ -7,6 +7,7 @@ import pythoncom
 from pathlib import Path
 from datetime import datetime
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from newspaper import Article
 from .models import load_models, clean_content
 import scripts.settings as settings
 from .temporary import (
@@ -18,7 +19,6 @@ from . import temporary
 # Functions...
 def filter_operational_content(text):
     """Remove operational tags and metadata from the text."""
-    # Updated to handle <think> tags
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
     return text.strip()
@@ -29,19 +29,17 @@ def get_cpu_info():
     Returns a list of dictionaries with CPU labels and core ranges.
     """
     try:
-        # Use wmic to get CPU names
         output = subprocess.check_output("wmic cpu get name", shell=True).decode()
         cpu_names = [line.strip() for line in output.split('\n') if line.strip() and 'Name' not in line]
         cpus = []
         for i, name in enumerate(cpu_names):
             cpus.append({
                 "label": f"CPU {i}: {name}",
-                "core_range": list(range(psutil.cpu_count(logical=True)))  # All logical cores
+                "core_range": list(range(psutil.cpu_count(logical=True)))
             })
         return cpus
     except Exception as e:
         print(f"Error getting CPU info: {e}")
-        # Fallback to a default CPU entry
         return [{"label": "CPU 0", "core_range": list(range(psutil.cpu_count(logical=True)))}]
     
 def get_available_gpus():
@@ -52,10 +50,9 @@ def get_available_gpus():
         return gpus if gpus else ["CPU Only"]
     except Exception:
         try:
-            # Fallback to dxdiag
             temp_file = Path(TEMP_DIR) / "dxdiag.txt"
             subprocess.run(f"dxdiag /t {temp_file}", shell=True, check=True)
-            time.sleep(2)  # Wait for dxdiag to write
+            time.sleep(2)
             with open(temp_file, 'r') as f:
                 content = f.read()
                 gpu = re.search(r"Card name: (.+)", content)
@@ -69,18 +66,17 @@ def generate_session_id():
 def speak_text(text):
     """Read text aloud using PyWin32's text-to-speech functionality."""
     try:
-        pythoncom.CoInitialize()  # Initialize COM for this thread
+        pythoncom.CoInitialize()
         speaker = win32com.client.Dispatch("SAPI.SpVoice")
         print(f"DEBUG: Attempting to speak: {text[:50]}..." if len(text) > 50 else f"DEBUG: Attempting to speak: {text}")
         speaker.Speak(text)
         print(f"DEBUG: Successfully spoke: {text[:50]}..." if len(text) > 50 else f"DEBUG: Successfully spoke: {text}")
     except Exception as e:
         print(f"Error speaking text: {str(e)}")
-        raise  # Re-raise to catch in chat_interface
+        raise
     finally:
-        pythoncom.CoUninitialize()  # Clean up COM initialization
+        pythoncom.CoUninitialize()
 
-# Add this new function
 def generate_session_label(session_log):
     """Generate a session label using YAKE on the entire session log, up to 25 characters."""
     if not session_log:
@@ -94,7 +90,6 @@ def generate_session_label(session_log):
         description = description[:25]
     return description
 
-# Updated save_session_history
 def save_session_history(session_log, attached_files):
     if not temporary.current_session_id:
         temporary.current_session_id = generate_session_id()
@@ -110,7 +105,7 @@ def save_session_history(session_log, attached_files):
     }
     with open(temp_file, "w") as f:
         json.dump(session_data, f)
-    os.replace(temp_file, session_file)  # Replace rename with os.replace to overwrite if needed
+    os.replace(temp_file, session_file)
     manage_session_history()
     
 def load_session_history(session_file):
@@ -148,23 +143,46 @@ def process_uploaded_files(files):
     return [file.name for file in files] if files else []
 
 def web_search(query: str, num_results: int = 3) -> str:
-    """Perform a web search using DuckDuckGo and return formatted results.
+    """Perform a web search using DuckDuckGo and extract article content for relevant results.
 
     Args:
         query (str): The search query.
         num_results (int): Number of results to return. Defaults to 3.
 
     Returns:
-        str: Formatted search results or an error message.
+        str: Formatted search results with article summaries or an error message.
     """
+    # Refine query using YAKE
+    kw_extractor = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=1)
+    keywords = kw_extractor.extract_keywords(query)
+    refined_query = keywords[0][0] if keywords else query
+    refined_query += " news"  # Append "news" for recent stories
+
     wrapper = DuckDuckGoSearchAPIWrapper()
     try:
-        results = wrapper.results(query, max_results=num_results)
+        results = wrapper.results(refined_query, max_results=num_results)
         if not results:
             return "No results found."
-        snippets = [f"{r.get('link', 'unknown')}:\n{r.get('snippet', 'No snippet available.')}" 
-                    for r in results]
-        return f"Results:\n{'nn'.join(snippets)}"
+        
+        formatted_results = []
+        for result in results:
+            link = result.get('link', 'unknown')
+            snippet = result.get('snippet', 'No snippet available.')
+            # Attempt to extract article content
+            try:
+                article = Article(link)
+                article.download()
+                article.parse()
+                article_text = article.text[:500]  # Limit to 500 chars
+                if article_text:
+                    summary = f"{link}:\nSnippet: {snippet}\nArticle Summary: {article_text}..."
+                else:
+                    summary = f"{link}:\nSnippet: {snippet}\nArticle Summary: No article content available."
+            except Exception as e:
+                summary = f"{link}:\nSnippet: {snippet}\nArticle Summary: Failed to extract content: {str(e)}"
+            formatted_results.append(summary)
+        
+        return f"Web Search Results:\n{'nn'.join(formatted_results)}"
     except Exception as e:
         return f"Error during web search: {str(e)}"
 
@@ -176,7 +194,7 @@ def summarize_document(file_path):
         kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
         keywords = kw_extractor.extract_keywords(content)
         summary = keywords[0][0] if keywords else "No summary available"
-        return summary[:100]  # Truncate to 100 characters
+        return summary[:100]
     except Exception as e:
         print(f"Error summarizing document {file_path}: {e}")
         return "Error generating summary"
@@ -217,15 +235,12 @@ def delete_all_session_histories():
     Returns a status message indicating the result.
     """
     history_dir = Path(HISTORY_DIR)
-    
-    # Delete all history JSON files
     for file in history_dir.glob('*.json'):
         try:
             file.unlink()
             print(f"Deleted history file: {file}")
         except Exception as e:
             print(f"Error deleting {file}: {e}")
-    
     return "All session histories deleted."
 
 def extract_links_with_descriptions(text):
@@ -252,22 +267,13 @@ def extract_links_with_descriptions(text):
 
 def get_saved_sessions():
     """Get list of saved session files sorted by modification time."""
-    history_dir = Path(HISTORY_DIR)  # Updated to use HISTORY_DIR
+    history_dir = Path(HISTORY_DIR)
     session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
     return [f.name for f in session_files]
 
 def process_files(files, existing_files, max_files, is_attach=True):
     """
     Process uploaded files for attach or vector, ensuring no duplicates and respecting max file limits.
-    
-    Args:
-        files (list): List of new file paths.
-        existing_files (list): List of currently attached or vector files.
-        max_files (int): Maximum number of files allowed.
-        is_attach (bool): True for attach files, False for vector files.
-    
-    Returns:
-        tuple: (status_message, updated_file_list)
     """
     if not files:
         return "No files uploaded.", existing_files
@@ -276,14 +282,13 @@ def process_files(files, existing_files, max_files, is_attach=True):
     if not new_files:
         return "No new files to add.", existing_files
 
-    # Remove older versions with the same name
     for f in new_files:
         file_name = Path(f).name
         existing_files = [ef for ef in existing_files if Path(ef).name != file_name]
 
     available_slots = max_files - len(existing_files)
     processed_files = new_files[:available_slots]
-    updated_files = processed_files + existing_files  # New files added to the front
+    updated_files = processed_files + existing_files
 
     if is_attach:
         temporary.session_attached_files = updated_files
@@ -297,7 +302,6 @@ def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary, with a confirmation message."""
     reload_required = False
     try:
-        # Model settings
         if key == "temperature":
             temporary.TEMPERATURE = float(value)
         elif key == "context_size":
@@ -335,7 +339,7 @@ def update_setting(key, value):
         if reload_required:
             reload_result = change_model(temporary.MODEL_NAME.split('/')[-1])
             message = f"Setting '{key}' updated to '{value}', model reload triggered."
-            return message, *reload_result  # Unpack reload_result assuming it returns two values
+            return message, *reload_result
         else:
             message = f"Setting '{key}' updated to '{value}'."
             return message, None, None

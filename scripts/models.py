@@ -17,12 +17,6 @@ from scripts.temporary import (
 def get_chat_format(metadata):
     """
     Determine the chat format based on the model's architecture.
-    
-    Args:
-        metadata (dict): Metadata of the model.
-    
-    Returns:
-        str: The chat format to use.
     """
     architecture = metadata.get('general.architecture', 'unknown')
     return CHAT_FORMAT_MAP.get(architecture, 'llama2')
@@ -30,24 +24,17 @@ def get_chat_format(metadata):
 def get_model_metadata(model_path: str) -> dict:
     """
     Retrieve metadata from a GGUF model, including the number of layers.
-    
-    Args:
-        model_path (str): Path to the GGUF model file.
-    
-    Returns:
-        dict: Metadata with 'layers' key, or empty dict on failure.
     """
     try:
         from llama_cpp import Llama
-        # Attempt loading with architecture-specific chat_format if known
         chat_format = 'chatml' if 'qwen' in model_path.lower() else None
         model = Llama(
             model_path=model_path,
-            n_ctx=4096,  # Increased from 512 to match Qwen non-GGUF config
+            n_ctx=4096,
             n_batch=1,
             n_gpu_layers=0,
-            verbose=True,  # Enable verbose output for debugging
-            chat_format=chat_format  # Set early for Qwen models
+            verbose=True,
+            chat_format=chat_format
         )
         metadata = model.metadata
         print(f"Debug: Metadata keys for '{model_path}': {list(metadata.keys())}")
@@ -55,7 +42,6 @@ def get_model_metadata(model_path: str) -> dict:
         architecture = metadata.get('general.architecture', 'unknown')
         layers = metadata.get(f'{architecture}.block_count', 0)
         
-        # Enhanced fallback for layer count
         if layers == 0:
             possible_keys = ['block_count', 'layer_count', 'num_hidden_layers', 'num_layers']
             for key in metadata:
@@ -70,7 +56,6 @@ def get_model_metadata(model_path: str) -> dict:
         metadata['layers'] = layers
         del model
         return metadata
-
     except Exception as e:
         import traceback
         print(f"Error reading model metadata for '{model_path}': {str(e)}\n{traceback.format_exc()}")
@@ -79,12 +64,6 @@ def get_model_metadata(model_path: str) -> dict:
 def get_model_layers(model_path: str) -> int:
     """
     Get the number of layers for a GGUF model.
-    
-    Args:
-        model_path (str): Path to the GGUF model file.
-    
-    Returns:
-        int: Number of layers, or 0 if not determined.
     """
     metadata = get_model_metadata(model_path)
     layers = metadata.get('layers', 0)
@@ -262,7 +241,6 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         temporary.MODEL_NAME = model
         status = f"Model '{model}' loaded successfully with chat_format '{chat_format}'. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
         return status, True, new_llm, True
-
     except Exception as e:
         error_msg = f"Error loading model: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
@@ -324,7 +302,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             search_message = f"search_results is not a string, got {type(search_results)}: {search_results}. Converting to string."
             print(search_message)
             search_results = str(search_results)
-        system_message += f"\n\nWeb Search Results:\n{search_results}"
+        system_message += f"\n\n{search_results}"
 
     print(f"system_message: {repr(system_message)}")
 
@@ -391,7 +369,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         return is_creative_task or is_long_input or (is_interactive_mode and input_length > 50)
 
     stream_enabled = should_stream(user_query, settings)
-    max_tokens = temporary.BATCH_SIZE // 2 if stream_enabled else temporary.BATCH_SIZE
+    max_tokens = temporary.BATCH_SIZE if stream_enabled else temporary.BATCH_SIZE
 
     try:
         temperature = float(settings.get("temperature", temporary.TEMPERATURE))
@@ -404,13 +382,13 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         if stream_enabled:
             response_stream = llm_state.create_chat_completion(
                 messages=messages,
-                max_tokens=4096,
+                max_tokens=max_tokens,
                 temperature=temperature,
                 repeat_penalty=repeat_penalty,
                 stream=True,
                 stop=None
             )
-            print(f"Debug: Starting streaming with max_tokens=4096")
+            print(f"Debug: Starting streaming with max_tokens={max_tokens}")
             chunk_count = 0
             for chunk in response_stream:
                 if cancel_event and cancel_event.is_set():
@@ -420,6 +398,8 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 if 'choices' in chunk and chunk['choices']:
                     content = chunk['choices'][0].get('delta', {}).get('content', '')
                     if content:
+                        # Strip any model-generated prefixes
+                        content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
                         chunk_count += 1
                         print(f"Debug: Chunk {chunk_count}: {repr(content)}")
                         yield content
@@ -432,7 +412,10 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 repeat_penalty=repeat_penalty,
                 stream=False
             )
-            yield response['choices'][0]['message']['content']
+            content = response['choices'][0]['message']['content']
+            # Strip any model-generated prefixes
+            content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
+            yield content
     except Exception as e:
         print(f"Debug: Exception: {str(e)}")
         yield f"Error generating response: {str(e)}\n{traceback.format_exc()}"
