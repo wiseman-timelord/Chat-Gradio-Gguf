@@ -122,9 +122,11 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
 <details>
   <summary>Current ></summary>
 
-    1. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
-    2. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
-    3. Complete Gen1.    
+    1. Websearch needs fixing, grok was saying some SearxNG solution was best idea for non-api implementation.
+    2. Qwen 3 integration.
+    3. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
+    4. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
+    5. Complete Gen1.    
 </details>
 <details>
     <summary>Distant ></summary>
