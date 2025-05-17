@@ -64,16 +64,19 @@ def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def speak_text(text):
-    """Read text aloud using PyWin32's text-to-speech functionality."""
+    """Read text aloud with improved error handling"""
+    if not text:
+        return
     try:
         pythoncom.CoInitialize()
         speaker = win32com.client.Dispatch("SAPI.SpVoice")
-        print(f"DEBUG: Attempting to speak: {text[:50]}..." if len(text) > 50 else f"DEBUG: Attempting to speak: {text}")
+        # Skip speaking if same as last spoken
+        if hasattr(temporary, 'LAST_SPOKEN') and temporary.LAST_SPOKEN == text:
+            return
         speaker.Speak(text)
-        print(f"DEBUG: Successfully spoke: {text[:50]}..." if len(text) > 50 else f"DEBUG: Successfully spoke: {text}")
+        temporary.LAST_SPOKEN = text
     except Exception as e:
-        print(f"Error speaking text: {str(e)}")
-        raise
+        print(f"Speech error: {str(e)}")
     finally:
         pythoncom.CoUninitialize()
 
@@ -142,49 +145,82 @@ def process_uploaded_files(files):
     """Process uploaded files (if needed beyond copying)."""
     return [file.name for file in files] if files else []
 
+def chunk_text_for_speech(text, max_chars=500):
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    # Split into sentences first
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        sentence_length = len(sentence)
+        
+        if current_length + sentence_length <= max_chars:
+            current_chunk.append(sentence)
+            current_length += sentence_length
+        else:
+            if current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = []
+                current_length = 0
+            # Handle long individual sentences
+            while sentence_length > max_chars:
+                split_pos = sentence[:max_chars].rfind('. ') + 1
+                if split_pos <= 0:
+                    split_pos = max_chars
+                chunks.append(sentence[:split_pos])
+                sentence = sentence[split_pos:].lstrip()
+                sentence_length = len(sentence)
+            if sentence:
+                current_chunk.append(sentence)
+                current_length += sentence_length
+                
+    if current_chunk:
+        chunks.append(' '.join(current_chunk))
+    return chunks
+
 def web_search(query: str, num_results: int = 3) -> str:
-    """Perform a web search using DuckDuckGo and extract article content for relevant results.
-
-    Args:
-        query (str): The search query.
-        num_results (int): Number of results to return. Defaults to 3.
-
-    Returns:
-        str: Formatted search results with article summaries or an error message.
-    """
-    # Refine query using YAKE
-    kw_extractor = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=1)
-    keywords = kw_extractor.extract_keywords(query)
-    refined_query = keywords[0][0] if keywords else query
-    refined_query += " news"  # Append "news" for recent stories
-
-    wrapper = DuckDuckGoSearchAPIWrapper()
+    """Perform a web search using DuckDuckGo and extract article content for relevant results."""
     try:
-        results = wrapper.results(refined_query, max_results=num_results)
+        results = DuckDuckGoSearchAPIWrapper().results(query, num_results)
         if not results:
             return "No results found."
         
-        formatted_results = []
+        formatted = []
+        links = []  # Store links separately
         for result in results:
-            link = result.get('link', 'unknown')
-            snippet = result.get('snippet', 'No snippet available.')
-            # Attempt to extract article content
+            link = result.get('link', '').strip()
+            if not link:
+                continue
+                
+            domain = re.sub(r'https?://(www\.)?([^/]+).*', r'\2', link)
+            snippet = result.get('snippet', 'No snippet available.').strip()
+            
             try:
                 article = Article(link)
                 article.download()
                 article.parse()
-                article_text = article.text[:500]  # Limit to 500 chars
-                if article_text:
-                    summary = f"{link}:\nSnippet: {snippet}\nArticle Summary: {article_text}..."
-                else:
-                    summary = f"{link}:\nSnippet: {snippet}\nArticle Summary: No article content available."
-            except Exception as e:
-                summary = f"{link}:\nSnippet: {snippet}\nArticle Summary: Failed to extract content: {str(e)}"
-            formatted_results.append(summary)
-        
-        return f"Web Search Results:\n{'nn'.join(formatted_results)}"
+                summary = article.text[:500].strip()
+                formatted.append(
+                    f"[{domain}]({link}): {snippet}\n"
+                    f"{summary}..." if summary else f"[{domain}]({link}): {snippet}"
+                )
+                links.append(link)  # Collect links
+            except Exception:
+                formatted.append(f"[{domain}]({link}): {snippet}")
+                links.append(link)
+
+        # Add links section if we have any
+        if links:
+            formatted.append("\n\nLinks:\n" + "\n".join([f"- {link}" for link in links]))
+            
+        return "\n\n".join(formatted)
     except Exception as e:
-        return f"Error during web search: {str(e)}"
+        return f"Search error: {str(e)}"
 
 def summarize_document(file_path):
     """Summarize the contents of a document using YAKE, up to 100 characters."""

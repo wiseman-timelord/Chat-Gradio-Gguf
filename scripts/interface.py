@@ -443,29 +443,15 @@ def update_action_button(phase):
 async def conversation_interface(
     user_input, session_log, loaded_files,
     is_reasoning_model, cancel_flag, web_search_enabled,
-    interaction_phase, llm_state, models_loaded_state
+    interaction_phase, llm_state, models_loaded_state,
+    summary_enabled, speech_enabled
 ):
     """
     Handle user input and generate AI responses asynchronously for the Chat-Gradio-Gguf interface.
-    
-    Args:
-        user_input (str): The user's input text.
-        session_log (list): List of conversation history.
-        loaded_files (list): List of attached files.
-        is_reasoning_model (bool): Whether the model is a reasoning model.
-        cancel_flag (bool): Flag to cancel generation.
-        web_search_enabled (bool): Whether web search is enabled.
-        interaction_phase (str): Current phase of interaction.
-        llm_state (Llama): The loaded model instance.
-        models_loaded_state (bool): Whether the model is loaded.
-    
-    Yields:
-        tuple: 8 values corresponding to UI updates (session_log, status_message, action_button, cancel_flag, loaded_files, interaction_phase, user_input_update, additional_update).
     """
     import gradio as gr
     from scripts import temporary, utility
     from scripts.models import get_model_settings, get_response_stream
-    from scripts.utility import filter_operational_content
     import asyncio
     import queue
     import threading
@@ -477,13 +463,35 @@ async def conversation_interface(
     temporary.current_summary = ""
 
     # Check if model is loaded
-    if not models_loaded_state or llm_state is None:
-        yield session_log, "Please load a model first.", update_action_button(interaction_phase), False, loaded_files, interaction_phase, gr.update(), gr.update()
+    if not models_loaded_state or not llm_state:
+        yield (
+            session_log,
+            "Please load a model first.",
+            update_action_button(interaction_phase),
+            False,
+            loaded_files,
+            interaction_phase,
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update()
+        )
         return
 
     # Check for empty input
     if not user_input.strip():
-        yield session_log, "No input provided.", update_action_button(interaction_phase), False, loaded_files, interaction_phase, gr.update(), gr.update()
+        yield (
+            session_log,
+            "No input provided.",
+            update_action_button(interaction_phase),
+            False,
+            loaded_files,
+            interaction_phase,
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update()
+        )
         return
 
     # Prepare user input with attached files
@@ -499,9 +507,21 @@ async def conversation_interface(
 
     # Append user message and placeholder assistant response
     session_log.append({'role': 'user', 'content': f"User:\n{user_input}"})
-    session_log.append({'role': 'assistant', 'content': ""})
+    session_log.append({'role': 'assistant', 'content': "AI-Chat:\n"})  # Single prefix added here
     interaction_phase = "afterthought_countdown"
-    yield session_log, "Processing...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(interactive=False), gr.update()
+    
+    yield (
+        session_log,
+        "Processing...",
+        update_action_button(interaction_phase),
+        cancel_flag,
+        loaded_files,
+        interaction_phase,
+        gr.update(interactive=False),
+        gr.update(),
+        gr.update(),
+        gr.update()
+    )
 
     # Afterthought countdown
     input_length = len(original_input.strip())
@@ -510,12 +530,34 @@ async def conversation_interface(
     
     for i in range(countdown_seconds, -1, -1):
         current_progress = random.choice(progress_indicators)
-        yield session_log, f"{current_progress} Afterthought countdown... {i}s", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+        yield (
+            session_log,
+            f"{current_progress} Afterthought countdown... {i}s",
+            update_action_button(interaction_phase),
+            cancel_flag,
+            loaded_files,
+            interaction_phase,
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update()
+        )
         await asyncio.sleep(1)
         if cancel_flag:
             session_log.pop()  # Remove the empty assistant message
             interaction_phase = "waiting_for_input"
-            yield session_log, "Input cancelled.", update_action_button(interaction_phase), False, loaded_files, interaction_phase, gr.update(interactive=True, value=original_input), gr.update()
+            yield (
+                session_log,
+                "Input cancelled.",
+                update_action_button(interaction_phase),
+                False,
+                loaded_files,
+                interaction_phase,
+                gr.update(interactive=True, value=original_input),
+                gr.update(),
+                gr.update(),
+                gr.update()
+            )
             return
 
     # Begin response generation
@@ -525,17 +567,38 @@ async def conversation_interface(
     # Handle web search if enabled
     search_results = None
     if web_search_enabled:
-        session_log[-1]['content'] = "Workflow:\nPRODUCE WEBSEARCH ---> PRODUCE ASSESSMENT"
-        yield session_log, "🔍 Performing web search...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+        yield (
+            session_log,
+            "🔍 Performing web search...",
+            update_action_button(interaction_phase),
+            cancel_flag,
+            loaded_files,
+            interaction_phase,
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update()
+        )
         search_results = await asyncio.to_thread(utility.web_search, original_input)
         status = "✅ Web search completed." if search_results and not search_results.startswith("Error") else "⚠️ No web results."
-        session_log[-1]['content'] = status
-        yield session_log, status, update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
+        session_log[-1]['content'] = f"AI-Chat:\n{status}"
+        yield (
+            session_log,
+            status,
+            update_action_button(interaction_phase),
+            cancel_flag,
+            loaded_files,
+            interaction_phase,
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update()
+        )
 
     # Set up streaming
     q = queue.Queue()
     cancel_event = threading.Event()
-    visible_response = ""  # Start without prefix
+    visible_response = ""  # Start with empty response
 
     def run_generator():
         try:
@@ -548,8 +611,8 @@ async def conversation_interface(
                 llm_state=llm_state,
                 models_loaded_state=models_loaded_state
             ):
-                # Remove duplicate AI-Chat: prefixes, preserve single prefix
-                chunk = re.sub(r'^(AI-Chat:)+', 'AI-Chat:\n', chunk, flags=re.MULTILINE | re.IGNORECASE)
+                # Remove any duplicate AI-Chat prefixes from chunks
+                chunk = re.sub(r'^AI-Chat:\s*', '', chunk, flags=re.IGNORECASE)
                 q.put(chunk)
             q.put(None)
         except Exception as e:
@@ -563,7 +626,7 @@ async def conversation_interface(
         try:
             chunk = q.get_nowait()
         except queue.Empty:
-            await asyncio.sleep(0.01)  # Brief delay when queue is empty
+            await asyncio.sleep(0.01)
             continue
 
         if chunk is None:
@@ -571,44 +634,121 @@ async def conversation_interface(
 
         if cancel_flag:
             cancel_event.set()
-            session_log[-1]['content'] = "Generation cancelled."
-            yield session_log, "Cancelled", update_action_button(interaction_phase), False, loaded_files, interaction_phase, gr.update(), gr.update()
+            session_log[-1]['content'] = "AI-Chat:\nGeneration cancelled."
+            yield (
+                session_log,
+                "Cancelled",
+                update_action_button(interaction_phase),
+                False,
+                loaded_files,
+                interaction_phase,
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update()
+            )
             break
 
         if chunk == "<CANCELLED>":
-            session_log[-1]['content'] = "Generation cancelled."
-            yield session_log, "Cancelled", update_action_button(interaction_phase), False, loaded_files, interaction_phase, gr.update(), gr.update()
+            session_log[-1]['content'] = "AI-Chat:\nGeneration cancelled."
+            yield (
+                session_log,
+                "Cancelled",
+                update_action_button(interaction_phase),
+                False,
+                loaded_files,
+                interaction_phase,
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update()
+            )
             break
 
         if isinstance(chunk, str) and chunk.startswith("Error:"):
-            session_log[-1]['content'] = chunk
-            yield session_log, f"⚠️ {chunk}", update_action_button("waiting_for_input"), False, loaded_files, "waiting_for_input", gr.update(interactive=True), gr.update()
+            session_log[-1]['content'] = f"AI-Chat:\n{chunk}"
+            yield (
+                session_log,
+                f"⚠️ {chunk}",
+                update_action_button("waiting_for_input"),
+                False,
+                loaded_files,
+                "waiting_for_input",
+                gr.update(interactive=True),
+                gr.update(),
+                gr.update(),
+                gr.update()
+            )
             return
 
-        # Stream updates with single AI-Chat: prefix
+        # Stream updates (no additional AI-Chat prefix)
         visible_response += chunk
-        # Ensure single AI-Chat: prefix in streamed response
-        display_response = re.sub(r'^(AI-Chat:)+', 'AI-Chat:\n', visible_response, flags=re.MULTILINE | re.IGNORECASE)
-        if not display_response.startswith('AI-Chat:\n'):
-            display_response = f'AI-Chat: \n{display_response}'
-        session_log[-1]['content'] = display_response
-        yield session_log, "Streaming Response...", update_action_button(interaction_phase), cancel_flag, loaded_files, interaction_phase, gr.update(), gr.update()
-        await asyncio.sleep(0.05)  # Allow UI to update
+        session_log[-1]['content'] = f"{visible_response.strip()}"
+        yield (
+            session_log,
+            "Streaming Response...",
+            update_action_button(interaction_phase),
+            cancel_flag,
+            loaded_files,
+            interaction_phase,
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update()
+        )
+        await asyncio.sleep(0.05)
 
-    # Finalize response
+    # Finalize response with summary/speech handling
     if visible_response:
-        # Remove duplicate AI-Chat: prefixes, ensure single prefix
-        final_content = re.sub(r'^(AI-Chat:)+', 'AI-Chat:\n', visible_response, flags=re.MULTILINE | re.IGNORECASE)
-        if not final_content.startswith('AI-Chat:\n'):
-            final_content = f'AI-Chat: \n{final_content}'
-        final_content = filter_operational_content(final_content)
+        # Extract and separate links from main content
+        links_match = re.search(r'\nLinks:\n(.*?)$', visible_response, re.DOTALL)
+        clean_response = re.sub(r'\nLinks:\n.*?$', '', visible_response, flags=re.DOTALL).strip()
+        
+        # Count lines excluding links for summary decision
+        response_lines = len([line for line in clean_response.split('\n') if line.strip()])
+        
+        # Generate summary if enabled and response is substantial
+        if summary_enabled and response_lines > 4:
+            temporary.current_summary = generate_summary(clean_response, llm_state)
+            final_content = f"{clean_response}\n\nSUMMARY:\n{temporary.current_summary}"
+        else:
+            temporary.current_summary = ""
+            final_content = clean_response
+            
+        # Add links back at the end if they exist
+        if links_match:
+            final_content += f"\n\nLinks:\n{links_match.group(1).strip()}"
+            
+        # Handle speech if enabled (excluding links)
+        if speech_enabled:
+            speech_text = temporary.current_summary if temporary.current_summary else clean_response
+            # Clean text and chunk
+            clean_speech = re.sub(r'^AI-Chat:\s*', '', speech_text, flags=re.IGNORECASE)
+            chunks = utility.chunk_text_for_speech(clean_speech, 500)
+            for chunk in chunks:
+                utility.speak_text(chunk)
+                await asyncio.sleep(0.5)
+            
+        # Format final content with single AI-Chat prefix
+        final_content = f"AI-Chat:\n{final_content.strip()}"
         session_log[-1]['content'] = final_content
         utility.save_session_history(session_log, temporary.session_attached_files)
     else:
-        session_log[-1]['content'] = "AI-Chat: \n(Empty response)"
+        session_log[-1]['content'] = "AI-Chat:\n(Empty response)"
 
     interaction_phase = "waiting_for_input"
-    yield session_log, "✅ Response ready", update_action_button(interaction_phase), False, loaded_files, interaction_phase, gr.update(interactive=True, value=""), gr.update()
+    yield (
+        session_log,
+        "✅ Response ready",
+        update_action_button(interaction_phase),
+        False,
+        loaded_files,
+        interaction_phase,
+        gr.update(interactive=True, value=""),
+        gr.update(),
+        gr.update(),
+        gr.update()
+    )
     
 # Core Gradio Interface    
 def launch_interface():
@@ -655,7 +795,10 @@ def launch_interface():
             is_reasoning_model=gr.State(False),
             selected_panel=gr.State("History"),
             expanded_state=gr.State(True),
-            model_settings=gr.State({})  # Store full model settings
+            model_settings=gr.State({}),  # Store full model settings
+            web_search_enabled=gr.State(False),
+            speech_enabled=gr.State(False),
+            summary_enabled=gr.State(False)
         )
         # Define conversation_components once to avoid redefinition
         conversation_components = {}
@@ -717,9 +860,12 @@ def launch_interface():
                         )
                         # Search enhancement row
                         with gr.Row(elem_classes=["clean_elements"]):
-                            switches = dict(
-                                web_search=gr.Checkbox(label="Web-Search", value=False, visible=True)
-                            )
+                            # Initialize action_buttons FIRST
+                            action_buttons = {}
+                            action_buttons["web_search"] = gr.Button("🌐 Web-Search", variant="secondary", scale=1)
+                            action_buttons["speech"] = gr.Button("🔊 Speech", variant="secondary", scale=1)
+                            action_buttons["summary"] = gr.Button("📝 Summary", variant="secondary", scale=1)
+                            
                         # User input (3 lines, max 15)
                         initial_max_lines = max(3, int(((temporary.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
                         temporary.USER_INPUT_MAX_LINES = initial_max_lines  # Add this line
@@ -737,7 +883,7 @@ def launch_interface():
                         )
                         # Buttons row
                         with gr.Row(elem_classes=["clean-elements"]):
-                            action_buttons = {}
+                            # Now add to existing action_buttons
                             action_buttons["action"] = gr.Button(
                                 "Send Input",
                                 variant="secondary",
@@ -746,7 +892,6 @@ def launch_interface():
                             )
                             action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="huggingface", scale=1)
                             action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1)
-                            action_buttons["say_summary"] = gr.Button("Say Summary", variant="huggingface", scale=1)
 
                 # Status bar
                 with gr.Row():
@@ -887,6 +1032,17 @@ def launch_interface():
                             )
                         )
 
+        # Subfunctions
+        def handle_edit_previous(session_log):
+            """Restore last user input and remove the last exchange (user + AI messages)."""
+            if len(session_log) < 2:
+                return session_log, gr.update(), "No previous input to edit."
+            
+            # Remove last AI response and user input
+            new_log = session_log[:-2]
+            last_user_input = session_log[-2]['content'].replace("User:\n", "", 1)
+            return new_log, gr.update(value=last_user_input), "Previous input restored. Edit and resend."        
+
         # Event handlers
         model_folder_state.change(
             fn=lambda f: setattr(temporary, "MODEL_FOLDER", f) or None,
@@ -905,21 +1061,12 @@ def launch_interface():
         start_new_session_btn.click(
             fn=start_new_session,
             inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], status_text, conversation_components["user_input"], switches["web_search"]]
-        ).then(
-            fn=update_session_buttons,
-            inputs=[],
-            outputs=buttons["session"]
-        ).then(
-            fn=lambda: [],
-            inputs=[],
-            outputs=[states["attached_files"]]
-        )
-
-        new_session_btn_collapsed.click(
-            fn=start_new_session,
-            inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], status_text, conversation_components["user_input"], switches["web_search"]]
+            outputs=[
+                conversation_components["session_log"], 
+                status_text, 
+                conversation_components["user_input"], 
+                states["web_search_enabled"]  # Changed from switches["web_search"]
+            ]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -982,10 +1129,12 @@ def launch_interface():
                 states["attached_files"],
                 states["is_reasoning_model"],
                 states["cancel_flag"],
-                switches["web_search"],
-                states["interaction_phase"],
+                states["web_search_enabled"],
+                states["interaction_phase"],  # Correct order
                 states["llm"],
-                states["models_loaded"]
+                states["models_loaded"],
+                states["summary_enabled"],  
+                states["speech_enabled"]
             ],
             outputs=[
                 conversation_components["session_log"],
@@ -995,7 +1144,9 @@ def launch_interface():
                 states["attached_files"],
                 states["interaction_phase"],
                 conversation_components["user_input"],
-                switches["web_search"]
+                states["web_search_enabled"],
+                states["summary_enabled"],  # Add these
+                states["speech_enabled"]     # new state outputs
             ]
         ).then(
             fn=update_session_buttons,
@@ -1009,10 +1160,44 @@ def launch_interface():
             outputs=[status_text]
         )
 
-        action_buttons["say_summary"].click(
-            fn=say_summary,
-            inputs=[conversation_components["session_log"], states["llm"], states["models_loaded"]],
-            outputs=[status_text]
+        action_buttons["web_search"].click(
+            fn=lambda enabled: not enabled,
+            inputs=[states["web_search_enabled"]],
+            outputs=[states["web_search_enabled"]]
+        ).then(
+            lambda state: gr.update(variant="primary" if state else "secondary"),
+            inputs=[states["web_search_enabled"]], 
+            outputs=[action_buttons["web_search"]]
+        )
+
+        action_buttons["speech"].click(
+            fn=lambda enabled: not enabled,
+            inputs=[states["speech_enabled"]],
+            outputs=[states["speech_enabled"]]
+        ).then(
+            lambda state: gr.update(variant="primary" if state else "secondary"),
+            inputs=[states["speech_enabled"]], 
+            outputs=[action_buttons["speech"]]
+        )
+
+        action_buttons["summary"].click(
+            fn=lambda enabled: not enabled,
+            inputs=[states["summary_enabled"]],
+            outputs=[states["summary_enabled"]]
+        ).then(
+            lambda state: gr.update(variant="primary" if state else "secondary"),
+            inputs=[states["summary_enabled"]], 
+            outputs=[action_buttons["summary"]]
+        )
+
+        action_buttons["edit_previous"].click(
+            fn=handle_edit_previous,
+            inputs=[conversation_components["session_log"]],
+            outputs=[
+                conversation_components["session_log"], 
+                conversation_components["user_input"], 
+                status_text
+            ]
         )
 
         attach_files.upload(

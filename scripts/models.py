@@ -280,6 +280,15 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     from scripts.utility import clean_content
     from scripts.prompts import get_system_message
 
+    def should_stream(input_text, settings):
+        """Determine if response should be streamed based on input characteristics"""
+        stream_keywords = ["write", "generate", "story", "report", "essay", "explain", "describe"]
+        input_length = len(input_text.strip())
+        is_long_input = input_length > 100
+        is_creative_task = any(keyword in input_text.lower() for keyword in stream_keywords)
+        is_interactive_mode = settings.get("is_reasoning", False)
+        return is_creative_task or is_long_input or (is_interactive_mode and input_length > 50)
+
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
         return
@@ -292,130 +301,76 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         web_search_enabled=web_search_enabled,
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False)
-    ) + "\nDo not include 'AI-Chat:' or any prefixes in your responses."
-    if not isinstance(system_message, str):
-        yield f"Error: system_message from get_system_message is not a string, got {type(system_message)}: {system_message}"
-        return
-
-    if web_search_enabled and search_results is not None:
-        if not isinstance(search_results, str):
-            search_message = f"search_results is not a string, got {type(search_results)}: {search_results}. Converting to string."
-            print(search_message)
-            search_results = str(search_results)
-        system_message += f"\n\n{search_results}"
-
-    print(f"system_message: {repr(system_message)}")
-
-    system_message = system_message.encode('utf-8').decode('utf-8')
-    system_message = re.sub(r'<[^>]+>', '', system_message)
-    system_message = system_message.replace('\n', ' ').strip()
+    ) + "\nRespond directly without prefixes like 'AI-Chat:'."
+    
+    if web_search_enabled and search_results:
+        system_message += "\n\nSearch Results:\n" + re.sub(r'https?://(www\.)?([^/]+).*', r'\2', str(search_results))
 
     try:
         system_tokens = len(llm_state.tokenize(system_message.encode('utf-8')))
-        print(f"Debug: System message tokens: {system_tokens}")
     except Exception as e:
-        yield f"Error tokenizing system message: {str(e)}. Type: {type(system_message)}, Value: {system_message[:50]}..."
+        yield f"Error tokenizing system message: {str(e)}"
         return
 
-    if session_log and len(session_log) >= 2 and session_log[-2]['role'] == 'user':
-        user_query = clean_content('user', session_log[-2]['content'])
-        if not isinstance(user_query, str):
-            yield f"Error: user_query is not a string, got {type(user_query)}: {user_query}"
-            return
-        try:
-            user_tokens = len(llm_state.tokenize(user_query.encode('utf-8')))
-        except Exception as e:
-            yield f"Error tokenizing user query: {str(e)}. Type: {type(user_query)}, Value: {user_query[:50]}..."
-            return
-    else:
+    if not session_log or len(session_log) < 2 or session_log[-2]['role'] != 'user':
         yield "Error: No user input to process."
         return
 
-    response_reserve_tokens = temporary.BATCH_SIZE // 8
-    available_tokens = n_ctx - system_tokens - user_tokens - response_reserve_tokens
+    user_query = clean_content('user', session_log[-2]['content'])
+    try:
+        user_tokens = len(llm_state.tokenize(user_query.encode('utf-8')))
+    except Exception as e:
+        yield f"Error tokenizing user query: {str(e)}"
+        return
+
+    available_tokens = n_ctx - system_tokens - user_tokens - (temporary.BATCH_SIZE // 8)
     if available_tokens < 0:
-        yield "Error: Context size exceeded with system message and user input."
+        yield "Error: Context size exceeded."
         return
 
     messages = [{"role": "system", "content": system_message}]
-
-    history_messages = []
     current_tokens = 0
+    
     for msg in reversed(session_log[:-2]):
-        role = msg['role']
-        content = clean_content(role, msg['content'])
-        if not isinstance(content, str):
-            yield f"Error: History message content is not a string, got {type(content)}: {content}"
-            return
+        content = clean_content(msg['role'], msg['content'])
         try:
             msg_tokens = len(llm_state.tokenize(content.encode('utf-8')))
-        except Exception as e:
-            yield f"Error tokenizing history message: {str(e)}. Type: {type(content)}, Value: {content[:50]}..."
-            return
-        if current_tokens + msg_tokens > available_tokens:
-            break
-        history_messages.insert(0, {"role": role, "content": content})
-        current_tokens += msg_tokens
+            if current_tokens + msg_tokens > available_tokens:
+                break
+            messages.insert(1, {"role": msg['role'], "content": content})
+            current_tokens += msg_tokens
+        except Exception:
+            continue
 
-    messages.extend(history_messages)
     messages.append({"role": "user", "content": user_query})
 
-    def should_stream(input_text, settings):
-        stream_keywords = ["write", "generate", "story", "report", "essay", "explain", "describe"]
-        input_length = len(input_text.strip())
-        is_long_input = input_length > 100
-        is_creative_task = any(keyword in input_text.lower() for keyword in stream_keywords)
-        is_interactive_mode = settings.get("is_reasoning", False)
-        return is_creative_task or is_long_input or (is_interactive_mode and input_length > 50)
-
-    stream_enabled = should_stream(user_query, settings)
-    max_tokens = temporary.BATCH_SIZE if stream_enabled else temporary.BATCH_SIZE
-
     try:
-        temperature = float(settings.get("temperature", temporary.TEMPERATURE))
-        repeat_penalty = float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY))
-    except (ValueError, TypeError) as e:
-        yield f"Error: Invalid temperature or repeat_penalty: {str(e)}"
-        return
-
-    try:
-        if stream_enabled:
-            response_stream = llm_state.create_chat_completion(
+        if should_stream(user_query, settings):
+            for chunk in llm_state.create_chat_completion(
                 messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                repeat_penalty=repeat_penalty,
-                stream=True,
-                stop=None
-            )
-            print(f"Debug: Starting streaming with max_tokens={max_tokens}")
-            chunk_count = 0
-            for chunk in response_stream:
+                max_tokens=temporary.BATCH_SIZE,
+                temperature=float(settings.get("temperature", temporary.TEMPERATURE)),
+                repeat_penalty=float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY)),
+                stream=True
+            ):
                 if cancel_event and cancel_event.is_set():
-                    print("Debug: Stream cancelled")
                     yield "<CANCELLED>"
                     return
-                if 'choices' in chunk and chunk['choices']:
+                if chunk.get('choices'):
                     content = chunk['choices'][0].get('delta', {}).get('content', '')
                     if content:
-                        # Strip any model-generated prefixes
                         content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
-                        chunk_count += 1
-                        print(f"Debug: Chunk {chunk_count}: {repr(content)}")
+                        content = re.sub(r'\n{2,}', '\n', content)
                         yield content
-            print(f"Debug: Stream ended after {chunk_count} chunks")
         else:
             response = llm_state.create_chat_completion(
                 messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                repeat_penalty=repeat_penalty,
+                max_tokens=temporary.BATCH_SIZE,
                 stream=False
             )
             content = response['choices'][0]['message']['content']
-            # Strip any model-generated prefixes
             content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
+            content = re.sub(r'\n{2,}', '\n', content)
             yield content
     except Exception as e:
-        print(f"Debug: Exception: {str(e)}")
-        yield f"Error generating response: {str(e)}\n{traceback.format_exc()}"
+        yield f"Error generating response: {str(e)}"
