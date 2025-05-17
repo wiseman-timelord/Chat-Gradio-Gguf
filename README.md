@@ -20,7 +20,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
 
 ### Preview
-- When, requires installed and upon start, the engine initializes, and then runs the Gradio Server...
+- When Requires are installed, startup looks like this in the command console...
 ```
 =======================================================================================================================
     Chat-Gradio-Gguf: Launcher
