@@ -9,12 +9,12 @@ REM title code
 set "TITLE=Chat-Gradio-Gguf"
 title %TITLE%
 
-:: DP0 TO SCRIPT BLOCK, DO NOT, MODIFY or MOVE: START
+:: DP0 TO SCRIPT BLOCK, DO NOT MODIFY or MOVE: START
 set "ScriptDirectory=%~dp0"
 set "ScriptDirectory=%ScriptDirectory:~0,-1%"
 cd /d "%ScriptDirectory%"
 echo Dp0'd to Script.
-:: DP0 TO SCRIPT BLOCK, DO NOT, MODIFY or MOVE: END
+:: DP0 TO SCRIPT BLOCK, DO NOT MODIFY or MOVE: END
 
 REM Check for Administrator privileges
 net session >nul 2>&1
@@ -91,8 +91,32 @@ if /i "%choice%"=="1" (
     
     REM Activate venv and launch
     call .\.venv\Scripts\activate.bat
-    python.exe .\requisites.py testlibs
-	python.exe -u .\launcher.py
+    
+    REM Check libraries
+    python.exe .\requisites.py testlibs > temp_libs.txt 2>&1
+    set "hasError=0"
+    
+    for /F "usebackq delims=" %%a in ("temp_libs.txt") do (
+        echo %%a | find "[FAIL]" >nul
+        if not errorlevel 1 set "hasError=1"
+    )
+    
+    if !hasError! equ 1 (
+        echo Checking Python libraries...
+        type temp_libs.txt
+        echo Please re-install Chat-Gradio-Gguf!
+        del temp_libs.txt
+        timeout /t 3 >nul
+        call .\.venv\Scripts\deactivate.bat
+        goto :end_of_script
+    ) else (
+        echo Checking Python libraries...
+        findstr /C:"Success: All Python libraries verified" temp_libs.txt
+    )
+    del temp_libs.txt
+    
+    REM Launch main program
+    python.exe -u .\launcher.py
     
     REM Check for errors
     if errorlevel 1 (
@@ -100,7 +124,7 @@ if /i "%choice%"=="1" (
         pause
     )
     
-    REM Deactivate venv using full path to batch file
+    REM Deactivate venv
     call .\.venv\Scripts\deactivate.bat
     set PYTHONUNBUFFERED=0
     goto MainMenu
