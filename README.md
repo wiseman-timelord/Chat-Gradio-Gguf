@@ -27,18 +27,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 =======================================================================================================================
 
 Starting Chat-Gradio-Gguf...
-gradio>=4.25.0                                               [GOOD]
-requests==2.31.0                                             [GOOD]
-pyperclip                                                    [GOOD]
-yake                                                         [GOOD]
-psutil                                                       [GOOD]
-pywin32                                                      [GOOD]
-duckduckgo-search                                            [GOOD]
-newspaper3k                                                  [GOOD]
-llama-cpp-python                                             [GOOD]
-langchain-community==0.3.18                                  [GOOD]
-pygments==2.17.2                                             [GOOD]
-lxml_html_clean                                              [GOOD]
+Checking Python libraries...
 Success: All Python libraries verified                       [GOOD]
 Starting `launcher` Imports.
 `launcher` Imports Complete.
@@ -46,11 +35,18 @@ Starting `launcher.main`.
 Working directory: C:\Program_Filez\Chat-Gradio-Gguf\Chat-Gradio-Gguf-main
 Data directory: C:\Program_Filez\Chat-Gradio-Gguf\Chat-Gradio-Gguf-main\data
 Loading persistent config...
-Scanning directory: models
-Models Found: ['Select_a_model...']
+Scanning directory: E:\Models\T3Q-qwen2.5-14b-v1.0-e3-GGUF
+Models Found: ['T3Q-qwen2.5-14b-v1.0-e3.Q6_K.gguf']
 Launching Gradio Interface...
 * Running on local URL:  http://127.0.0.1:7860
 * To create a public link, set `share=True` in `launch()`.
+
+
+
+
+
+
+
 ```
 
 - The "Interaction" page, where the conversation happens...
