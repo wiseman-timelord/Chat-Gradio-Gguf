@@ -27,6 +27,7 @@ Intended as a high-quality chat interface programmed towards windows 10 non-WSL,
 =======================================================================================================================
 
 Starting Chat-Gradio-Gguf...
+Activated: `.venv`
 Checking Python libraries...
 Success: All Python libraries verified                       [GOOD]
 Starting `launcher` Imports.
