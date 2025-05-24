@@ -1077,6 +1077,25 @@ def launch_interface():
             outputs=[states["attached_files"]]
         )
 
+        new_session_btn_collapsed.click(
+            fn=start_new_session,
+            inputs=[states["models_loaded"]],
+            outputs=[
+                conversation_components["session_log"],
+                status_text,
+                conversation_components["user_input"],
+                states["web_search_enabled"]
+            ]
+        ).then(
+            fn=update_session_buttons,
+            inputs=[],
+            outputs=buttons["session"]
+        ).then(
+            fn=lambda: [],
+            inputs=[],
+            outputs=[states["attached_files"]]
+        )
+
         # Existing event handler for attach_files (for reference)
         attach_files.upload(
             fn=process_attach_files,
