@@ -114,7 +114,8 @@ if /i "%choice%"=="1" (
         findstr /C:"Success: All Python libraries verified" temp_libs.txt
     )
     del temp_libs.txt
-    
+    del 4.25.0
+	
     REM Launch main program
     python.exe -u .\launcher.py
     
