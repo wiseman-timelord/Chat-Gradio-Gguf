@@ -159,19 +159,17 @@ project_root/
 ```
 
 # Current
-1. Websearch needs fixing, grok was saying some SearxNG solution was best idea for non-api implementation.
-2. Qwen 3 integration.
-3. Need to get streaming, sentence by sentence, working again, currently its word by word...is that ok? Whats with the buffer stuff in the terminal? Buffering each word? Need to also ensure output is standard in, answer section on reasoning model and normal output on normal model.
-4. Ensure, Testing and bugfixing, all features is done, and that everything is how is preferred..
-5. Complete Gen1.    
+1. Qwen 3 and Deepseek 3, compatibility/integration/features.
+2. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present. 
 
 # Distant
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
-3. **User Interface and Notification Enhancements:**  
-   - Implement verbose, clear, and concise printed notifications for all stages of model interaction (e.g., "Sending Prompt to Code Model...", "Response Received from Code Model...").   
-   - maintain critical inclusion of Debug notification for terminal, as each are needed to be worked through.
-
+3. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
+- a row with a square box, that visualizes the thinking/generation, in some simple method, that is somehow interesting, and under that, a row with a buttton to turn "Visualize" ON/OFF.
+- a row with 3 boxes each with 1 stat for generation speed/whatever else is typically of interest to people.
+- a row with 2 butttons, 1 to turn "Visualize" ON/OFF and 1 to turn "Statistics" on/off. Same kind of on/off buttons as web-Search/Speech/Summary.
+- sliders for, context size and batch size, affecting them will affect the ones on the configuration page, and vice versa. They use the same global in temporary. we would then need to ensure that whatever settings are selected on either/both, will then be active for when the next time the user clicks send.
 
 ## Credits
 Thanks to all the following teams, for their parts...
