@@ -12,7 +12,7 @@ BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
 VULKAN_TARGET_VERSION = "1.4.304.1"
-LLAMACPP_TARGET_VERSION = "b5468"
+LLAMACPP_TARGET_VERSION = "b5473"
 BACKEND_TYPE = None  # Will be set by the backend menu
 DIRECTORIES = [
     "data", "scripts", "models",
@@ -74,10 +74,10 @@ BACKEND_OPTIONS = {
         "needs_python_bindings": False,
         "vulkan_required": True
     },
-    "GPU/CPU - Kompute": {
-        "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-kompute-x64.zip",
-        "dest": "data/llama-kompute-bin",
-        "cli_path": "data/llama-kompute-bin/llama-cli.exe",
+    "GPU/CPU - Hip-Radeon": {
+        "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-hip-radeon-x64.zip",
+        "dest": "data/llama-hip-radeon-bin",
+        "cli_path": "data/llama-hip-radeon-bin/llama-cli.exe",
         "needs_python_bindings": False,
         "vulkan_required": True
     },
@@ -582,7 +582,7 @@ def select_backend_type() -> None:
         "NoAVX - CPU Only - For older CPUs without AVX support",
         "OpenBLAS - CPU Only - Optimized for linear algebra operations",
         "Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU",
-        "Kompute - GPU/CPU - Experimental Vulkan for AMD/nVidia/Intel",
+        "Hip-Radeon - GPU/CPU - Experimental Hip for AMD GPU",
         "CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback",
         "CUDA 12.4 - GPU/CPU - For CUDA 12.4 GPUs with CPU fallback"
     ]
@@ -592,7 +592,7 @@ def select_backend_type() -> None:
         options[2]: "CPU Only - NoAVX",
         options[3]: "CPU Only - OpenBLAS",
         options[4]: "GPU/CPU - Vulkan",
-        options[5]: "GPU/CPU - Kompute",
+        options[5]: "GPU/CPU - Hip-Radeon",
         options[6]: "GPU/CPU - CUDA 11.7",
         options[7]: "GPU/CPU - CUDA 12.4"
     }
