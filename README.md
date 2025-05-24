@@ -159,7 +159,7 @@ project_root/
 ```
 
 # Current
-1. Qwen 3 and Deepseek 3, compatibility/integration/features.
+1. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
 2. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present.
 3. There is no stop button.
 
