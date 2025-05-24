@@ -82,8 +82,12 @@ STATUS_TEXTS = {
 }
 
 CHAT_FORMAT_MAP = {
-    'qwen2': 'chatml',   # Qwen2 uses a ChatML-like format
-    'llama': 'llama-2',  # Llama models use llama-2 format
+    'qwen2': 'chatml',
+    'llama': 'llama-2',
+    'qwen3': 'chatml',
+    'qwen3moe': 'chatml',
+    'deepseek2': 'deepseek',
+    'stablelm': 'chatml',
 }
 
 # Handling Keywords for Special Model Behaviors
