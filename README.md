@@ -119,10 +119,6 @@ You will of course need to have a `*.Gguf` model, here are some good ones at the
     - `reasoning` keywords - "reason", "r1", "think".
 </details>
 
-### New Models to Add Above
-- Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT-GGUF - https://huggingface.co/mradermacher/Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT-GGUF/tree/main
-- T3Q-qwen2.5-14b-v1.0-e3-Uncensored-DeLMAT-GGUF - https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-Uncensored-DeLMAT-GGUF/tree/main
-
 ## Development
 - Core Project files...
 ```
