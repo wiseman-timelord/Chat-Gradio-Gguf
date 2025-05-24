@@ -160,7 +160,8 @@ project_root/
 
 # Current
 1. Qwen 3 and Deepseek 3, compatibility/integration/features.
-2. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present. 
+2. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present.
+3. There is no stop button.
 
 # Distant
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
