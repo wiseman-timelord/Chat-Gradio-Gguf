@@ -82,6 +82,7 @@ Launching Gradio Interface...
 - Afterthought Countdown is, <25 characters then 1s or 26-100 charactrs then 3s or >100 lines then 5s, cooldown before proceeding, enabling cancelation relative to input.
 <details>
   <summary>- This is not even 1/5 of the bs involved in one of the updates...see the work I do, impressed? Please help out and donate to cover the, coffee and cigaretts, expense.,  ></summary>
+```
 INFORMATION: 
 We are working on "Chat-Gradio-Gguf"...
 
@@ -212,6 +213,7 @@ ValueError: Failed to load model from file: E:\Models\Qwen3-4B-abliterated-GGUF\
 Diagnosis:
 So, what I think is, that llama-cpp-python is producing the required output, however, it is not able to load the file because llama-cpp-python is unable to respond with a positive result in the test interference, and then this stops the model from being able to be loaded. The solution is, regardless of success or fail in interference, capture the required lines for architecture and layers, and progress regardless of a fail on test interference, using, the architecture and the calculated safe numbers of layers to load into the Vram, in configuration/handling of llama.cpp pre-compiled binary.
 Furthermore, under the event of an error, it should be handled, and print a messages, such as, Success: Capture Architecture/Layers. and Error: Capture architecture/layers., Error: Test Interference. and Success: Test Interference, and then, as relevantly possible moving on to the model loading, using the detected/calculated parameters, or obviously if unable to capture the architecture/layers, then we should instead throw tracebacks etc.
+```
 </details>
 
 
