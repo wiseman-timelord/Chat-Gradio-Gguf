@@ -2,6 +2,9 @@
 ![banner_image](media/project_banner.jpg)
 <br>Status: Beta - See `Development` section..
 
+### vLLM
+- This branch is the experimental vllm branch, that I will be using for implementation of vLLM 0.90, for which is able to run Qwen3 models. Llama.cpp pre-compiled binary sadly does NOT support Qwen3/deepseek3. If it dont work after 2 days, then will be deleted, and other options considered.
+
 ## Description
 Intended as a high-quality chat interface programmed towards windows 10 non-WSL, with any Cpu/Gpu on GGUF models. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as, Gradio and Grok3Beta and gguf models, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience.
 
