@@ -126,6 +126,142 @@ Either, compatibility in progress or not confirmed, with gpt for comparrisson..
     - `reasoning` keywords - "reason", "r1", "think".
 </details>
 
+<details>
+  <summary>This is not even 1/5 of the bs involved in one of the updates... ></summary>
+INFORMATION: 
+We are working on "Chat-Gradio-Gguf"...
+
+Intended as a high-quality chat interface programmed towards windows 10 non-WSL, with any Cpu/Gpu on GGUF models. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience.
+
+...the file structure is like this...
+
+Core Project files...
+project_root/
+│ Chat-Gradio-Gguf.bat
+│ requisites.py
+│ launcher.py
+├── media/
+│ └── project_banner.jpg
+├── scripts/
+│ └── interface.py
+│ └── models.py
+│ └── prompts.py
+│ └── settings.py
+│ └── temporary.py
+│ └── utlity.py
+
+...files created during install includes...
+
+Installed/Temporary files...
+project_root/
+├── data/
+│ └── persistence.json
+├── data/vectors/
+└─────── *
+├── data/temp/
+└────── *
+├── data/history
+└────── *
+├── .venv/
+└────── *
+
+INSTRUCTION: 
+in my scripts Qwen3 is working with, llama-cpp-python and llama.cpp pre-compiled binaries, and despite spending a week trying to make it work with AI, i have failed. The key barrier is, I want to keep installation simpler, so as to not require build-tools for building llama-cpp-python, so I think we are using some kind of pre-combined wheel. However...I looked at the releases of llama.cpp pre-compiled binary and it said...
+
+b5480
+llama : add support for Qwen3 MoE tied word embeddings (#13768)
+
+...while requisites.py says it installs...
+
+LLAMACPP_TARGET_VERSION =a "b5498"
+
+When we look at the output from llama-cpp-python, we can see that the, architecture and layers, are clearly there....
+
+llama_model_loader: - kv   0:                       general.architecture str              = qwen3
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3 8B Abliterated
+llama_model_loader: - kv   3:                           general.finetune str              = abliterated
+llama_model_loader: - kv   4:                           general.basename str              = Qwen3
+llama_model_loader: - kv   5:                         general.size_label str              = 8B
+llama_model_loader: - kv   6:                          qwen3.block_count u32              = 36
+llama_model_loader: - kv   7:                       qwen3.context_length u32              = 40960
+llama_model_loader: - kv   8:                     qwen3.embedding_length u32              = 4096
+llama_model_loader: - kv   9:                  qwen3.feed_forward_length u32              = 12288
+llama_model_loader: - kv  10:                 qwen3.attention.head_count u32              = 32
+llama_model_loader: - kv  11:              qwen3.attention.head_count_kv u32              = 8
+llama_model_loader: - kv  12:                       qwen3.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  13:     qwen3.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  14:                 qwen3.attention.key_length u32              = 128
+llama_model_loader: - kv  15:               qwen3.attention.value_length u32              = 128
+llama_model_loader: - kv  16:                       tokenizer.ggml.model str              = gpt2
+
+...so llama-cpp-python is doing its job, but produces an error...
+
+llama_model_load: error loading model: error loading model architecture: unknown model architecture: 'qwen3'
+
+...because the latest pre-built wheel for llama-cpp-python is 0.3.2 as shown here https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.2/llama_cpp_python-0.3.2-cp311-cp311-win_amd64.whl.for completeness (and you should ignore this unless you need to refer to it as there is a lot to deal with here, come back to this next bit joing here if you need it.
+
+Scanning directory: E:\Models\Qwen3-4B-abliterated-GGUF
+Models Found: ['Qwen3-4B-abliterated-q6_k_m.gguf']
+Choices returned: ['Qwen3-4B-abliterated-q6_k_m.gguf'], Setting value to: Qwen3-4B-abliterated-q6_k_m.gguf
+llama_model_loader: loaded meta data with 34 key-value pairs and 398 tensors from E:\Models\Qwen3-4B-abliterated-GGUF\Qwen3-4B-abliterated-q6_k_m.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen3
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3-4B-abliterated
+llama_model_loader: - kv   3:                           general.finetune str              = 3129e1ebf6cc410eeb9b10696ee5cff98ee274b0
+llama_model_loader: - kv   4:                         general.size_label str              = 4.0B
+llama_model_loader: - kv   5:                          qwen3.block_count u32              = 36
+llama_model_loader: - kv   6:                       qwen3.context_length u32              = 40960
+llama_model_loader: - kv   7:                     qwen3.embedding_length u32              = 2560
+llama_model_loader: - kv   8:                  qwen3.feed_forward_length u32              = 9728
+llama_model_loader: - kv   9:                 qwen3.attention.head_count u32              = 32
+llama_model_loader: - kv  10:              qwen3.attention.head_count_kv u32              = 8
+llama_model_loader: - kv  11:                       qwen3.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  12:     qwen3.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  13:                 qwen3.attention.key_length u32              = 128
+llama_model_loader: - kv  14:               qwen3.attention.value_length u32              = 128
+llama_model_loader: - kv  15:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  16:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  17:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  18:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  19:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  20:                tokenizer.ggml.eos_token_id u32              = 151645
+llama_model_loader: - kv  21:            tokenizer.ggml.padding_token_id u32              = 151643
+llama_model_loader: - kv  22:                tokenizer.ggml.bos_token_id u32              = 151643
+llama_model_loader: - kv  23:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  24:                    tokenizer.chat_template str              = {%- if tools %}\n    {{- '<|im_start|>...
+llama_model_loader: - kv  25:                       general.quantized_by str              = Mungert
+llama_model_loader: - kv  26:                           general.repo_url str              = https://huggingface.co/mungert
+llama_model_loader: - kv  27:                        general.sponsor_url str              = https://freenetworkmonitor.click
+llama_model_loader: - kv  28:               general.quantization_version u32              = 2
+llama_model_loader: - kv  29:                          general.file_type u32              = 18
+llama_model_loader: - kv  30:                      quantize.imatrix.file str              = /home/mahadeva/code/models/Qwen3-4B-a...
+llama_model_loader: - kv  31:                   quantize.imatrix.dataset str              = /training_dir/calibration_datav3.txt
+llama_model_loader: - kv  32:             quantize.imatrix.entries_count i32              = 252
+llama_model_loader: - kv  33:              quantize.imatrix.chunks_count i32              = 209
+llama_model_loader: - type  f32:  145 tensors
+llama_model_loader: - type q6_K:  253 tensors
+llama_model_load: error loading model: error loading model architecture: unknown model architecture: 'qwen3'
+llama_load_model_from_file: failed to load model
+Error reading model metadata for 'E:\Models\Qwen3-4B-abliterated-GGUF\Qwen3-4B-abliterated-q6_k_m.gguf': Failed to load model from file: E:\Models\Qwen3-4B-abliterated-GGUF\Qwen3-4B-abliterated-q6_k_m.gguf
+Traceback (most recent call last):
+  File "C:\Program_Filez\Chat-Gradio-Gguf\Chat-Gradio-Gguf-A064\scripts\models.py", line 31, in get_model_metadata
+    model = Llama(
+            ^^^^^^
+  File "C:\Program_Filez\Chat-Gradio-Gguf\Chat-Gradio-Gguf-A064\.venv\Lib\site-packages\llama_cpp\llama.py", line 369, in __init__
+    internals.LlamaModel(
+  File "C:\Program_Filez\Chat-Gradio-Gguf\Chat-Gradio-Gguf-A064\.venv\Lib\site-packages\llama_cpp\_internals.py", line 56, in __init__
+    raise ValueError(f"Failed to load model from file: {path_model}")
+ValueError: Failed to load model from file: E:\Models\Qwen3-4B-abliterated-GGUF\Qwen3-4B-abliterated-q6_k_m.gguf
+
+Diagnosis:
+So, what I think is, that llama-cpp-python is producing the required output, however, it is not able to load the file because llama-cpp-python is unable to respond with a positive result in the test interference, and then this stops the model from being able to be loaded. The solution is, regardless of success or fail in interference, capture the required lines for architecture and layers, and progress regardless of a fail on test interference, using, the architecture and the calculated safe numbers of layers to load into the Vram, in configuration/handling of llama.cpp pre-compiled binary.
+Furthermore, under the event of an error, it should be handled, and print a messages, such as, Success: Capture Architecture/Layers. and Error: Capture architecture/layers., Error: Test Interference. and Success: Test Interference, and then, as relevantly possible moving on to the model loading, using the detected/calculated parameters, or obviously if unable to capture the architecture/layers, then we should instead throw tracebacks etc.
+</details>
+
+
+
 ## Development
 - Core Project files...
 ```
