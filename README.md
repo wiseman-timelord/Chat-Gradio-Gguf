@@ -260,6 +260,7 @@ Either, compatibility in progress or not confirmed, with gpt for comparrisson..
     - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
     - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
     - `reasoning` keywords - "reason", "r1", "think".
+```
 </details>
 
 ## Development
