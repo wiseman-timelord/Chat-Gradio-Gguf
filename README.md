@@ -80,7 +80,7 @@ Launching Gradio Interface...
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 - This project is for a chat interface, and is not intended to overlap with my other projects, `Rpg-Gradio-Gguf`, or the blueprints for, `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
 - Afterthought Countdown is, <25 characters then 1s or 26-100 charactrs then 3s or >100 lines then 5s, cooldown before proceeding, enabling cancelation relative to input.
-- <details>
+<details>
   <summary>- This is not even 1/5 of the bs involved in one of the updates...see the work I do, impressed? Please help out and donate to cover the, coffee and cigaretts, expense.,  ></summary>
 INFORMATION: 
 We are working on "Chat-Gradio-Gguf"...
