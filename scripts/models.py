@@ -1,73 +1,121 @@
 # Script: `.\scripts\models.py`
 
 # Imports...
-import time, re
+import time, re, traceback, json
 from pathlib import Path
 import gradio as gr
 from scripts.prompts import get_system_message, get_reasoning_instruction
 import scripts.temporary as temporary
-from scripts.prompts import prompt_templates
+from scripts.prompts import prompt_templates, get_system_message
 from scripts.temporary import (
     CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, handling_keywords, llm,
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED, CHAT_FORMAT_MAP
 )
+from llama_cpp import Llama
 
 # Functions...
-def get_chat_format(metadata):
-    """
-    Determine the chat format based on the model's architecture.
-    """
-    architecture = metadata.get('general.architecture', 'unknown')
-    return CHAT_FORMAT_MAP.get(architecture, 'llama2')
+def get_model_metadata(model_path: str) -> tuple[dict, int]:
+    print(f"Getting metadata for: {model_path}")
+    metadata = {}
+    layer_count = 0
 
-def get_model_metadata(model_path: str) -> dict:
-    """
-    Retrieve metadata from a GGUF model, including the number of layers.
-    """
     try:
-        from llama_cpp import Llama
-        chat_format = 'chatml' if 'qwen' in model_path.lower() else None
-        model = Llama(
-            model_path=model_path,
-            n_ctx=4096,
-            n_batch=1,
-            n_gpu_layers=0,
-            verbose=True,
-            chat_format=chat_format
-        )
-        metadata = model.metadata
-        print(f"Debug: Metadata keys for '{model_path}': {list(metadata.keys())}")
-        
-        architecture = metadata.get('general.architecture', 'unknown')
-        layers = metadata.get(f'{architecture}.block_count', 0)
-        
-        if layers == 0:
-            possible_keys = ['block_count', 'layer_count', 'num_hidden_layers', 'num_layers']
-            for key in metadata:
-                if any(pk in key for pk in possible_keys):
-                    layers = metadata[key]
-                    print(f"Debug: Found layers ({layers}) in key '{key}'")
+        # First try low-level metadata extraction for Qwen models
+        from llama_cpp.llama_cpp import llama_model_loader
+        with open(model_path, 'rb') as f:
+            loader = llama_model_loader(f)
+            for i in range(loader.n_kv()):
+                key = loader.kv_key_at(i).decode('utf-8')
+                value = loader.kv_value_at(i)
+                if isinstance(value, (int, float, str, bool)):
+                    metadata[key] = value
+                elif isinstance(value, list):
+                    metadata[key] = [v.decode('utf-8') if isinstance(v, bytes) else v for v in value]
+            loader.close()
+
+        architecture = metadata.get('general.architecture', 'unknown').lower()
+        print(f"Debug: Architecture detected via low-level loader: '{architecture}'")
+
+        # Qwen-specific layer detection
+        layer_keys = [
+            f"{architecture}.block_count",  # For qwen3/qwen2
+            "qwen.block_count",             # Fallback for older versions
+            "num_hidden_layers",
+            "n_layers",
+            "block_count"
+        ]
+
+        for key in layer_keys:
+            if key in metadata:
+                try:
+                    layer_count = int(metadata[key])
+                    print(f"Debug: Found layer count ({layer_count}) using key '{key}'")
                     break
+                except (ValueError, TypeError):
+                    continue
+        else:
+            raise ValueError(f"Could not determine layer count for '{model_path}'")
+
+    except Exception as low_level_error:
+        print(f"Low-level extraction failed, trying normal load: {low_level_error}")
+        try:
+            # Fallback to normal model load
+            model = Llama(model_path, n_ctx=4096, n_batch=1, n_gpu_layers=0, verbose=True)
+            metadata = model.metadata
+            architecture = metadata.get('general.architecture', 'unknown').lower()
+            print(f"Debug: Architecture detected via normal load: '{architecture}'")
+
+            layer_keys = [
+                f"{architecture}.block_count",
+                f"{architecture}.num_hidden_layers",
+                "num_hidden_layers",
+                "n_layers",
+                "block_count"
+            ]
+            
+            for key in layer_keys:
+                if key in metadata:
+                    try:
+                        layer_count = int(metadata[key])
+                        print(f"Debug: Found layer count ({layer_count}) using key '{key}'")
+                        break
+                    except (ValueError, TypeError):
+                        continue
             else:
-                print(f"Warning: Could not find layer count for '{model_path}' in metadata.")
-                layers = 0
-        
-        metadata['layers'] = layers
-        del model
-        return metadata
-    except Exception as e:
-        import traceback
-        print(f"Error reading model metadata for '{model_path}': {str(e)}\n{traceback.format_exc()}")
-        return {}
+                layer_count = int(metadata.get("llama.block_count", 0))
+
+            del model
+
+        except Exception as e:
+            error_msg = f"Failed both metadata methods for '{model_path}': {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            raise ValueError(error_msg)
+
+    return metadata, layer_count
+
+def get_chat_format(metadata):
+    """Determine chat format using CHAT_FORMAT_MAP from temporary"""
+    architecture = metadata.get('general.architecture', 'unknown').lower()
+    
+    # Find longest matching key prefix
+    match = None
+    for key in sorted(temporary.CHAT_FORMAT_MAP.keys(), key=len, reverse=True):
+        if architecture.startswith(key):
+            match = key
+            break
+            
+    return temporary.CHAT_FORMAT_MAP.get(match, 'llama-2')  # Default fallback
+
+import traceback
+from llama_cpp import Llama
 
 def get_model_layers(model_path: str) -> int:
     """
     Get the number of layers for a GGUF model.
     """
-    metadata = get_model_metadata(model_path)
-    layers = metadata.get('layers', 0)
-    return int(layers)
+    _, layers = get_model_metadata(model_path)
+    return layers
 
 def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
@@ -158,15 +206,14 @@ def inspect_model(model_dir, model_name, vram_size):
         return f"Model file '{model_path}' not found."
     save_config()
     try:
-        metadata = get_model_metadata(str(model_path))
+        metadata, layers = get_model_metadata(str(model_path))
         architecture = metadata.get('general.architecture', 'unknown')
         params_str = metadata.get('general.size_label', 'Unknown')
-        layers = metadata.get(f'{architecture}.block_count', 'Unknown')
         max_ctx = metadata.get(f'{architecture}.context_length', 'Unknown')
         embed = metadata.get(f'{architecture}.embedding_length', 'Unknown')
         model_size_mb = get_model_size(str(model_path))
         model_size_gb = model_size_mb / 1024
-        if isinstance(layers, int) and layers > 0:
+        if layers > 0:
             fit_layers = calculate_single_model_gpu_layers_with_layers(
                 str(model_path), vram_size, layers, DYNAMIC_GPU_LAYERS
             )
@@ -185,10 +232,22 @@ def inspect_model(model_dir, model_name, vram_size):
         return f"Error inspecting model: {str(e)}"
 
 def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
-    from scripts.temporary import CONTEXT_SIZE, BATCH_SIZE, MMAP, DYNAMIC_GPU_LAYERS
     from scripts.settings import save_config
-    from pathlib import Path
-    import traceback
+    """
+    Prepare the model environment for inference using the llama.cpp binary.
+    
+    Args:
+        model_folder (str): Directory containing the model files.
+        model (str): Name of the model file to load.
+        vram_size (int): Available VRAM size in MB.
+        llm_state: Current state of the LLM (not used with binary).
+        models_loaded_state (bool): Whether models are currently loaded.
+    
+    Returns:
+        tuple: (status message, success boolean, llm_state, models_loaded_state)
+    """
+    print(f"Initiating load for model: {model} from {model_folder}...")
+    from scripts.temporary import DYNAMIC_GPU_LAYERS
 
     save_config()
 
@@ -199,68 +258,42 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     if not model_path.exists():
         return f"Error: Model file '{model_path}' not found.", False, llm_state, models_loaded_state
 
-    metadata = get_model_metadata(str(model_path))
-    chat_format = get_chat_format(metadata)
-
-    num_layers = get_model_layers(str(model_path))
-    if num_layers <= 0:
-        return f"Error: Could not determine layer count for model '{model}'.", False, llm_state, models_loaded_state
-
-    temporary.GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
-        str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
-    )
-
     try:
-        from llama_cpp import Llama
-    except ImportError:
-        return "Error: llama-cpp-python not installed. Python bindings are required.", False, llm_state, models_loaded_state
+        metadata, num_layers = get_model_metadata(str(model_path))
+        if num_layers <= 0:
+            return f"Error: Could not determine layer count for model '{model}'.", False, llm_state, models_loaded_state
+        chat_format = get_chat_format(metadata)
 
-    try:
-        if models_loaded_state:
-            unload_models(llm_state, models_loaded_state)
+        # Calculate GPU layers only if not CPU-only backend
+        cpu_only_backends = ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
+        if BACKEND_TYPE not in cpu_only_backends:
+            GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
+                str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
+            )
+        else:
+            GPU_LAYERS = 0
+            print(f"Debug: CPU-only backend detected ({BACKEND_TYPE}). Setting GPU_LAYERS to 0.")
 
-        print(f"Debug: Loading model '{model}' from '{model_folder}' with Python bindings and chat_format '{chat_format}'")
-        new_llm = Llama(
-            model_path=str(model_path),
-            n_ctx=temporary.CONTEXT_SIZE,
-            n_gpu_layers=temporary.GPU_LAYERS,
-            n_batch=temporary.BATCH_SIZE,
-            mmap=temporary.MMAP,
-            mlock=temporary.MLOCK,
-            verbose=True,
-            chat_format=chat_format
-        )
-
-        test_output = new_llm.create_chat_completion(
-            messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=temporary.BATCH_SIZE,
-            stream=False
-        )
-        print(f"Debug: Test inference successful: {test_output}")
-
-        temporary.MODEL_NAME = model
-        status = f"Model '{model}' loaded successfully with chat_format '{chat_format}'. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
-        return status, True, new_llm, True
+        # Store model details for inference
+        MODEL_NAME = model
+        status = f"Model '{model}' prepared for loading with chat_format '{chat_format}'. GPU layers: {GPU_LAYERS}/{num_layers}"
+        return status, True, None, True  # No llm_state needed with binary
     except Exception as e:
-        error_msg = f"Error loading model: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"Error preparing model: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
-        return error_msg, False, None, False
+        return error_msg, False, llm_state, models_loaded_state
 
 def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vram: int, num_layers: int, dynamic_gpu_layers: bool = True) -> int:
     from math import floor
     if num_layers <= 0 or available_vram <= 0:
-        print("Debug: Invalid input (layers or VRAM), returning 0 layers")
         return 0
     model_file_size = get_model_size(model_path)
-    metadata = get_model_metadata(model_path)
+    metadata, _ = get_model_metadata(model_path)
     factor = 1.2 if metadata.get('general.architecture') == 'llama' else 1.1
     adjusted_model_size = model_file_size * factor
     layer_size = adjusted_model_size / num_layers if num_layers > 0 else 0
     max_layers = floor(available_vram / layer_size) if layer_size > 0 else 0
     result = min(max_layers, num_layers) if dynamic_gpu_layers else num_layers
-    print(f"Debug: Model size = {model_file_size:.2f} MB, Layers = {num_layers}, VRAM = {available_vram} MB")
-    print(f"Debug: Adjusted size = {adjusted_model_size:.2f} MB, Layer size = {layer_size:.2f} MB")
-    print(f"Debug: Max layers with VRAM = {max_layers}, Final result = {result}")
     return result
 
 def unload_models(llm_state, models_loaded_state):
@@ -274,27 +307,31 @@ def unload_models(llm_state, models_loaded_state):
     return "No model loaded to unload.", llm_state, models_loaded_state
 
 def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None, cancel_event=None, llm_state=None, models_loaded_state=False):
-    import re
-    import traceback
-    from scripts import temporary
-    from scripts.utility import clean_content
-    from scripts.prompts import get_system_message
-
-    def should_stream(input_text, settings):
-        """Determine if response should be streamed based on input characteristics"""
-        stream_keywords = ["write", "generate", "story", "report", "essay", "explain", "describe"]
-        input_length = len(input_text.strip())
-        is_long_input = input_length > 100
-        is_creative_task = any(keyword in input_text.lower() for keyword in stream_keywords)
-        is_interactive_mode = settings.get("is_reasoning", False)
-        return is_creative_task or is_long_input or (is_interactive_mode and input_length > 50)
-
-    if not models_loaded_state or llm_state is None:
+    """
+    Generate a response stream by calling the llama.cpp binary.
+    
+    Args:
+        session_log (list): List of conversation messages.
+        settings (dict): Model settings (temperature, repeat_penalty, etc.).
+        web_search_enabled (bool): Whether web search is enabled.
+        search_results (str): Web search results to include.
+        cancel_event (Event): Event to cancel the stream.
+        llm_state: Not used (kept for compatibility).
+        models_loaded_state (bool): Whether a model is loaded.
+    
+    Yields:
+        str: Chunks of the generated response.
+    """
+    if not models_loaded_state:
         yield "Error: No model loaded. Please load a model first."
         return
 
-    n_ctx = temporary.CONTEXT_SIZE
+    model_path = Path(MODEL_FOLDER) / MODEL_NAME
+    if not model_path.exists():
+        yield f"Error: Model file '{model_path}' not found."
+        return
 
+    # Prepare system message and user query
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
         is_nsfw=settings.get("is_nsfw", False),
@@ -302,75 +339,49 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False)
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
-    
+
     if web_search_enabled and search_results:
         system_message += "\n\nSearch Results:\n" + re.sub(r'https?://(www\.)?([^/]+).*', r'\2', str(search_results))
-
-    try:
-        system_tokens = len(llm_state.tokenize(system_message.encode('utf-8')))
-    except Exception as e:
-        yield f"Error tokenizing system message: {str(e)}"
-        return
 
     if not session_log or len(session_log) < 2 or session_log[-2]['role'] != 'user':
         yield "Error: No user input to process."
         return
 
     user_query = clean_content('user', session_log[-2]['content'])
-    try:
-        user_tokens = len(llm_state.tokenize(user_query.encode('utf-8')))
-    except Exception as e:
-        yield f"Error tokenizing user query: {str(e)}"
-        return
+    prompt = f"{system_message}\n\nUser: {user_query}\nAssistant:"
 
-    available_tokens = n_ctx - system_tokens - user_tokens - (temporary.BATCH_SIZE // 8)
-    if available_tokens < 0:
-        yield "Error: Context size exceeded."
-        return
-
-    messages = [{"role": "system", "content": system_message}]
-    current_tokens = 0
-    
-    for msg in reversed(session_log[:-2]):
-        content = clean_content(msg['role'], msg['content'])
-        try:
-            msg_tokens = len(llm_state.tokenize(content.encode('utf-8')))
-            if current_tokens + msg_tokens > available_tokens:
-                break
-            messages.insert(1, {"role": msg['role'], "content": content})
-            current_tokens += msg_tokens
-        except Exception:
-            continue
-
-    messages.append({"role": "user", "content": user_query})
+    # Construct the command for llama.cpp binary
+    command = [
+        LLAMA_CLI_PATH,
+        '-m', str(model_path),
+        '-p', prompt,
+        '-n', str(BATCH_SIZE),
+        '--temp', str(settings.get("temperature", TEMPERATURE)),
+        '--repeat_penalty', str(settings.get("repeat_penalty", REPEAT_PENALTY)),
+        '-c', str(CONTEXT_SIZE),
+        '-ngl', str(GPU_LAYERS),
+    ]
 
     try:
-        if should_stream(user_query, settings):
-            for chunk in llm_state.create_chat_completion(
-                messages=messages,
-                max_tokens=temporary.BATCH_SIZE,
-                temperature=float(settings.get("temperature", temporary.TEMPERATURE)),
-                repeat_penalty=float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY)),
-                stream=True
-            ):
-                if cancel_event and cancel_event.is_set():
-                    yield "<CANCELLED>"
-                    return
-                if chunk.get('choices'):
-                    content = chunk['choices'][0].get('delta', {}).get('content', '')
-                    if content:
-                        content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
-                        content = re.sub(r'\n{2,}', '\n', content)
-                        yield content
-        else:
-            response = llm_state.create_chat_completion(
-                messages=messages,
-                max_tokens=temporary.BATCH_SIZE,
-                stream=False
-            )
-            content = response['choices'][0]['message']['content']
-            content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
-            content = re.sub(r'\n{2,}', '\n', content)
-            yield content
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        for line in process.stdout:
+            if cancel_event and cancel_event.is_set():
+                process.terminate()
+                yield "<CANCELLED>"
+                return
+            content = line.strip()
+            if content:
+                content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
+                content = re.sub(r'\n{2,}', '\n', content)
+                yield content
+        process.wait()
+        if process.returncode != 0:
+            error = process.stderr.read()
+            yield f"Error from binary: {error}"
     except Exception as e:
         yield f"Error generating response: {str(e)}"

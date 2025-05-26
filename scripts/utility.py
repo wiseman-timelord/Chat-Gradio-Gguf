@@ -8,7 +8,6 @@ from pathlib import Path
 from datetime import datetime
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from newspaper import Article
-from .models import load_models, clean_content
 import scripts.settings as settings
 from .temporary import (
     TEMP_DIR, HISTORY_DIR, SESSION_FILE_FORMAT, ALLOWED_EXTENSIONS, 
@@ -81,6 +80,7 @@ def speak_text(text):
         pythoncom.CoUninitialize()
 
 def generate_session_label(session_log):
+    from .models import clean_content
     """Generate a session label using YAKE on the entire session log, up to 25 characters."""
     if not session_log:
         return "Untitled"

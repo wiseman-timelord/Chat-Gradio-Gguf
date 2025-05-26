@@ -82,12 +82,31 @@ STATUS_TEXTS = {
 }
 
 CHAT_FORMAT_MAP = {
-    'qwen2': 'chatml',
-    'llama': 'llama-2',
-    'qwen3': 'chatml',
-    'qwen3moe': 'chatml',
-    'deepseek2': 'deepseek',
-    'stablelm': 'chatml',
+    # Qwen Family
+    "qwen3moe": "chatml",
+    "qwen3": "chatml",
+    "qwen2.5": "chatml", 
+    "qwen2": "chatml",
+    "codeqwen": "chatml",
+    "qwen": "chatml",
+    
+    # Llama Family
+    "llama-3.2": "llama-2",
+    "llama3": "llama-2",
+    "hermes-3-llama": "llama-2",
+    "smol-llama": "llama-2",
+    "llama": "llama-2",
+
+    # Other Architectures
+    "deepseek-v3": "deepseek",
+    "deepseek2": "deepseek",
+    "deepseek": "deepseek",
+    "phi4": "phi",
+    "phi": "phi",
+    "mistral": "mistral",
+    "mixtral": "mistral",
+    "stablelm": "chatml",
+    "opus": "chatml"
 }
 
 # Handling Keywords for Special Model Behaviors
