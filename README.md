@@ -60,9 +60,9 @@ Launching Gradio Interface...
 ![preview_image](media/configuration_page.jpg)
 
 ## Requirements
-- Windows 10/11 - Its a Windows program, it may be linux compatible later (not now).
+- Windows 7-11 - Its a Windows program, batch menu has auto-sized-layout for modern/old OS.
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
-- Python => 3.8 (tested on 3.11.0) - Libraries used = Gradio, LangChain, llama-cpp-python, FAISS.
+- Python => 3.8 - "Based on provided scripts, Chat-Gradio-Gguf requires Python 3.8+" -deepseek.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section.
 - Suitable CPU/GPU - Gpu may be, Main or Compute, with VRam 2-64GB, testing on rx470 in Compute.  
 
