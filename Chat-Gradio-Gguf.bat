@@ -46,7 +46,7 @@ goto :eof
 
 REM ==== 80-Column Version ====
 :MainMenu80
-cls
+REM cls
 color 0F
 call :DisplaySeparatorThick80
 echo     Chat-Gradio-Gguf: Batch Menu
@@ -121,7 +121,36 @@ if /i "%choice%"=="1" (
     echo Starting %TITLE%...
     set PYTHONUNBUFFERED=1
     
-    REM [Rest of your processing code...]
+    call .\.venv\Scripts\activate.bat
+    echo Activated: `.venv`
+
+    echo Checking Python libraries...
+    python.exe .\requisites.py testlibs > temp_libs.txt 2>&1
+    set "hasError=0"
+    for /F "usebackq delims=" %%a in ("temp_libs.txt") do (
+        echo %%a | find "[FAIL]" >nul && set "hasError=1"
+    )
+    if !hasError! equ 1 (
+        type temp_libs.txt
+        echo Please re-install Chat-Gradio-Gguf!
+        del temp_libs.txt
+        timeout /t 3 >nul
+        call .\.venv\Scripts\deactivate.bat
+        goto :end_of_script
+    ) else (
+        findstr /C:"Success: All Python libraries verified" temp_libs.txt
+    )
+    del temp_libs.txt
+    del 4.25.0
+	
+    python.exe -u .\launcher.py
+    if errorlevel 1 (
+        echo Error launching %TITLE%
+        pause
+    )
+    call .\.venv\Scripts\deactivate.bat
+    echo DeActivated: `.venv`
+    set PYTHONUNBUFFERED=0
     goto MainMenu80
 )
 
@@ -133,9 +162,25 @@ if /i "%choice%"=="2" (
     call :DisplaySeparatorThick80
     echo.
     echo Running Installer...
-    REM [Rest of your processing code...]
+    timeout /t 1 >nul
+    
+    call .\.venv\Scripts\activate.bat
+    echo Activated: `.venv`
+    
+    cls
+    python.exe .\requisites.py installer
+    if errorlevel 1 (
+        echo Error during installation
+        pause
+    )
+    call .\.venv\Scripts\deactivate.bat
+    echo DeActivated: `.venv`
+    set PYTHONUNBUFFERED=0
+    pause
     goto MainMenu80
 )
+
+
 
 if /i "%choice%"=="X" (
     cls
@@ -159,7 +204,36 @@ if /i "%choice%"=="1" (
     echo Starting %TITLE%...
     set PYTHONUNBUFFERED=1
     
-    REM [Rest of your processing code...]
+    call .\.venv\Scripts\activate.bat
+    echo Activated: `.venv`
+
+    echo Checking Python libraries...
+    python.exe .\requisites.py testlibs > temp_libs.txt 2>&1
+    set "hasError=0"
+    for /F "usebackq delims=" %%a in ("temp_libs.txt") do (
+        echo %%a | find "[FAIL]" >nul && set "hasError=1"
+    )
+    if !hasError! equ 1 (
+        type temp_libs.txt
+        echo Please re-install Chat-Gradio-Gguf!
+        del temp_libs.txt
+        timeout /t 3 >nul
+        call .\.venv\Scripts\deactivate.bat
+        goto :end_of_script
+    ) else (
+        findstr /C:"Success: All Python libraries verified" temp_libs.txt
+    )
+    del temp_libs.txt
+    del 4.25.0
+	
+    python.exe -u .\launcher.py
+    if errorlevel 1 (
+        echo Error launching %TITLE%
+        pause
+    )
+    call .\.venv\Scripts\deactivate.bat
+    echo DeActivated: `.venv`
+    set PYTHONUNBUFFERED=0
     goto MainMenu120
 )
 
@@ -171,7 +245,21 @@ if /i "%choice%"=="2" (
     call :DisplaySeparatorThick120
     echo.
     echo Running Installer...
-    REM [Rest of your processing code...]
+    timeout /t 1 >nul
+    
+    call .\.venv\Scripts\activate.bat
+    echo Activated: `.venv`
+    
+    cls
+    python.exe .\requisites.py installer
+    if errorlevel 1 (
+        echo Error during installation
+        pause
+    )
+    call .\.venv\Scripts\deactivate.bat
+    echo DeActivated: `.venv`
+    set PYTHONUNBUFFERED=0
+    pause
     goto MainMenu120
 )
 
