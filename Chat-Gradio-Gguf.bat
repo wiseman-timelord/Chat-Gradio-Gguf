@@ -78,12 +78,12 @@ REM ==== 120-Column Version ====
 cls
 color 0F
 call :DisplaySeparatorThick120
-echo "                                  ___________      ________          ________                                        "
-echo "                                  \__    ___/     /  _____/         /  _____/                                        "
-echo "                                    |    | ______/   \  ___  ______/   \  ___                                        "
-echo "                                    |    |/_____/\    \_\  \/_____/\    \_\  \                                       "
-echo "                                    |____|        \______  /        \______  /                                       "
-echo "                                                         \/                \/                                        "
+echo "                                  _________             ________            ________                                 "
+echo "                                  \_   ___ \           /  _____/           /  _____/                                 "
+echo "                                  /    \  \/   ______ /   \  ___   ______ /   \  ___                                 "
+echo "                                  \     \____ /_____/ \    \_\  \ /_____/ \    \_\  \                                "
+echo "                                   \______  /          \______  /          \______  /                                "
+echo "                                          \/                  \/                  \/                                 "
 call :DisplaySeparatorThin120
 echo                                     Chat-Gradio-Gguf: Batch Menu                                      
 call :DisplaySeparatorThick120
