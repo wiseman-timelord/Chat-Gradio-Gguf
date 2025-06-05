@@ -46,7 +46,7 @@ goto :eof
 
 REM ==== 80-Column Version ====
 :MainMenu80
-REM cls
+cls
 color 0F
 call :DisplaySeparatorThick80
 echo     Chat-Gradio-Gguf: Batch Menu
@@ -183,9 +183,6 @@ if /i "%choice%"=="2" (
 
 
 if /i "%choice%"=="X" (
-    cls
-    echo Closing %TITLE%...
-    timeout /t 2 >nul
     goto :end_of_script
 )
 
@@ -264,9 +261,6 @@ if /i "%choice%"=="2" (
 )
 
 if /i "%choice%"=="X" (
-    cls
-    echo Closing %TITLE%...
-    timeout /t 2 >nul
     goto :end_of_script
 )
 
@@ -284,9 +278,6 @@ if %errorlevel%==0 (
 )
 
 :end_of_script
-cls
-color 0F
-call :DisplaySeparatorThick80
-echo. 
+echo Closing %TITLE%...
 timeout /t 2 >nul
 exit
