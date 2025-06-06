@@ -159,9 +159,37 @@ project_root/
 ```
 
 # Current
-1. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
-2. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present.
-3. There is no stop button.
+1. issue with no vulkan_sdk installed, not providing useful feedback. supposed to raise error, then instruct the user where to download, and possibly its also crashing out on my new windows 8 python 9 setup...
+```
+===============================================================================
+    Chat-Gradio-Gguf: Installation
+===============================================================================
+
+Installing Chat-Gradio-Gguf...
+Selected backend: GPU/CPU - Vulkan                                     [GOOD]
+Detected Vulkan versions: {}
+No Vulkan SDK found                                                    [FAIL]
+Preparing to install Vulkan SDK...                                     [GOOD]
+Traceback (most recent call last):
+  File "C:\Program_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-A066\requisites.py",
+line 678, in <module>
+    install()
+  File "C:\Program_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-A066\requisites.py",
+line 573, in install
+    if not install_vulkan_sdk():
+  File "C:\Program_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-A066\requisites.py",
+line 357, in install_vulkan_sdk
+    TEMP_DIR.mkdir(exist_ok=True)
+  File "pathlib.py", line 1312, in mkdir
+FileNotFoundError: [WinError 3] The system cannot find the path specified: 'C:\\
+Program_Files\\Chat-Gradio-Gguf\\Chat-Gradio-Gguf-A066\\data\\temp'
+Error during installation
+Press any key to continue . . .
+```
+2. Check for duplicated printed lines during initialization.
+3. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
+4. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present.
+5. There is no stop button.
 
 # Distant
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
