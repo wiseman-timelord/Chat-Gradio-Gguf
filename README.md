@@ -6,7 +6,7 @@
 Intended as a high-quality chat interface programmed towards windows 7-11 (non-WSL), with any Cpu/Gpu on GGUF models. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience.
 
 ### Features
-- **Comprihensive CPU/GPU Support**: CPUs x64-CPU/AVX2/AVX512 and GPUs AMD/nVIDIA/Intel, with dropdown list selection supporting multi CPU/GPU setup.
+- **Comprihensive CPU/GPU Support**: CPUs AVX2/AVX512 Compatible and GPUs AMD/nVIDIA, with dropdown list selection supporting multi CPU/GPU setup.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, TOT, no-THINK, and code formatting, and with file attachments. 
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
 - **Configurable Context**: Set model context to 8192-138072, and batch output to 1028-4096.
@@ -160,7 +160,7 @@ project_root/
 ```
 
 # Current
-1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time.
+1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time. Had to streamline, this could break things, dropped support for intel GPU and non avx2 compatible processors.
 2. Check for duplicated printed lines during initialization.
 3. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
 4. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present.
