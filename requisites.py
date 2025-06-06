@@ -402,13 +402,14 @@ def install_vulkan_sdk() -> bool:
         # Create parent directory if needed
         install_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Run silent installer
+        # Run silent installer - QUOTE THE PATH TO HANDLE SPACES
+        quoted_path = f'"{install_path}"'
         command = [
             str(installer_path),
             "--accept-licenses",
             "--confirm-command",
             "install",
-            f"installpath={install_path}",
+            f"installpath={quoted_path}",
             "launch=false",
             "/S"
         ]
@@ -432,6 +433,13 @@ def install_vulkan_sdk() -> bool:
         return False
     except Exception as e:
         print_status(f"Vulkan SDK installation failed: {str(e)}", False)
+        # Print more details for debugging
+        if hasattr(e, 'cmd'):
+            print(f"Command: {e.cmd}")
+        if hasattr(e, 'output'):
+            print(f"Output: {e.output}")
+        if hasattr(e, 'stderr'):
+            print(f"Error: {e.stderr}")
         return False
     finally:
         installer_path.unlink(missing_ok=True)
