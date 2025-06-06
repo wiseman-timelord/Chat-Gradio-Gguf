@@ -148,7 +148,7 @@ project_root/
 ```
 project_root/
 ├── data/
-│ └── persistence.json
+│ └── persistent.json
 ├── data/vectors/
 └─────── *
 ├── data/temp/
