@@ -26,7 +26,7 @@ VULKAN_PATHS = [
     Path("C:/progra~1/VulkanSDK"),
     Path("C:/progra~2/VulkanSDK"),
     Path("C:/programs/VulkanSDK"),
-    Path("C:/program_filez/VulkanSDK"),
+    Path("C:/program_files/VulkanSDK"),
     Path("C:/drivers/VulkanSDK")
 ]
 REQUIREMENTS = [
