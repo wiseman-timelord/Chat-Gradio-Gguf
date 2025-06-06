@@ -5,6 +5,7 @@ import os, json, platform, subprocess, sys, contextlib, time, copy
 import pkg_resources
 from pathlib import Path
 from typing import Dict, Any, Optional
+import shutil
 
 # Globals
 APP_NAME = "Chat-Gradio-Gguf"
@@ -122,28 +123,65 @@ CONFIG_TEMPLATE = """{
   }
 }"""
 
+# Console width detection and separator utilities
+SEPARATOR_THICK = "="
+SEPARATOR_THIN = "-"
+CONSOLE_WIDTH = 80  # Default, will be updated
+
+def get_console_width() -> int:
+    """Detect console width and return appropriate size (79 or 119)"""
+    try:
+        width = shutil.get_terminal_size().columns
+        return 119 if width >= 120 else 79
+    except:
+        return 79  # Fallback to narrow width
+
+# Update the CONSOLE_WIDTH at startup
+CONSOLE_WIDTH = get_console_width()
+
+def print_header(title: str) -> None:
+    """Print header with dynamic width separators"""
+    clear_screen()
+    separator = SEPARATOR_THICK * CONSOLE_WIDTH
+    print(f"{separator}\n    {APP_NAME}: {title}\n{separator}\n")
+
+def print_separator(thick: bool = True) -> None:
+    """Print separator line with dynamic width"""
+    char = SEPARATOR_THICK if thick else SEPARATOR_THIN
+    print(char * CONSOLE_WIDTH)
+
+def print_status(message: str, success: bool = True) -> None:
+    """Print status message with dynamic width alignment"""
+    status = "[GOOD]" if success else "[FAIL]"
+    message_width = CONSOLE_WIDTH - len(status) - 3  # Account for status and spacing
+    truncated_msg = (message[:message_width-3] + '...') if len(message) > message_width else message
+    print(f"{truncated_msg.ljust(message_width)} {status}")
+    time.sleep(1 if success else 3)
+
 # Utility Functions
 def clear_screen() -> None:
     os.system('cls')
 
-def print_header(title: str) -> None:
-    clear_screen()
-    print(f"{'='*120}\n    {APP_NAME}: {title}\n{'='*120}\n")
-
-def print_status(message: str, success: bool = True) -> None:
-    status = "[GOOD]" if success else "[FAIL]"
-    print(f"{message.ljust(60)} {status}")
-    time.sleep(1 if success else 3)
-
 # Configuration
 def get_user_choice(prompt: str, options: list) -> str:
+    """Print menu with layout optimized for current console width"""
     print_header("Install Options")
-    print(f"\n\n {prompt}\n\b")
-    for i, option in enumerate(options, 1):
-        print(f"    {i}. {option}\n")
-    print(f"\n\n{'='*120}")
+    
+    if CONSOLE_WIDTH >= 120:
+        # Original spacious layout for wide consoles
+        print(f"\n\n {prompt}\n\b")
+        for i, option in enumerate(options, 1):
+            print(f"    {i}. {option}\n")
+    else:
+        # Compact layout for narrow consoles
+        print(f" {prompt}")
+        for i, option in enumerate(options, 1):
+            print(f"    {i}. {option}\n")
+    
+    print_separator()
+    
     while True:
-        choice = input(" Selection; Menu Options = 1-{}, Exit Installer = X: ".format(len(options))).strip().upper()
+        choice = input(f" Selection; Menu Options = 1-{len(options)}, Exit Installer = X: ").strip().upper()
         if choice == "X":
             print("\nExiting installer...")
             sys.exit(0)
@@ -582,7 +620,7 @@ def select_backend_type() -> None:
         "NoAVX - CPU Only - For older CPUs without AVX support",
         "OpenBLAS - CPU Only - Optimized for linear algebra operations",
         "Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU",
-        "HIP-Radeon - GPU/CPU - Experimental Vulkan for AMD-ROCM",
+        "Hip-Radeon - GPU/CPU - Experimental Vulkan for AMD-ROCM",
         "CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback",
         "CUDA 12.4 - GPU/CPU - For CUDA 12.4 GPUs with CPU fallback"
     ]
