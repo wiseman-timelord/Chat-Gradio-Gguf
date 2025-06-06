@@ -346,27 +346,47 @@ def create_venv() -> bool:
         return False
 
 def install_vulkan_sdk() -> bool:
-    """
-    Download and install Vulkan SDK version 1.4.x.
+    """Install Vulkan SDK to predefined location"""
     
-    Returns:
-        bool: True if installation succeeds, False otherwise.
-    """
-    print_status("Preparing to install Vulkan SDK...")
+    # Create installation options from VULKAN_PATHS
+    install_options = [base_path / VULKAN_TARGET_VERSION for base_path in VULKAN_PATHS]
+    
+    # Show installation location menu
+    print("\nSelect installation directory for Vulkan SDK:")
+    for i, path in enumerate(install_options, 1):
+        print(f" {i}. {path}")
+    print("")
+    
+    # Get user choice
+    while True:
+        choice = input(f"Select location (1-{len(install_options)}), [X] to cancel: ").strip().upper()
+        if choice == "X":
+            print_status("Vulkan SDK installation cancelled", False)
+            return False
+        if choice.isdigit() and 1 <= int(choice) <= len(install_options):
+            install_path = install_options[int(choice) - 1]
+            break
+        print("Invalid selection, please try again")
+    
+    print_status(f"Will install to: {install_path}")
+    
+    # Download the SDK
     vulkan_url = f"https://sdk.lunarg.com/sdk/download/{VULKAN_TARGET_VERSION}/windows/VulkanSDK-{VULKAN_TARGET_VERSION}-Installer.exe?Human=true"
     TEMP_DIR.mkdir(exist_ok=True)
     installer_path = TEMP_DIR / "VulkanSDK.exe"
+    
     try:
         import requests
         from tqdm import tqdm
         print_status("Downloading Vulkan SDK...")
-        for attempt in range(3):  # Retry up to 3 times
+        for attempt in range(3):
             try:
                 response = requests.get(vulkan_url, stream=True, timeout=30)
                 response.raise_for_status()
                 total_size = int(response.headers.get('content-length', 0))
                 with open(installer_path, 'wb') as f:
-                    with tqdm(total=total_size, unit='B', unit_scale=True, desc="Downloading Vulkan SDK") as pbar:
+                    with tqdm(total=total_size, unit='B', unit_scale=True, 
+                              desc="Downloading Vulkan SDK") as pbar:
                         for chunk in response.iter_content(chunk_size=8192):
                             if chunk:
                                 f.write(chunk)
@@ -379,22 +399,42 @@ def install_vulkan_sdk() -> bool:
                     return False
                 time.sleep(5)
         
-        print_status("Running Vulkan SDK installer...")
-        try:
-            result = subprocess.run([str(installer_path), "/S"], check=True, capture_output=True, text=True)
-            if result.returncode != 0:
-                raise Exception(f"Installer exited with code {result.returncode}")
-            print_status("Vulkan SDK installation completed")
-        except PermissionError:
-            print_status("Permission denied: Run installer as administrator", False)
-            return False
-        finally:
-            installer_path.unlink(missing_ok=True)
+        # Create parent directory if needed
+        install_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Run silent installer
+        command = [
+            str(installer_path),
+            "--accept-licenses",
+            "--confirm-command",
+            "install",
+            f"installpath={install_path}",
+            "launch=false",
+            "/S"
+        ]
+        result = subprocess.run(
+            command, 
+            check=True, 
+            capture_output=True, 
+            text=True
+        )
+        
+        if result.returncode != 0:
+            raise Exception(f"Installer exited with code {result.returncode}")
+        
+        # Set environment variable
+        os.environ["VULKAN_SDK"] = str(install_path)
+        print_status(f"Vulkan SDK installed to: {install_path}")
         return True
+        
+    except PermissionError:
+        print_status("Permission denied: Run installer as administrator", False)
+        return False
     except Exception as e:
         print_status(f"Vulkan SDK installation failed: {str(e)}", False)
-        installer_path.unlink(missing_ok=True)
         return False
+    finally:
+        installer_path.unlink(missing_ok=True)
 
 def download_extract_backend(backend: str) -> bool:
     """
@@ -565,6 +605,10 @@ def install():
         time.sleep(2)
         sys.exit(1)
     
+    # Create directories FIRST before anything else
+    print_status("Creating required directories...")
+    create_directories()
+    
     print_status("Selected backend: " + BACKEND_TYPE)
     backend_info = BACKEND_OPTIONS[BACKEND_TYPE]
     requires_vulkan = backend_info.get("vulkan_required", False)
@@ -576,9 +620,6 @@ def install():
             sys.exit(1)
         else:
             print_status("Vulkan SDK installed successfully")
-    
-    print_status("Creating required directories...")
-    create_directories()
     
     print_status("Setting up virtual environment...")
     if not create_venv():
