@@ -132,7 +132,8 @@ Either, compatibility in progress or not confirmed, with gpt for comparrisson..
 ```
 project_root/
 │ Chat-Gradio-Gguf.bat
-│ requisites.py
+│ installer.py
+│ validater.py
 │ launcher.py
 ├── media/
 │ └── project_banner.jpg
@@ -160,7 +161,8 @@ project_root/
 ```
 
 # Current
-1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time. Had to streamline, this could break things, dropped support for intel GPU and non avx2 compatible processors.
+1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time. Had to streamline, this could break things, dropped support for intel GPU and non avx2 compatible processors..
+2. Ensuring that the displays are correct in the batch on win 7-11, had to ditch eleglant menu design and ascii art.
 2. Check for duplicated printed lines during initialization.
 3. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
 4. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present.
