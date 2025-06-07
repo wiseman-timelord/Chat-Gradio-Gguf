@@ -161,7 +161,7 @@ project_root/
 ```
 
 # Current
-1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time. Had to streamline, this could break things, dropped support for intel GPU and non avx2 compatible processors..
+1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time. Had to streamline, this could break things, dropped support for intel GPU and non avx2 compatible processors. There is no vulkanSDK 1.1 available online, Need to find it or will have to notify windows 7-8 users to install the vulkanSDK part themselves if they have it, or install other backend.  
 2. Ensuring that the displays are correct in the batch on win 7-11, had to ditch eleglant menu design and ascii art.
 2. Check for duplicated printed lines during initialization.
 3. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
