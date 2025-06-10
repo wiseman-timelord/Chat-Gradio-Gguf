@@ -44,6 +44,23 @@ goto :eof
 echo ----------------------------------------------------------------------------------------------------------------------
 goto :eof
 
+REM ==== Dynamic Separator Functions ====
+:DisplaySeparatorThick
+if "%MENU_WIDTH%"=="120" (
+    call :DisplaySeparatorThick120
+) else (
+    call :DisplaySeparatorThick80
+)
+goto :eof
+
+:DisplaySeparatorThin
+if "%MENU_WIDTH%"=="120" (
+    call :DisplaySeparatorThin120
+) else (
+    call :DisplaySeparatorThin80
+)
+goto :eof
+
 REM ==== 80-Column Version ====
 :MainMenu80
 cls
@@ -57,12 +74,11 @@ echo.
 echo.
 echo.
 echo.
-echo.
 echo     1. Run Main Program
 echo.
 echo     2. Run Installation
 echo.
-echo.
+echo     3. Run Validation
 echo.
 echo.
 echo.
@@ -70,8 +86,8 @@ echo.
 echo.
 echo.
 call :DisplaySeparatorThick80
-set /p "choice=Selection; Menu Options = 1-2, Exit Batch = X: "
-goto :ProcessChoice80
+set /p "choice=Selection; Menu Options = 1-3, Exit Batch = X: "
+goto :ProcessChoice
 
 REM ==== 120-Column Version ====
 :MainMenu120
@@ -85,7 +101,7 @@ echo "                                  \     \____ /_____/ \    \_\  \ /_____/ 
 echo "                                   \______  /          \______  /          \______  /                                "
 echo "                                          \/                  \/                  \/                                 "
 call :DisplaySeparatorThin120
-echo                                     Chat-Gradio-Gguf: Batch Menu                                      
+echo    Chat-Gradio-Gguf: Batch Menu                                      
 call :DisplaySeparatorThick120
 echo.
 echo.
@@ -94,10 +110,11 @@ echo.
 echo.
 echo.
 echo.
-echo                                     1. Run Main Program
+echo    1. Run Main Program
 echo.
-echo                                     2. Run Installation
+echo    2. Run Installation
 echo.
+echo    3. Run Validation
 echo.
 echo.
 echo.
@@ -106,174 +123,127 @@ echo.
 echo.
 echo.
 call :DisplaySeparatorThick120
-set /p "choice=Selection; Menu Options = 1-2, Exit Batch = X: "
-goto :ProcessChoice120
+set /p "choice=Selection; Menu Options = 1-3, Exit Batch = X: "
+goto :ProcessChoice
 
-REM ==== Common Processing ====
-:ProcessChoice80
-if /i "%choice%"=="1" (
-    cls
-    color 06
-    call :DisplaySeparatorThick80
-    echo     Chat-Gradio-Gguf: Launcher
-    call :DisplaySeparatorThick80
-    echo.
-    echo Starting %TITLE%...
-    set PYTHONUNBUFFERED=1
-    
-    call .\.venv\Scripts\activate.bat
-    echo Activated: `.venv`
-
-    echo Checking Python libraries...
-    python.exe .\requisites.py testlibs > temp_libs.txt 2>&1
-    set "hasError=0"
-    for /F "usebackq delims=" %%a in ("temp_libs.txt") do (
-        echo %%a | find "[FAIL]" >nul && set "hasError=1"
-    )
-    if !hasError! equ 1 (
-        type temp_libs.txt
-        echo Please re-install Chat-Gradio-Gguf!
-        del temp_libs.txt
-        timeout /t 3 >nul
-        call .\.venv\Scripts\deactivate.bat
-        goto :end_of_script
-    ) else (
-        findstr /C:"Success: All Python libraries verified" temp_libs.txt
-    )
-    del temp_libs.txt
-    del 4.25.0
-	
-    python.exe -u .\launcher.py
-    if errorlevel 1 (
-        echo Error launching %TITLE%
-        pause
-    )
-    call .\.venv\Scripts\deactivate.bat
-    echo DeActivated: `.venv`
-    set PYTHONUNBUFFERED=0
-    goto MainMenu80
-)
-
-if /i "%choice%"=="2" (
-    cls
-    color 06
-    call :DisplaySeparatorThick80
-    echo     Chat-Gradio-Gguf: Installer
-    call :DisplaySeparatorThick80
-    echo.
-    echo Running Installer...
-    timeout /t 1 >nul
-    
-    call .\.venv\Scripts\activate.bat
-    echo Activated: `.venv`
-    
-    cls
-    python.exe .\requisites.py installer
-    if errorlevel 1 (
-        echo Error during installation
-        pause
-    )
-    call .\.venv\Scripts\deactivate.bat
-    echo DeActivated: `.venv`
-    set PYTHONUNBUFFERED=0
-    pause
-    goto MainMenu80
-)
-
-
-
-if /i "%choice%"=="X" (
-    goto :end_of_script
-)
+REM ==== Unified Choice Processing ====
+:ProcessChoice
+if /i "%choice%"=="1" goto :RunMainProgram
+if /i "%choice%"=="2" goto :RunInstallation
+if /i "%choice%"=="3" goto :RunValidation
+if /i "%choice%"=="X" goto :end_of_script
 
 echo Invalid selection. Please try again.
 timeout /t 2 >nul
-goto MainMenu80
+goto :MainMenu
 
-:ProcessChoice120
-if /i "%choice%"=="1" (
-    cls
-    color 06
-    call :DisplaySeparatorThick120
+REM ==== Option 1: Run Main Program ====
+:RunMainProgram
+cls
+color 06
+call :DisplaySeparatorThick
+if "%MENU_WIDTH%"=="120" (
     echo                                     Chat-Gradio-Gguf: Launcher                                      
-    call :DisplaySeparatorThick120
-    echo.
-    echo Starting %TITLE%...
-    set PYTHONUNBUFFERED=1
-    
-    call .\.venv\Scripts\activate.bat
-    echo Activated: `.venv`
-
-    echo Checking Python libraries...
-    python.exe .\requisites.py testlibs > temp_libs.txt 2>&1
-    set "hasError=0"
-    for /F "usebackq delims=" %%a in ("temp_libs.txt") do (
-        echo %%a | find "[FAIL]" >nul && set "hasError=1"
-    )
-    if !hasError! equ 1 (
-        type temp_libs.txt
-        echo Please re-install Chat-Gradio-Gguf!
-        del temp_libs.txt
-        timeout /t 3 >nul
-        call .\.venv\Scripts\deactivate.bat
-        goto :end_of_script
-    ) else (
-        findstr /C:"Success: All Python libraries verified" temp_libs.txt
-    )
-    del temp_libs.txt
-    del 4.25.0
-	
-    python.exe -u .\launcher.py
-    if errorlevel 1 (
-        echo Error launching %TITLE%
-        pause
-    )
-    call .\.venv\Scripts\deactivate.bat
-    echo DeActivated: `.venv`
-    set PYTHONUNBUFFERED=0
-    goto MainMenu120
+) else (
+    echo     Chat-Gradio-Gguf: Launcher
 )
+call :DisplaySeparatorThick
+echo.
+echo Starting %TITLE%...
+set PYTHONUNBUFFERED=1
 
-if /i "%choice%"=="2" (
-    cls
-    color 06
-    call :DisplaySeparatorThick120
-    echo                                     Chat-Gradio-Gguf: Installer                                      
-    call :DisplaySeparatorThick120
-    echo.
-    echo Running Installer...
-    timeout /t 1 >nul
-    
-    call .\.venv\Scripts\activate.bat
-    echo Activated: `.venv`
-    
-    cls
-    python.exe .\requisites.py installer
-    if errorlevel 1 (
-        echo Error during installation
-        pause
-    )
-    call .\.venv\Scripts\deactivate.bat
-    echo DeActivated: `.venv`
-    set PYTHONUNBUFFERED=0
+call .\.venv\Scripts\activate.bat
+echo Activated: `.venv`
+
+python.exe -u .\launcher.py
+if errorlevel 1 (
+    echo Error launching %TITLE%
     pause
-    goto MainMenu120
 )
+call .\.venv\Scripts\deactivate.bat
+echo DeActivated: `.venv`
+set PYTHONUNBUFFERED=0
+goto :MainMenu
 
-if /i "%choice%"=="X" (
-    goto :end_of_script
+REM ==== Option 2: Run Installation ====
+:RunInstallation
+cls
+color 06
+call :DisplaySeparatorThick
+if "%MENU_WIDTH%"=="120" (
+    echo                                     Chat-Gradio-Gguf: Installer                                      
+) else (
+    echo     Chat-Gradio-Gguf: Installer
 )
+call :DisplaySeparatorThick
+echo.
+echo Running Installer...
+timeout /t 1 >nul
 
-echo Invalid selection. Please try again.
-timeout /t 2 >nul
-goto MainMenu120
+rmdir /s /q .\data
+echo Deleted: .\data
+echo Foolproofing VENV Deletion
+call .\.venv\Scripts\deactivate.bat
+rmdir /s /q .\.venv
+echo Deleted: .\.venv
+echo.
+echo Preperation Complete.
+timeout /t 1 >nul
+echo Running Installer...
+timeout /t 3 >nul
+
+cls
+python.exe .\requisites.py installer
+if errorlevel 1 (
+    echo Error during installation
+    pause
+)
+call .\.venv\Scripts\deactivate.bat
+echo DeActivated: `.venv`
+set PYTHONUNBUFFERED=0
+pause
+goto :MainMenu
+
+REM ==== Option 3: Run Validation ====
+:RunValidation
+cls
+color 06
+call :DisplaySeparatorThick
+if "%MENU_WIDTH%"=="120" (
+    echo                                     Chat-Gradio-Gguf: Library Validation                                      
+) else (
+    echo     Chat-Gradio-Gguf: Library Validation
+)
+call :DisplaySeparatorThick
+echo.
+echo Running Library Validation...
+
+call .\.venv\Scripts\activate.bat
+echo Activated: `.venv`
+
+python.exe .\validater.py
+
+call .\.venv\Scripts\deactivate.bat
+echo DeActivated: `.venv`
+pause
+goto :MainMenu
+
+REM ==== Main Menu Router ====
+:MainMenu
+if "%MENU_WIDTH%"=="120" (
+    goto :MainMenu120
+) else (
+    goto :MainMenu80
+)
 
 :SkipFunctions
 REM ==== Auto-detect which menu to show ====
 mode con | find "120" >nul
 if %errorlevel%==0 (
+    set "MENU_WIDTH=120"
     goto :MainMenu120
 ) else (
+    set "MENU_WIDTH=80"
     goto :MainMenu80
 )
 
