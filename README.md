@@ -179,7 +179,7 @@ project_root/
 
 ## Credits
 Thanks to all the following teams, for their parts...
-- [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - Core library for interference with models.
+- [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - The binaries used for interference with models.
 - [Yake](https://github.com/LIAAD/yake) - Library used for generating the labels for the history slots.
 - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
 - [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
