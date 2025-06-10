@@ -193,7 +193,7 @@ echo Running Installer...
 timeout /t 3 >nul
 
 cls
-python.exe .\requisites.py installer
+python.exe .\installer.py
 if errorlevel 1 (
     echo Error during installation
     pause
