@@ -1,4 +1,4 @@
-# Script: `.\installer.py` (Installation script for Chat-Gradio-Gguf)
+# Script: `.\installer.py` (Installation script for Chat-Windows-Gguf)
 
 # Imports
 import os, json, platform, subprocess, sys, contextlib, time, copy
@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 import shutil
 
 # Globals
-APP_NAME = "Chat-Gradio-Gguf"
+APP_NAME = "Chat-Windows-Gguf"
 BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
@@ -556,7 +556,7 @@ def install_python_deps(backend: str) -> bool:
 # Main Installation Flow
 def install():
     """
-    Main installation function to set up the Chat-Gradio-Gguf application.
+    Main installation function to set up the Chat-Windows-Gguf application.
     """
     print_header("Installation")
     print(f"Installing {APP_NAME}...")
