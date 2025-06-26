@@ -1,5 +1,4 @@
-# Chat-Windows-Gguf
-![banner_image](media/project_banner.jpg)
+# ![Chat-Windows-Gguf](media/project_banner.jpg)
 <br>Status: Beta - See `Development` section..
 
 ## Description
