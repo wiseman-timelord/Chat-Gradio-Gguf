@@ -447,7 +447,7 @@ async def conversation_interface(
     summary_enabled, speech_enabled
 ):
     """
-    Handle user input and generate AI responses asynchronously for the Chat-Gradio-Gguf interface.
+    Handle user input and generate AI responses asynchronously for the Chat-Windows-Gguf interface.
     """
     import gradio as gr
     from scripts import temporary, utility
@@ -752,7 +752,7 @@ async def conversation_interface(
     
 # Core Gradio Interface    
 def launch_interface():
-    """Launch the Gradio interface for the Chat-Gradio-Gguf conversationbot with an updated layout."""
+    """Launch the Gradio interface for the Chat-Windows-Gguf conversationbot with an updated layout."""
     global demo
     import tkinter as tk
     from tkinter import filedialog
@@ -808,7 +808,7 @@ def launch_interface():
                 with gr.Row():
                     # Expanded left column
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as left_column_expanded:
-                        toggle_button_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary")
+                        toggle_button_expanded = gr.Button("Chat-Windows-Gguf", variant="secondary")
                         panel_toggle = gr.Radio(
                             choices=["History", "Attach"],
                             label="Panel Mode",
@@ -1016,7 +1016,7 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         with gr.Column(scale=1, elem_classes=["clean-elements"]):
                             gr.Markdown("About Program...")
-                            gr.Markdown("[Chat-Gradio-Gguf](https://github.com/wiseman-timelord/Chat-Gradio-Gguf) by [Wiseman-Timelord](https://github.com/wiseman-timelord).")
+                            gr.Markdown("[Chat-Windows-Gguf](https://github.com/wiseman-timelord/Chat-Windows-Gguf) by [Wiseman-Timelord](https://github.com/wiseman-timelord).")
                             gr.Markdown("Donations through, [Patreon](https://patreon.com/WisemanTimelord) or [Ko-fi](https://ko-fi.com/WisemanTimelord).")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
