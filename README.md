@@ -1,4 +1,4 @@
-# Chat-Gradio-Gguf
+# Chat-Windows-Gguf
 ![banner_image](media/project_banner.jpg)
 <br>Status: Beta - See `Development` section..
 
@@ -24,18 +24,18 @@ Intended as a high-quality chat interface programmed towards windows 7-11 (non-W
 - When Requires are installed, startup looks like this in the command console...
 ```
 =======================================================================================================================
-    Chat-Gradio-Gguf: Launcher
+    Chat-Windows-Gguf: Launcher
 =======================================================================================================================
 
-Starting Chat-Gradio-Gguf...
+Starting Chat-Windows-Gguf...
 Activated: `.venv`
 Checking Python libraries...
 Success: All Python libraries verified                       [GOOD]
 Starting `launcher` Imports.
 `launcher` Imports Complete.
 Starting `launcher.main`.
-Working directory: C:\Program_Filez\Chat-Gradio-Gguf\Chat-Gradio-Gguf-main
-Data directory: C:\Program_Filez\Chat-Gradio-Gguf\Chat-Gradio-Gguf-main\data
+Working directory: C:\Program_Filez\Chat-Windows-Gguf\Chat-Windows-Gguf-main
+Data directory: C:\Program_Filez\Chat-Windows-Gguf\Chat-Windows-Gguf-main\data
 Loading persistent config...
 Scanning directory: E:\Models\T3Q-qwen2.5-14b-v1.0-e3-GGUF
 Models Found: ['T3Q-qwen2.5-14b-v1.0-e3.Q6_K.gguf']
@@ -63,14 +63,14 @@ Launching Gradio Interface...
 ## Requirements
 - Windows 7-11 - Its a Windows program, batch menu has auto-sized-layout for modern/old OS.
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
-- Python => 3.8 - "Based on provided scripts, Chat-Gradio-Gguf requires Python 3.8+" -deepseek.
+- Python => 3.8 - "Based on provided scripts, Chat-Windows-Gguf requires Python 3.8+" -deepseek.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section.
 - Suitable CPU/GPU - Gpu may be, Main or Compute, with VRam 2-64GB, testing on rx470 in Compute.  
 
 ### Instructions
-1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Chat-Gradio-Gguf` or `C:\Programs\Chat-Gradio-Gguf`. 
-2. Right click the file `Chat-Gradio-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
-3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Gradio-Gguf`. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. 
+1. Download a "Release" version, when its available, and unpack to a sensible directory, like, `C:\Program_Filez\Chat-Windows-Gguf` or `C:\Programs\Chat-Windows-Gguf`. 
+2. Right click the file `Chat-Windows-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
+3. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Windows-Gguf`. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. 
 4. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
 - VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card.
 5. Go back to the `Interaction` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
@@ -131,7 +131,7 @@ Either, compatibility in progress or not confirmed, with gpt for comparrisson..
 - Core Project files...
 ```
 project_root/
-│ Chat-Gradio-Gguf.bat
+│ Chat-Windows-Gguf.bat
 │ installer.py
 │ validater.py
 │ launcher.py
@@ -170,8 +170,8 @@ project_root/
 
 # Distant
 1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Gradio-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
-3. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
+2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Windows-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
+3. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Windows-Gguf" button, in the expanded panel here I want...
 - a row with a square box, that visualizes the thinking/generation, in some simple method, that is somehow interesting, and under that, a row with a buttton to turn "Visualize" ON/OFF.
 - a row with 3 boxes each with 1 stat for generation speed/whatever else is typically of interest to people.
 - a row with 2 butttons, 1 to turn "Visualize" ON/OFF and 1 to turn "Statistics" on/off. Same kind of on/off buttons as web-Search/Speech/Summary.
