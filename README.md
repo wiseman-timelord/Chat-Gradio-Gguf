@@ -128,7 +128,7 @@ Either, compatibility in progress or not confirmed, with gpt for comparrisson..
     - `reasoning` keywords - "reason", "r1", "think".
 </details>
 
-## Development
+## Structure
 - Core Project files...
 ```
 project_root/
@@ -161,18 +161,15 @@ project_root/
 └────── *
 ```
 
-# Current
+# Development
 1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time. Had to streamline, this could break things, dropped support for intel GPU and non avx2 compatible processors. There is no vulkanSDK 1.1 available online, Need to find it or will have to notify windows 7-8 users to install the vulkanSDK part themselves if they have it, or install other backend.  
 2. Ensuring that the displays are correct in the batch on win 7-11, had to ditch eleglant menu design and ascii art.
 2. Check for duplicated printed lines during initialization.
 3. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
 4. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present.
 5. There is no stop button.
-
-# Distant
-1. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-2. **Cross-Platform Scripting:** Introduce a unified script (`Chat-Windows-Gguf.sh`) to support both Linux and Windows environments, and adapt scripts appropriately. 
-3. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Windows-Gguf" button, in the expanded panel here I want...
+6. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
+7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Windows-Gguf" button, in the expanded panel here I want...
 - a row with a square box, that visualizes the thinking/generation, in some simple method, that is somehow interesting, and under that, a row with a buttton to turn "Visualize" ON/OFF.
 - a row with 3 boxes each with 1 stat for generation speed/whatever else is typically of interest to people.
 - a row with 2 butttons, 1 to turn "Visualize" ON/OFF and 1 to turn "Statistics" on/off. Same kind of on/off buttons as web-Search/Speech/Summary.
