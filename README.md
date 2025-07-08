@@ -161,8 +161,9 @@ project_root/
 ```
 
 # Development
+1. Progress the dual-mode conversin, then bugfix.
 1. Either we must have, intel and AMD, or just gpus.
-2. I want, Summary, Speech Summary, Speech. Summary will summarise everything so far or as much as will fit in the maximum context window, into 1024 batch output, while after returning, to normal context length and to the user's prompt (without inputting the prompt). Speech summary will do the same, but, the summary will be in 768 batch output, also read the summary. Speech will input the users prompt, and after the response, then, summarize the critical parts of the response in max 512 batch output and read it. 
+2. I want, Summary, Speech Summary, Speech, buttons instead of just, "Speech" and "Summary", therein these buttons will be OR, meaning maximum one selected with auto-deselects the other 2. `Summary` will summarise everything so far or as much as will fit in the maximum context window, into 1024 batch output, while after returning, to normal context length and to the user's prompt (without inputting the prompt). `Speech/Summary` will do the same, but, the summary will be in 768 batch output, also read the summary. `Speech` will input the users prompt, and after the response, then, summarize the critical parts of the response in max 512 batch output and read it. 
 1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time. Had to streamline, this could break things, dropped support for intel GPU and non avx2 compatible processors. There is no vulkanSDK 1.1 available online, Need to find it or will have to notify windows 7-8 users to install the vulkanSDK part themselves if they have it, or install other backend.  
 2. Ensuring that the displays are correct in the batch on win 7-11, had to ditch eleglant menu design and ascii art.
 2. Check for duplicated printed lines during initialization.
