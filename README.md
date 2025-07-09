@@ -167,7 +167,8 @@ project_root/
 
 # Development
 1. Dual-mode conversion done, requires testing/bugfixing.
-2. No CPU options anymore, cant bugfix on main, BugTesting must wait. 
+2. No CPU options anymore.
+3. My hardware is Cuda 11, hence, used `b5587` instead of latest, which is ok for the ones on the chart shown above, but when, Qwen3 and Deepseek3, are correctly programmed, then will want to update. 
 3. Summary is removed.
 4. Speech is now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
 5. New processing setup, it will need to be Tested/bugfixed. User is limited to 
