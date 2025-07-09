@@ -166,17 +166,16 @@ project_root/
 ```
 
 # Development
-1. Progress the dual-mode conversin, then bugfix.
-1. Either we must have, intel and AMD, or just gpus.
-2. I want, Summary, Speech Summary, Speech, so as for, speech and summary, to be able to be selected instead of just, "Speech" or "Summary". `Summary` will summarise everything so far or as much as will fit in the maximum context window, into 1024 batch output, while after returning, to normal context length and to the user's prompt (without inputting the prompt). `Speech/Summary` will do the same, but, the summary will be in 768 batch output, also read the summary. `Speech` will input the users prompt, and after the response, then, summarize the critical parts of the response in max 512 batch output and read it. 
-1. issue with no vulkan_sdk installed, turns out 2-8 requires 1.1 and 8.1+ can have the latest version. No sources for direct link for 1.1, having to implement complext chocolatey install for the 1.1, where as the 8.1+ install will be from the vulkan website. Its taking time. Had to streamline, this could break things, dropped support for intel GPU and non avx2 compatible processors. There is no vulkanSDK 1.1 available online, Need to find it or will have to notify windows 7-8 users to install the vulkanSDK part themselves if they have it, or install other backend.  
-2. Ensuring that the displays are correct in the batch on win 7-11, had to ditch eleglant menu design and ascii art.
-2. Check for duplicated printed lines during initialization.
-3. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
-4. Need to simplify streaming, I want it character by character instead of chunking into words/sentences, so as to simplify. As a result hopefully remove occurences of no response until the complete thing is outputted, just print it how it comes, subject to whatever filters are present.
-5. There is no stop button.
+1. Dual-mode conversion done, requires testing/bugfixing.
+2. No CPU options anymore, cant bugfix on main, BugTesting must wait. 
+3. Summary is removed.
+4. Speech is now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
+5. New processing setup, it will need to be Tested/bugfixed.
+6. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
+4. Need to optimize streaming output and relating displaying of text/animations. Design needs work, doesnt work how I want.
+5. The stop button wont work because the button freezes during certain/all phases of generation.
 6. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Windows-Gguf" button, in the expanded panel here I want...
+7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
 - a row with a square box, that visualizes the thinking/generation, in some simple method, that is somehow interesting, and under that, a row with a buttton to turn "Visualize" ON/OFF.
 - a row with 3 boxes each with 1 stat for generation speed/whatever else is typically of interest to people.
 - a row with 2 butttons, 1 to turn "Visualize" ON/OFF and 1 to turn "Statistics" on/off. Same kind of on/off buttons as web-Search/Speech/Summary.
