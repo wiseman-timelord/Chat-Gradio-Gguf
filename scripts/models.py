@@ -24,38 +24,65 @@ def get_chat_format(metadata):
 def get_model_metadata(model_path: str) -> dict:
     """
     Retrieve metadata from a GGUF model, including the number of layers.
+    Returns empty dict if metadata cannot be retrieved.
     """
     try:
         from llama_cpp import Llama
+    except ImportError as ie:
+        print(f"llama_cpp import error: {str(ie)}")
+        return {}
+        
+    try:
+        model_path = str(Path(model_path).resolve())
         chat_format = 'chatml' if 'qwen' in model_path.lower() else None
+        
         model = Llama(
             model_path=model_path,
             n_ctx=4096,
             n_batch=1,
             n_gpu_layers=0,
-            verbose=True,
+            verbose=False,  # Reduced verbosity
             chat_format=chat_format
         )
-        metadata = model.metadata
-        print(f"Debug: Metadata keys for '{model_path}': {list(metadata.keys())}")
         
-        architecture = metadata.get('general.architecture', 'unknown')
-        layers = metadata.get(f'{architecture}.block_count', 0)
+        metadata = model.metadata
+        architecture = metadata.get('general.architecture', 'unknown').lower()
+        
+        # Try multiple ways to get layer count
+        layers = 0
+        possible_layer_keys = [
+            f'{architecture}.block_count',
+            f'{architecture}.num_layers',
+            'llama.block_count',
+            'llama.num_layers',
+            'num_layers',
+            'block_count'
+        ]
+        
+        for key in possible_layer_keys:
+            if key in metadata:
+                try:
+                    layers = int(metadata[key])
+                    break
+                except (ValueError, TypeError):
+                    continue
         
         if layers == 0:
-            possible_keys = ['block_count', 'layer_count', 'num_hidden_layers', 'num_layers']
-            for key in metadata:
-                if any(pk in key for pk in possible_keys):
-                    layers = metadata[key]
-                    print(f"Debug: Found layers ({layers}) in key '{key}'")
-                    break
-            else:
-                print(f"Warning: Could not find layer count for '{model_path}' in metadata.")
-                layers = 0
+            # Fallback to counting layer-related keys
+            layer_keys = [k for k in metadata if 'layer' in k.lower() or 'block' in k.lower()]
+            if layer_keys:
+                try:
+                    layers = int(metadata[layer_keys[0]])
+                except (ValueError, TypeError):
+                    layers = 0
         
         metadata['layers'] = layers
+        metadata['architecture'] = architecture
+        
+        # Clean up
         del model
         return metadata
+        
     except Exception as e:
         import traceback
         print(f"Error reading model metadata for '{model_path}': {str(e)}\n{traceback.format_exc()}")
@@ -79,15 +106,31 @@ def clean_content(role, content):
     return content.strip()
 
 def set_cpu_affinity():
+    """Set CPU affinity based on selected CPU core range."""
     from scripts import utility
     cpu_only_backends = ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
+    
     if temporary.BACKEND_TYPE in cpu_only_backends and temporary.SELECTED_CPU:
         cpus = utility.get_cpu_info()
         selected_cpu = next((cpu for cpu in cpus if cpu["label"] == temporary.SELECTED_CPU), None)
+        
         if selected_cpu:
             try:
+                import psutil
                 p = psutil.Process()
-                p.cpu_affinity(selected_cpu["core_range"])
+                
+                if temporary.PLATFORM == "windows":
+                    p.cpu_affinity(selected_cpu["core_range"])
+                elif temporary.PLATFORM == "linux":
+                    try:
+                        import os
+                        affinity_mask = 0
+                        for core in selected_cpu["core_range"]:
+                            affinity_mask |= (1 << core)
+                        os.sched_setaffinity(0, [core for core in selected_cpu["core_range"]])
+                        print(f"Set CPU affinity to cores: {selected_cpu['core_range']}")
+                    except Exception as e:
+                        print(f"Failed to set CPU affinity: {e}")
                 print(f"Set CPU affinity to {selected_cpu['label']}")
             except Exception as e:
                 print(f"Failed to set CPU affinity: {e}")
@@ -197,7 +240,10 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     model_path = Path(model_folder) / model
     if not model_path.exists():
-        return f"Error: Model file '{model_path}' not found.", False, llm_state, models_loaded_state
+        # Handle Linux paths
+        model_path = Path(model_folder) / model.replace('\\', '/')
+        if not model_path.exists():
+            return f"Error: Model file '{model_path}' not found.", False, llm_state, models_loaded_state
 
     metadata = get_model_metadata(str(model_path))
     chat_format = get_chat_format(metadata)

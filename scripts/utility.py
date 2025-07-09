@@ -1,9 +1,8 @@
 # Script: `.\scripts\utility.py`
 
 # Imports...
+import tempfile
 import re, subprocess, json, time, random, psutil, shutil, os, zipfile, yake
-import win32com.client
-import pythoncom
 from pathlib import Path
 from datetime import datetime
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
@@ -16,6 +15,16 @@ from .temporary import (
 )
 from . import temporary
 
+# Conditional imports based on platform
+if temporary.PLATFORM == "windows":
+    import win32com.client
+    import pythoncom
+elif temporary.PLATFORM == "linux":
+    try:
+        import pyttsx3
+    except ImportError:
+        print("Warning: pyttsx3 not installed. Text-to-speech will be unavailable on Linux.")
+
 # Functions...
 def filter_operational_content(text):
     """Remove operational tags and metadata from the text."""
@@ -23,10 +32,9 @@ def filter_operational_content(text):
     text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
     return text.strip()
 
-def get_cpu_info():
+def get_cpu_info_windows():
     """
-    Retrieve information about available CPUs and their cores.
-    Returns a list of dictionaries with CPU labels and core ranges.
+    Retrieve CPU information on Windows using wmic.
     """
     try:
         output = subprocess.check_output("wmic cpu get name", shell=True).decode()
@@ -39,18 +47,48 @@ def get_cpu_info():
             })
         return cpus
     except Exception as e:
-        print(f"Error getting CPU info: {e}")
+        print(f"Error getting CPU info on Windows: {e}")
+        return [{"label": "CPU 0", "core_range": list(range(psutil.cpu_count(logical=True)))}]
+
+def get_cpu_info_linux():
+    """
+    Retrieve CPU information on Linux using lscpu.
+    """
+    try:
+        output = subprocess.check_output("lscpu").decode()
+        model_name = "Unknown"
+        for line in output.split('\n'):
+            if "Model name" in line:
+                model_name = line.split(':')[1].strip()
+                break
+        num_cores = psutil.cpu_count(logical=True)
+        return [{"label": f"CPU: {model_name}", "core_range": list(range(num_cores))}]
+    except Exception as e:
+        print(f"Error getting CPU info on Linux: {e}")
+        return [{"label": "CPU 0", "core_range": list(range(psutil.cpu_count(logical=True)))}]
+
+def get_cpu_info():
+    """
+    Get CPU information based on the platform.
+    """
+    if temporary.PLATFORM == "windows":
+        return get_cpu_info_windows()
+    elif temporary.PLATFORM == "linux":
+        return get_cpu_info_linux()
+    else:
         return [{"label": "CPU 0", "core_range": list(range(psutil.cpu_count(logical=True)))}]
     
-def get_available_gpus():
-    """Detect available GPUs with fallback using dxdiag."""
+def get_available_gpus_windows():
+    """
+    Retrieve available GPUs on Windows using wmic and dxdiag.
+    """
     try:
         output = subprocess.check_output("wmic path win32_VideoController get name", shell=True).decode()
         gpus = [line.strip() for line in output.split('\n') if line.strip() and 'Name' not in line]
         return gpus if gpus else ["CPU Only"]
     except Exception:
         try:
-            temp_file = Path(TEMP_DIR) / "dxdiag.txt"
+            temp_file = Path(temporary.TEMP_DIR) / "dxdiag.txt"
             subprocess.run(f"dxdiag /t {temp_file}", shell=True, check=True)
             time.sleep(2)
             with open(temp_file, 'r') as f:
@@ -59,26 +97,104 @@ def get_available_gpus():
                 return [gpu.group(1).strip()] if gpu else ["CPU Only"]
         except Exception:
             return ["CPU Only"]
+
+def get_available_gpus_linux():
+    try:
+        # NVIDIA detection
+        try:
+            output = subprocess.check_output(
+                "nvidia-smi --query-gpu=name --format=csv,noheader",
+                shell=True,
+                stderr=subprocess.DEVNULL
+            ).decode()
+            return [f"NVIDIA {line.strip()}" for line in output.split('\n') if line.strip()]
+        except:
+            pass
+        
+        # AMD detection
+        try:
+            output = subprocess.check_output(
+                "rocminfo | grep 'Marketing Name' | awk -F: '{print $2}'",
+                shell=True,
+                stderr=subprocess.DEVNULL
+            ).decode().strip()
+            return [f"AMD {line.strip()}" for line in output.split('\n') if line.strip()]
+        except:
+            pass
+        
+        # Intel detection
+        try:
+            output = subprocess.check_output(
+                "lspci | grep VGA | grep Intel | cut -d' ' -f5-",
+                shell=True,
+                stderr=subprocess.DEVNULL
+            ).decode().strip()
+            return [f"Intel {output}"] if output else []
+        except:
+            pass
+        
+        return ["CPU Only"]
+    except Exception as e:
+        print(f"GPU detection error: {str(e)}")
+        return ["CPU Only"]
+
+def get_available_gpus():
+    """
+    Get available GPUs based on the platform.
+    """
+    if temporary.PLATFORM == "windows":
+        return get_available_gpus_windows()
+    elif temporary.PLATFORM == "linux":
+        return get_available_gpus_linux()
+    else:
+        return ["CPU Only"]  # Fixed syntax error
             
 def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def speak_text(text):
-    """Read text aloud with improved error handling"""
+    """Speak the given text using platform-specific text-to-speech."""
     if not text:
         return
-    try:
-        pythoncom.CoInitialize()
-        speaker = win32com.client.Dispatch("SAPI.SpVoice")
-        # Skip speaking if same as last spoken
-        if hasattr(temporary, 'LAST_SPOKEN') and temporary.LAST_SPOKEN == text:
-            return
-        speaker.Speak(text)
-        temporary.LAST_SPOKEN = text
-    except Exception as e:
-        print(f"Speech error: {str(e)}")
-    finally:
-        pythoncom.CoUninitialize()
+    if hasattr(temporary, 'LAST_SPOKEN') and temporary.LAST_SPOKEN == text:
+        return  # Avoid repeating the same text
+    
+    if temporary.PLATFORM == "windows":
+        try:
+            import pythoncom
+            import win32com.client
+            pythoncom.CoInitialize()
+            speaker = win32com.client.Dispatch("SAPI.SpVoice")
+            speaker.Speak(text)
+            temporary.LAST_SPOKEN = text
+        except Exception as e:
+            print(f"Windows speech error: {str(e)}")
+        finally:
+            pythoncom.CoUninitialize()
+    elif temporary.PLATFORM == "linux":
+        try:
+            # Try pyttsx3 first
+            if not hasattr(temporary, 'tts_engine'):
+                import pyttsx3
+                temporary.tts_engine = pyttsx3.init()
+                temporary.tts_engine.setProperty('rate', 150)
+                temporary.tts_engine.setProperty('volume', 0.9)
+            
+            temporary.tts_engine.say(text)
+            temporary.tts_engine.runAndWait()
+            temporary.LAST_SPOKEN = text
+        except Exception as e:
+            # Fallback to espeak
+            try:
+                subprocess.run(['espeak', text])
+            except:
+                # Final fallback to spd-say
+                try:
+                    subprocess.run(['spd-say', text])
+                except:
+                    print("All TTS methods failed on Linux")
+    else:
+        raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
 
 def generate_session_label(session_log):
     """Generate a session label using YAKE on the entire session log, up to 25 characters."""
@@ -94,23 +210,43 @@ def generate_session_label(session_log):
     return description
 
 def save_session_history(session_log, attached_files):
-    if not temporary.current_session_id:
-        temporary.current_session_id = generate_session_id()
-    temporary.session_label = generate_session_label(session_log)
-    os.makedirs(HISTORY_DIR, exist_ok=True)
-    session_file = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}.json"
-    temp_file = session_file.with_suffix('.tmp')
-    session_data = {
-        "session_id": temporary.current_session_id,
-        "label": temporary.session_label,
-        "history": session_log,
-        "attached_files": attached_files
-    }
-    with open(temp_file, "w") as f:
-        json.dump(session_data, f)
-    os.replace(temp_file, session_file)
-    manage_session_history()
-    
+    """Save session history with error handling and timestamp."""
+    try:
+        # Ensure directories exist
+        Path(HISTORY_DIR).mkdir(parents=True, exist_ok=True)
+        Path(TEMP_DIR).mkdir(parents=True, exist_ok=True)
+        
+        if not temporary.current_session_id:
+            temporary.current_session_id = generate_session_id()
+        
+        if not temporary.session_label or temporary.session_label == "Untitled":
+            temporary.session_label = generate_session_label(session_log)
+        
+        session_file = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}.json"
+        
+        session_data = {
+            "session_id": temporary.current_session_id,
+            "label": temporary.session_label,
+            "history": session_log,
+            "attached_files": [str(Path(f).resolve()) for f in attached_files] if attached_files else [],
+            "last_saved": datetime.now().isoformat()
+        }
+        
+        # Atomic write using temporary file
+        temp_file = Path(TEMP_DIR) / f"temp_{temporary.current_session_id}.json"
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(session_data, f, ensure_ascii=False, indent=2)
+        
+        # Atomic move
+        temp_file.replace(session_file)
+        print(f"Session saved: {session_file}")
+        manage_session_history()
+        return True
+        
+    except Exception as e:
+        print(f"Error saving session: {str(e)}")
+        return False
+
 def load_session_history(session_file):
     """Load session history from a file."""
     try:
@@ -123,9 +259,8 @@ def load_session_history(session_file):
     session_id = data.get("session_id", session_file.stem.replace('session_', ''))
     label = data.get("label", "Untitled")
     history = data.get("history", [])
-    attached_files = data.get("attached_files", [])
+    attached_files = [str(Path(file).resolve()) for file in data.get("attached_files", []) if Path(file).exists()]
 
-    attached_files = [file for file in attached_files if Path(file).exists()]
     if len(attached_files) != len(data.get("attached_files", [])):
         print(f"Removed missing attached files from session {session_id}")
 

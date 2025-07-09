@@ -4,7 +4,16 @@
 import time
 from scripts.prompts import prompt_templates 
 
+# Conditional Variables
+def initialize_platform_settings():
+    global LLAMA_CLI_PATH
+    if temporary.PLATFORM == "windows":
+        LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
+    elif temporary.PLATFORM == "linux":
+        LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
+
 # Configuration variables with defaults
+PLATFORM = None
 MODEL_FOLDER = "path/to/your/models"
 CONTEXT_SIZE = 8192
 VRAM_SIZE = 8192
@@ -42,7 +51,6 @@ SELECTED_GPU = None
 SELECTED_CPU = None
 STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True
-LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
 BACKEND_TYPE = "Not Configured"
 DATA_DIR = None  # Will be set by launcher.py
 llm = None

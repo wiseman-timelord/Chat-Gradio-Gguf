@@ -11,6 +11,7 @@ from tkinter import filedialog
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
+import queue
 from queue import Queue
 import scripts.temporary as temporary
 import scripts.settings as settings  # Added import for configuration variables
@@ -30,6 +31,7 @@ from scripts.utility import (
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings, inspect_model, load_models
 )
+from scripts.launcher import shutdown_program
 
 # Functions...
 def set_loading_status():
@@ -335,25 +337,6 @@ def copy_last_response(session_log):
         return "AI Response copied to clipboard."
     return "No response available to copy."
 
-def shutdown_program(llm_state, models_loaded_state):
-    import time, sys
-    if models_loaded_state:
-        print("Shutting Down...")
-        print("Unloading model...")
-        unload_models(llm_state, models_loaded_state)
-        print("Model unloaded.")
-    print("Closing Gradio server...")
-    demo.close()
-    print("Gradio server closed.")
-    print("\n\nA program by Wiseman-Timelord\n")
-    print("GitHub: github.com/wiseman-timelord")
-    print("Website: wisetime.rf.gd\n\n")
-    for i in range(5, 0, -1):
-        print(f"\rExiting program in...{i}s", end='', flush=True)
-        time.sleep(1)
-    print()
-    os._exit(0)
-
 def update_file_slot_ui(file_list, is_attach=True):
     from pathlib import Path
     button_updates = []
@@ -447,7 +430,7 @@ async def conversation_interface(
     summary_enabled, speech_enabled
 ):
     """
-    Handle user input and generate AI responses asynchronously for the Chat-Windows-Gguf interface.
+    Handle user input and generate AI responses asynchronously for the Chat-Gradio-Gguf interface.
     """
     import gradio as gr
     from scripts import temporary, utility
@@ -752,7 +735,7 @@ async def conversation_interface(
     
 # Core Gradio Interface    
 def launch_interface():
-    """Launch the Gradio interface for the Chat-Windows-Gguf conversationbot with an updated layout."""
+    """Launch the Gradio interface for the Chat-Gradio-Gguf conversationbot with an updated layout."""
     global demo
     import tkinter as tk
     from tkinter import filedialog
@@ -808,7 +791,7 @@ def launch_interface():
                 with gr.Row():
                     # Expanded left column
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as left_column_expanded:
-                        toggle_button_expanded = gr.Button("Chat-Windows-Gguf", variant="secondary")
+                        toggle_button_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary")
                         panel_toggle = gr.Radio(
                             choices=["History", "Attach"],
                             label="Panel Mode",
@@ -904,7 +887,12 @@ def launch_interface():
                     exit_button = gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110)
                     exit_button.click(
                         fn=shutdown_program,
-                        inputs=[states["llm"], states["models_loaded"]]
+                        inputs=[
+                            states["llm"],
+                            states["models_loaded"],
+                            conversation_components["session_log"],
+                            states["attached_files"]
+                        ]
                     )
 
             # Configuration tab (unchanged)
@@ -1016,7 +1004,7 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         with gr.Column(scale=1, elem_classes=["clean-elements"]):
                             gr.Markdown("About Program...")
-                            gr.Markdown("[Chat-Windows-Gguf](https://github.com/wiseman-timelord/Chat-Windows-Gguf) by [Wiseman-Timelord](https://github.com/wiseman-timelord).")
+                            gr.Markdown("[Chat-Gradio-Gguf](https://github.com/wiseman-timelord/Chat-Gradio-Gguf) by [Wiseman-Timelord](https://github.com/wiseman-timelord).")
                             gr.Markdown("Donations through, [Patreon](https://patreon.com/WisemanTimelord) or [Ko-fi](https://ko-fi.com/WisemanTimelord).")
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
@@ -1026,10 +1014,15 @@ def launch_interface():
                                 value="Select model on Configuration page.",
                                 scale=20
                             ),
-                            shutdown=gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110).click(
-                                fn=shutdown_program,
-                                inputs=[states["llm"], states["models_loaded"]]
-                            )
+							shutdown=gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110).click(
+								fn=shutdown_program,
+								inputs=[
+									states["llm"], 
+									states["models_loaded"],
+									conversation_components["session_log"],  # Add this component
+									states["attached_files"]  # Add this component
+								]
+							)
                         )
 
         # Subfunctions
