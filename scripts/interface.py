@@ -73,41 +73,6 @@ def update_panel_on_mode_change(current_panel):
         new_panel
     )
 
-def generate_summary(last_response, llm_state):
-    """Generate a summary of the last response, limited to 256 characters."""
-    if not last_response:
-        return "No response to summarize."
-    summary_prompt = f"Summarize the following response in under 256 characters:\n\n{last_response}"
-    try:
-        response = llm_state.create_chat_completion(
-            messages=[{"role": "user", "content": summary_prompt}],
-            max_tokens=256,
-            temperature=0.5,
-            stream=False
-        )
-        summary = response['choices'][0]['message']['content'].strip()
-        if len(summary) > 256:
-            summary = summary[:253] + "..."
-        return summary
-    except Exception as e:
-        return f"Error generating summary: {str(e)}"
-
-def say_summary(session_log, llm_state, models_loaded_state):
-    """Handle the 'Say Summary' button click by generating or replaying a summary."""
-    from scripts import temporary, utility
-    if not models_loaded_state or llm_state is None:
-        return "Please load a model first."
-    if not session_log or session_log[-1]['role'] != 'assistant':
-        return "No response to summarize."
-    last_response = session_log[-1]['content']
-    if not temporary.current_summary:
-        temporary.current_summary = generate_summary(last_response, llm_state)
-    try:
-        utility.speak_text(temporary.current_summary)
-        return "Speaking summary..."
-    except Exception as e:
-        return f"Error speaking summary: {str(e)}"
-
 def process_attach_files(files, attached_files, models_loaded):
     if not models_loaded:
         return "Error: Load model first.", attached_files
@@ -118,19 +83,18 @@ def process_vector_files(files, vector_files, models_loaded):
         return "Error: Load model first.", vector_files
     return process_files(files, vector_files, temporary.MAX_ATTACH_SLOTS, is_attach=False)
 
-def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model):
+def update_config_settings(ctx, batch, temp, repeat, vram, gpu, model):
     temporary.CONTEXT_SIZE = int(ctx)
     temporary.BATCH_SIZE = int(batch)
     temporary.TEMPERATURE = float(temp)
     temporary.REPEAT_PENALTY = float(repeat)
     temporary.VRAM_SIZE = int(vram)
     temporary.SELECTED_GPU = gpu
-    temporary.SELECTED_CPU = cpu
     temporary.MODEL_NAME = model
     status_message = (
         f"Updated settings: Context Size={ctx}, Batch Size={batch}, "
         f"Temperature={temp}, Repeat Penalty={repeat}, VRAM Size={vram}, "
-        f"Selected GPU={gpu}, Selected CPU={cpu}, Model={model}"
+        f"Selected GPU={gpu}, Model={model}"
     )
     return status_message
 
@@ -427,7 +391,7 @@ async def conversation_interface(
     user_input, session_log, loaded_files,
     is_reasoning_model, cancel_flag, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
-    summary_enabled, speech_enabled
+    speech_enabled
 ):
     """
     Handle user input and generate AI responses asynchronously for the Chat-Gradio-Gguf interface.
@@ -442,9 +406,6 @@ async def conversation_interface(
     import random
     import re
 
-    # Clear the current summary when new input is processed
-    temporary.current_summary = ""
-
     # Check if model is loaded
     if not models_loaded_state or not llm_state:
         yield (
@@ -454,7 +415,6 @@ async def conversation_interface(
             False,
             loaded_files,
             interaction_phase,
-            gr.update(),
             gr.update(),
             gr.update(),
             gr.update()
@@ -470,7 +430,6 @@ async def conversation_interface(
             False,
             loaded_files,
             interaction_phase,
-            gr.update(),
             gr.update(),
             gr.update(),
             gr.update()
@@ -502,7 +461,6 @@ async def conversation_interface(
         interaction_phase,
         gr.update(interactive=False),
         gr.update(),
-        gr.update(),
         gr.update()
     )
 
@@ -522,7 +480,6 @@ async def conversation_interface(
             interaction_phase,
             gr.update(),
             gr.update(),
-            gr.update(),
             gr.update()
         )
         await asyncio.sleep(1)
@@ -537,7 +494,6 @@ async def conversation_interface(
                 loaded_files,
                 interaction_phase,
                 gr.update(interactive=True, value=original_input),
-                gr.update(),
                 gr.update(),
                 gr.update()
             )
@@ -559,7 +515,6 @@ async def conversation_interface(
             interaction_phase,
             gr.update(),
             gr.update(),
-            gr.update(),
             gr.update()
         )
         search_results = await asyncio.to_thread(utility.web_search, original_input)
@@ -572,7 +527,6 @@ async def conversation_interface(
             cancel_flag,
             loaded_files,
             interaction_phase,
-            gr.update(),
             gr.update(),
             gr.update(),
             gr.update()
@@ -627,7 +581,6 @@ async def conversation_interface(
                 interaction_phase,
                 gr.update(),
                 gr.update(),
-                gr.update(),
                 gr.update()
             )
             break
@@ -641,7 +594,6 @@ async def conversation_interface(
                 False,
                 loaded_files,
                 interaction_phase,
-                gr.update(),
                 gr.update(),
                 gr.update(),
                 gr.update()
@@ -659,7 +611,6 @@ async def conversation_interface(
                 "waiting_for_input",
                 gr.update(interactive=True),
                 gr.update(),
-                gr.update(),
                 gr.update()
             )
             return
@@ -676,36 +627,26 @@ async def conversation_interface(
             interaction_phase,
             gr.update(),
             gr.update(),
-            gr.update(),
             gr.update()
         )
         await asyncio.sleep(0.05)
 
-    # Finalize response with summary/speech handling
+    # Finalize response with speech handling
     if visible_response:
         # Extract and separate links from main content
         links_match = re.search(r'\nLinks:\n(.*?)$', visible_response, re.DOTALL)
         clean_response = re.sub(r'\nLinks:\n.*?$', '', visible_response, flags=re.DOTALL).strip()
         
-        # Count lines excluding links for summary decision
-        response_lines = len([line for line in clean_response.split('\n') if line.strip()])
+        # Use clean_response as final content
+        final_content = clean_response
         
-        # Generate summary if enabled and response is substantial
-        if summary_enabled and response_lines > 4:
-            temporary.current_summary = generate_summary(clean_response, llm_state)
-            final_content = f"{clean_response}\n\nSUMMARY:\n{temporary.current_summary}"
-        else:
-            temporary.current_summary = ""
-            final_content = clean_response
-            
-        # Add links back at the end if they exist
+        # Add links back if they exist
         if links_match:
             final_content += f"\n\nLinks:\n{links_match.group(1).strip()}"
             
-        # Handle speech if enabled (excluding links)
+        # Handle speech if enabled
         if speech_enabled:
-            speech_text = temporary.current_summary if temporary.current_summary else clean_response
-            # Clean text and chunk
+            speech_text = clean_response
             clean_speech = re.sub(r'^AI-Chat:\s*', '', speech_text, flags=re.IGNORECASE)
             chunks = utility.chunk_text_for_speech(clean_speech, 500)
             for chunk in chunks:
@@ -728,7 +669,6 @@ async def conversation_interface(
         loaded_files,
         interaction_phase,
         gr.update(interactive=True, value=""),
-        gr.update(),
         gr.update(),
         gr.update()
     )
@@ -778,10 +718,9 @@ def launch_interface():
             is_reasoning_model=gr.State(False),
             selected_panel=gr.State("History"),
             expanded_state=gr.State(True),
-            model_settings=gr.State({}),  # Store full model settings
+            model_settings=gr.State({}),
             web_search_enabled=gr.State(False),
-            speech_enabled=gr.State(False),
-            summary_enabled=gr.State(False)
+            speech_enabled=gr.State(False)
         )
         # Define conversation_components once to avoid redefinition
         conversation_components = {}
@@ -843,15 +782,14 @@ def launch_interface():
                         )
                         # Search enhancement row
                         with gr.Row(elem_classes=["clean_elements"]):
-                            # Initialize action_buttons FIRST
+                            # Initialize action_buttons
                             action_buttons = {}
                             action_buttons["web_search"] = gr.Button("🌐 Web-Search", variant="secondary", scale=1)
                             action_buttons["speech"] = gr.Button("🔊 Speech", variant="secondary", scale=1)
-                            action_buttons["summary"] = gr.Button("📝 Summary", variant="secondary", scale=1)
                             
                         # User input (3 lines, max 15)
                         initial_max_lines = max(3, int(((temporary.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
-                        temporary.USER_INPUT_MAX_LINES = initial_max_lines  # Add this line
+                        temporary.USER_INPUT_MAX_LINES = initial_max_lines
                         conversation_components["user_input"] = gr.Textbox(
                             label="User Input",
                             lines=3,
@@ -866,7 +804,6 @@ def launch_interface():
                         )
                         # Buttons row
                         with gr.Row(elem_classes=["clean-elements"]):
-                            # Now add to existing action_buttons
                             action_buttons["action"] = gr.Button(
                                 "Send Input",
                                 variant="secondary",
@@ -901,20 +838,11 @@ def launch_interface():
                     is_cpu_only = temporary.BACKEND_TYPE in ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
                     config_components = {}
                     with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("CPU/GPU Options...")
-                    with gr.Row(visible=not is_cpu_only, elem_classes=["clean-elements"]):
+                        gr.Markdown("GPU Options...")
+                    with gr.Row(elem_classes=["clean-elements"]):
                         config_components.update(
-                            backend_type=gr.Textbox(label="Backend Type", value=temporary.BACKEND_TYPE, interactive=False, scale=3),
-                        )
-                        gpu_choices = utility.get_available_gpus()
-                        if len(gpu_choices) == 1:
-                            default_gpu = gpu_choices[0]
-                        else:
-                            gpu_choices = ["Select_processing_device..."] + gpu_choices
-                            default_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in gpu_choices else "Select_processing_device..."
-                        config_components.update(
-                            gpu=gr.Dropdown(choices=gpu_choices, label="Select GPU", value=default_gpu, scale=4),
-                            vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign Free VRam", value=temporary.VRAM_SIZE, scale=3),
+                            gpu=gr.Dropdown(choices=gpu_choices, label="Select GPU", value=default_gpu, scale=10),
+                            vram=gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="Assign VRAM", value=temporary.VRAM_SIZE, scale=5),
                         )
                     with gr.Row(visible=is_cpu_only, elem_classes=["clean-elements"]):
                         config_components.update(
@@ -982,7 +910,6 @@ def launch_interface():
                             unload=gr.Button("Unload Model", variant="huggingface"),
                         )
 
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("Program Options...")
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -1014,15 +941,15 @@ def launch_interface():
                                 value="Select model on Configuration page.",
                                 scale=20
                             ),
-							shutdown=gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110).click(
-								fn=shutdown_program,
-								inputs=[
-									states["llm"], 
-									states["models_loaded"],
-									conversation_components["session_log"],  # Add this component
-									states["attached_files"]  # Add this component
-								]
-							)
+                            shutdown=gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110).click(
+                                fn=shutdown_program,
+                                inputs=[
+                                    states["llm"], 
+                                    states["models_loaded"],
+                                    conversation_components["session_log"],
+                                    states["attached_files"]
+                                ]
+                            )
                         )
 
         # Subfunctions
@@ -1034,7 +961,7 @@ def launch_interface():
             # Remove last AI response and user input
             new_log = session_log[:-2]
             last_user_input = session_log[-2]['content'].replace("User:\n", "", 1)
-            return new_log, gr.update(value=last_user_input), "Previous input restored. Edit and resend."        
+            return new_log, gr.update(value=last_user_input), "Previous input restored. Edit and resend."
 
         # Event handlers
         model_folder_state.change(
@@ -1058,7 +985,7 @@ def launch_interface():
                 conversation_components["session_log"], 
                 status_text, 
                 conversation_components["user_input"], 
-                states["web_search_enabled"]  # Changed from switches["web_search"]
+                states["web_search_enabled"]
             ]
         ).then(
             fn=update_session_buttons,
@@ -1089,18 +1016,6 @@ def launch_interface():
             outputs=[states["attached_files"]]
         )
 
-        # Existing event handler for attach_files (for reference)
-        attach_files.upload(
-            fn=process_attach_files,
-            inputs=[attach_files, states["attached_files"], states["models_loaded"]],
-            outputs=[status_text, states["attached_files"]]
-        ).then(
-            fn=lambda files: update_file_slot_ui(files, True),
-            inputs=[states["attached_files"]],
-            outputs=attach_slots + [attach_files]
-        )
-
-        # New event handler for add_attach_files_collapsed
         add_attach_files_collapsed.upload(
             fn=process_attach_files,
             inputs=[add_attach_files_collapsed, states["attached_files"], states["models_loaded"]],
@@ -1142,10 +1057,9 @@ def launch_interface():
                 states["is_reasoning_model"],
                 states["cancel_flag"],
                 states["web_search_enabled"],
-                states["interaction_phase"],  # Correct order
+                states["interaction_phase"],
                 states["llm"],
                 states["models_loaded"],
-                states["summary_enabled"],  
                 states["speech_enabled"]
             ],
             outputs=[
@@ -1157,8 +1071,7 @@ def launch_interface():
                 states["interaction_phase"],
                 conversation_components["user_input"],
                 states["web_search_enabled"],
-                states["summary_enabled"],  # Add these
-                states["speech_enabled"]     # new state outputs
+                states["speech_enabled"]
             ]
         ).then(
             fn=update_session_buttons,
@@ -1190,16 +1103,6 @@ def launch_interface():
             lambda state: gr.update(variant="primary" if state else "secondary"),
             inputs=[states["speech_enabled"]], 
             outputs=[action_buttons["speech"]]
-        )
-
-        action_buttons["summary"].click(
-            fn=lambda enabled: not enabled,
-            inputs=[states["summary_enabled"]],
-            outputs=[states["summary_enabled"]]
-        ).then(
-            lambda state: gr.update(variant="primary" if state else "secondary"),
-            inputs=[states["summary_enabled"]], 
-            outputs=[action_buttons["summary"]]
         )
 
         action_buttons["edit_previous"].click(

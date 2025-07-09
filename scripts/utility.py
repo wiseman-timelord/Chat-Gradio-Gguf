@@ -32,52 +32,6 @@ def filter_operational_content(text):
     text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
     return text.strip()
 
-def get_cpu_info_windows():
-    """
-    Retrieve CPU information on Windows using wmic.
-    """
-    try:
-        output = subprocess.check_output("wmic cpu get name", shell=True).decode()
-        cpu_names = [line.strip() for line in output.split('\n') if line.strip() and 'Name' not in line]
-        cpus = []
-        for i, name in enumerate(cpu_names):
-            cpus.append({
-                "label": f"CPU {i}: {name}",
-                "core_range": list(range(psutil.cpu_count(logical=True)))
-            })
-        return cpus
-    except Exception as e:
-        print(f"Error getting CPU info on Windows: {e}")
-        return [{"label": "CPU 0", "core_range": list(range(psutil.cpu_count(logical=True)))}]
-
-def get_cpu_info_linux():
-    """
-    Retrieve CPU information on Linux using lscpu.
-    """
-    try:
-        output = subprocess.check_output("lscpu").decode()
-        model_name = "Unknown"
-        for line in output.split('\n'):
-            if "Model name" in line:
-                model_name = line.split(':')[1].strip()
-                break
-        num_cores = psutil.cpu_count(logical=True)
-        return [{"label": f"CPU: {model_name}", "core_range": list(range(num_cores))}]
-    except Exception as e:
-        print(f"Error getting CPU info on Linux: {e}")
-        return [{"label": "CPU 0", "core_range": list(range(psutil.cpu_count(logical=True)))}]
-
-def get_cpu_info():
-    """
-    Get CPU information based on the platform.
-    """
-    if temporary.PLATFORM == "windows":
-        return get_cpu_info_windows()
-    elif temporary.PLATFORM == "linux":
-        return get_cpu_info_linux()
-    else:
-        return [{"label": "CPU 0", "core_range": list(range(psutil.cpu_count(logical=True)))}]
-    
 def get_available_gpus_windows():
     """
     Retrieve available GPUs on Windows using wmic and dxdiag.
@@ -139,15 +93,15 @@ def get_available_gpus_linux():
         return ["CPU Only"]
 
 def get_available_gpus():
-    """
-    Get available GPUs based on the platform.
-    """
-    if temporary.PLATFORM == "windows":
-        return get_available_gpus_windows()
-    elif temporary.PLATFORM == "linux":
-        return get_available_gpus_linux()
-    else:
-        return ["CPU Only"]  # Fixed syntax error
+    """Returns list of GPUs with Intel marked appropriately"""
+    gpus = []
+    if PLATFORM == "windows":
+        # Windows detection logic that identifies Intel GPUs
+        gpus = get_available_gpus_windows()  # Should include Intel GPUs
+    elif PLATFORM == "linux":
+        # Linux detection that identifies Intel GPUs
+        gpus = get_available_gpus_linux()    # Should include Intel GPUs
+    return gpus
             
 def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")

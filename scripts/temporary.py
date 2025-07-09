@@ -1,6 +1,6 @@
 # scripts/temporary.py
 
-# Imports...
+# Imports
 import time
 from scripts.prompts import prompt_templates 
 
@@ -48,15 +48,12 @@ SESSION_ACTIVE = False
 MODEL_NAME = "Select_a_model..."
 GPU_LAYERS = 0
 SELECTED_GPU = None
-SELECTED_CPU = None
 STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True
 BACKEND_TYPE = "Not Configured"
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
 SPEECH_ENABLED = False
-AUTO_SUMMARY = False
-CURRENT_SUMMARY = ""
 
 # Arrays
 session_attached_files = []
@@ -109,5 +106,5 @@ handling_keywords = {
 
 # prompt template table
 current_model_settings = {
-    "category": "chat"  # Simplified; prompt_template removed as itâ€™s not needed
+    "category": "chat"  # Simplified; prompt_template removed as it’s not needed
 }

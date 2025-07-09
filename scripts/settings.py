@@ -63,8 +63,6 @@ def load_config():
             temporary.VRAM_SIZE = model_settings["vram_size"]
         if "selected_gpu" in model_settings:
             temporary.SELECTED_GPU = model_settings["selected_gpu"]
-        if "selected_cpu" in model_settings:
-            temporary.SELECTED_CPU = model_settings["selected_cpu"]
         if "mmap" in model_settings:
             temporary.MMAP = model_settings["mmap"]
         if "mlock" in model_settings:
@@ -93,7 +91,6 @@ def load_config():
         temporary.BACKEND_TYPE = "Not Configured"
         temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
         temporary.SELECTED_GPU = None
-        temporary.SELECTED_CPU = None
         temporary.MODEL_NAME = "Select_a_model..."
     
     # Scan for available models and cache the result
@@ -127,7 +124,6 @@ def save_config():
             "llama_cli_path": temporary.LLAMA_CLI_PATH,
             "vram_size": temporary.VRAM_SIZE,
             "selected_gpu": temporary.SELECTED_GPU,
-            "selected_cpu": temporary.SELECTED_CPU,
             "mmap": temporary.MMAP,
             "mlock": temporary.MLOCK,
             "n_batch": temporary.BATCH_SIZE,

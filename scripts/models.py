@@ -21,73 +21,6 @@ def get_chat_format(metadata):
     architecture = metadata.get('general.architecture', 'unknown')
     return CHAT_FORMAT_MAP.get(architecture, 'llama2')
 
-def get_model_metadata(model_path: str) -> dict:
-    """
-    Retrieve metadata from a GGUF model, including the number of layers.
-    Returns empty dict if metadata cannot be retrieved.
-    """
-    try:
-        from llama_cpp import Llama
-    except ImportError as ie:
-        print(f"llama_cpp import error: {str(ie)}")
-        return {}
-        
-    try:
-        model_path = str(Path(model_path).resolve())
-        chat_format = 'chatml' if 'qwen' in model_path.lower() else None
-        
-        model = Llama(
-            model_path=model_path,
-            n_ctx=4096,
-            n_batch=1,
-            n_gpu_layers=0,
-            verbose=False,  # Reduced verbosity
-            chat_format=chat_format
-        )
-        
-        metadata = model.metadata
-        architecture = metadata.get('general.architecture', 'unknown').lower()
-        
-        # Try multiple ways to get layer count
-        layers = 0
-        possible_layer_keys = [
-            f'{architecture}.block_count',
-            f'{architecture}.num_layers',
-            'llama.block_count',
-            'llama.num_layers',
-            'num_layers',
-            'block_count'
-        ]
-        
-        for key in possible_layer_keys:
-            if key in metadata:
-                try:
-                    layers = int(metadata[key])
-                    break
-                except (ValueError, TypeError):
-                    continue
-        
-        if layers == 0:
-            # Fallback to counting layer-related keys
-            layer_keys = [k for k in metadata if 'layer' in k.lower() or 'block' in k.lower()]
-            if layer_keys:
-                try:
-                    layers = int(metadata[layer_keys[0]])
-                except (ValueError, TypeError):
-                    layers = 0
-        
-        metadata['layers'] = layers
-        metadata['architecture'] = architecture
-        
-        # Clean up
-        del model
-        return metadata
-        
-    except Exception as e:
-        import traceback
-        print(f"Error reading model metadata for '{model_path}': {str(e)}\n{traceback.format_exc()}")
-        return {}
-
 def get_model_layers(model_path: str) -> int:
     """
     Get the number of layers for a GGUF model.
@@ -104,36 +37,6 @@ def clean_content(role, content):
     if role == 'user':
         return content.replace("User:\n", "", 1).strip()
     return content.strip()
-
-def set_cpu_affinity():
-    """Set CPU affinity based on selected CPU core range."""
-    from scripts import utility
-    cpu_only_backends = ["CPU Only - AVX2", "CPU Only - AVX512", "CPU Only - NoAVX", "CPU Only - OpenBLAS"]
-    
-    if temporary.BACKEND_TYPE in cpu_only_backends and temporary.SELECTED_CPU:
-        cpus = utility.get_cpu_info()
-        selected_cpu = next((cpu for cpu in cpus if cpu["label"] == temporary.SELECTED_CPU), None)
-        
-        if selected_cpu:
-            try:
-                import psutil
-                p = psutil.Process()
-                
-                if temporary.PLATFORM == "windows":
-                    p.cpu_affinity(selected_cpu["core_range"])
-                elif temporary.PLATFORM == "linux":
-                    try:
-                        import os
-                        affinity_mask = 0
-                        for core in selected_cpu["core_range"]:
-                            affinity_mask |= (1 << core)
-                        os.sched_setaffinity(0, [core for core in selected_cpu["core_range"]])
-                        print(f"Set CPU affinity to cores: {selected_cpu['core_range']}")
-                    except Exception as e:
-                        print(f"Failed to set CPU affinity: {e}")
-                print(f"Set CPU affinity to {selected_cpu['label']}")
-            except Exception as e:
-                print(f"Failed to set CPU affinity: {e}")
 
 def get_available_models():
     model_dir = Path(temporary.MODEL_FOLDER)
@@ -297,17 +200,26 @@ def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vra
     if num_layers <= 0 or available_vram <= 0:
         print("Debug: Invalid input (layers or VRAM), returning 0 layers")
         return 0
+    
     model_file_size = get_model_size(model_path)
     metadata = get_model_metadata(model_path)
     factor = 1.2 if metadata.get('general.architecture') == 'llama' else 1.1
     adjusted_model_size = model_file_size * factor
     layer_size = adjusted_model_size / num_layers if num_layers > 0 else 0
     max_layers = floor(available_vram / layer_size) if layer_size > 0 else 0
-    result = min(max_layers, num_layers) if dynamic_gpu_layers else num_layers
+    
+    if dynamic_gpu_layers:
+        gpu_layers = min(max_layers, num_layers)
+        cpu_fallback = num_layers - gpu_layers
+        print(f"Using {gpu_layers} GPU layers + {cpu_fallback} CPU layers")
+    else:
+        gpu_layers = num_layers
+        if max_layers < num_layers:
+            print(f"⚠️ Insufficient VRAM, falling back to CPU for {num_layers - max_layers} layers")
+
     print(f"Debug: Model size = {model_file_size:.2f} MB, Layers = {num_layers}, VRAM = {available_vram} MB")
-    print(f"Debug: Adjusted size = {adjusted_model_size:.2f} MB, Layer size = {layer_size:.2f} MB")
-    print(f"Debug: Max layers with VRAM = {max_layers}, Final result = {result}")
-    return result
+    print(f"Debug: Layer size = {layer_size:.2f} MB")
+    return gpu_layers
 
 def unload_models(llm_state, models_loaded_state):
     import gc
