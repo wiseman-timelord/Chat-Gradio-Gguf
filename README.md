@@ -170,7 +170,7 @@ project_root/
 2. No CPU options anymore, cant bugfix on main, BugTesting must wait. 
 3. Summary is removed.
 4. Speech is now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
-5. New processing setup, it will need to be Tested/bugfixed.
+5. New processing setup, it will need to be Tested/bugfixed. User is limited to 
 6. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
 4. Need to optimize streaming output and relating displaying of text/animations. Design needs work, doesnt work how I want.
 5. The stop button wont work because the button freezes during certain/all phases of generation.
