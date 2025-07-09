@@ -16,23 +16,27 @@ def parse_args():
     parser.add_argument('platform', choices=['windows', 'linux'], help='Target platform')
     return parser.parse_args()
 
-def initialize_platform(platform_arg):
-    """Initialize platform-specific settings"""
-    if platform_arg not in ["windows", "linux"]:
-        raise ValueError("Invalid platform argument. Must be 'windows' or 'linux'")
-    
-    temporary.PLATFORM = platform_arg
-    initialize_platform_settings()
-    print(f"Initialized platform: {platform_arg}")
-
 def initialize_platform_settings():
     """Set platform-specific paths and configurations"""
+    from scripts.settings import load_config
+    load_config()  # Ensure config is loaded
+    
     if temporary.PLATFORM == "windows":
-        temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
+        elif "cuda" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli.exe"
+        elif "hip" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-hip-radeon-bin/llama-cli.exe"
     elif temporary.PLATFORM == "linux":
-        temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
+        elif "cuda" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli"
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
+    
+    print(f"Initialized {temporary.PLATFORM} with backend: {temporary.BACKEND_TYPE}")
 
 def shutdown_program(llm_state, models_loaded_state, session_log, attached_files):
     """Gracefully shutdown the program, saving current session if active."""

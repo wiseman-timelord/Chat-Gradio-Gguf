@@ -29,30 +29,6 @@ DIRECTORIES = [
 if PLATFORM == "windows":
     VULKAN_TARGET_VERSION = "1.4.304.1"
     BACKEND_OPTIONS = {
-        "CPU Only - AVX2": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-avx2-x64.zip",
-            "dest": "data/llama-avx2-bin",
-            "cli_path": "data/llama-avx2-bin/llama-cli.exe",
-            "needs_python_bindings": True
-        },
-        "CPU Only - AVX512": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-avx512-x64.zip",
-            "dest": "data/llama-avx512-bin",
-            "cli_path": "data/llama-avx512-bin/llama-cli.exe",
-            "needs_python_bindings": True
-        },
-        "CPU Only - NoAVX": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-noavx-x64.zip",
-            "dest": "data/llama-noavx-bin",
-            "cli_path": "data/llama-noavx-bin/llama-cli.exe",
-            "needs_python_bindings": True
-        },
-        "CPU Only - OpenBLAS": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-openblas-x64.zip",
-            "dest": "data/llama-openblas-bin",
-            "cli_path": "data/llama-openblas-bin/llama-cli.exe",
-            "needs_python_bindings": True
-        },
         "GPU/CPU - Vulkan": {
             "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
             "dest": "data/llama-vulkan-bin",
@@ -83,22 +59,22 @@ if PLATFORM == "windows":
         }
     }
 elif PLATFORM == "linux":
-    BACKEND_OPTIONS = {
-        "CPU Only": {
-            "needs_python_bindings": True,
-            "build_flags": {}
+BACKEND_OPTIONS = {
+        "GPU/CPU - Vulkan (AMD/Intel/NVIDIA)": {
+            "needs_python_bindings": False,
+            "vulkan_required": True,
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
+            "dest": "data/llama-vulkan-bin",
+            "cli_path": "data/llama-vulkan-bin/llama-cli.exe"
         },
-        "GPU/CPU - Vulkan": {
-            "needs_python_bindings": True,
-            "build_flags": {"LLAMA_VULKAN": "1"},
-            "vulkan_required": True
-        },
-        "GPU/CPU - CUDA": {
-            "needs_python_bindings": True,
-            "build_flags": {"LLAMA_CUBLAS": "1"},
-            "cuda_required": True
-        }
-    }
+         "GPU/CPU - CUDA": {
+             "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-cuda-x64.zip",
+             "dest": "data/llama-cuda-bin",
+             "cli_path": "data/llama-cuda-bin/llama-cli",
+             "needs_python_bindings": False,
+             "cuda_required": True
+         }
+     }
 
 # Python dependencies
 REQUIREMENTS = [
@@ -128,7 +104,6 @@ CONFIG_TEMPLATE = """{
         "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
         "vram_size": 8192,
         "selected_gpu": null,
-        "selected_cpu": "null",
         "mmap": true,
         "mlock": true,
         "n_batch": 2048,
@@ -399,35 +374,25 @@ def select_backend_type() -> None:
     global BACKEND_TYPE
     if PLATFORM == "windows":
         options = [
-            "AVX2 - CPU Only - Must be compatible with AVX2",
-            "AVX512 - CPU Only - Must be compatible with AVX512",
-            "NoAVX - CPU Only - For older CPUs without AVX support",
-            "OpenBLAS - CPU Only - Optimized for linear algebra operations",
             "Vulkan - GPU/CPU - For AMD/nVidia/Intel GPU with x64 CPU",
             "Hip-Radeon - GPU/CPU - Experimental Vulkan for AMD-ROCM",
             "CUDA 11.7 - GPU/CPU - For CUDA 11.7 GPUs with CPU fallback",
             "CUDA 12.4 - GPU/CPU - For CUDA 12.4 GPUs with CPU fallback"
         ]
         mapping = {
-            options[0]: "CPU Only - AVX2",
-            options[1]: "CPU Only - AVX512",
-            options[2]: "CPU Only - NoAVX",
-            options[3]: "CPU Only - OpenBLAS",
-            options[4]: "GPU/CPU - Vulkan",
-            options[5]: "GPU/CPU - HIP-Radeon",
-            options[6]: "GPU/CPU - CUDA 11.7",
-            options[7]: "GPU/CPU - CUDA 12.4"
+            options[0]: "GPU/CPU - Vulkan",
+            options[1]: "GPU/CPU - HIP-Radeon",
+            options[2]: "GPU/CPU - CUDA 11.7",
+            options[3]: "GPU/CPU - CUDA 12.4"
         }
     else:
         options = [
-            "CPU Only - Standard CPU processing",
-            "GPU/CPU - Vulkan - For AMD/Intel/NVIDIA GPUs",
-            "GPU/CPU - CUDA - For NVIDIA GPUs with CUDA"
+            "Vulkan - For AMD/Intel/NVIDIA GPUs",
+            "CUDA - For NVIDIA GPUs with CUDA"
         ]
         mapping = {
-            options[0]: "CPU Only",
-            options[1]: "GPU/CPU - Vulkan",
-            options[2]: "GPU/CPU - CUDA"
+            options[0]: "GPU/CPU - Vulkan",
+            options[1]: "GPU/CPU - CUDA"
         }
     
     choice = get_user_choice("Select the Llama.Cpp backend type:", options)
