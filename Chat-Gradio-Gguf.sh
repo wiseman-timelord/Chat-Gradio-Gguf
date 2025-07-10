@@ -1,11 +1,11 @@
 #!/bin/bash
-# Script: `.\Chat-Gradio-Gguf.sh`
+# Script: `./Chat-Gradio-Gguf.sh`
 
-# Set terminal title
+# Set terminal title (Linux/Unix method)
 echo -ne "\033]0;Chat-Gradio-Gguf\007"
 
 # Change to script directory
-SCRIPT_DIR=$(dirname "$0")
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$SCRIPT_DIR" || exit 1
 echo "Changed to script directory: $SCRIPT_DIR"
 
@@ -103,8 +103,8 @@ run_main_program() {
     display_separator_thick
     echo ""
     echo "Starting Chat-Gradio-Gguf..."
-    if [ -d "./.venv" ]; then
-        source ./.venv/bin/activate
+    if [ -d ".venv" ]; then
+        source .venv/bin/activate
         echo "Activated: .venv"
     else
         echo "Error: Virtual environment (.venv) not found"
@@ -137,11 +137,11 @@ run_installation() {
     sleep 1
     rm -rf ./data
     echo "Deleted: ./data"
-    if [ -d "./.venv" ]; then
-        source ./.venv/bin/activate
+    if [ -d ".venv" ]; then
+        source .venv/bin/activate
         deactivate
-        rm -rf ./.venv
-        echo "Deleted: ./.venv"
+        rm -rf .venv
+        echo "Deleted: .venv"
     else
         echo "No existing .venv to delete"
     fi
@@ -156,8 +156,8 @@ run_installation() {
         echo "Error during installation"
         read -p "Press Enter to continue..."
     fi
-    if [ -d "./.venv" ]; then
-        source ./.venv/bin/activate
+    if [ -d ".venv" ]; then
+        source .venv/bin/activate
         deactivate
         echo "Deactivated: .venv"
     fi
@@ -175,8 +175,8 @@ run_validation() {
     display_separator_thick
     echo ""
     echo "Running Library Validation..."
-    if [ -d "./.venv" ]; then
-        source ./.venv/bin/activate
+    if [ -d ".venv" ]; then
+        source .venv/bin/activate
         echo "Activated: .venv"
     else
         echo "Error: Virtual environment (.venv) not found"
