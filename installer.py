@@ -10,9 +10,6 @@ import time
 from pathlib import Path
 import shutil
 
-# Validate platform argument
-
-
 # Constants
 APP_NAME = "Chat-Gradio-Gguf"
 BASE_DIR = Path(__file__).parent
@@ -20,10 +17,23 @@ VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
 LLAMACPP_TARGET_VERSION = "b5587"
 BACKEND_TYPE = None
+PLATFORM = None  # Initialize PLATFORM variable
+
 DIRECTORIES = [
     "data", "scripts", "models",
     "data/history", "data/temp"
 ]
+
+# Set Platform
+def set_platform():
+    global PLATFORM
+    if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
+        print("ERROR: Platform argument required (windows/linux)")
+        sys.exit(1)
+    PLATFORM = sys.argv[1].lower()
+
+# Initialize platform before using it
+set_platform()
 
 # Platform-specific configurations
 if PLATFORM == "windows":
@@ -34,47 +44,53 @@ if PLATFORM == "windows":
             "dest": "data/llama-vulkan-bin",
             "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
             "needs_python_bindings": False,
-            "vulkan_required": True
+            "vulkan_required": True,
+            "build_flags": {}
         },
         "GPU/CPU - HIP-Radeon": {
             "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-hip-radeon-x64.zip",
             "dest": "data/llama-hip-radeon-bin",
             "cli_path": "data/llama-hip-radeon-bin/llama-cli.exe",
             "needs_python_bindings": False,
-            "vulkan_required": True
+            "vulkan_required": True,
+            "build_flags": {}
         },
         "GPU/CPU - CUDA 11.7": {
             "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-cuda-11.7-x64.zip",
             "dest": "data/llama-cuda-11.7-bin",
             "cli_path": "data/llama-cuda-11.7-bin/llama-cli.exe",
             "needs_python_bindings": False,
-            "cuda_required": True
+            "cuda_required": True,
+            "build_flags": {}
         },
         "GPU/CPU - CUDA 12.4": {
             "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-cuda-12.4-x64.zip",
             "dest": "data/llama-cuda-12.4-bin",
             "cli_path": "data/llama-cuda-12.4-bin/llama-cli.exe",
             "needs_python_bindings": False,
-            "cuda_required": True
+            "cuda_required": True,
+            "build_flags": {}
         }
     }
 elif PLATFORM == "linux":
-BACKEND_OPTIONS = {
-        "GPU/CPU - Vulkan (AMD/Intel/NVIDIA)": {
+    BACKEND_OPTIONS = {
+        "GPU/CPU - Vulkan": {
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip",
+            "dest": "data/llama-vulkan-bin",
+            "cli_path": "data/llama-vulkan-bin/llama-cli",
             "needs_python_bindings": False,
             "vulkan_required": True,
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli.exe"
+            "build_flags": {}
         },
-         "GPU/CPU - CUDA": {
-             "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-cuda-x64.zip",
-             "dest": "data/llama-cuda-bin",
-             "cli_path": "data/llama-cuda-bin/llama-cli",
-             "needs_python_bindings": False,
-             "cuda_required": True
-         }
-     }
+        "GPU/CPU - CUDA": {
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-cuda-x64.zip",
+            "dest": "data/llama-cuda-bin",
+            "cli_path": "data/llama-cuda-bin/llama-cli",
+            "needs_python_bindings": False,
+            "cuda_required": True,
+            "build_flags": {}
+        }
+    }
 
 # Python dependencies
 REQUIREMENTS = [
@@ -89,9 +105,14 @@ REQUIREMENTS = [
     "langchain-community==0.3.18",
     "pygments==2.17.2",
     "lxml_html_clean",
-    "pyttsx3",
-    "pyobjc" if PLATFORM == "linux" else "pywin32"
+    "pyttsx3"
 ]
+
+# Add platform-specific requirements
+if PLATFORM == "linux":
+    REQUIREMENTS.append("pyobjc")
+else:
+    REQUIREMENTS.append("pywin32")
 
 CONFIG_TEMPLATE = """{
     "model_settings": {
@@ -117,13 +138,6 @@ CONFIG_TEMPLATE = """{
         "llama_bin_path": "data/llama-vulkan-bin"
     }
 }"""
-
-# Set Platform
-def set_platform():
-    if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
-        print("ERROR: Platform argument required (windows/linux)")
-        sys.exit(1)
-    temporary.PLATFORM = sys.argv[1].lower()
 
 # Utility functions
 def print_header(title: str) -> None:
@@ -250,30 +264,41 @@ def install_python_deps(backend: str) -> bool:
         # Linux-specific system dependencies
         if PLATFORM == "linux":
             print_status("Installing Linux system dependencies...")
-            subprocess.run([
-                "sudo", "apt-get", "update"
-            ], check=True)
-            
-            subprocess.run([
-                "sudo", "apt-get", "install", "-y",
-                "espeak", "portaudio19-dev", "libasound2-dev"
-            ], check=True)
-            
-            if backend == "GPU/CPU - Vulkan":
+            try:
+                subprocess.run([
+                    "sudo", "apt-get", "update"
+                ], check=True)
+                
                 subprocess.run([
                     "sudo", "apt-get", "install", "-y",
-                    "vulkan-tools", "libvulkan-dev", "vulkan-utils"
+                    "espeak", "portaudio19-dev", "libasound2-dev"
                 ], check=True)
-            elif backend == "GPU/CPU - CUDA":
-                subprocess.run([
-                    "sudo", "apt-get", "install", "-y",
-                    "nvidia-cuda-toolkit"
-                ], check=True)
+                
+                if backend == "GPU/CPU - Vulkan":
+                    subprocess.run([
+                        "sudo", "apt-get", "install", "-y",
+                        "vulkan-tools", "libvulkan-dev", "vulkan-utils"
+                    ], check=True)
+                elif backend == "GPU/CPU - CUDA":
+                    subprocess.run([
+                        "sudo", "apt-get", "install", "-y",
+                        "nvidia-cuda-toolkit"
+                    ], check=True)
+                
+                print_status("Linux system dependencies installed successfully")
+            except subprocess.CalledProcessError as e:
+                print_status(f"Warning: Some system dependencies failed to install: {e}", False)
+                print("You may need to install these manually:")
+                print("  sudo apt-get install espeak portaudio19-dev libasound2-dev")
+                if backend == "GPU/CPU - Vulkan":
+                    print("  sudo apt-get install vulkan-tools libvulkan-dev vulkan-utils")
+                elif backend == "GPU/CPU - CUDA":
+                    print("  sudo apt-get install nvidia-cuda-toolkit")
         
         # Install Python packages with appropriate build flags
         env = os.environ.copy()
         if backend in BACKEND_OPTIONS:
-            env.update(BACKEND_OPTIONS[backend]["build_flags"])
+            env.update(BACKEND_OPTIONS[backend].get("build_flags", {}))
         
         cmd = [pip_exe, "install"] + REQUIREMENTS
         if backend == "GPU/CPU - CUDA":
@@ -327,9 +352,6 @@ def install_vulkan_sdk() -> bool:
         return False
 
 def download_extract_backend(backend: str) -> bool:
-    if PLATFORM != "windows":
-        return True
-        
     print_status(f"Downloading llama.cpp ({backend})...")
     backend_info = BACKEND_OPTIONS[backend]
     TEMP_DIR.mkdir(exist_ok=True)
@@ -360,12 +382,16 @@ def download_extract_backend(backend: str) -> bool:
         
         cli_path = BASE_DIR / backend_info["cli_path"]
         if not cli_path.exists():
-            raise FileNotFoundError(f"llama-cli.exe not found at {cli_path}")
+            raise FileNotFoundError(f"llama-cli not found at {cli_path}")
+        
+        # Make executable on Linux
+        if PLATFORM == "linux":
+            os.chmod(cli_path, 0o755)
         
         print_status(f"llama.cpp ({backend}) installed successfully")
         return True
     except Exception as e:
-        print_status(f"Unexpected error: {str(e)}", False)
+        print_status(f"Backend installation failed: {str(e)}", False)
         return False
     finally:
         temp_zip.unlink(missing_ok=True)
@@ -424,13 +450,12 @@ def install():
         sys.exit(1)
     
     # Install Python dependencies
-    with activate_venv():
-        if not install_python_deps(BACKEND_TYPE):
-            print_status("Python dependency installation failed!", False)
-            sys.exit(1)
+    if not install_python_deps(BACKEND_TYPE):
+        print_status("Python dependency installation failed!", False)
+        sys.exit(1)
     
-    # Download backend binaries (Windows only)
-    if PLATFORM == "windows" and not backend_info["needs_python_bindings"]:
+    # Download backend binaries
+    if not backend_info["needs_python_bindings"]:
         if not download_extract_backend(BACKEND_TYPE):
             print_status("llama.cpp backend installation failed!", False)
             sys.exit(1)
@@ -443,7 +468,6 @@ def install():
     print(f"  {'Chat-Gradio-Gguf.bat' if PLATFORM == 'windows' else './Chat-Gradio-Gguf.sh'}")
 
 if __name__ == "__main__":
-    set_platform()
     try:
         select_backend_type()
         install()
