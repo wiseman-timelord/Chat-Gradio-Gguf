@@ -80,6 +80,7 @@ Launching Gradio Interface...
 ```
 
 ### Notation 
+- For Vulkan installations, you must install the Vulkan SDK; I will be adding this to [Ubuntu25-TweakInstall](https://github.com/wiseman-timelord/Ubuntu25-TweakInstall), otherwise you must go here [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
 - For CUDA installations, you must install the CUDA Toolkit; I added this to [Ubuntu25-TweakInstall](https://github.com/wiseman-timelord/Ubuntu25-TweakInstall), but if you have other OS, then research/instal first.
 - VRAM dropdown, 1GB to 64GB in steps, this should be your FREE ram available on the selected card, it should not be the total amount the car has, unless you are running in compute mode.  
 - We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
