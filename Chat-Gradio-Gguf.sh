@@ -154,13 +154,14 @@ run_installation() {
     python3 ./installer.py linux
     if [ $? -ne 0 ]; then
         echo "Error during installation"
+        read -p "Press Enter to continue..."
     fi
     if [ -d ".venv" ]; then
         source .venv/bin/activate
         deactivate
         echo "Deactivated: .venv"
+        read -p "Press Enter to continue..."
     fi
-    read -p "Press Enter to continue..."
 }
 
 # Function to run validation

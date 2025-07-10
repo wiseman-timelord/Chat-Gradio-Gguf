@@ -37,7 +37,6 @@ set_platform()
 
 # Platform-specific configurations
 if PLATFORM == "windows":
-    VULKAN_TARGET_VERSION = "1.4.304.1"
     BACKEND_OPTIONS = {
         "GPU/CPU - Vulkan": {
             "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
@@ -111,7 +110,6 @@ REQUIREMENTS = [
 # Add platform-specific requirements
 if PLATFORM == "windows":
     REQUIREMENTS.append("pywin32")
-# Note: pyobjc is macOS-specific, not needed on Linux
 
 CONFIG_TEMPLATE = """{
     "model_settings": {
@@ -315,6 +313,72 @@ def check_package_exists(package_name: str) -> bool:
     except subprocess.CalledProcessError:
         return False
 
+def is_vulkan_installed() -> bool:
+    """Check if Vulkan is properly installed"""
+    if PLATFORM == "windows":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Khronos\Vulkan\Drivers") as key:
+                return True
+        except:
+            return False
+    else:  # Linux
+        try:
+            result = subprocess.run(["vulkaninfo", "--summary"], 
+                                 stdout=subprocess.DEVNULL, 
+                                 stderr=subprocess.DEVNULL)
+            return result.returncode == 0
+        except FileNotFoundError:
+            return False
+
+def is_cuda_installed() -> bool:
+    """Check if CUDA is properly installed"""
+    if PLATFORM == "windows":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\NVIDIA Corporation\CUDA") as key:
+                return True
+        except:
+            return False
+    else:  # Linux
+        try:
+            result = subprocess.run(["nvcc", "--version"], 
+                                 stdout=subprocess.DEVNULL, 
+                                 stderr=subprocess.DEVNULL)
+            return result.returncode == 0
+        except FileNotFoundError:
+            return False
+
+def verify_backend_dependencies(backend: str) -> bool:
+    """Check if required dependencies are installed for selected backend"""
+    backend_info = BACKEND_OPTIONS[backend]
+    
+    if backend_info.get("vulkan_required", False):
+        if not is_vulkan_installed():
+            print("\n" + "!" * 80)
+            print(f"Vulkan not detected but required for {backend} backend!")
+            print("Please install Vulkan SDK before continuing:")
+            if PLATFORM == "windows":
+                print("  Download from: https://vulkan.lunarg.com/sdk/home")
+            else:
+                print("  Install with: sudo apt install vulkan-tools libvulkan-dev")
+            print("!" * 80 + "\n")
+            return False
+    
+    if backend_info.get("cuda_required", False):
+        if not is_cuda_installed():
+            print("\n" + "!" * 80)
+            print(f"CUDA not detected but required for {backend} backend!")
+            print("Please install CUDA Toolkit before continuing:")
+            if PLATFORM == "windows":
+                print("  Download from: https://developer.nvidia.com/cuda-downloads")
+            else:
+                print("  Install with: sudo apt install nvidia-cuda-toolkit")
+            print("!" * 80 + "\n")
+            return False
+    
+    return True
+
 def install_linux_system_dependencies(backend: str) -> bool:
     """Install Linux system dependencies with improved error handling"""
     if PLATFORM != "linux":
@@ -322,17 +386,14 @@ def install_linux_system_dependencies(backend: str) -> bool:
     
     print_status("Installing Linux system dependencies...")
     
-    # Essential packages that are required
     essential_packages = [
         "build-essential",
         "portaudio19-dev",
         "libasound2-dev"
     ]
     
-    # Optional packages that enhance functionality
     optional_packages = ["espeak"]
     
-    # Backend-specific packages
     backend_packages = []
     if backend == "GPU/CPU - Vulkan":
         backend_packages = [
@@ -346,7 +407,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
             "nvidia-cuda-toolkit"
         ]
     
-    # Update package lists first
     try:
         print_status("Updating package lists...")
         subprocess.run(["sudo", "apt-get", "update"], check=True, capture_output=True)
@@ -355,7 +415,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
         print_status(f"Warning: Failed to update package lists: {e}", False)
         print("Continuing with installation...")
     
-    # Install essential packages
     failed_essential = []
     for package in essential_packages:
         if check_package_exists(package):
@@ -369,7 +428,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
             print_status(f"Package {package} not found in repositories", False)
             failed_essential.append(package)
     
-    # Install optional packages
     failed_optional = []
     for package in optional_packages:
         if check_package_exists(package):
@@ -383,7 +441,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
             print_status(f"Optional package {package} not found in repositories", False)
             failed_optional.append(package)
     
-    # Install backend-specific packages
     failed_backend = []
     if backend_packages:
         print_status(f"Installing {backend} specific packages...")
@@ -399,7 +456,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
                 print_status(f"{backend} package {package} not found in repositories", False)
                 failed_backend.append(package)
     
-    # Report results
     if failed_essential:
         print_status(f"CRITICAL: Essential packages failed to install: {', '.join(failed_essential)}", False)
         print("\nEssential packages are required for the application to work properly.")
@@ -427,24 +483,19 @@ def install_python_deps(backend: str) -> bool:
         if not os.path.exists(pip_exe):
             raise FileNotFoundError(f"Pip not found at {pip_exe}")
         
-        # Upgrade pip first
         subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", "pip"], check=True)
         print_status("Upgraded pip successfully")
         
-        # Install Linux system dependencies first
         if not install_linux_system_dependencies(backend):
             print_status("Critical system dependencies failed to install!", False)
             return False
         
-        # Install Python packages with retry logic and better error handling
         env = os.environ.copy()
         if backend in BACKEND_OPTIONS:
             env.update(BACKEND_OPTIONS[backend].get("build_flags", {}))
         
-        # Install packages in groups to better handle failures
         basic_requirements = [req for req in REQUIREMENTS if req != "llama-cpp-python"]
         
-        # Install basic requirements first
         print_status("Installing basic Python packages...")
         for req in basic_requirements:
             max_retries = 3
@@ -456,12 +507,10 @@ def install_python_deps(backend: str) -> bool:
                 except subprocess.CalledProcessError as e:
                     if attempt == max_retries - 1:
                         print_status(f"Failed to install {req} after {max_retries} attempts: {e}", False)
-                        # Try to continue with other packages
                         continue
                     print_status(f"Retrying {req} (attempt {attempt + 2}/{max_retries})", False)
                     time.sleep(2)
         
-        # Install llama-cpp-python separately with special handling
         print_status("Installing llama-cpp-python...")
         llama_cmd = [pip_exe, "install"]
         if backend == "GPU/CPU - CUDA":
@@ -489,35 +538,7 @@ def install_python_deps(backend: str) -> bool:
         print_status(f"Dependency installation failed: {e}", False)
         return False
 
-def install_vulkan_sdk() -> bool:
-    if PLATFORM != "windows":
-        return True
-        
-    print_status("Preparing to install Vulkan SDK...")
-    vulkan_url = f"https://sdk.lunarg.com/sdk/download/{VULKAN_TARGET_VERSION}/windows/VulkanSDK-{VULKAN_TARGET_VERSION}-Installer.exe?Human=true"
-    TEMP_DIR.mkdir(exist_ok=True)
-    installer_path = TEMP_DIR / "VulkanSDK.exe"
-    
-    try:
-        download_with_progress(vulkan_url, installer_path, "Downloading Vulkan SDK")
-        
-        print_status("Running Vulkan SDK installer...")
-        try:
-            subprocess.run([str(installer_path), "/S"], check=True)
-            print_status("Vulkan SDK installation completed")
-            return True
-        except PermissionError:
-            print_status("Permission denied: Run installer as administrator", False)
-            return False
-        finally:
-            installer_path.unlink(missing_ok=True)
-    except Exception as e:
-        print_status(f"Vulkan SDK installation failed: {str(e)}", False)
-        installer_path.unlink(missing_ok=True)
-        return False
-
 def copy_linux_binaries(source_dir: Path, dest_dir: Path) -> None:
-    """Copy Linux binaries from build/bin to the destination directory"""
     build_bin_dir = source_dir / "build" / "bin"
     
     if not build_bin_dir.exists():
@@ -525,13 +546,11 @@ def copy_linux_binaries(source_dir: Path, dest_dir: Path) -> None:
     
     print_status("Copying Linux binaries to destination...")
     
-    # Copy all llama executables
     copied_files = []
     for file in build_bin_dir.iterdir():
         if file.is_file() and file.name.startswith("llama"):
             dest_file = dest_dir / file.name
             shutil.copy2(file, dest_file)
-            # Make executable
             os.chmod(dest_file, 0o755)
             copied_files.append(file.name)
     
@@ -549,7 +568,6 @@ def download_extract_backend(backend: str) -> bool:
     try:
         import zipfile
         
-        # Download the backend with progress
         download_with_progress(backend_info["url"], temp_zip, f"Downloading {backend}")
         
         dest_path = BASE_DIR / backend_info["dest"]
@@ -557,28 +575,24 @@ def download_extract_backend(backend: str) -> bool:
         
         print_status("Extracting backend files...")
         with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
-            # Extract with progress for large archives
             members = zip_ref.namelist()
             total_files = len(members)
             
             for i, member in enumerate(members):
                 zip_ref.extract(member, dest_path)
-                if i % 25 == 0 or i == total_files - 1:  # Update every 25 files or at end
+                if i % 25 == 0 or i == total_files - 1:
                     progress = simple_progress_bar(i + 1, total_files)
                     print(f"\rExtracting: {progress}", end='', flush=True)
             
-            print()  # New line after progress
+            print()
         
-        # Handle Linux-specific binary location
         if PLATFORM == "linux":
-            # Linux binaries are in build/bin subdirectory, copy them to the main directory
             copy_linux_binaries(dest_path, dest_path)
         
         cli_path = BASE_DIR / backend_info["cli_path"]
         if not cli_path.exists():
             raise FileNotFoundError(f"llama-cli not found at {cli_path}")
         
-        # Make executable on Linux (if not already done)
         if PLATFORM == "linux":
             os.chmod(cli_path, 0o755)
         
@@ -627,34 +641,28 @@ def install():
         sys.exit(1)
     
     print_status(f"Selected backend: {BACKEND_TYPE}")
-    backend_info = BACKEND_OPTIONS[BACKEND_TYPE]
     
-    # Create directories
+    # Verify backend dependencies first
+    if not verify_backend_dependencies(BACKEND_TYPE):
+        print_status("Required dependencies not satisfied!", False)
+        sys.exit(1)
+    
     create_directories()
     
-    # Set up virtual environment
     if not create_venv():
         print_status("Virtual environment creation failed!", False)
         sys.exit(1)
     
-    # Install Python dependencies first
     if not install_python_deps(BACKEND_TYPE):
         print_status("Python dependency installation failed!", False)
         sys.exit(1)
     
-    # Check for required system components after Python deps are installed
-    if PLATFORM == "windows" and backend_info.get("vulkan_required", False):
-        if not install_vulkan_sdk():
-            print_status("Vulkan SDK installation failed!", False)
-            sys.exit(1)
-    
-    # Download backend binaries
+    backend_info = BACKEND_OPTIONS[BACKEND_TYPE]
     if not backend_info["needs_python_bindings"]:
         if not download_extract_backend(BACKEND_TYPE):
             print_status("llama.cpp backend installation failed!", False)
             sys.exit(1)
     
-    # Create configuration
     create_config(BACKEND_TYPE)
     
     print_status(f"\n{APP_NAME} installation completed successfully!")
