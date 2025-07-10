@@ -64,7 +64,7 @@ Launching Gradio Interface...
 - Llama.Cpp - Options here for, Avx2, Vulkan, Kompute, Cuda 11, Cuda 12.
 - Python => 3.8 - "Based on provided scripts, Chat-Windows-Gguf requires Python 3.8+" -deepseek.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section.
-- Suitable CPU/GPU - Gpu may be, Main or Compute, with VRam 2-64GB, testing on rx470 in Compute.  
+- Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. Tested with Vulkan install.  
 
 ### Instructions (W = Windows, U = Ubuntu)...
 ```
@@ -80,7 +80,8 @@ Launching Gradio Interface...
 ```
 
 ### Notation 
-- VRAM dropdown, 1GB to 32GB in steps, this should be your FREE ram available on the selected card, it should not be the total amount the car has, unless you are running in compute mode.  
+- For CUDA installations, you must install the CUDA Toolkit; I added this to [Ubuntu25-TweakInstall](https://github.com/wiseman-timelord/Ubuntu25-TweakInstall), if you have some other OS, research appropriately.
+- VRAM dropdown, 1GB to 64GB in steps, this should be your FREE ram available on the selected card, it should not be the total amount the car has, unless you are running in compute mode.  
 - We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 - This project is for a chat interface, and is not intended to overlap with my other projects, `Rpg-Gradio-Gguf`, or the blueprints for, `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
