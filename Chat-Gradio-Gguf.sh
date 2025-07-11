@@ -191,6 +191,7 @@ run_validation() {
     fi
     deactivate
     echo "Deactivated: .venv"
+    read -p "Press Enter to continue..."
 }
 
 # Detect terminal width
