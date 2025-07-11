@@ -67,6 +67,13 @@ Launching Gradio Interface...
 - Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. Tested with Vulkan install.  
 
 ### Instructions (W = Windows, U = Ubuntu)...
+- Pre-Installation...
+```
+If installing with Vulkan option, you will need to have installed the `Vulkan SDK`,
+If installing with CUDA option, you will need to have installed the "CUDA Toolkit".
+If installing with ROCM, you will need to have installed the `ROCm Software Stack`.
+```
+- Installation...
 ```
 1.W. Download a "Release" version, when its available, and unpack to a sensible directory, such as, `C:\Programs\Chat-Windows-Gguf` or `C:\Program_Files\Chat-Windows-Gguf`, (try not to use spaces). 
 1.U. Download a "Release" version, when its available, and unpack to a sensible directory, such as, `/media/**UserName**/Programs_250/Chat-Gradio-Gguf`, (try not to use spaces).
