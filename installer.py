@@ -103,13 +103,16 @@ REQUIREMENTS = [
     "llama-cpp-python",
     "langchain-community==0.3.18",
     "pygments==2.17.2",
-    "lxml_html_clean",
-    "pyttsx3"
+    "lxml",
+    "pyttsx3",
+    "tk"
 ]
 
 # Add platform-specific requirements
 if PLATFORM == "windows":
     REQUIREMENTS.append("pywin32")
+elif PLATFORM == "linux":
+    REQUIREMENTS.append("python3-tk")  # Required for tkinter
 
 CONFIG_TEMPLATE = """{
     "model_settings": {
@@ -324,10 +327,14 @@ def is_vulkan_installed() -> bool:
             return False
     else:  # Linux
         try:
-            result = subprocess.run(["vulkaninfo", "--summary"], 
-                                 stdout=subprocess.DEVNULL, 
-                                 stderr=subprocess.DEVNULL)
-            return result.returncode == 0
+            # Check both vulkaninfo and library presence
+            result1 = subprocess.run(["vulkaninfo", "--summary"], 
+                                  stdout=subprocess.DEVNULL, 
+                                  stderr=subprocess.DEVNULL)
+            result2 = subprocess.run(["ldconfig", "-p", "|", "grep", "libvulkan"],
+                                  shell=True,
+                                  stdout=subprocess.DEVNULL)
+            return result1.returncode == 0 or result2.returncode == 0
         except FileNotFoundError:
             return False
 
@@ -389,7 +396,10 @@ def install_linux_system_dependencies(backend: str) -> bool:
     essential_packages = [
         "build-essential",
         "portaudio19-dev",
-        "libasound2-dev"
+        "libasound2-dev",
+        "python3-tk",
+        "vulkan-tools",
+        "libvulkan-dev"
     ]
     
     optional_packages = ["espeak"]
