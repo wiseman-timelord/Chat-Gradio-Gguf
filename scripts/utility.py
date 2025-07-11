@@ -107,46 +107,91 @@ def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def speak_text(text):
-    """Speak the given text using platform-specific text-to-speech."""
-    if not text:
-        return
-    if hasattr(temporary, 'LAST_SPOKEN') and temporary.LAST_SPOKEN == text:
-        return  # Avoid repeating the same text
+    """Speak the given text using platform-specific text-to-speech.
     
+    Args:
+        text (str): The text to be spoken
+        
+    Handles:
+        - Windows: Uses SAPI via win32com
+        - Linux: Attempts pyttsx3, falls back to espeak, then spd-say
+        - Thread safety on Windows
+        - Avoids repeating the same text
+        - Graceful degradation if TTS unavailable
+    """
+    if not text or not isinstance(text, str):
+        return
+        
+    # Check if we just spoke this text
+    if hasattr(temporary, 'LAST_SPOKEN') and temporary.LAST_SPOKEN == text:
+        return
+        
     if temporary.PLATFORM == "windows":
         try:
             import pythoncom
             import win32com.client
-            pythoncom.CoInitialize()
+            
+            # Initialize COM in new thread if needed
+            if not pythoncom.CoInitialized():
+                pythoncom.CoInitialize()
+                
             speaker = win32com.client.Dispatch("SAPI.SpVoice")
             speaker.Speak(text)
             temporary.LAST_SPOKEN = text
+            
         except Exception as e:
-            print(f"Windows speech error: {str(e)}")
+            print(f"Windows TTS error: {str(e)}")
+            try:
+                # Fallback to simple beep if TTS fails
+                import winsound
+                winsound.Beep(1000, 200)
+            except:
+                pass
+                
         finally:
-            pythoncom.CoUninitialize()
+            # Clean up COM if we initialized it
+            if pythoncom.CoInitialized():
+                pythoncom.CoUninitialize()
+                
     elif temporary.PLATFORM == "linux":
         try:
-            # Try pyttsx3 first
+            # Initialize engine if not exists
             if not hasattr(temporary, 'tts_engine'):
                 import pyttsx3
-                temporary.tts_engine = pyttsx3.init()
-                temporary.tts_engine.setProperty('rate', 150)
-                temporary.tts_engine.setProperty('volume', 0.9)
-            
+                try:
+                    temporary.tts_engine = pyttsx3.init(driverName='espeak')
+                    temporary.tts_engine.setProperty('rate', 150)
+                    temporary.tts_engine.setProperty('volume', 0.9)
+                except:
+                    # Fallback to default driver
+                    temporary.tts_engine = pyttsx3.init()
+                    
             temporary.tts_engine.say(text)
             temporary.tts_engine.runAndWait()
             temporary.LAST_SPOKEN = text
+            
         except Exception as e:
-            # Fallback to espeak
+            print(f"Linux TTS error (pyttsx3): {str(e)}")
             try:
-                subprocess.run(['espeak', text])
-            except:
-                # Final fallback to spd-say
+                # Fallback to direct espeak
+                subprocess.run(
+                    ['espeak', '-v', 'en-us', '-s', '150', text],
+                    check=True
+                )
+            except FileNotFoundError:
                 try:
-                    subprocess.run(['spd-say', text])
-                except:
-                    print("All TTS methods failed on Linux")
+                    # Final fallback to spd-say
+                    subprocess.run(
+                        ['spd-say', '--wait', '-r', '-50', '-t', 'female3', text],
+                        check=True
+                    )
+                except FileNotFoundError:
+                    print("All Linux TTS methods failed - no speech available")
+                except Exception as e:
+                    print(f"spd-say error: {str(e)}")
+            except Exception as e:
+                print(f"espeak error: {str(e)}")
+                
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
 
