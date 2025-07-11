@@ -71,7 +71,7 @@ Launching Gradio Interface...
 ```
 If installing with Vulkan option, you will need to have installed the `Vulkan SDK`,
 If installing with CUDA option, you will need to have installed the "CUDA Toolkit".
-If installing with ROCM, you will need to have installed the `ROCm Software Stack`.
+If installing with ROCM option, you will need to have installed the `ROCm Software Stack`.
 ```
 - Installation...
 ```
