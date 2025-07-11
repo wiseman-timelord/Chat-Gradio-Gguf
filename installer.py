@@ -103,14 +103,14 @@ REQUIREMENTS = [
     "llama-cpp-python",
     "langchain-community==0.3.18",
     "pygments==2.17.2",
-    "lxml",
-    "pyttsx3",
-    "tk"
+    "lxml[html_clean]",
+    "pyttsx3"
 ]
 
 # Add platform-specific requirements
 if PLATFORM == "windows":
     REQUIREMENTS.append("pywin32")
+    REQUIREMENTS.append("tk") 
 elif PLATFORM == "linux":
     REQUIREMENTS.append("python3-tk")  # Required for tkinter
 
@@ -495,23 +495,44 @@ def install_python_deps(backend: str) -> bool:
         
         subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", "pip"], check=True)
         print_status("Upgraded pip successfully")
+
+        # Linux-specific system dependencies
+        if PLATFORM == "linux":
+            try:
+                # Install system packages for tkinter
+                print_status("Installing system dependencies for tkinter...")
+                subprocess.run([
+                    "sudo", "apt-get", "install", "-y",
+                    "python3-tk",
+                    "python3.13-tk"  # Specific package for Python 3.13
+                ], check=True)
+                print_status("System dependencies for tkinter installed")
+
+                # Verify tkinter works with Python 3.13
+                print_status("Verifying tkinter installation...")
+                subprocess.run([python_exe, "-c", "import tkinter; print('Tkinter verified')"], check=True)
+                print_status("Tkinter verified with Python 3.13")
+            except subprocess.CalledProcessError as e:
+                print_status(f"Failed to install system dependencies for tkinter: {e}", False)
+                # Continue installation but tkinter may not work
+                
+        # Windows-specific tk installation
+        elif PLATFORM == "windows":
+            try:
+                subprocess.run([pip_exe, "install", "tk"], check=True)
+                print_status("Installed tk for Windows")
+            except subprocess.CalledProcessError as e:
+                print_status(f"Failed to install tk for Windows: {e}", False)
+
+        # Install Python packages (excluding python3-tk)
+        requirements = [req for req in REQUIREMENTS if req != "python3-tk"]
         
-        if not install_linux_system_dependencies(backend):
-            print_status("Critical system dependencies failed to install!", False)
-            return False
-        
-        env = os.environ.copy()
-        if backend in BACKEND_OPTIONS:
-            env.update(BACKEND_OPTIONS[backend].get("build_flags", {}))
-        
-        basic_requirements = [req for req in REQUIREMENTS if req != "llama-cpp-python"]
-        
-        print_status("Installing basic Python packages...")
-        for req in basic_requirements:
+        print_status("Installing Python packages...")
+        for req in requirements:
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    subprocess.run([pip_exe, "install", req], check=True, env=env)
+                    subprocess.run([pip_exe, "install", req], check=True)
                     print_status(f"Installed {req}")
                     break
                 except subprocess.CalledProcessError as e:
@@ -520,7 +541,8 @@ def install_python_deps(backend: str) -> bool:
                         continue
                     print_status(f"Retrying {req} (attempt {attempt + 2}/{max_retries})", False)
                     time.sleep(2)
-        
+
+        # Install llama-cpp-python with appropriate backend
         print_status("Installing llama-cpp-python...")
         llama_cmd = [pip_exe, "install"]
         if backend == "GPU/CPU - CUDA":
@@ -531,7 +553,7 @@ def install_python_deps(backend: str) -> bool:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                subprocess.run(llama_cmd, check=True, env=env)
+                subprocess.run(llama_cmd, check=True)
                 print_status("llama-cpp-python installed successfully")
                 break
             except subprocess.CalledProcessError as e:

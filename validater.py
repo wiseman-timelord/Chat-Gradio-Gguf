@@ -33,8 +33,9 @@ if PLATFORM == "windows":
         "llama-cpp-python",
         "langchain-community==0.3.18",
         "pygments==2.17.2",
-        "lxml_html_clean",
-        "pyttsx3"
+        "lxml[html_clean]",  # Replaced lxml_html_clean
+        "pyttsx3",
+        "tk"     # Added for file dialogs
     ]
 elif PLATFORM == "linux":
     REQS = [
@@ -48,9 +49,10 @@ elif PLATFORM == "linux":
         "llama-cpp-python",
         "langchain-community==0.3.18",
         "pygments==2.17.2",
-        "lxml_html_clean",
+        "lxml",  # Replaced lxml_html_clean
         "pyttsx3"
     ]
+    # Note: python3-tk is a system package on Linux
 
 def print_status(msg: str, success: bool = True) -> None:
     """Simplified status printer"""
@@ -172,10 +174,7 @@ def test_libs():
         return False
     
     # Set venv_py based on platform
-    if PLATFORM == "windows":
-        venv_py = VENV_DIR / "Scripts" / "python.exe"
-    else:
-        venv_py = VENV_DIR / "bin" / "python"
+    venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
     if not venv_py.exists():
         print_status("Python executable missing", False)
@@ -194,38 +193,108 @@ def test_libs():
         "llama-cpp-python": "llama_cpp",
         "langchain-community": "langchain_community",
         "pygments": "pygments",
-        "lxml_html_clean": "lxml_html_clean",
-        "pyttsx3": "pyttsx3"
+        "lxml[html_clean]": "lxml",
+        "pyttsx3": "pyttsx3",
+        "tkinter": "tkinter"
     }
+    
+    # Platform-specific adjustments
+    requirements = REQS.copy()
+    if PLATFORM == "windows":
+        import_names["tk"] = "tkinter"
+    else:
+        requirements = [req for req in requirements if req != "tk"]
     
     # Test each requirement
     success = True
     print("Checking packages:")
     
-    for req in REQS:
+    for req in requirements:
         pkg_name = req.split('>=')[0].split('==')[0].split('<')[0].strip()
         import_name = import_names.get(pkg_name, pkg_name.replace('-', '_'))
         
         try:
-            cmd = f"import {import_name}; print('OK')"
+            # Special handling for newspaper3k
+            if pkg_name == "newspaper3k":
+                cmd = """
+try:
+    import lxml.html.clean
+    import newspaper
+    from newspaper import Article
+    print('OK')
+except ImportError as e:
+    print(f'MISSING DEPENDENCY: {str(e)}')
+except Exception as e:
+    print(f'ERROR: {str(e)}')
+"""
+            else:
+                cmd = f"import {import_name}; print('OK')"
+            
             result = subprocess.run(
                 [str(venv_py), "-c", cmd],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=15
             )
             
             if result.returncode == 0 and "OK" in result.stdout:
                 print_status(pkg_name)
             else:
-                print_status(pkg_name, False)
+                error_msg = result.stderr.strip() or result.stdout.strip()
+                print_status(f"{pkg_name} - {error_msg}", False)
                 success = False
                 
         except subprocess.TimeoutExpired:
-            print_status(f"{pkg_name} (timeout)", False)
+            print_status(f"{pkg_name} (timeout during import)", False)
             success = False
         except Exception as e:
-            print_status(f"{pkg_name} (error)", False)
+            print_status(f"{pkg_name} (validation error: {str(e)})", False)
+            success = False
+    
+    # Enhanced tkinter validation for Linux
+    if PLATFORM == "linux":
+        print("\nChecking Linux system packages:")
+        try:
+            # Check for both python3-tk and python3.13-tk
+            tk_packages = ["python3-tk", "python3.13-tk"]
+            found = False
+            
+            for pkg in tk_packages:
+                result = subprocess.run(
+                    ["dpkg", "-s", pkg],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                
+                if result.returncode == 0:
+                    print_status(f"{pkg} (system)")
+                    found = True
+                    break
+            
+            if not found:
+                print_status("python3-tk/python3.13-tk not found!", False)
+                success = False
+            
+            # Verify tkinter is actually importable
+            try:
+                import_result = subprocess.run(
+                    [str(venv_py), "-c", "import tkinter; tkinter.Tk(); print('OK')"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if import_result.returncode == 0 and "OK" in import_result.stdout:
+                    print_status("tkinter (functional)")
+                else:
+                    error = import_result.stderr.strip()
+                    print_status(f"tkinter - {error}", False)
+                    success = False
+            except subprocess.TimeoutExpired:
+                print_status("tkinter (timeout during test)", False)
+                success = False
+                
+        except Exception as e:
+            print_status(f"System package check failed: {str(e)}", False)
             success = False
     
     return success
@@ -258,6 +327,8 @@ def main():
         print("1. Run the installer again: python installer.py [windows|linux]")
         print("2. Check directory permissions")
         print("3. Verify internet connection during installation")
+        if PLATFORM == "linux":
+            print("4. Install missing system packages: sudo apt install python3-tk")
         return 1
 
 if __name__ == "__main__":
