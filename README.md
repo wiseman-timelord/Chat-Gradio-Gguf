@@ -124,9 +124,6 @@ Deactivated: .venv
 Press Enter to continue...
 ```
 
-```
-
-
 ## Requirements
 - Windows 7-11 - Its a Windows program, batch menu has auto-sized-layout for modern/old OS.
 - Llama.Cpp - Options here for, Vulkan, ROCM, Cuda 11, Cuda 12. Llama.cpp are limiting the options now.
