@@ -399,90 +399,51 @@ def install_linux_system_dependencies(backend: str) -> bool:
         "libasound2-dev",
         "python3-tk",
         "vulkan-tools",
-        "libvulkan-dev"
+        "libvulkan-dev",
+        "espeak",
+        "libespeak-dev",
+        "ffmpeg"  # For potential audio processing
     ]
     
-    optional_packages = ["espeak"]
+    optional_packages = [
+        "pulseaudio",
+        "libpulse-dev"
+    ]
     
     backend_packages = []
     if backend == "GPU/CPU - Vulkan":
         backend_packages = [
+            "mesa-utils",
+            "vulkan-utils",
             "libvulkan1",
-            "libvulkan-dev", 
-            "vulkan-tools",
-            "mesa-vulkan-drivers"
+            "vulkan-validationlayers"
         ]
     elif backend == "GPU/CPU - CUDA":
         backend_packages = [
-            "nvidia-cuda-toolkit"
+            "nvidia-cuda-toolkit",
+            "nvidia-driver-535"  # Or appropriate driver version
         ]
     
+    # Unified installation process
+    all_packages = essential_packages + optional_packages + backend_packages
+    unique_packages = list(set(all_packages))  # Remove duplicates
+    
     try:
-        print_status("Updating package lists...")
-        subprocess.run(["sudo", "apt-get", "update"], check=True, capture_output=True)
-        print_status("Package lists updated successfully")
+        # Update package lists
+        subprocess.run(["sudo", "apt-get", "update"], check=True)
+        
+        # Install all packages in one command for efficiency
+        install_cmd = ["sudo", "apt-get", "install", "-y"] + unique_packages
+        subprocess.run(install_cmd, check=True)
+        
+        print_status("All Linux dependencies installed successfully")
+        return True
+        
     except subprocess.CalledProcessError as e:
-        print_status(f"Warning: Failed to update package lists: {e}", False)
-        print("Continuing with installation...")
-    
-    failed_essential = []
-    for package in essential_packages:
-        if check_package_exists(package):
-            try:
-                subprocess.run(["sudo", "apt-get", "install", "-y", package], check=True)
-                print_status(f"Installed essential package: {package}")
-            except subprocess.CalledProcessError as e:
-                print_status(f"Failed to install essential package {package}: {e}", False)
-                failed_essential.append(package)
-        else:
-            print_status(f"Package {package} not found in repositories", False)
-            failed_essential.append(package)
-    
-    failed_optional = []
-    for package in optional_packages:
-        if check_package_exists(package):
-            try:
-                subprocess.run(["sudo", "apt-get", "install", "-y", package], check=True)
-                print_status(f"Installed optional package: {package}")
-            except subprocess.CalledProcessError as e:
-                print_status(f"Warning: Failed to install optional package {package}: {e}", False)
-                failed_optional.append(package)
-        else:
-            print_status(f"Optional package {package} not found in repositories", False)
-            failed_optional.append(package)
-    
-    failed_backend = []
-    if backend_packages:
-        print_status(f"Installing {backend} specific packages...")
-        for package in backend_packages:
-            if check_package_exists(package):
-                try:
-                    subprocess.run(["sudo", "apt-get", "install", "-y", package], check=True)
-                    print_status(f"Installed {backend} package: {package}")
-                except subprocess.CalledProcessError as e:
-                    print_status(f"Warning: Failed to install {backend} package {package}: {e}", False)
-                    failed_backend.append(package)
-            else:
-                print_status(f"{backend} package {package} not found in repositories", False)
-                failed_backend.append(package)
-    
-    if failed_essential:
-        print_status(f"CRITICAL: Essential packages failed to install: {', '.join(failed_essential)}", False)
-        print("\nEssential packages are required for the application to work properly.")
-        print("Please install them manually:")
-        for package in failed_essential:
-            print(f"  sudo apt-get install {package}")
+        print_status(f"Failed to install system dependencies: {str(e)}", False)
+        print("\nYou may need to install these packages manually:")
+        print("  sudo apt-get install " + " ".join(unique_packages))
         return False
-    
-    if failed_optional or failed_backend:
-        print_status("Some optional packages failed to install", False)
-        print("\nOptional packages that failed:")
-        for package in failed_optional + failed_backend:
-            print(f"  sudo apt-get install {package}")
-        print("\nThe application should still work, but some features may be limited.")
-    
-    print_status("Linux system dependencies installation completed")
-    return True
 
 def install_python_deps(backend: str) -> bool:
     print_status("Installing Python dependencies...")

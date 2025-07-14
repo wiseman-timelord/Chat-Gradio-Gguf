@@ -1,21 +1,30 @@
 # launcher.py
 
-# Imports
-print("Starting `launcher` Imports.")
+# Early Imports
+print("Starting Early Launcher Imports.")
 import sys, argparse
 from pathlib import Path
 import os
-from scripts import temporary
-from scripts.settings import load_config
-from scripts.interface import launch_interface
-print("`launcher` Imports Complete.")
 
-# Functions
+# Parse and set platform here
+print("Detecting and Setting, Platform.")
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('platform', choices=['windows', 'linux'], help='Target platform')
     return parser.parse_args()
+args = parse_args()
+import scripts.temporary as temporary
+temporary.PLATFORM = args.platform           # 1️⃣ set it
+temporary.BACKEND_TYPE = "Vulkan"            # 2️⃣ set defaults that depend on it
 
+# Late Importz
+print("Starting Late-Launcher Imports.")
+from scripts.settings import load_config     # 3️⃣ now safe to import
+from scripts.interface import launch_interface
+from scripts.utility import detect_cpu_config
+print("`Launcher` Imports Complete.")
+
+# Functions
 def initialize_platform_settings():
     """Set platform-specific paths and configurations"""
     from scripts.settings import load_config
@@ -85,9 +94,10 @@ def shutdown_platform():
     elif temporary.PLATFORM == "linux":
         # Linux-specific cleanup
         try:
-            if hasattr(temporary, 'tts_engine'):
-                temporary.tts_engine.stop()
-                del temporary.tts_engine
+            from scripts import utility
+            if hasattr(utility, 'tts_engine'):
+                utility.tts_engine.stop()
+                del utility.tts_engine
         except:
             pass
     print(f"Cleaned up {temporary.PLATFORM} resources")
@@ -97,11 +107,11 @@ def main():
     """Main entry point for the application."""
     try:
         # Parse command-line arguments
-        args = parse_args()  # Add this line
+        args = parse_args()
         
         # Initialize platform
         temporary.PLATFORM = args.platform
-        initialize_platform(temporary.PLATFORM)
+        initialize_platform_settings()
         print(f"Starting Chat-Gradio-Gguf for {temporary.PLATFORM} platform")
         
         # Set up directories and paths
@@ -122,6 +132,12 @@ def main():
         print(f"History directory: {temporary.HISTORY_DIR}")
         print(f"Temp directory: {temporary.TEMP_DIR}")
         
+        # Initialize CPU configuration
+        from scripts.utility import detect_cpu_config
+        detect_cpu_config()
+        print(f"CPU Configuration: {temporary.CPU_PHYSICAL_CORES} physical cores, "
+              f"{temporary.CPU_LOGICAL_CORES} logical cores")
+        
         # Set platform-specific defaults
         temporary.BACKEND_TYPE = "Vulkan"  # Default for both platforms
         
@@ -129,8 +145,17 @@ def main():
         print("Loading persistent config...")
         load_config()
         
+        # Print final configuration
+        print("\nFinal Configuration:")
+        print(f"  Backend: {temporary.BACKEND_TYPE}")
+        print(f"  Model: {temporary.MODEL_NAME or 'None'}")
+        print(f"  Context Size: {temporary.CONTEXT_SIZE}")
+        print(f"  VRAM Allocation: {temporary.VRAM_SIZE} MB")
+        print(f"  CPU Threads: {temporary.CPU_THREADS}")
+        print(f"  GPU Layers: {temporary.GPU_LAYERS if hasattr(temporary, 'GPU_LAYERS') else 'Auto'}")
+        
         # Launch interface
-        print("Launching Gradio Interface...")
+        print("\nLaunching Gradio Interface...")
         try:
             launch_interface()
         except Exception as e:
