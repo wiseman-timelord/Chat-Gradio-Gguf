@@ -4,16 +4,8 @@
 import time
 from scripts.prompts import prompt_templates 
 
-# Conditional Variables
-def initialize_platform_settings():
-    global LLAMA_CLI_PATH
-    if temporary.PLATFORM == "windows":
-        LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
-    elif temporary.PLATFORM == "linux":
-        LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
-
 # Configuration variables with defaults
-PLATFORM = None
+PLATFORM = None          # will be set by launcher.py
 MODEL_FOLDER = "path/to/your/models"
 CONTEXT_SIZE = 8192
 VRAM_SIZE = 8192
@@ -54,6 +46,14 @@ BACKEND_TYPE = "Not Configured"
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
 SPEECH_ENABLED = False
+LLAMA_CLI_PATH = None  # will be set by launcher.py
+
+# CPU COnfiguration
+CPU_THREADS = None  # Will be auto-detected
+CPU_THREAD_OPTIONS = []  # Will be populated with available thread counts
+CPU_PHYSICAL_CORES = 1
+CPU_LOGICAL_CORES = 1
+SELECTED_CPU = None
 
 # Arrays
 session_attached_files = []
@@ -108,3 +108,9 @@ handling_keywords = {
 current_model_settings = {
     "category": "chat"  # Simplified; prompt_template removed as it’s not needed
 }
+
+# RAG / vector-store placeholder
+class _ContextInjector:
+    def set_session_vectorstore(self, vectorstore):
+        pass           # no-op stub until full RAG is wired up
+context_injector = _ContextInjector()

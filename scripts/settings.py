@@ -4,7 +4,7 @@
 import json
 from pathlib import Path
 import scripts.temporary as temporary
-from scripts.models import get_available_models  # Added import for model validation
+from scripts.models import get_available_models, change_model  # Added import for model validation
 
 CONFIG_PATH = Path("data/persistent.json")
 
@@ -141,3 +141,53 @@ def save_config():
     with open(CONFIG_PATH, 'w') as f:
         json.dump(config, f, indent=4)
     return "Settings saved."
+
+def update_setting(key, value):
+    """Update a setting and return components requiring reload if necessary, with a confirmation message."""
+    reload_required = False
+    try:
+        if key == "temperature":
+            temporary.TEMPERATURE = float(value)
+        elif key == "context_size":
+            temporary.CONTEXT_SIZE = int(value)
+            reload_required = True
+        elif key == "n_gpu_layers":
+            temporary.GPU_LAYERS = int(value)
+            reload_required = True
+        elif key == "vram_size":
+            temporary.VRAM_SIZE = int(value)
+            reload_required = True
+        elif key == "selected_gpu":
+            temporary.SELECTED_GPU = value
+        elif key == "selected_cpu":
+            temporary.SELECTED_CPU = value
+        elif key == "repeat_penalty":
+            temporary.REPEAT_PENALTY = float(value)
+        elif key == "mlock":
+            temporary.MLOCK = bool(value)
+        elif key == "n_batch":
+            temporary.BATCH_SIZE = int(value)
+        elif key == "model_folder":
+            temporary.MODEL_FOLDER = value
+            reload_required = True
+        elif key == "model_name":
+            temporary.MODEL_NAME = value
+            reload_required = True
+        elif key == "max_history_slots":
+            temporary.MAX_HISTORY_SLOTS = int(value)
+        elif key == "max_attach_slots":
+            temporary.MAX_ATTACH_SLOTS = int(value)
+        elif key == "session_log_height":
+            temporary.SESSION_LOG_HEIGHT = int(value)
+
+        if reload_required:
+            from scripts.models import change_model
+            reload_result = change_model(temporary.MODEL_NAME.split('/')[-1])
+            message = f"Setting '{key}' updated to '{value}', model reload triggered."
+            return message, *reload_result
+        else:
+            message = f"Setting '{key}' updated to '{value}'."
+            return message, None, None
+    except Exception as e:
+        message = f"Error updating setting '{key}': {str(e)}"
+        return message, None, None

@@ -32,6 +32,35 @@ def filter_operational_content(text):
     text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
     return text.strip()
 
+def detect_cpu_config():
+    """Detect CPU configuration and set thread options"""
+    try:
+        import psutil
+        cpu_info = {
+            "physical_cores": psutil.cpu_count(logical=False) or 1,
+            "logical_cores": psutil.cpu_count(logical=True) or 1
+        }
+        
+        temporary.CPU_PHYSICAL_CORES = cpu_info["physical_cores"]
+        temporary.CPU_LOGICAL_CORES = cpu_info["logical_cores"]
+        
+        # Generate thread options (1 to logical_cores-1)
+        max_threads = max(1, temporary.CPU_LOGICAL_CORES - 1)
+        temporary.CPU_THREAD_OPTIONS = list(range(1, max_threads + 1))
+        temporary.CPU_THREADS = min(4, max_threads)  # Default to 4 or max available
+        
+        # Vulkan-specific: Even with all layers on GPU, still uses some CPU threads
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            temporary.CPU_THREADS = max(2, temporary.CPU_THREADS)  # Ensure at least 2 threads
+            
+    except Exception as e:
+        print(f"Error detecting CPU config: {e}")
+        # Fallback values
+        temporary.CPU_PHYSICAL_CORES = 4
+        temporary.CPU_LOGICAL_CORES = 8
+        temporary.CPU_THREAD_OPTIONS = [1, 2, 3, 4, 5, 6, 7]
+        temporary.CPU_THREADS = 4
+
 def get_available_gpus_windows():
     """
     Retrieve available GPUs on Windows using wmic and dxdiag.
@@ -53,8 +82,9 @@ def get_available_gpus_windows():
             return ["CPU Only"]
 
 def get_available_gpus_linux():
+    """Get available GPUs on Linux systems with improved detection"""
     try:
-        # NVIDIA detection
+        # First try nvidia-smi for NVIDIA GPUs
         try:
             output = subprocess.check_output(
                 "nvidia-smi --query-gpu=name --format=csv,noheader",
@@ -64,41 +94,99 @@ def get_available_gpus_linux():
             return [f"NVIDIA {line.strip()}" for line in output.split('\n') if line.strip()]
         except:
             pass
-        
-        # AMD detection
+
+        # Try AMD detection
         try:
             output = subprocess.check_output(
                 "rocminfo | grep 'Marketing Name' | awk -F: '{print $2}'",
                 shell=True,
                 stderr=subprocess.DEVNULL
             ).decode().strip()
-            return [f"AMD {line.strip()}" for line in output.split('\n') if line.strip()]
+            if output:
+                return [f"AMD {output}"]
         except:
             pass
-        
-        # Intel detection
+
+        # Generic GPU detection
         try:
             output = subprocess.check_output(
-                "lspci | grep VGA | grep Intel | cut -d' ' -f5-",
+                "lspci | grep -i 'vga\\|3d\\|display'",
                 shell=True,
                 stderr=subprocess.DEVNULL
-            ).decode().strip()
-            return [f"Intel {output}"] if output else []
+            ).decode()
+            gpus = []
+            for line in output.split('\n'):
+                if not line.strip():
+                    continue
+                parts = line.split(':')
+                if len(parts) > 2:
+                    gpu_name = parts[-1].strip()
+                    if 'nvidia' in gpu_name.lower():
+                        gpus.append(f"NVIDIA {gpu_name}")
+                    elif 'amd' in gpu_name.lower():
+                        gpus.append(f"AMD {gpu_name}")
+                    elif 'intel' in gpu_name.lower():
+                        gpus.append(f"Intel {gpu_name}")
+                    else:
+                        gpus.append(gpu_name)
+            return gpus if gpus else ["CPU Only"]
         except:
             pass
-        
+
         return ["CPU Only"]
     except Exception as e:
         print(f"GPU detection error: {str(e)}")
         return ["CPU Only"]
 
+def get_cpu_info():
+    """
+    Get CPU information for configuration purposes.
+    Returns a list of dictionaries with CPU information.
+    """
+    try:
+        import psutil
+        cpu_count = psutil.cpu_count(logical=False) or 1
+        logical_count = psutil.cpu_count(logical=True) or 1
+        
+        # Try to get CPU brand/model info
+        try:
+            with open('/proc/cpuinfo', 'r') as f:
+                cpuinfo = f.read()
+            model_match = re.search(r'model name\s*:\s*(.+)', cpuinfo)
+            if model_match:
+                model = model_match.group(1).strip()
+            else:
+                model = "Unknown CPU"
+        except:
+            model = "Generic CPU"
+        
+        return [{
+            "label": f"{model} ({cpu_count} cores, {logical_count} threads)",
+            "physical_cores": cpu_count,
+            "logical_cores": logical_count
+        }]
+    except ImportError:
+        # Fallback if psutil is not available
+        return [{
+            "label": "Generic CPU",
+            "physical_cores": 4,
+            "logical_cores": 8
+        }]
+    except Exception as e:
+        print(f"Error getting CPU info: {e}")
+        return [{
+            "label": "Default CPU",
+            "physical_cores": 4,
+            "logical_cores": 8
+        }]
+
 def get_available_gpus():
     """Returns list of GPUs with Intel marked appropriately"""
     gpus = []
-    if PLATFORM == "windows":
+    if temporary.PLATFORM == "windows":
         # Windows detection logic that identifies Intel GPUs
         gpus = get_available_gpus_windows()  # Should include Intel GPUs
-    elif PLATFORM == "linux":
+    elif temporary.PLATFORM == "linux":
         # Linux detection that identifies Intel GPUs
         gpus = get_available_gpus_linux()    # Should include Intel GPUs
     return gpus
@@ -107,18 +195,7 @@ def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def speak_text(text):
-    """Speak the given text using platform-specific text-to-speech.
-    
-    Args:
-        text (str): The text to be spoken
-        
-    Handles:
-        - Windows: Uses SAPI via win32com
-        - Linux: Attempts pyttsx3, falls back to espeak, then spd-say
-        - Thread safety on Windows
-        - Avoids repeating the same text
-        - Graceful degradation if TTS unavailable
-    """
+    """Speak the given text using platform-specific text-to-speech."""
     if not text or not isinstance(text, str):
         return
         
@@ -131,7 +208,6 @@ def speak_text(text):
             import pythoncom
             import win32com.client
             
-            # Initialize COM in new thread if needed
             if not pythoncom.CoInitialized():
                 pythoncom.CoInitialize()
                 
@@ -142,14 +218,12 @@ def speak_text(text):
         except Exception as e:
             print(f"Windows TTS error: {str(e)}")
             try:
-                # Fallback to simple beep if TTS fails
                 import winsound
                 winsound.Beep(1000, 200)
             except:
                 pass
                 
         finally:
-            # Clean up COM if we initialized it
             if pythoncom.CoInitialized():
                 pythoncom.CoUninitialize()
                 
@@ -163,7 +237,6 @@ def speak_text(text):
                     temporary.tts_engine.setProperty('rate', 150)
                     temporary.tts_engine.setProperty('volume', 0.9)
                 except:
-                    # Fallback to default driver
                     temporary.tts_engine = pyttsx3.init()
                     
             temporary.tts_engine.say(text)
@@ -176,14 +249,14 @@ def speak_text(text):
                 # Fallback to direct espeak
                 subprocess.run(
                     ['espeak', '-v', 'en-us', '-s', '150', text],
-                    check=True
+                    check=False
                 )
             except FileNotFoundError:
                 try:
                     # Final fallback to spd-say
                     subprocess.run(
                         ['spd-say', '--wait', '-r', '-50', '-t', 'female3', text],
-                        check=True
+                        check=False
                     )
                 except FileNotFoundError:
                     print("All Linux TTS methods failed - no speech available")
@@ -191,7 +264,6 @@ def speak_text(text):
                     print(f"spd-say error: {str(e)}")
             except Exception as e:
                 print(f"espeak error: {str(e)}")
-                
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
 
@@ -323,17 +395,17 @@ def web_search(query: str, num_results: int = 3) -> str:
         results = DuckDuckGoSearchAPIWrapper().results(query, num_results)
         if not results:
             return "No results found."
-        
+
         formatted = []
-        links = []  # Store links separately
+        links = []
         for result in results:
             link = result.get('link', '').strip()
             if not link:
                 continue
-                
+
             domain = re.sub(r'https?://(www\.)?([^/]+).*', r'\2', link)
             snippet = result.get('snippet', 'No snippet available.').strip()
-            
+
             try:
                 article = Article(link)
                 article.download()
@@ -343,18 +415,17 @@ def web_search(query: str, num_results: int = 3) -> str:
                     f"[{domain}]({link}): {snippet}\n"
                     f"{summary}..." if summary else f"[{domain}]({link}): {snippet}"
                 )
-                links.append(link)  # Collect links
+                links.append(link)
             except Exception:
                 formatted.append(f"[{domain}]({link}): {snippet}")
                 links.append(link)
 
-        # Add links section if we have any
         if links:
             formatted.append("\n\nLinks:\n" + "\n".join([f"- {link}" for link in links]))
-            
+
         return "\n\n".join(formatted)
     except Exception as e:
-        return f"Search error: {str(e)}"
+        return f"Search error: {type(e).__name__} – {str(e)}"
 
 def summarize_document(file_path):
     """Summarize the contents of a document using YAKE, up to 100 characters."""
@@ -468,51 +539,3 @@ def process_files(files, existing_files, max_files, is_attach=True):
     status = f"Processed {len(processed_files)} new {'attach' if is_attach else 'vector'} files."
     return status, updated_files
 
-def update_setting(key, value):
-    """Update a setting and return components requiring reload if necessary, with a confirmation message."""
-    reload_required = False
-    try:
-        if key == "temperature":
-            temporary.TEMPERATURE = float(value)
-        elif key == "context_size":
-            temporary.CONTEXT_SIZE = int(value)
-            reload_required = True
-        elif key == "n_gpu_layers":
-            temporary.GPU_LAYERS = int(value)
-            reload_required = True
-        elif key == "vram_size":
-            temporary.VRAM_SIZE = int(value)
-            reload_required = True
-        elif key == "selected_gpu":
-            temporary.SELECTED_GPU = value
-        elif key == "selected_cpu":
-            temporary.SELECTED_CPU = value
-        elif key == "repeat_penalty":
-            temporary.REPEAT_PENALTY = float(value)
-        elif key == "mlock":
-            temporary.MLOCK = bool(value)
-        elif key == "n_batch":
-            temporary.BATCH_SIZE = int(value)
-        elif key == "model_folder":
-            temporary.MODEL_FOLDER = value
-            reload_required = True
-        elif key == "model_name":
-            temporary.MODEL_NAME = value
-            reload_required = True
-        elif key == "max_history_slots":
-            temporary.MAX_HISTORY_SLOTS = int(value)
-        elif key == "max_attach_slots":
-            temporary.MAX_ATTACH_SLOTS = int(value)
-        elif key == "session_log_height":
-            temporary.SESSION_LOG_HEIGHT = int(value)
-
-        if reload_required:
-            reload_result = change_model(temporary.MODEL_NAME.split('/')[-1])
-            message = f"Setting '{key}' updated to '{value}', model reload triggered."
-            return message, *reload_result
-        else:
-            message = f"Setting '{key}' updated to '{value}'."
-            return message, None, None
-    except Exception as e:
-        message = f"Error updating setting '{key}': {str(e)}"
-        return message, None, None

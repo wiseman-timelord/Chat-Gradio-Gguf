@@ -8,7 +8,7 @@ from scripts.prompts import get_system_message, get_reasoning_instruction
 import scripts.temporary as temporary
 from scripts.prompts import prompt_templates
 from scripts.temporary import (
-    CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, LLAMA_CLI_PATH, BACKEND_TYPE, VRAM_SIZE,
+    CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, handling_keywords, llm,
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED, CHAT_FORMAT_MAP
 )
@@ -131,7 +131,10 @@ def inspect_model(model_dir, model_name, vram_size):
         return f"Error inspecting model: {str(e)}"
 
 def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
-    from scripts.temporary import CONTEXT_SIZE, BATCH_SIZE, MMAP, DYNAMIC_GPU_LAYERS
+    from scripts.temporary import (
+        CONTEXT_SIZE, BATCH_SIZE, MMAP, MLOCK, DYNAMIC_GPU_LAYERS,
+        BACKEND_TYPE, CPU_THREADS
+    )
     from scripts.settings import save_config
     from pathlib import Path
     import traceback
@@ -155,9 +158,22 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     if num_layers <= 0:
         return f"Error: Could not determine layer count for model '{model}'.", False, llm_state, models_loaded_state
 
-    temporary.GPU_LAYERS = calculate_single_model_gpu_layers_with_layers(
+    # Calculate GPU layers and determine CPU-thread usage
+    gpu_layers = calculate_single_model_gpu_layers_with_layers(
         str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
     )
+    temporary.GPU_LAYERS = gpu_layers
+
+    # NEW: Always enable CPU threads for Vulkan; skip only on full-GPU non-Vulkan
+    use_cpu_threads = True
+    if "vulkan" in BACKEND_TYPE.lower():
+        use_cpu_threads = True
+        if CPU_THREADS is None or CPU_THREADS < 2:
+            temporary.CPU_THREADS = 2  # min for Vulkan
+    elif gpu_layers >= num_layers:
+        use_cpu_threads = False  # full GPU offload on non-Vulkan
+    else:
+        use_cpu_threads = True
 
     try:
         from llama_cpp import Llama
@@ -168,48 +184,75 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         if models_loaded_state:
             unload_models(llm_state, models_loaded_state)
 
-        print(f"Debug: Loading model '{model}' from '{model_folder}' with Python bindings and chat_format '{chat_format}'")
-        new_llm = Llama(
-            model_path=str(model_path),
-            n_ctx=temporary.CONTEXT_SIZE,
-            n_gpu_layers=temporary.GPU_LAYERS,
-            n_batch=temporary.BATCH_SIZE,
-            mmap=temporary.MMAP,
-            mlock=temporary.MLOCK,
-            verbose=True,
-            chat_format=chat_format
-        )
+        print(f"Debug: Loading model '{model}' with {gpu_layers}/{num_layers} GPU layers")
+        print(f"Debug: Using {temporary.CPU_THREADS if use_cpu_threads else 0} CPU threads")
 
-        test_output = new_llm.create_chat_completion(
+        kwargs = {
+            "model_path": str(model_path),
+            "n_ctx": CONTEXT_SIZE,
+            "n_gpu_layers": gpu_layers,
+            "n_batch": BATCH_SIZE,
+            "mmap": MMAP,
+            "mlock": MLOCK,
+            "verbose": True,
+            "chat_format": chat_format
+        }
+
+        if use_cpu_threads and CPU_THREADS is not None:
+            kwargs["n_threads"] = CPU_THREADS
+
+        new_llm = Llama(**kwargs)
+
+        # Quick smoke test
+        test_out = new_llm.create_chat_completion(
             messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=temporary.BATCH_SIZE,
+            max_tokens=BATCH_SIZE,
             stream=False
         )
-        print(f"Debug: Test inference successful: {test_output}")
+        print(f"Debug: Test inference successful: {test_out}")
 
         temporary.MODEL_NAME = model
-        status = f"Model '{model}' loaded successfully with chat_format '{chat_format}'. GPU layers: {temporary.GPU_LAYERS}/{num_layers}"
+        status = (f"Model '{model}' loaded successfully. "
+                  f"GPU layers: {gpu_layers}/{num_layers}, "
+                  f"CPU threads: {temporary.CPU_THREADS if use_cpu_threads else 'auto'}")
         return status, True, new_llm, True
-    except Exception as e:
-        error_msg = f"Error loading model: {str(e)}\n{traceback.format_exc()}"
-        print(error_msg)
-        return error_msg, False, None, False
 
-def calculate_single_model_gpu_layers_with_layers(model_path: str, available_vram: int, num_layers: int, dynamic_gpu_layers: bool = True) -> int:
+    except Exception as e:
+        tb = traceback.format_exc()
+        err = (f"Error loading model: {e}\n"
+               f"GPU Layers: {gpu_layers}/{num_layers}\n"
+               f"CPU Threads: {temporary.CPU_THREADS if use_cpu_threads else 'none'}\n"
+               f"{tb}")
+        print(err)
+        return err, False, None, False
+
+def calculate_single_model_gpu_layers_with_layers(
+    model_path: str,
+    available_vram: int,
+    num_layers: int,
+    dynamic_gpu_layers: bool = True
+) -> int:
+    """
+    Decide how many layers go on GPU.
+    Vulkan always keeps at least 1–2 layers on CPU even if VRAM is huge.
+    """
     from math import floor
     if num_layers <= 0 or available_vram <= 0:
         print("Debug: Invalid input (layers or VRAM), returning 0 layers")
         return 0
-    
+
     model_file_size = get_model_size(model_path)
     metadata = get_model_metadata(model_path)
     factor = 1.2 if metadata.get('general.architecture') == 'llama' else 1.1
     adjusted_model_size = model_file_size * factor
     layer_size = adjusted_model_size / num_layers if num_layers > 0 else 0
     max_layers = floor(available_vram / layer_size) if layer_size > 0 else 0
-    
-    if dynamic_gpu_layers:
+
+    if dynamic_gpu_layers and num_layers > 0:
         gpu_layers = min(max_layers, num_layers)
+        # Vulkan: never push *all* layers to GPU
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            gpu_layers = max(1, gpu_layers - 2)  # keep at least 2 on CPU
         cpu_fallback = num_layers - gpu_layers
         print(f"Using {gpu_layers} GPU layers + {cpu_fallback} CPU layers")
     else:
@@ -332,3 +375,18 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             yield content
     except Exception as e:
         yield f"Error generating response: {str(e)}"
+
+def change_model(model_name):
+    """Helper function to reload model with new settings."""
+    try:
+        from scripts.temporary import MODEL_FOLDER, VRAM_SIZE, MODELS_LOADED, llm
+        status, models_loaded, llm_state, _ = load_models(
+            MODEL_FOLDER,
+            model_name,
+            VRAM_SIZE,
+            llm,
+            MODELS_LOADED
+        )
+        return status, models_loaded, llm_state
+    except Exception as e:
+        return f"Error changing model: {str(e)}", False, None
