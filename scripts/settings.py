@@ -77,6 +77,8 @@ def load_config():
             temporary.MAX_ATTACH_SLOTS = model_settings["max_attach_slots"]
         if "session_log_height" in model_settings:
             temporary.SESSION_LOG_HEIGHT = model_settings["session_log_height"]
+        if "cpu_threads" in model_settings:
+            temporary.CPU_THREADS = model_settings["cpu_threads"]
         
         # Load backend_config
         backend_config = config.get("backend_config", {})
@@ -85,7 +87,7 @@ def load_config():
         if "llama_bin_path" in backend_config:
             temporary.LLAMA_CLI_PATH = backend_config["llama_bin_path"]
     else:
-        # Set defaults if JSON doesn’t exist
+        # Set defaults if JSON doesn't exist
         for key, value in DEFAULTS.items():
             setattr(temporary, key, value)
         temporary.BACKEND_TYPE = "Not Configured"
@@ -131,6 +133,7 @@ def save_config():
             "max_history_slots": temporary.MAX_HISTORY_SLOTS,
             "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
             "session_log_height": temporary.SESSION_LOG_HEIGHT,
+            "cpu_threads": temporary.CPU_THREADS,  # Add this line
         },
         "backend_config": {
             "backend_type": temporary.BACKEND_TYPE,

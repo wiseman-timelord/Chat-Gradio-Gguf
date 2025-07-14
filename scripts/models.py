@@ -1,7 +1,7 @@
 # Script: `.\scripts\models.py`
 
 # Imports...
-import time, re
+import time, re, json
 from pathlib import Path
 import gradio as gr
 from scripts.prompts import get_system_message, get_reasoning_instruction
@@ -94,6 +94,24 @@ def calculate_gpu_layers(models, available_vram):
         max_layers = floor(vram_allocations[model] / layer_size) if layer_size > 0 else 0
         gpu_layers[model] = min(max_layers, num_layers) if DYNAMIC_GPU_LAYERS else num_layers
     return gpu_layers
+
+# Add to scripts/models.py (after imports, before other functions)
+def get_model_metadata(model_path: str) -> dict:
+    """Extract metadata from a GGUF model file."""
+    try:
+        from llama_cpp import Llama
+        # Quick load just for metadata extraction
+        llm = Llama(
+            model_path=model_path,
+            n_ctx=512,  # Minimal context
+            verbose=False
+        )
+        metadata = llm.metadata
+        llm.close()
+        return metadata
+    except Exception as e:
+        print(f"Error reading model metadata: {e}")
+        return {}
 
 def inspect_model(model_dir, model_name, vram_size):
     from scripts.settings import save_config

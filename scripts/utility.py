@@ -2,7 +2,7 @@
 
 # Imports...
 import tempfile
-import re, subprocess, json, time, random, psutil, shutil, os, zipfile, yake
+import re, subprocess, json, time, random, psutil, shutil, os, zipfile, yake, sys
 from pathlib import Path
 from datetime import datetime
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
@@ -83,60 +83,69 @@ def get_available_gpus_windows():
 
 def get_available_gpus_linux():
     """Get available GPUs on Linux systems with improved detection"""
+    gpus = []
+
     try:
-        # First try nvidia-smi for NVIDIA GPUs
+        # 1) NVIDIA GPUs (via nvidia-smi)
         try:
             output = subprocess.check_output(
-                "nvidia-smi --query-gpu=name --format=csv,noheader",
-                shell=True,
-                stderr=subprocess.DEVNULL
-            ).decode()
-            return [f"NVIDIA {line.strip()}" for line in output.split('\n') if line.strip()]
-        except:
+                ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                stderr=subprocess.DEVNULL,
+                text=True
+            )
+            gpus.extend(f"NVIDIA {line.strip()}" for line in output.splitlines() if line.strip())
+        except Exception:
             pass
 
-        # Try AMD detection
+        # 2) AMD GPUs (via rocminfo – ROCm stack)
         try:
             output = subprocess.check_output(
-                "rocminfo | grep 'Marketing Name' | awk -F: '{print $2}'",
-                shell=True,
-                stderr=subprocess.DEVNULL
-            ).decode().strip()
-            if output:
-                return [f"AMD {output}"]
-        except:
+                ["rocminfo"],
+                stderr=subprocess.DEVNULL,
+                text=True
+            )
+            for line in output.splitlines():
+                if "Marketing Name" in line:
+                    name = line.split(":", 1)[-1].strip()
+                    if name:
+                        gpus.append(f"AMD {name}")
+        except Exception:
             pass
 
-        # Generic GPU detection
+        # 3) Generic PCI bus scan (catches AMD, Intel, and others)
         try:
             output = subprocess.check_output(
-                "lspci | grep -i 'vga\\|3d\\|display'",
-                shell=True,
-                stderr=subprocess.DEVNULL
-            ).decode()
-            gpus = []
-            for line in output.split('\n'):
-                if not line.strip():
-                    continue
-                parts = line.split(':')
-                if len(parts) > 2:
-                    gpu_name = parts[-1].strip()
-                    if 'nvidia' in gpu_name.lower():
-                        gpus.append(f"NVIDIA {gpu_name}")
-                    elif 'amd' in gpu_name.lower():
-                        gpus.append(f"AMD {gpu_name}")
-                    elif 'intel' in gpu_name.lower():
-                        gpus.append(f"Intel {gpu_name}")
+                ["lspci", "-nn"],
+                stderr=subprocess.DEVNULL,
+                text=True
+            )
+            for line in output.splitlines():
+                lower = line.lower()
+                if "vga" in lower or "display" in lower or "3d" in lower:
+                    name = line.split(":", 2)[-1].strip()
+                    if "nvidia" in lower:
+                        gpus.append(f"NVIDIA {name}")
+                    elif "amd" in lower or "ati" in lower:
+                        gpus.append(f"AMD {name}")
+                    elif "intel" in lower:
+                        gpus.append(f"Intel {name}")
                     else:
-                        gpus.append(gpu_name)
-            return gpus if gpus else ["CPU Only"]
-        except:
+                        gpus.append(name)
+        except Exception:
             pass
 
-        return ["CPU Only"]
     except Exception as e:
         print(f"GPU detection error: {str(e)}")
-        return ["CPU Only"]
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_gpus = [g for g in gpus if not (g in seen or seen.add(g))]
+
+    if not unique_gpus:
+        print("\n❌  No GPUs detected, please check your setup.\n")
+        sys.exit(1)          # critical exit → back to launcher caller
+
+    return unique_gpus
 
 def get_cpu_info():
     """

@@ -385,6 +385,31 @@ def update_action_button(phase):
     else:
         return gr.update(value="Unknown Phase", variant="secondary", elem_classes=["send-button-green"], interactive=False)
 
+def update_cpu_threads_display():
+    """Update the CPU threads slider display based on detected threads"""
+    max_threads = max(1, temporary.CPU_LOGICAL_CORES - 1)
+    current_threads = min(temporary.CPU_THREADS, max_threads) if temporary.CPU_THREADS else min(4, max_threads)
+    return gr.update(maximum=max_threads, value=current_threads)
+
+def save_configuration_settings():
+    """Save all configuration settings including CPU threads"""
+    try:
+        # Update CPU threads from slider
+        temporary.CPU_THREADS = temporary.CPU_THREADS or min(4, temporary.CPU_LOGICAL_CORES - 1)
+        
+        # Save all settings
+        from scripts.settings import save_config
+        save_config()
+        
+        return "Settings saved successfully."
+    except Exception as e:
+        return f"Error saving settings: {str(e)}"
+
+def handle_cpu_threads_change(new_threads):
+    """Handle CPU threads slider changes"""
+    temporary.CPU_THREADS = int(new_threads)
+    return f"CPU threads set to {new_threads}"
+
 async def conversation_interface(
     user_input, session_log, loaded_files,
     is_reasoning_model, cancel_flag, web_search_enabled,
@@ -804,33 +829,100 @@ def launch_interface():
                     g_choices = ["Auto-Select"] + gpus if gpus != ["CPU Only"] else ["CPU Only"]
                     def_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in g_choices else g_choices[0]
 
-                    with gr.Row(elem_classes=["clean-elements"]): gr.Markdown("Hardware")
+                    with gr.Row(elem_classes=["clean-elements"]): 
+                        gr.Markdown("Hardware")
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["gpu"] = gr.Dropdown(choices=g_choices, label="GPU", value=def_gpu, scale=10)
-                        config_components["vram"] = gr.Dropdown(choices=temporary.VRAM_OPTIONS, label="VRAM MB", value=temporary.VRAM_SIZE, scale=5)
+                        config_components["backend_type"] = gr.Textbox(
+                            label="Backend", 
+                            value=temporary.BACKEND_TYPE, 
+                            interactive=False, 
+                            scale=5
+                        )
+                        config_components["gpu"] = gr.Dropdown(
+                            choices=g_choices, 
+                            label="GPU", 
+                            value=def_gpu, 
+                            scale=10
+                        )
+                        config_components["vram"] = gr.Dropdown(
+                            choices=temporary.VRAM_OPTIONS, 
+                            label="VRAM MB", 
+                            value=temporary.VRAM_SIZE, 
+                            scale=5
+                        )
 
                     with gr.Row(visible=is_cpu or is_vk, elem_classes=["clean-elements"]) as cpu_row:
-                        config_components["backend_type"] = gr.Textbox(label="Backend", value=temporary.BACKEND_TYPE, interactive=False, scale=3)
                         cpu_labs = [c["label"] for c in utility.get_cpu_info()] or ["Default CPU"]
                         cpu_opts = ["Select..."] + cpu_labs if len(cpu_labs) > 1 else cpu_labs
                         def_cpu = temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_opts else cpu_opts[0]
-                        config_components["cpu"] = gr.Dropdown(choices=cpu_opts, label="CPU Device", value=def_cpu, scale=4)
-                        config_components["cpu_threads"] = gr.Slider(minimum=1, maximum=max(temporary.CPU_THREAD_OPTIONS or [8]), value=temporary.CPU_THREADS, step=1, label="Threads", scale=3, info="Leave 1-2 free")
+                        config_components["cpu"] = gr.Dropdown(
+                            choices=cpu_opts, 
+                            label="CPU Device", 
+                            value=def_cpu, 
+                            scale=4
+                        )
+                        max_threads = max(temporary.CPU_THREAD_OPTIONS or [8])
+                        config_components["cpu_threads"] = gr.Slider(
+                            minimum=1, 
+                            maximum=max(temporary.CPU_THREAD_OPTIONS or [8]),  # Dynamic max
+                            value=temporary.CPU_THREADS or min(4, max(temporary.CPU_THREAD_OPTIONS or [8])), 
+                            step=1, 
+                            label="Threads", 
+                            scale=3, 
+                            info=f"Available: {max(temporary.CPU_THREAD_OPTIONS or [8])} threads",
+                            interactive=True  # Ensure it's not disabled
+                        )
 
-                    with gr.Row(elem_classes=["clean-elements"]): gr.Markdown("Model")
+                    with gr.Row(elem_classes=["clean-elements"]): 
+                        gr.Markdown("Model")
                     with gr.Row(elem_classes=["clean-elements"]):
                         avail = temporary.AVAILABLE_MODELS or get_available_models()
                         mods = ["Select_a_model..."] + [m for m in avail if m != "Select_a_model..."]
                         def_m = temporary.MODEL_NAME if temporary.MODEL_NAME in mods else (mods[1] if len(mods) > 1 else mods[0])
-                        config_components["model_path"] = gr.Textbox(label="Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=10)
-                        config_components["model"] = gr.Dropdown(choices=mods, label="File", value=def_m, scale=10, info=".gguf")
-                        keywords_display = gr.Textbox(label="Features", interactive=False, scale=10)
+                        config_components["model_path"] = gr.Textbox(
+                            label="Folder", 
+                            value=temporary.MODEL_FOLDER, 
+                            interactive=False, 
+                            scale=10
+                        )
+                        config_components["model"] = gr.Dropdown(
+                            choices=mods, 
+                            label="File", 
+                            value=def_m, 
+                            scale=10, 
+                            info=".gguf"
+                        )
+                        keywords_display = gr.Textbox(
+                            label="Features", 
+                            interactive=False, 
+                            scale=10
+                        )
 
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["ctx"] = gr.Dropdown(temporary.CTX_OPTIONS, label="Ctx", value=temporary.CONTEXT_SIZE, scale=5)
-                        config_components["batch"] = gr.Dropdown(temporary.BATCH_OPTIONS, label="Batch", value=temporary.BATCH_SIZE, scale=5)
-                        config_components["temp"] = gr.Dropdown(temporary.TEMP_OPTIONS, label="Temp", value=temporary.TEMPERATURE, scale=5)
-                        config_components["repeat"] = gr.Dropdown(temporary.REPEAT_OPTIONS, label="Repeat", value=temporary.REPEAT_PENALTY, scale=5)
+                        config_components["ctx"] = gr.Dropdown(
+                            temporary.CTX_OPTIONS, 
+                            label="Ctx", 
+                            value=temporary.CONTEXT_SIZE, 
+                            scale=5
+                        )
+                        config_components["batch"] = gr.Dropdown(
+                            temporary.BATCH_OPTIONS, 
+                            label="Batch", 
+                            value=temporary.BATCH_SIZE, 
+                            scale=5
+                        )
+                        config_components["temp"] = gr.Dropdown(
+                            temporary.TEMP_OPTIONS, 
+                            label="Temp", 
+                            value=temporary.TEMPERATURE, 
+                            scale=5
+                        )
+                        config_components["repeat"] = gr.Dropdown(
+                            temporary.REPEAT_OPTIONS, 
+                            label="Repeat", 
+                            value=temporary.REPEAT_PENALTY, 
+                            scale=5
+                        )
 
                     with gr.Row(elem_classes=["clean-elements"]):
                         browse = gr.Button("📁 Browse", variant="secondary")
@@ -838,20 +930,50 @@ def launch_interface():
                         config_components["inspect"] = gr.Button("🔍 Inspect")
                         config_components["unload"] = gr.Button("🗑️ Unload", variant="stop")
 
-                    with gr.Row(elem_classes=["clean-elements"]): gr.Markdown("UI")
+                    with gr.Row(elem_classes=["clean-elements"]): 
+                        gr.Markdown("Program")
                     with gr.Row(elem_classes=["clean-elements"]):
-                        custom_components["max_hist"] = gr.Dropdown(temporary.HISTORY_SLOT_OPTIONS, label="Sessions", value=temporary.MAX_HISTORY_SLOTS, scale=5)
-                        custom_components["height"] = gr.Dropdown(temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Height", value=temporary.SESSION_LOG_HEIGHT, scale=5)
-                        custom_components["max_att"] = gr.Dropdown(temporary.ATTACH_SLOT_OPTIONS, label="Attach", value=temporary.MAX_ATTACH_SLOTS, scale=5)
+                        custom_components["max_hist"] = gr.Dropdown(
+                            temporary.HISTORY_SLOT_OPTIONS, 
+                            label="Sessions", 
+                            value=temporary.MAX_HISTORY_SLOTS, 
+                            scale=5
+                        )
+                        custom_components["height"] = gr.Dropdown(
+                            temporary.SESSION_LOG_HEIGHT_OPTIONS, 
+                            label="Height", 
+                            value=temporary.SESSION_LOG_HEIGHT, 
+                            scale=5
+                        )
+                        custom_components["max_att"] = gr.Dropdown(
+                            temporary.ATTACH_SLOT_OPTIONS, 
+                            label="Attach", 
+                            value=temporary.MAX_ATTACH_SLOTS, 
+                            scale=5
+                        )
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        config_components["save_settings"] = gr.Button(
+                            "💾 Save Settings", 
+                            variant="primary"
+                        )
+                        config_components["delete_all_history"] = gr.Button(
+                            "🗑️ Clear All History", 
+                            variant="stop"
+                        )
 
-                    with gr.Row(elem_classes=["clean-elements"]): gr.Markdown("System")
                     with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["save_settings"] = gr.Button("💾 Save Settings", variant="primary")
-                        config_components["delete_all_history"] = gr.Button("🗑️ Clear All History", variant="stop")
-
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        status_settings = gr.Textbox(label="Status", interactive=False, value="Ready" if temporary.MODELS_LOADED else "No model loaded", scale=20)
-                        exit_config = gr.Button("⏻ Exit", variant="stop", elem_classes=["double-height"], min_width=110)
+                        status_settings = gr.Textbox(
+                            label="Status", 
+                            interactive=False, 
+                            value="Ready" if temporary.MODELS_LOADED else "No model loaded", 
+                            scale=20
+                        )
+                        exit_config = gr.Button(
+                            "⏻ Exit", 
+                            variant="stop", 
+                            elem_classes=["double-height"], 
+                            min_width=110
+                        )
 
         def handle_edit_previous(session_log):
             if len(session_log) < 2:
@@ -1057,6 +1179,12 @@ def launch_interface():
             outputs=[keywords_display]
         )
 
+        config_components["cpu_threads"].change(
+            fn=handle_cpu_threads_change,
+            inputs=[config_components["cpu_threads"]],
+            outputs=[status_text]
+        )
+
         states["selected_panel"].change(
             fn=lambda panel: (
                 gr.update(visible=panel == "Attach"),
@@ -1096,7 +1224,8 @@ def launch_interface():
         )
 
         config_components["save_settings"].click(
-            fn=save_all_settings,
+            fn=save_configuration_settings,  # Ensure this function exists
+            inputs=[],  # No inputs needed - reads from temporary.*
             outputs=[status_text]
         )
 
