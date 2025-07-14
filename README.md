@@ -160,6 +160,7 @@ If installing with ROCM option, you will need to have installed the `ROCm Softwa
 - This project is for a chat interface, and is not intended to overlap with my other projects, `Rpg-Gradio-Gguf`, or the blueprints for, `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
 - Afterthought Countdown is, <25 characters then 1s or 26-100 charactrs then 3s or >100 lines then 5s, cooldown before proceeding, enabling cancelation relative to input.
 - "Chat-Windows-Gguf" is intended as the Windows version of [Chat-Linux-Gguf](https://github.com/wiseman-timelord/Chat-Linux-Gguf).
+- This was the command to make a python script file created in windows to be compatible with linux `sed -i 's/\xE2\x80\x8B//g' scripts/interface.py`.
 
 ### Models (Confirmed Working)
 You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..    
