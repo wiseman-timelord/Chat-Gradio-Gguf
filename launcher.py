@@ -53,7 +53,8 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
     from scripts.models import unload_models
     import time
     
-    print("\nInitiating shutdown sequence...")
+    from scripts.temporary import set_status
+    set_status("Shutting down...")
     
     # Save current session if active and has content
     if temporary.SESSION_ACTIVE and session_log:
@@ -146,6 +147,8 @@ def main():
         load_config()
         
         # Print final configuration
+        from scripts.temporary import set_status
+        set_status("Config loaded")
         print("\nFinal Configuration:")
         print(f"  Backend: {temporary.BACKEND_TYPE}")
         print(f"  Model: {temporary.MODEL_NAME or 'None'}")
