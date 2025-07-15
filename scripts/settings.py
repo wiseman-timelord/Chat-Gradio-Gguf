@@ -33,6 +33,8 @@ DEFAULTS = {
     "SESSION_LOG_HEIGHT_OPTIONS": [450, 475, 500, 550, 650, 800, 1050, 1300],
 }
 
+# scripts/settings.py
+
 def load_config():
     """
     Load configuration from persistent.json and set in temporary.py.
@@ -41,45 +43,35 @@ def load_config():
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH, 'r') as f:
             config = json.load(f)
-        
+        temporary.set_status("Config loaded", console=True)
+
         # Load model_settings
         model_settings = config.get("model_settings", {})
-        # Handle DEFAULTS keys with potential mismatches
         if "model_dir" in model_settings:
             temporary.MODEL_FOLDER = model_settings["model_dir"]
         else:
             temporary.MODEL_FOLDER = DEFAULTS["MODEL_FOLDER"]
-        
+
         # Load other settings
-        if "context_size" in model_settings:
-            temporary.CONTEXT_SIZE = model_settings["context_size"]
-        if "temperature" in model_settings:
-            temporary.TEMPERATURE = model_settings["temperature"]
-        if "repeat_penalty" in model_settings:
-            temporary.REPEAT_PENALTY = model_settings["repeat_penalty"]
-        if "llama_cli_path" in model_settings:
-            temporary.LLAMA_CLI_PATH = model_settings["llama_cli_path"]
-        if "vram_size" in model_settings:
-            temporary.VRAM_SIZE = model_settings["vram_size"]
-        if "selected_gpu" in model_settings:
-            temporary.SELECTED_GPU = model_settings["selected_gpu"]
-        if "mmap" in model_settings:
-            temporary.MMAP = model_settings["mmap"]
-        if "mlock" in model_settings:
-            temporary.MLOCK = model_settings["mlock"]
-        if "n_batch" in model_settings:
-            temporary.BATCH_SIZE = model_settings["n_batch"]
-        if "dynamic_gpu_layers" in model_settings:
-            temporary.DYNAMIC_GPU_LAYERS = model_settings["dynamic_gpu_layers"]
-        if "max_history_slots" in model_settings:
-            temporary.MAX_HISTORY_SLOTS = model_settings["max_history_slots"]
-        if "max_attach_slots" in model_settings:
-            temporary.MAX_ATTACH_SLOTS = model_settings["max_attach_slots"]
-        if "session_log_height" in model_settings:
-            temporary.SESSION_LOG_HEIGHT = model_settings["session_log_height"]
-        if "cpu_threads" in model_settings:
-            temporary.CPU_THREADS = model_settings["cpu_threads"]
-        
+        for key, attr in {
+            "context_size": "CONTEXT_SIZE",
+            "temperature": "TEMPERATURE",
+            "repeat_penalty": "REPEAT_PENALTY",
+            "llama_cli_path": "LLAMA_CLI_PATH",
+            "vram_size": "VRAM_SIZE",
+            "selected_gpu": "SELECTED_GPU",
+            "mmap": "MMAP",
+            "mlock": "MLOCK",
+            "n_batch": "BATCH_SIZE",
+            "dynamic_gpu_layers": "DYNAMIC_GPU_LAYERS",
+            "max_history_slots": "MAX_HISTORY_SLOTS",
+            "max_attach_slots": "MAX_ATTACH_SLOTS",
+            "session_log_height": "SESSION_LOG_HEIGHT",
+            "cpu_threads": "CPU_THREADS",
+        }.items():
+            if key in model_settings:
+                setattr(temporary, attr, model_settings[key])
+
         # Load backend_config
         backend_config = config.get("backend_config", {})
         if "backend_type" in backend_config:
@@ -94,22 +86,23 @@ def load_config():
         temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
         temporary.SELECTED_GPU = None
         temporary.MODEL_NAME = "Select_a_model..."
-    
+        print(f"⚠️  Config file not found, using defaults: {CONFIG_PATH.resolve()}")
+
     # Scan for available models and cache the result
     available_models = get_available_models()
     temporary.AVAILABLE_MODELS = available_models
-    
+
     # Validate model_name against available models
     if CONFIG_PATH.exists():
         model_settings = config.get("model_settings", {})
-        if "model_name" in model_settings and model_settings["model_name"] in available_models:
-            temporary.MODEL_NAME = model_settings["model_name"]
-        else:
-            # Set to first available model if possible, otherwise "Select_a_model..."
-            temporary.MODEL_NAME = available_models[0] if available_models else "Select_a_model..."
+        temporary.MODEL_NAME = (
+            model_settings.get("model_name")
+            if model_settings.get("model_name") in available_models
+            else (available_models[0] if available_models else "Select_a_model...")
+        )
     else:
         temporary.MODEL_NAME = "Select_a_model..."
-    
+
     return "Configuration loaded."
 
 def save_config():
@@ -133,17 +126,20 @@ def save_config():
             "max_history_slots": temporary.MAX_HISTORY_SLOTS,
             "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
             "session_log_height": temporary.SESSION_LOG_HEIGHT,
-            "cpu_threads": temporary.CPU_THREADS,  # Add this line
+            "cpu_threads": temporary.CPU_THREADS,
         },
         "backend_config": {
             "backend_type": temporary.BACKEND_TYPE,
             "llama_bin_path": temporary.LLAMA_CLI_PATH,
         }
     }
+
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_PATH, 'w') as f:
         json.dump(config, f, indent=4)
-    return "Settings saved."
+
+    temporary.set_status("Settings saved")
+    return "Settings saved"
 
 def update_setting(key, value):
     """Update a setting and return components requiring reload if necessary, with a confirmation message."""

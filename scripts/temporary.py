@@ -47,6 +47,7 @@ DATA_DIR = None  # Will be set by launcher.py
 llm = None
 SPEECH_ENABLED = False
 LLAMA_CLI_PATH = None  # will be set by launcher.py
+global_status = None 
 
 # CPU COnfiguration
 CPU_THREADS = None  # Will be auto-detected
@@ -58,20 +59,18 @@ SELECTED_CPU = None
 # Arrays
 session_attached_files = []
 
-# UI Constants
+# UI Constants/Variables
 USER_COLOR = "#ffffff"
 THINK_COLOR = "#c8a2c8"
 RESPONSE_COLOR = "#add8e6"
 SEPARATOR = "=" * 40
 MID_SEPARATOR = "-" * 30
-
-# Options for Dropdowns
 ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}
 MAX_POSSIBLE_HISTORY_SLOTS = 16
 MAX_POSSIBLE_ATTACH_SLOTS = 10
 
-# Status text entries
-STATUS_TEXTS = {
+# Status text entries  
+STATUS_MESSAGES = {
     "model_loading": "Loading model...",
     "model_loaded": "Model loaded successfully",
     "model_unloading": "Unloading model...",
@@ -114,3 +113,11 @@ class _ContextInjector:
     def set_session_vectorstore(self, vectorstore):
         pass           # no-op stub until full RAG is wired up
 context_injector = _ContextInjector()
+
+# Status Updater
+def set_status(msg: str, console=False):
+    """Update both UI and/or terminal"""
+    if global_status is not None:          # UI ready?
+        global_status.value = msg
+    if console or len(msg.split()) > 3:
+        print(msg)

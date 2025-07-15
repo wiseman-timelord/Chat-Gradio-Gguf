@@ -54,7 +54,7 @@ def detect_cpu_config():
             temporary.CPU_THREADS = max(2, temporary.CPU_THREADS)  # Ensure at least 2 threads
             
     except Exception as e:
-        print(f"Error detecting CPU config: {e}")
+        temporary.set_status("CPU fallback", console=True)
         # Fallback values
         temporary.CPU_PHYSICAL_CORES = 4
         temporary.CPU_LOGICAL_CORES = 8
@@ -142,7 +142,7 @@ def get_available_gpus_linux():
     unique_gpus = [g for g in gpus if not (g in seen or seen.add(g))]
 
     if not unique_gpus:
-        print("\n❌  No GPUs detected, please check your setup.\n")
+        temporary.set_status("No GPU", console=True)
         sys.exit(1)          # critical exit → back to launcher caller
 
     return unique_gpus
@@ -319,7 +319,7 @@ def save_session_history(session_log, attached_files):
         
         # Atomic move
         temp_file.replace(session_file)
-        print(f"Session saved: {session_file}")
+        temporary.set_status("Ready")
         manage_session_history()
         return True
         

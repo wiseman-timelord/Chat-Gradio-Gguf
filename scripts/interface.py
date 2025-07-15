@@ -16,10 +16,13 @@ import scripts.temporary as temporary
 import scripts.settings as settings  # Added import for configuration variables
 from scripts.settings import save_config
 from scripts.temporary import (
-    USER_COLOR, THINK_COLOR, RESPONSE_COLOR, SEPARATOR, MID_SEPARATOR,
-    ALLOWED_EXTENSIONS, SELECTED_GPU, SELECTED_CPU, context_injector,
-    current_model_settings, GPU_LAYERS, SESSION_ACTIVE,
-    HISTORY_DIR, MODEL_NAME, STATUS_TEXTS, BACKEND_TYPE, STREAM_OUTPUT
+    MODEL_NAME, SESSION_ACTIVE,
+    MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, 
+    MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
+    VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
+    ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
+    REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
+    ATTACH_SLOT_OPTIONS
 )
 from scripts import utility
 from scripts.utility import (
@@ -32,9 +35,6 @@ from scripts.models import (
 )
 
 # Functions...
-def set_loading_status():
-    return "Loading model..."
-
 def get_panel_choices(model_settings):
     """Determine available panel choices based on model settings."""
     choices = ["History", "Attach"]
@@ -110,7 +110,7 @@ def save_all_settings():
         str: Confirmation message.
     """
     settings.save_config()
-    return "Settings saved successfully."
+    return temporary.STATUS_MESSAGES["config_saved"]
 
 def set_session_log_base_height(new_height):
     """Set the base session log height from the Configuration page dropdown."""
@@ -266,7 +266,7 @@ def start_new_session(models_loaded):
     if not models_loaded:
         return (
             [],                                # session_log
-            "Load model first on Configuration page...",  # status_text
+            "Load model first on Configuration page...",  # global_status
             gr.update(interactive=False),     # user_input
             gr.update()                       # web_search
         )
@@ -275,7 +275,7 @@ def start_new_session(models_loaded):
     temporary.SESSION_ACTIVE = True
     return (
         [],                                # session_log
-        "Type input and click Send to begin...",  # status_text
+        "Type input and click Send to begin...",  # global_status
         gr.update(interactive=True),      # user_input
         gr.update()                       # web_search
     )
@@ -739,7 +739,7 @@ def launch_interface():
     from pathlib import Path
     from scripts import temporary, utility, models
     from scripts.temporary import (
-        STATUS_TEXTS, MODEL_NAME, SESSION_ACTIVE,
+        MODEL_NAME, SESSION_ACTIVE,
         MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, 
         MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
         VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
@@ -816,7 +816,14 @@ def launch_interface():
                             action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1)
 
                 with gr.Row():
-                    status_text = gr.Textbox(label="Status", interactive=False, value="Select model on Configuration page.", scale=30)
+                    global_status = gr.Textbox(
+                        value="Ready",
+                        label="Status",
+                        interactive=False,
+                        max_lines=1,
+                        elem_classes=["clean-elements"]
+                    )
+                    temporary.global_status = global_status
                     exit_button = gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110)
                     exit_button.click(fn=shutdown_program, inputs=[states["llm"], states["models_loaded"], conversation_components["session_log"], states["attached_files"]])
 
@@ -962,12 +969,14 @@ def launch_interface():
                         )
 
                     with gr.Row(elem_classes=["clean-elements"]):
-                        status_settings = gr.Textbox(
-                            label="Status", 
-                            interactive=False, 
-                            value="Ready" if temporary.MODELS_LOADED else "No model loaded", 
-                            scale=20
+                        global_status = gr.Textbox(
+                            value="Ready",
+                            label="Status",
+                            interactive=False,
+                            max_lines=1,
+                            elem_classes=["clean-elements"]
                         )
+                        temporary.global_status = global_status
                         exit_config = gr.Button(
                             "⏻ Exit", 
                             variant="stop", 
@@ -993,13 +1002,13 @@ def launch_interface():
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
             inputs=[model_folder_state],
-            outputs=[status_text]
+            outputs=[global_status]
         )
 
         start_new_session_btn.click(
             fn=start_new_session,
             inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], status_text, conversation_components["user_input"], states["web_search_enabled"]]
+            outputs=[conversation_components["session_log"], global_status, conversation_components["user_input"], states["web_search_enabled"]]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1013,7 +1022,7 @@ def launch_interface():
         new_session_btn_collapsed.click(
             fn=start_new_session,
             inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], status_text, conversation_components["user_input"], states["web_search_enabled"]]
+            outputs=[conversation_components["session_log"], global_status, conversation_components["user_input"], states["web_search_enabled"]]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1027,7 +1036,7 @@ def launch_interface():
         add_attach_files_collapsed.upload(
             fn=process_attach_files,
             inputs=[add_attach_files_collapsed, states["attached_files"], states["models_loaded"]],
-            outputs=[status_text, states["attached_files"]]
+            outputs=[global_status, states["attached_files"]]
         ).then(
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
@@ -1049,7 +1058,7 @@ def launch_interface():
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
             inputs=[model_folder_state],
-            outputs=[status_text]
+            outputs=[global_status]
         )
 
         action_buttons["action"].click(
@@ -1072,7 +1081,7 @@ def launch_interface():
             ],
             outputs=[
                 conversation_components["session_log"],
-                status_text,
+                global_status,
                 action_buttons["action"],
                 states["cancel_flag"],
                 states["attached_files"],
@@ -1090,7 +1099,7 @@ def launch_interface():
         action_buttons["copy_response"].click(
             fn=copy_last_response,
             inputs=[conversation_components["session_log"]],
-            outputs=[status_text]
+            outputs=[global_status]
         )
 
         action_buttons["web_search"].click(
@@ -1116,13 +1125,13 @@ def launch_interface():
         action_buttons["edit_previous"].click(
             fn=handle_edit_previous,
             inputs=[conversation_components["session_log"]],
-            outputs=[conversation_components["session_log"], conversation_components["user_input"], status_text]
+            outputs=[conversation_components["session_log"], conversation_components["user_input"], global_status]
         )
 
         attach_files.upload(
             fn=process_attach_files,
             inputs=[attach_files, states["attached_files"], states["models_loaded"]],
-            outputs=[status_text, states["attached_files"]]
+            outputs=[global_status, states["attached_files"]]
         ).then(
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
@@ -1133,14 +1142,14 @@ def launch_interface():
             btn.click(
                 fn=lambda files, idx=i: eject_file(files, idx, True),
                 inputs=[states["attached_files"]],
-                outputs=[states["attached_files"], status_text] + attach_slots + [attach_files]
+                outputs=[states["attached_files"], global_status] + attach_slots + [attach_files]
             )
 
         for i, btn in enumerate(buttons["session"]):
             btn.click(
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
-                outputs=[conversation_components["session_log"], states["attached_files"], status_text]
+                outputs=[conversation_components["session_log"], states["attached_files"], global_status]
             ).then(
                 fn=update_session_buttons,
                 inputs=[],
@@ -1160,7 +1169,7 @@ def launch_interface():
         config_components["model"].change(
             fn=handle_model_selection,
             inputs=[config_components["model"], model_folder_state],
-            outputs=[model_folder_state, config_components["model"], status_text]
+            outputs=[model_folder_state, config_components["model"], global_status]
         ).then(
             fn=lambda model_name: models.get_model_settings(model_name)["is_reasoning"],
             inputs=[config_components["model"]],
@@ -1182,7 +1191,7 @@ def launch_interface():
         config_components["cpu_threads"].change(
             fn=handle_cpu_threads_change,
             inputs=[config_components["cpu_threads"]],
-            outputs=[status_text]
+            outputs=[global_status]
         )
 
         states["selected_panel"].change(
@@ -1198,40 +1207,40 @@ def launch_interface():
             comp.change(
                 fn=update_config_settings,
                 inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]],
-                outputs=[status_text]
+                outputs=[global_status]
             )
 
         config_components["unload"].click(
             fn=unload_models,
             inputs=[states["llm"], states["models_loaded"]],
-            outputs=[status_text, states["llm"], states["models_loaded"]]
+            outputs=[global_status, states["llm"], states["models_loaded"]]
         ).then(
             fn=lambda: gr.update(interactive=False),
             outputs=[conversation_components["user_input"]]
         )
 
         config_components["load"].click(
-            fn=set_loading_status,
-            outputs=[status_text]
+            fn=lambda: temporary.set_status("Loading...", console=True),
+            outputs=[global_status]
         ).then(
             fn=load_models,
             inputs=[model_folder_state, config_components["model"], config_components["vram"], states["llm"], states["models_loaded"]],
-            outputs=[status_text, states["models_loaded"], states["llm"], states["models_loaded"]]
+            outputs=[global_status, states["models_loaded"], states["llm"], states["models_loaded"]]
         ).then(
             fn=lambda status, ml: (status, gr.update(interactive=ml)),
-            inputs=[status_text, states["models_loaded"]],
-            outputs=[status_text, conversation_components["user_input"]]
+            inputs=[global_status, states["models_loaded"]],
+            outputs=[global_status, conversation_components["user_input"]]
         )
 
         config_components["save_settings"].click(
-            fn=save_configuration_settings,  # Ensure this function exists
-            inputs=[],  # No inputs needed - reads from temporary.*
-            outputs=[status_text]
+            fn=lambda: settings.save_config(),  # returns "Settings saved."
+            inputs=[],
+            outputs=[global_status] 
         )
 
         config_components["delete_all_history"].click(
             fn=utility.delete_all_session_histories,
-            outputs=[status_text]
+            outputs=[global_status]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1315,10 +1324,10 @@ def launch_interface():
             outputs=[keywords_display]
         )
 
-        status_text.change(
+        global_status.change(
             fn=lambda status: status,
-            inputs=[status_text],
-            outputs=[status_settings]
+            inputs=[global_status],
+            outputs=[global_status]
         )
 
     demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)

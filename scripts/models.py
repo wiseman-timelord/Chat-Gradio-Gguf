@@ -137,14 +137,7 @@ def inspect_model(model_dir, model_name, vram_size):
         else:
             fit_layers = "Unknown"
         author = metadata.get('general.organization', 'Unknown')
-        return (
-            f"Results: Params = {params_str}, "
-            f"Fit/Layers = {fit_layers}/{layers}, "
-            f"Size = {model_size_gb:.2f} GB, "
-            f"Max Ctx = {max_ctx}, "
-            f"Embed = {embed}, "
-            f"Author = {author}"
-        )
+        return f"{params_str}|{fit_layers}/{layers}|{model_size_gb:.1f}GB|{max_ctx}"
     except Exception as e:
         return f"Error inspecting model: {str(e)}"
 
@@ -202,8 +195,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         if models_loaded_state:
             unload_models(llm_state, models_loaded_state)
 
-        print(f"Debug: Loading model '{model}' with {gpu_layers}/{num_layers} GPU layers")
-        print(f"Debug: Using {temporary.CPU_THREADS if use_cpu_threads else 0} CPU threads")
+        temporary.set_status(f"Load {gpu_layers}/{num_layers}", console=True)
 
         kwargs = {
             "model_path": str(model_path),
@@ -227,13 +219,8 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             max_tokens=BATCH_SIZE,
             stream=False
         )
-        print(f"Debug: Test inference successful: {test_out}")
-
-        temporary.MODEL_NAME = model
-        status = (f"Model '{model}' loaded successfully. "
-                  f"GPU layers: {gpu_layers}/{num_layers}, "
-                  f"CPU threads: {temporary.CPU_THREADS if use_cpu_threads else 'auto'}")
-        return status, True, new_llm, True
+        temporary.set_status("Model ready", console=True)
+        return "Model ready", True, new_llm, True
 
     except Exception as e:
         tb = traceback.format_exc()
@@ -287,10 +274,10 @@ def unload_models(llm_state, models_loaded_state):
     if models_loaded_state:
         del llm_state
         gc.collect()
-        print(f"Model {temporary.MODEL_NAME} unloaded.")
+        temporary.set_status("Unloaded", console=True)
         return "Model unloaded successfully.", None, False
-    print("Warning: No model was loaded to unload.")
-    return "No model loaded to unload.", llm_state, models_loaded_state
+    temporary.set_status("Model off", console=True)
+    return "Model off", llm_state, models_loaded_state
 
 def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None, cancel_event=None, llm_state=None, models_loaded_state=False):
     import re
