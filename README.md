@@ -47,7 +47,7 @@ Configuration:
   Model: qwen2.5-7b-cabs-v0.4.Q6_K.gguf
   Context Size: 8192
   VRAM Allocation: 8192 MB
-  CPU Threads: 4
+  CPU Threads: 20
   GPU Layers: 0
 
 Launching Gradio Interface...
