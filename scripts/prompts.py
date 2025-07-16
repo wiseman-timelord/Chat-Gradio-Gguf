@@ -49,6 +49,7 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
         system_message += " " + prompt_templates["chat"]["roleplay"]
     
     system_message = system_message.replace("\n", " ").strip()
+    system_message += " Always use line breaks and bullet points to keep the response readable."
     return system_message
 
 def get_reasoning_instruction():

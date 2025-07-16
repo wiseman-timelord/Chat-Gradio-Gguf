@@ -54,7 +54,8 @@ def detect_cpu_config():
         # Generate thread options (1 to logical_cores-1)
         max_threads = max(1, temporary.CPU_LOGICAL_CORES - 1)
         temporary.CPU_THREAD_OPTIONS = list(range(1, max_threads + 1))
-        temporary.CPU_THREADS = min(4, max_threads)  # Default to 4 or max available
+        if temporary.CPU_THREADS is None:            # keep user’s saved value
+            temporary.CPU_THREADS = min(4, max_threads)
         
         # Vulkan-specific: Even with all layers on GPU, still uses some CPU threads
         if "vulkan" in temporary.BACKEND_TYPE.lower():

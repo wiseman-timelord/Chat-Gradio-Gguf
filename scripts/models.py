@@ -110,7 +110,7 @@ def calculate_gpu_layers(models, available_vram):
         gpu_layers[model] = min(max_layers, num_layers) if DYNAMIC_GPU_LAYERS else num_layers
     return gpu_layers
 
-# Add to scripts/models.py (after imports, before other functions)
+# Get Model MetaData
 def get_model_metadata(model_path: str) -> dict:
     """Extract metadata from a GGUF model file – read-only, no context."""
     try:
@@ -269,7 +269,7 @@ def calculate_single_model_gpu_layers_with_layers(
         print(f"[GPU-LAYERS] Dynamic off-load disabled → {gpu_layers} layers")
     else:
         gpu_layers = min(max_layers, num_layers)
-        if "vulkan" in temporary.BACKEND_TYPE.lower():
+        if "vulkan" in str(temporary.BACKEND_TYPE).lower():
             gpu_layers = max(1, gpu_layers - 2)
         cpu_fallback = num_layers - gpu_layers
         print(f"[GPU-LAYERS] Model {adjusted_mb:.0f} MB, layer {layer_mb:.1f} MB")
@@ -287,7 +287,8 @@ def unload_models(llm_state, models_loaded_state):
     temporary.set_status("Model off", console=True)
     return "Model off", llm_state, models_loaded_state
 
-def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None, cancel_event=None, llm_state=None, models_loaded_state=False):
+def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None,
+                        cancel_event=None, llm_state=None, models_loaded_state=False):
     import re
     import traceback
     from scripts import temporary
@@ -316,9 +317,11 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False)
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
-    
+
     if web_search_enabled and search_results:
-        system_message += "\n\nSearch Results:\n" + re.sub(r'https?://(www\.)?([^/]+).*', r'\2', str(search_results))
+        system_message += "\n\nSearch Results:\n" + re.sub(
+            r'https?://(www\.)?([^/]+).*', r'\2', str(search_results)
+        )
 
     try:
         system_tokens = len(llm_state.tokenize(system_message.encode('utf-8')))
@@ -344,7 +347,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
     messages = [{"role": "system", "content": system_message}]
     current_tokens = 0
-    
+
     for msg in reversed(session_log[:-2]):
         content = clean_content(msg['role'], msg['content'])
         try:
@@ -357,6 +360,9 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             continue
 
     messages.append({"role": "user", "content": user_query})
+
+    # Buffer to accumulate the entire response
+    full_response_parts = []
 
     try:
         if should_stream(user_query, settings):
@@ -373,9 +379,25 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 if chunk.get('choices'):
                     content = chunk['choices'][0].get('delta', {}).get('content', '')
                     if content:
+                        # Clean & forward to Gradio
                         content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
-                        content = re.sub(r'\n{2,}', '\n', content)
+                        content = re.sub(r'([a-z])([A-Z])', r'\1 \2', content)
+                        content = re.sub(r'([a-zA-Z])(\d)', r'\1 \2', content)
+                        content = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', content)
+                        content = re.sub(r'\n{3,}', '\n\n', content)
+                        full_response_parts.append(content)
                         yield content
+
+            # All chunks received – one-shot raw print if enabled
+            complete_raw = ''.join(full_response_parts)
+            if temporary.PRINT_RAW_MODEL_OUTPUT and complete_raw:
+                print("\n***RAW_OUTPUT_FROM_MODEL_START***")
+                print(complete_raw, flush=True)
+                print("***RAW_OUTPUT_FROM_MODEL_END***\n")
+
+            # Final yield so caller can replace the bubble with fully-formatted text
+            yield complete_raw
+
         else:
             response = llm_state.create_chat_completion(
                 messages=messages,
@@ -384,13 +406,23 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             )
             content = response['choices'][0]['message']['content']
             content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
-            content = re.sub(r'\n{2,}', '\n', content)
+            content = re.sub(r'([a-z])([A-Z])', r'\1 \2', content)
+            content = re.sub(r'([a-zA-Z])(\d)', r'\1 \2', content)
+            content = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', content)
+            content = re.sub(r'\n{3,}', '\n\n', content)
+
+            if temporary.PRINT_RAW_MODEL_OUTPUT and content:
+                print("\n***RAW_OUTPUT_FROM_MODEL_START***")
+                print(content, flush=True)
+                print("***RAW_OUTPUT_FROM_MODEL_END***\n")
+
             yield content
+
     except Exception as e:
         yield f"Error generating response: {str(e)}"
 
+# Helper function to reload model with new settings
 def change_model(model_name):
-    """Helper function to reload model with new settings."""
     try:
         from scripts.temporary import MODEL_FOLDER, VRAM_SIZE, MODELS_LOADED, llm
         status, models_loaded, llm_state, _ = load_models(

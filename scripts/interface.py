@@ -81,7 +81,7 @@ def process_vector_files(files, vector_files, models_loaded):
         return "Error: Load model first.", vector_files
     return process_files(files, vector_files, temporary.MAX_ATTACH_SLOTS, is_attach=False)
 
-def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model):
+def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, print_raw):
     temporary.CONTEXT_SIZE = int(ctx)
     temporary.BATCH_SIZE = int(batch)
     temporary.TEMPERATURE = float(temp)
@@ -90,6 +90,7 @@ def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model):
     temporary.SELECTED_GPU = gpu
     temporary.SELECTED_CPU = cpu  # Add this line
     temporary.MODEL_NAME = model
+    temporary.PRINT_RAW_MODEL_OUTPUT = bool(print_raw)
     status_message = (
         f"Updated settings: Context Size={ctx}, Batch Size={batch}, "
         f"Temperature={temp}, Repeat Penalty={repeat}, VRAM Size={vram}, "
@@ -686,17 +687,18 @@ async def conversation_interface(
 
     # Finalize response
     if visible_response and not error_occurred:
-        # Extract and format links separately
-        links_match = re.search(r'\nLinks:\n(.*?)$', visible_response, re.DOTALL)
-        clean_response = re.sub(r'\nLinks:\n.*?$', '', visible_response, flags=re.DOTALL).strip()
-        
-        # Format final content
-        final_content = clean_response
+        # Clean once and overwrite the last assistant bubble
+        cleaned = filter_operational_content(visible_response)
+        cleaned = re.sub(r'^AI-Chat:\s*', '', cleaned, flags=re.I).strip()
+
+        # Optional link extraction (keep existing logic if you like)
+        links_match = re.search(r'\nLinks:\n(.*?)$', cleaned, re.DOTALL)
         if links_match:
-            final_content += f"\n\nLinks:\n{links_match.group(1).strip()}"
-        
-        # Update session log with formatted response
-        session_log[-1]['content'] = f"AI-Chat:\n{final_content}"
+            links_block = links_match.group(1).strip()
+            cleaned = re.sub(r'\nLinks:\n.*?$', '', cleaned, flags=re.DOTALL).strip()
+            cleaned += f"\n\nLinks:\n{links_block}"
+
+        session_log[-1]['content'] = f"AI-Chat:\n{cleaned}"
         
         # Handle speech synthesis if enabled
         if speech_enabled:
@@ -760,6 +762,7 @@ def launch_interface():
         .send-button-green { background-color: green !important; color: white !important }
         .send-button-orange { background-color: orange !important; color: white !important }
         .send-button-red { background-color: red !important; color: white !important }
+        .scrollable .message { white-space: pre-wrap; word-break: break-word; }
         """
     ) as demo:
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
@@ -959,6 +962,11 @@ def launch_interface():
                             value=temporary.MAX_ATTACH_SLOTS, 
                             scale=5
                         )
+                        config_components["print_raw"] = gr.Checkbox(
+                            label="Print raw model output to terminal",
+                            value=temporary.PRINT_RAW_MODEL_OUTPUT,
+                            scale=5
+                        )
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["save_settings"] = gr.Button(
                             "💾 Save Settings", 
@@ -1043,6 +1051,12 @@ def launch_interface():
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
             outputs=attach_slots + [add_attach_files_collapsed]
+        )
+
+        config_components["print_raw"].change(
+            fn=lambda v: setattr(temporary, "PRINT_RAW_MODEL_OUTPUT", bool(v)),
+            inputs=[config_components["print_raw"]],
+            outputs=[]
         )
 
         browse.click(
@@ -1208,7 +1222,7 @@ def launch_interface():
         for comp in [config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]]:
             comp.change(
                 fn=update_config_settings,
-                inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]],
+                inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]] + [config_components["print_raw"]],
                 outputs=[global_status]
             )
 
@@ -1320,6 +1334,17 @@ def launch_interface():
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
             outputs=attach_slots + [attach_files]
+        ).then(
+            fn=lambda: gr.update(
+                maximum=max(temporary.CPU_THREAD_OPTIONS or [8]),
+                value=temporary.CPU_THREADS or min(4, max(temporary.CPU_THREAD_OPTIONS or [8]))
+            ),
+            inputs=[],
+            outputs=[config_components["cpu_threads"]]
+        ).then(
+            fn=lambda: gr.update(value=temporary.PRINT_RAW_MODEL_OUTPUT),
+            inputs=[],
+            outputs=[config_components["print_raw"]]
         ).then(
             fn=lambda model_settings: "none" if not model_settings.get("detected_keywords", []) else ", ".join(model_settings.get("detected_keywords", [])),
             inputs=[states["model_settings"]],
