@@ -22,7 +22,7 @@ from scripts.temporary import (
     VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
     ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
     REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
-    ATTACH_SLOT_OPTIONS
+    ATTACH_SLOT_OPTIONS, HISTORY_DIR
 )
 from scripts import utility
 from scripts.utility import (
@@ -422,7 +422,7 @@ async def conversation_interface(
     import gradio as gr
     from scripts import temporary, utility
     from scripts.models import get_model_settings, get_response_stream
-    from scripts.rag import context_injector
+    from scripts.temporary import context_injector
     import asyncio
     import queue
     import threading
