@@ -155,6 +155,7 @@ If installing with ROCM option, you will need to have installed the `ROCm Softwa
 ```
 
 ### Notation 
+- For AMD hardware, do not use models with an "iMatrix", those are for nVidia GPUs. Just to save some issues for people that dont know.
 - For Vulkan installations, you must install the Vulkan SDK; I will be adding this to [Ubuntu25-TweakInstall](https://github.com/wiseman-timelord/Ubuntu25-TweakInstall), otherwise you must go here [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
 - For CUDA installations, you must install the CUDA Toolkit; I added this to [Ubuntu25-TweakInstall](https://github.com/wiseman-timelord/Ubuntu25-TweakInstall), but if you have other OS, then research/instal first.
 - VRAM dropdown, 1GB to 64GB in steps, this should be your FREE ram available on the selected card, it should not be the total amount the car has, unless you are running in compute mode.  
@@ -170,7 +171,7 @@ If installing with ROCM option, you will need to have installed the `ROCm Softwa
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
 | Early GPT-4 (compare stats)                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
 | Early GPT-4o (compare stats)                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
-t.b.a.
+| t.b.a.              | N/A      | N/A    | N/A   | N/A      | N/A      | N/A            | N/A       |
 
 ### Models working with version A068 (with gpt for comparrisson).
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
