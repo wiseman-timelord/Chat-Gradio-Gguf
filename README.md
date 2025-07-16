@@ -244,15 +244,12 @@ project_root/
 ```
 
 # Development
-1. Dual-mode conversion done, requires testing/bugfixing.
-2. No CPU options anymore.
-3. My hardware is Cuda 11, hence, used `b5587` instead of latest, which is ok for until, Qwen3 and Deepseek3, are correctly programmed, then will logically want to run newer models that come out. 
-3. Summary is removed.
-4. Speech is now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
-5. New processing setup, it will need to be Tested/bugfixed. User is limited to 
+1. windows mode requires testing/bugfixing.
+2. No CPU options anymore, but we had to add back in some of the cpu code to get the gpu to work, so possibly add back in the cpu binaries as most of other code is already there.
+3. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
 6. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
 4. Need to optimize streaming output and relating displaying of text/animations. Design needs work, doesnt work how I want.
-5. The stop button wont work because the button freezes during certain/all phases of generation.
+5. The stop button wont work because the button freezes during certain/all phases of generation. Or just change the message from "Cancel Sending" to "Please Wait".
 6. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
 - a row with a square box, that visualizes the thinking/generation, in some simple method, that is somehow interesting, and under that, a row with a buttton to turn "Visualize" ON/OFF.
