@@ -821,10 +821,11 @@ def launch_interface():
                         label="Status",
                         interactive=False,
                         max_lines=1,
-                        elem_classes=["clean-elements"]
+                        elem_classes=["clean-elements"],
+                        scale=20
                     )
                     temporary.global_status = global_status
-                    exit_button = gr.Button("Exit", variant="stop", elem_classes=["double-height"], min_width=110)
+                    exit_button = gr.Button("Exit", variant="stop", elem_classes=["double-height"], scale=1 , min_width=110)
                     exit_button.click(fn=shutdown_program, inputs=[states["llm"], states["models_loaded"], conversation_components["session_log"], states["attached_files"]])
 
             with gr.Tab("Configuration"):
@@ -974,14 +975,15 @@ def launch_interface():
                             label="Status",
                             interactive=False,
                             max_lines=1,
-                            elem_classes=["clean-elements"]
+                            elem_classes=["clean-elements"],
+                            scale=20
                         )
                         temporary.global_status = global_status
                         exit_config = gr.Button(
                             "⏻ Exit", 
                             variant="stop", 
                             elem_classes=["double-height"], 
-                            min_width=110
+                            scale=1
                         )
 
         def handle_edit_previous(session_log):

@@ -26,6 +26,13 @@ elif temporary.PLATFORM == "linux":
         print("Warning: pyttsx3 not installed. Text-to-speech will be unavailable on Linux.")
 
 # Functions...
+def short_path(path_str, max_len=44):
+    """Truncate path to last max_len chars with ... prefix"""
+    path = str(path_str)
+    if len(path) <= max_len:
+        return path
+    return "..." + path[-max_len:]
+
 def filter_operational_content(text):
     """Remove operational tags and metadata from the text."""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)

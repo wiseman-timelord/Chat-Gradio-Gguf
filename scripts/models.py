@@ -13,6 +13,7 @@ from scripts.temporary import (
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED, CHAT_FORMAT_MAP
 )
 
+
 # Functions...
 def get_chat_format(metadata):
     """
@@ -39,8 +40,9 @@ def clean_content(role, content):
     return content.strip()
 
 def get_available_models():
+    from scripts.utility import short_path    
     model_dir = Path(temporary.MODEL_FOLDER)
-    print(f"Scanning directory: {model_dir}")
+    print(f"Finding Models: {short_path(model_dir)}")
     files = list(model_dir.glob("*.gguf"))
     models = [f.name for f in files if f.is_file()]
     if models:
