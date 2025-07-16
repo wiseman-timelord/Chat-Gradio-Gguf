@@ -1,28 +1,21 @@
 # launcher.py
 
 # Early Imports
-print("Starting Early Launcher Imports.")
 import sys, argparse
 from pathlib import Path
 import os
-
-# Parse and set platform here
-print("Detecting and Setting, Platform.")
+from scripts.utility import short_path
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('platform', choices=['windows', 'linux'], help='Target platform')
     return parser.parse_args()
 args = parse_args()
 import scripts.temporary as temporary
-temporary.PLATFORM = args.platform           # 1️⃣ set it
-temporary.BACKEND_TYPE = "Vulkan"            # 2️⃣ set defaults that depend on it
-
-# Late Importz
-print("Starting Late-Launcher Imports.")
-from scripts.settings import load_config     # 3️⃣ now safe to import
+temporary.PLATFORM = args.platform
+temporary.BACKEND_TYPE = "Vulkan"
+from scripts.settings import load_config
 from scripts.interface import launch_interface
 from scripts.utility import detect_cpu_config
-print("`Launcher` Imports Complete.")
 
 # Functions
 def initialize_platform_settings():
@@ -107,6 +100,8 @@ def shutdown_platform():
 def main():
     """Main entry point for the application."""
     try:
+        print("`main` Function Started.")
+
         # Parse command-line arguments
         args = parse_args()
         
@@ -118,7 +113,7 @@ def main():
         # Set up directories and paths
         script_dir = Path(__file__).parent.resolve()
         os.chdir(script_dir)
-        print(f"Working directory: {script_dir}")
+        print(f"Working directory: {short_path(script_dir)}")
         
         temporary.DATA_DIR = str(script_dir / "data")
         temporary.HISTORY_DIR = str(script_dir / "data/history")
@@ -129,9 +124,9 @@ def main():
         Path(temporary.HISTORY_DIR).mkdir(parents=True, exist_ok=True)
         Path(temporary.TEMP_DIR).mkdir(parents=True, exist_ok=True)
         
-        print(f"Data directory: {temporary.DATA_DIR}")
-        print(f"History directory: {temporary.HISTORY_DIR}")
-        print(f"Temp directory: {temporary.TEMP_DIR}")
+        print(f"Data Directory: {short_path(temporary.DATA_DIR)}")
+        print(f"Session History: {short_path(temporary.HISTORY_DIR)}")
+        print(f"Temp Directory: {short_path(temporary.TEMP_DIR)}")
         
         # Initialize CPU configuration
         from scripts.utility import detect_cpu_config
@@ -142,14 +137,10 @@ def main():
         # Set platform-specific defaults
         temporary.BACKEND_TYPE = "Vulkan"  # Default for both platforms
         
-        # Load configuration
-        print("Loading persistent config...")
-        load_config()
-        
         # Print final configuration
         from scripts.temporary import set_status
         set_status("Config loaded")
-        print("\nFinal Configuration:")
+        print("\nConfiguration:")
         print(f"  Backend: {temporary.BACKEND_TYPE}")
         print(f"  Model: {temporary.MODEL_NAME or 'None'}")
         print(f"  Context Size: {temporary.CONTEXT_SIZE}")
