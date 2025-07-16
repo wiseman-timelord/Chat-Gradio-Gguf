@@ -38,7 +38,7 @@ def initialize_platform_settings():
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
     
-    print(f"Initialized {temporary.PLATFORM} with backend: {temporary.BACKEND_TYPE}")
+    print(f"Script mode `{temporary.PLATFORM}` with backend `{temporary.BACKEND_TYPE}`")
 
 def shutdown_program(llm_state, models_loaded_state, session_log, attached_files):
     """Gracefully shutdown the program, saving current session if active."""
@@ -108,7 +108,6 @@ def main():
         # Initialize platform
         temporary.PLATFORM = args.platform
         initialize_platform_settings()
-        print(f"Starting Chat-Gradio-Gguf for {temporary.PLATFORM} platform")
         
         # Set up directories and paths
         script_dir = Path(__file__).parent.resolve()
