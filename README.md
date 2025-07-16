@@ -256,7 +256,7 @@ project_root/
 ```
 
 # Development
-1. Output looks ok, but why is it printing it wrong in the session log then fixing it, while in the terminal it is fixed. Surely it should be other way round because the session log needs to fix it, or is the session log printing it wrong to begin with.
+1. Output looks ok, but why is it printing it wrong in the session log then fixing it, while in the terminal it is fixed. Surely it should be other way round because the session log needs to fix it, or is the session log printing it wrong to begin with. Possibly the session log can just stream it correctly decoding correct formatting on the fly, instead of some overly complicated process?
 2. the Speech option did not work in linux.
 3. python said something about a new duckduckgo library name. possibly references in, installer and main program, needs updating. 
 1. windows mode requires testing/bugfixing.
