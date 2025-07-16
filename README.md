@@ -244,6 +244,14 @@ project_root/
 ```
 
 # Development
+1. linux mode needs testing and improving/fixing, for example, websearch is having issues...
+```
+User:
+please find out all you can about new developments relating to discoveries about the "Blonde Haired Creator Gods" of "Summerian" history/archeology.
+
+AI-Chat:
+Icouldn'tfindanyspecificinformationon"BlondeHairedCreatorGods"relatedtoSumerianhistoryorarcheology.Theterm"Summerian"seemstobeamisspellingof"Sumerian."SumerianswereoneofthefirstcivilizationsinMesopotamia,andtheirmythsincludevariousgodslikeAnu(theskygod),Enlil(thewindgod),andEnki(thewatergod).However,thereisnowidelyacceptedorwell-documentedevidenceof"BlondeHairedCreatorGods"inSumerianhistoryorarcheology.Ifyouhaveaspecificsourceorcontextforthisterm,pleaseprovidemoredetailssoIcanassistbetter!
+```
 1. windows mode requires testing/bugfixing.
 2. No CPU options anymore, but we had to add back in some of the cpu code to get the gpu to work, so possibly add back in the cpu binaries as most of other code is already there.
 3. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
