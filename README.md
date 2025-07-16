@@ -171,7 +171,8 @@ If installing with ROCM option, you will need to have installed the `ROCm Softwa
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
 | Early GPT-4 (compare stats)                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
 | Early GPT-4o (compare stats)                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
-| t.b.a.              | N/A      | N/A    | N/A   | N/A      | N/A      | N/A            | N/A       |
+| Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT-GGUF           | N/A      | N/A    | N/A   | N/A      | N/A      | N/A            | N/A       |
+| Qwen2.5-Dyanka-7B-Preview-GGUF           | N/A      | N/A    | N/A   | N/A      | N/A      | N/A            | N/A       |
 
 ### Models working with version A068 (with gpt for comparrisson).
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
