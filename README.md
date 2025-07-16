@@ -32,8 +32,7 @@ Activated: .venv
 Config loaded
 Finding Models: ...o-Gguf-A069/models/qwen2.5-7b-cabs-v0.4-GGUF
 Models Found: ['qwen2.5-7b-cabs-v0.4.Q6_K.gguf']
-Initialized linux with backend: Vulkan
-Starting Chat-Gradio-Gguf for linux platform
+Script mode `linux` with backend `Vulkan`
 Working directory: ...s_250/Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069
 Data Directory: .../Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069/data
 Session History: ...adio-Gguf/Chat-Gradio-Gguf-A069/data/history
