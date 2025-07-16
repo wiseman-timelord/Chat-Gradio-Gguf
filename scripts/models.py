@@ -23,12 +23,25 @@ def get_chat_format(metadata):
     return CHAT_FORMAT_MAP.get(architecture, 'llama2')
 
 def get_model_layers(model_path: str) -> int:
-    """
-    Get the number of layers for a GGUF model.
-    """
-    metadata = get_model_metadata(model_path)
-    layers = metadata.get('layers', 0)
-    return int(layers)
+    """Return layer count for the model (GGUF)."""
+    meta = get_model_metadata(model_path)
+    arch = meta.get("general.architecture", "unknown")
+    keys_to_try = (
+        f"{arch}.block_count",
+        "llama.block_count",
+        "layers"            # very old fallback
+    )
+
+    for k in keys_to_try:
+        if k in meta:
+            try:
+                layers = int(meta[k])
+                print(f"[LAYERS] Using key '{k}' → {layers}")
+                return layers
+            except (ValueError, TypeError):
+                print(f"[LAYERS] Bad value for key '{k}': {meta[k]}")
+    print(f"[LAYERS] No valid key found in {Path(model_path).name}")
+    return 0
 
 def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
@@ -99,20 +112,17 @@ def calculate_gpu_layers(models, available_vram):
 
 # Add to scripts/models.py (after imports, before other functions)
 def get_model_metadata(model_path: str) -> dict:
-    """Extract metadata from a GGUF model file."""
+    """Extract metadata from a GGUF model file – read-only, no context."""
     try:
         from llama_cpp import Llama
-        # Quick load just for metadata extraction
-        llm = Llama(
-            model_path=model_path,
-            n_ctx=512,  # Minimal context
-            verbose=False
-        )
-        metadata = llm.metadata
+        print(f"[META] Opening {Path(model_path).name} for metadata…")
+        llm = Llama(model_path=model_path, n_ctx=0, verbose=False)
+        meta = llm.metadata
         llm.close()
-        return metadata
+        print(f"[META] Keys found: {list(meta.keys())}")
+        return meta
     except Exception as e:
-        print(f"Error reading model metadata: {e}")
+        print(f"[META] Error reading metadata: {e}")
         return {}
 
 def inspect_model(model_dir, model_name, vram_size):
@@ -202,6 +212,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         kwargs = {
             "model_path": str(model_path),
             "n_ctx": CONTEXT_SIZE,
+            "n_ctx_per_seq": CONTEXT_SIZE,      # ← NEW
             "n_gpu_layers": gpu_layers,
             "n_batch": BATCH_SIZE,
             "mmap": MMAP,
@@ -239,36 +250,31 @@ def calculate_single_model_gpu_layers_with_layers(
     num_layers: int,
     dynamic_gpu_layers: bool = True
 ) -> int:
-    """
-    Decide how many layers go on GPU.
-    Vulkan always keeps at least 1–2 layers on CPU even if VRAM is huge.
-    """
+    """Compute how many layers fit on GPU (b5587)."""
     from math import floor
+
     if num_layers <= 0 or available_vram <= 0:
-        print("Debug: Invalid input (layers or VRAM), returning 0 layers")
+        print(f"[GPU-LAYERS] Invalid input: layers={num_layers}, VRAM={available_vram} MB")
         return 0
 
-    model_file_size = get_model_size(model_path)
-    metadata = get_model_metadata(model_path)
-    factor = 1.2 if metadata.get('general.architecture') == 'llama' else 1.1
-    adjusted_model_size = model_file_size * factor
-    layer_size = adjusted_model_size / num_layers if num_layers > 0 else 0
-    max_layers = floor(available_vram / layer_size) if layer_size > 0 else 0
+    model_mb = get_model_size(model_path)
+    meta = get_model_metadata(model_path)
+    factor = 1.2 if meta.get("general.architecture") == "llama" else 1.1
+    adjusted_mb = model_mb * factor
+    layer_mb = adjusted_mb / num_layers
+    max_layers = floor(available_vram / layer_mb)
 
-    if dynamic_gpu_layers and num_layers > 0:
-        gpu_layers = min(max_layers, num_layers)
-        # Vulkan: never push *all* layers to GPU
-        if "vulkan" in temporary.BACKEND_TYPE.lower():
-            gpu_layers = max(1, gpu_layers - 2)  # keep at least 2 on CPU
-        cpu_fallback = num_layers - gpu_layers
-        print(f"Using {gpu_layers} GPU layers + {cpu_fallback} CPU layers")
-    else:
+    if not dynamic_gpu_layers:
         gpu_layers = num_layers
-        if max_layers < num_layers:
-            print(f"⚠️ Insufficient VRAM, falling back to CPU for {num_layers - max_layers} layers")
+        print(f"[GPU-LAYERS] Dynamic off-load disabled → {gpu_layers} layers")
+    else:
+        gpu_layers = min(max_layers, num_layers)
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            gpu_layers = max(1, gpu_layers - 2)
+        cpu_fallback = num_layers - gpu_layers
+        print(f"[GPU-LAYERS] Model {adjusted_mb:.0f} MB, layer {layer_mb:.1f} MB")
+        print(f"[GPU-LAYERS] VRAM {available_vram} MB → GPU {gpu_layers}/{num_layers} (CPU {cpu_fallback})")
 
-    print(f"Debug: Model size = {model_file_size:.2f} MB, Layers = {num_layers}, VRAM = {available_vram} MB")
-    print(f"Debug: Layer size = {layer_size:.2f} MB")
     return gpu_layers
 
 def unload_models(llm_state, models_loaded_state):
