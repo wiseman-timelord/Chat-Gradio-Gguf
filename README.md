@@ -2,7 +2,7 @@
 <br>Status: Beta
 - Ubuntu mode working best in v0.70. working means it works, on my machine and with the models I tested and for normal chat.
 - Windows mode untested, if v0.70 doesnt work, then try A068.
-- Check back for fully working/tested version later.
+- Check back for fully working/tested version (see Development section).
 
 ## Description
 The goal is a chatbot, that is simpler to configure than `TextGeneration-Webui`, while having features I want ie, attach, session history, speech, websearch, step back. Programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. It will have web features, but will not feature online services requiring registration, and everything is privatly run on your own hardware with your own models. 
@@ -256,14 +256,9 @@ project_root/
 ```
 
 # Development
-1. linux mode needs testing and improving/fixing, for example, websearch is having issues...
-```
-User:
-please find out all you can about new developments relating to discoveries about the "Blonde Haired Creator Gods" of "Summerian" history/archeology.
-
-AI-Chat:
-Icouldn'tfindanyspecificinformationon"BlondeHairedCreatorGods"relatedtoSumerianhistoryorarcheology.Theterm"Summerian"seemstobeamisspellingof"Sumerian."SumerianswereoneofthefirstcivilizationsinMesopotamia,andtheirmythsincludevariousgodslikeAnu(theskygod),Enlil(thewindgod),andEnki(thewatergod).However,thereisnowidelyacceptedorwell-documentedevidenceof"BlondeHairedCreatorGods"inSumerianhistoryorarcheology.Ifyouhaveaspecificsourceorcontextforthisterm,pleaseprovidemoredetailssoIcanassistbetter!
-```
+1. Output looks ok, but why is it printing it wrong in the session log then fixing it, while in the terminal it is fixed. Surely it should be other way round because the session log needs to fix it, or is the session log printing it wrong to begin with.
+2. the Speech option did not work in linux.
+3. python said something about a new duckduckgo library name. possibly references in, installer and main program, needs updating. 
 1. windows mode requires testing/bugfixing.
 2. No CPU options anymore, but we had to add back in some of the cpu code to get the gpu to work, so possibly add back in the cpu binaries as most of other code is already there.
 3. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
