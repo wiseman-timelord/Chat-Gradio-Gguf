@@ -33,8 +33,8 @@ Starting Chat-Gradio-Gguf...
 Activated: .venv
 `main` Function Started.
 Config loaded
-Finding Models: ...o-Gguf-A069/models/qwen2.5-7b-cabs-v0.4-GGUF
-Models Found: ['qwen2.5-7b-cabs-v0.4.Q6_K.gguf']
+Finding Models: ...2.5-Dyanka-7B-Preview-Uncensored-DeLMAT-GGUF
+Models Found: ['Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT.Q6_K.gguf']
 Script mode `linux` with backend `Vulkan`
 Working directory: ...s_250/Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069
 Data Directory: .../Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069/data
@@ -44,8 +44,8 @@ CPU Configuration: 12 physical cores, 24 logical cores
 
 Configuration:
   Backend: Vulkan
-  Model: qwen2.5-7b-cabs-v0.4.Q6_K.gguf
-  Context Size: 8192
+  Model: Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT.Q6_K.gguf
+  Context Size: 49152
   VRAM Allocation: 8192 MB
   CPU Threads: 20
   GPU Layers: 0
