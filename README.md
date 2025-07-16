@@ -22,31 +22,35 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 ### Preview
 - When Requires are installed, startup looks like this in the command console...
 ```
-=======================================================================================================================
+================================================================================
     Chat-Gradio-Gguf: Launcher
-=======================================================================================================================
+================================================================================
 
 Starting Chat-Gradio-Gguf...
-Activated: `.venv`
-Checking Python libraries...
-Success: All Python libraries verified                       [GOOD]
-Starting `launcher` Imports.
-`launcher` Imports Complete.
-Starting `launcher.main`.
-Working directory: C:\Program_Filez\Chat-Windows-Gguf\Chat-Windows-Gguf-main
-Data directory: C:\Program_Filez\Chat-Windows-Gguf\Chat-Windows-Gguf-main\data
-Loading persistent config...
-Scanning directory: E:\Models\T3Q-qwen2.5-14b-v1.0-e3-GGUF
-Models Found: ['T3Q-qwen2.5-14b-v1.0-e3.Q6_K.gguf']
+Activated: .venv
+`main` Function Started.
+Config loaded
+Finding Models: ...o-Gguf-A069/models/qwen2.5-7b-cabs-v0.4-GGUF
+Models Found: ['qwen2.5-7b-cabs-v0.4.Q6_K.gguf']
+Initialized linux with backend: Vulkan
+Starting Chat-Gradio-Gguf for linux platform
+Working directory: ...s_250/Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069
+Data Directory: .../Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069/data
+Session History: ...adio-Gguf/Chat-Gradio-Gguf-A069/data/history
+Temp Directory: ...-Gradio-Gguf/Chat-Gradio-Gguf-A069/data/temp
+CPU Configuration: 12 physical cores, 24 logical cores
+
+Configuration:
+  Backend: Vulkan
+  Model: qwen2.5-7b-cabs-v0.4.Q6_K.gguf
+  Context Size: 8192
+  VRAM Allocation: 8192 MB
+  CPU Threads: 4
+  GPU Layers: 0
+
 Launching Gradio Interface...
 * Running on local URL:  http://127.0.0.1:7860
 * To create a public link, set `share=True` in `launch()`.
-
-
-
-
-
-
 
 ```
 
