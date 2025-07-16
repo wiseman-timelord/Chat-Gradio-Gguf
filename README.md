@@ -165,8 +165,14 @@ If installing with ROCM option, you will need to have installed the `ROCm Softwa
 - "Chat-Windows-Gguf" is intended as the Windows version of [Chat-Linux-Gguf](https://github.com/wiseman-timelord/Chat-Linux-Gguf).
 - This was the command to make a python script file created in windows to be compatible with linux `sed -i 's/\xE2\x80\x8B//g' scripts/interface.py`.
 
-### Models (Confirmed Working)
-You will of course need to have a `*.Gguf` model, here are some good ones at the time, with gpt for comparrisson..    
+### Models working with v0.70 (with gpt for comparrisson).
+| Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
+|----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
+| Early GPT-4 (compare stats)                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
+| Early GPT-4o (compare stats)                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
+t.b.a.
+
+### Models working with version A068 (with gpt for comparrisson).
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
 | Early GPT-4 (compare stats)                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
