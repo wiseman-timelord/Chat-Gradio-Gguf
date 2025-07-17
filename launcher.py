@@ -68,13 +68,16 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
             print(f"Error unloading model: {str(e)}")
     
     # Graceful shutdown sequence
-    for i in range(3, 0, -1):
-        print(f"Closing in {i}...")
+    for i in range(3, -1, -1):        # include 0
+        print(f"Closing in...{i}", end="\r")
         time.sleep(1)
-    
+    print()                           # newline after countdown
+
     print("Shutdown complete. Goodbye!")
-    shutdown_platform()  # Call platform-specific cleanup
-    sys.exit(0)
+    shutdown_platform()
+    if temporary.demo is not None:
+        temporary.demo.close()        # stops the Gradio server
+    os._exit(0)  
 
 def shutdown_platform():
     """Platform-specific shutdown procedures"""

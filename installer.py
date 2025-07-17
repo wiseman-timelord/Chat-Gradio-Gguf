@@ -659,8 +659,7 @@ def install():
     create_config(BACKEND_TYPE)
     
     print_status(f"{APP_NAME} installation completed successfully!")
-    print("\nYou can now run the application using:")
-    print(f"  {'Chat-Gradio-Gguf.bat' if PLATFORM == 'windows' else './Chat-Gradio-Gguf.sh'}")
+    print("\nYou can now run the application from option 1 on the Bash/Batch Menu\n")
 
 if __name__ == "__main__":
     try:
