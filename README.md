@@ -228,6 +228,7 @@ project_root/
 ```
 
 # Development
+1. error with "Copy Output".
 1. there is annoying glitchy graphic objects when typing input to the model.
 2. the Speech option did not work in linux.
 1. windows mode requires testing/bugfixing.
