@@ -1,7 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 <br>Status: Beta
-- Ubuntu mode working best in v0.71. working means it works, on my machine and with the models I tested and for normal chat.
-- Windows mode untested, if v0.71 doesnt work, then try A068.
+- Ubuntu/Linux mode working best in latest version. working here means it works, on my machine in chat/websearch with the model Dyanka 8b.
+- Windows mode untested with latest release, currently A068 is verified all features fully-working but windows only.
 - This project is actively worked on, check back later for fully working/tested version (see, Development section and release notes).
 
 ## Description
