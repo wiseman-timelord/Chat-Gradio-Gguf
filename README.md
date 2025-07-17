@@ -1,8 +1,9 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 <br>Status: Beta
-- Ubuntu/Linux mode working best in latest version. working here means it works, on my machine in chat/websearch with the model Dyanka 8b.
-- Windows mode untested with latest release, currently A068 is verified all features fully-working but windows only.
+- Ubuntu/Linux mode working best in latest Release version.
+- Windows mode untested with latest release, currently A068 is verified all features working but A068 is windows only.
 - This project is actively worked on, check back later for progress, I try to release every 2 significant updates (see, Development section and release notes).
+- By "working" I mean briefly tested in chat/websearch with, the model Dyanka 8b and the backend Vulkan and a 8GB AMD card.
 
 ## Description
 The goal is a chatbot, that is simpler to configure than `TextGeneration-Webui`, while having features I want ie, attach, session history, speech, websearch, step back. Programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. It will have web features, but will not feature online services requiring registration, and everything is privatly run on your own hardware with your own models. 
