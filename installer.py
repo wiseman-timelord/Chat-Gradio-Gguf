@@ -98,7 +98,7 @@ REQUIREMENTS = [
     "pyperclip",
     "yake",
     "psutil",
-    "duckduckgo-search",
+    "ddgs",
     "newspaper3k",
     "llama-cpp-python",
     "langchain-community==0.3.18",
