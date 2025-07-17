@@ -229,6 +229,7 @@ project_root/
 ```
 
 # Development
+1. there are serious issues with RAG, check the previous session in KIMI K2, the initial prompt to fix is already done.
 1. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
 1. there is annoying glitchy graphic objects when typing input to the model.
 2. the Speech option did not work in linux.
