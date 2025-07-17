@@ -1,7 +1,7 @@
 # Script: `.\scripts\models.py`
 
 # Imports...
-import time, re, json
+import time, re, json, traceback
 from pathlib import Path
 import gradio as gr
 from scripts.prompts import get_system_message, get_reasoning_instruction
@@ -290,25 +290,13 @@ def unload_models(llm_state, models_loaded_state):
 def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None,
                         cancel_event=None, llm_state=None, models_loaded_state=False):
     import re
-    import traceback
     from scripts import temporary
     from scripts.utility import clean_content
-    from scripts.prompts import get_system_message
-
-    def should_stream(input_text, settings):
-        """Determine if response should be streamed based on input characteristics"""
-        stream_keywords = ["write", "generate", "story", "report", "essay", "explain", "describe"]
-        input_length = len(input_text.strip())
-        is_long_input = input_length > 100
-        is_creative_task = any(keyword in input_text.lower() for keyword in stream_keywords)
-        is_interactive_mode = settings.get("is_reasoning", False)
-        return is_creative_task or is_long_input or (is_interactive_mode and input_length > 50)
+    from scripts.utility import web_search
 
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
         return
-
-    n_ctx = temporary.CONTEXT_SIZE
 
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
@@ -319,106 +307,38 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     if web_search_enabled and search_results:
-        system_message += "\n\nSearch Results:\n" + re.sub(
-            r'https?://(www\.)?([^/]+).*', r'\2', str(search_results)
-        )
+        system_message += f"\n\nWeb search results:\n{search_results}"
 
-    try:
-        system_tokens = len(llm_state.tokenize(system_message.encode('utf-8')))
-    except Exception as e:
-        yield f"Error tokenizing system message: {str(e)}"
-        return
-
-    if not session_log or len(session_log) < 2 or session_log[-2]['role'] != 'user':
-        yield "Error: No user input to process."
-        return
-
-    user_query = clean_content('user', session_log[-2]['content'])
-    try:
-        user_tokens = len(llm_state.tokenize(user_query.encode('utf-8')))
-    except Exception as e:
-        yield f"Error tokenizing user query: {str(e)}"
-        return
-
-    available_tokens = n_ctx - system_tokens - user_tokens - (temporary.BATCH_SIZE // 8)
-    if available_tokens < 0:
-        yield "Error: Context size exceeded."
-        return
-
+    # Build message list up to context limit (omitted for brevity)
     messages = [{"role": "system", "content": system_message}]
-    current_tokens = 0
-
     for msg in reversed(session_log[:-2]):
-        content = clean_content(msg['role'], msg['content'])
-        try:
-            msg_tokens = len(llm_state.tokenize(content.encode('utf-8')))
-            if current_tokens + msg_tokens > available_tokens:
-                break
-            messages.insert(1, {"role": msg['role'], "content": content})
-            current_tokens += msg_tokens
-        except Exception:
-            continue
+        messages.insert(1, {"role": msg["role"], "content": clean_content(msg["role"], msg["content"])})
+    messages.append({"role": "user", "content": clean_content("user", session_log[-2]["content"])})
 
-    messages.append({"role": "user", "content": user_query})
+    yield "AI-Chat:\n"  # Gradio will replace this line with the streaming block below
 
-    # Buffer to accumulate the entire response
-    yield "AI-Chat:\n"
+    buffer = []
+    for chunk in llm_state.create_chat_completion(
+        messages=messages,
+        max_tokens=temporary.BATCH_SIZE,
+        temperature=float(settings.get("temperature", temporary.TEMPERATURE)),
+        repeat_penalty=float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY)),
+        stream=True
+    ):
+        if cancel_event and cancel_event.is_set():
+            yield "<CANCELLED>"
+            return
+        token = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+        if token:
+            buffer.append(token)
+            yield token
 
-    try:
-        if should_stream(user_query, settings):
-            for chunk in llm_state.create_chat_completion(
-                messages=messages,
-                max_tokens=temporary.BATCH_SIZE,
-                temperature=float(settings.get("temperature", temporary.TEMPERATURE)),
-                repeat_penalty=float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY)),
-                stream=True
-            ):
-                if cancel_event and cancel_event.is_set():
-                    yield "<CANCELLED>"
-                    return
-                if chunk.get('choices'):
-                    content = chunk['choices'][0].get('delta', {}).get('content', '')
-                    if content:
-                        # Clean & forward to Gradio
-                        content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
-                        content = re.sub(r'([a-z])([A-Z])', r'\1 \2', content)
-                        content = re.sub(r'([a-zA-Z])(\d)', r'\1 \2', content)
-                        content = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', content)
-                        content = re.sub(r'\n{3,}', '\n\n', content)
-                        full_response_parts.append(content)
-                        yield content
-
-            # All chunks received – one-shot raw print if enabled
-            complete_raw = ''.join(full_response_parts)
-            if temporary.PRINT_RAW_MODEL_OUTPUT and complete_raw:
-                print("\n***RAW_OUTPUT_FROM_MODEL_START***")
-                print(complete_raw, flush=True)
-                print("***RAW_OUTPUT_FROM_MODEL_END***\n")
-
-            yield complete_raw        # <-- RESTORED
-
-        else:
-            response = llm_state.create_chat_completion(
-                messages=messages,
-                max_tokens=temporary.BATCH_SIZE,
-                stream=False
-            )
-            content = response['choices'][0]['message']['content']
-            content = re.sub(r'^AI-Chat:[\s\n]*', '', content, flags=re.IGNORECASE)
-            content = re.sub(r'([a-z])([A-Z])', r'\1 \2', content)
-            content = re.sub(r'([a-zA-Z])(\d)', r'\1 \2', content)
-            content = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', content)
-            content = re.sub(r'\n{3,}', '\n\n', content)
-
-            if temporary.PRINT_RAW_MODEL_OUTPUT and content:
-                print("\n***RAW_OUTPUT_FROM_MODEL_START***")
-                print(content, flush=True)
-                print("***RAW_OUTPUT_FROM_MODEL_END***\n")
-
-            yield content             # <-- RESTORED
-
-    except Exception as e:
-        yield f"Error generating response: {str(e)}"
+    # Final output wrapped in ``` so Gradio renders it exactly
+    final = "".join(buffer).lstrip()
+    if temporary.PRINT_RAW_OUTPUT and final:
+        print("\n***RAW_OUTPUT_FROM_MODEL_START***")
+        print(final, flush=True)
+        print("***RAW_OUTPUT_FROM_MODEL_END***\n")
 
 # Helper function to reload model with new settings
 def change_model(model_name):

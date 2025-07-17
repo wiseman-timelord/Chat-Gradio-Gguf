@@ -1,12 +1,15 @@
 # Script: `.\scripts\utility.py`
 
-# Imports...
+# Imports
 import tempfile
 import re, subprocess, json, time, random, psutil, shutil, os, zipfile, yake, sys
 from pathlib import Path
 from datetime import datetime
-from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from newspaper import Article
+from duckduckgo_search import DDGS
+from duckduckgo_search import DDGS          # pip install duckduckgo-search>=6.0
+from duckduckgo_search.exceptions import DuckDuckGoSearchException
+import requests.exceptions  # For HTTPError and Timeout
 from .models import load_models, clean_content
 import scripts.settings as settings
 from .temporary import (
@@ -14,7 +17,6 @@ from .temporary import (
     current_session_id, session_label
 )
 from . import temporary
-from ddgs import DDGS
 
 # Conditional imports based on platform
 if temporary.PLATFORM == "windows":
@@ -407,43 +409,39 @@ def chunk_text_for_speech(text, max_chars=500):
         chunks.append(' '.join(current_chunk))
     return chunks
 
-def web_search(query: str, num_results: int = 3) -> str:
-    """Perform a web search using DuckDuckGo and extract article content for relevant results."""
+def web_search(query: str, num_results, max_hits: int = 6) -> str:
+    """
+    DuckDuckGo text search that also dumps raw results to terminal
+    when temporary.PRINT_RAW_OUTPUT is True.
+    """
+    import scripts.temporary as tmp           # local import avoids cycles
+
+    if not query.strip():
+        return "Empty query."
+
     try:
-        results = DDGS().text(query, max_results=num_results)
-        if not results:
-            return "No results found."
+        hits = DDGS().text(query, max_results=max_hits)
+    except DuckDuckGoSearchException as e:
+        raw = f"DuckDuckGo error: {e}"
+        if tmp.PRINT_RAW_OUTPUT:
+            print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
+        return raw
 
-        formatted = []
-        links = []
-        for result in results:
-            link = result.get('link', '').strip()
-            if not link:
-                continue
+    if not hits:
+        raw = "DuckDuckGo returned zero results."
+        if tmp.PRINT_RAW_OUTPUT:
+            print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
+        return raw
 
-            domain = re.sub(r'https?://(www\.)?([^/]+).*', r'\2', link)
-            snippet = result.get('snippet', 'No snippet available.').strip()
+    raw = "\n\n".join(
+        f"[{i}] **{h.get('title','')}**\n{h.get('body','')}\n*Source:* <{h.get('href','')}>"
+        for i, h in enumerate(hits, 1)
+    )
 
-            try:
-                article = Article(link)
-                article.download()
-                article.parse()
-                summary = article.text[:500].strip()
-                formatted.append(
-                    f"[{domain}]({link}): {snippet}\n"
-                    f"{summary}..." if summary else f"[{domain}]({link}): {snippet}"
-                )
-                links.append(link)
-            except Exception:
-                formatted.append(f"[{domain}]({link}): {snippet}")
-                links.append(link)
+    if tmp.PRINT_RAW_OUTPUT:
+        print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
 
-        if links:
-            formatted.append("\n\nLinks:\n" + "\n".join([f"- {link}" for link in links]))
-
-        return "\n\n".join(formatted)
-    except Exception as e:
-        return f"Search error: {type(e).__name__} – {str(e)}"
+    return raw
 
 def summarize_document(file_path):
     """Summarize the contents of a document using YAKE, up to 100 characters."""
@@ -501,28 +499,6 @@ def delete_all_session_histories():
         except Exception as e:
             print(f"Error deleting {file}: {e}")
     return "All session histories deleted."
-
-def extract_links_with_descriptions(text):
-    """Extract URLs from text and generate concise descriptions."""
-    import re
-    links = re.findall(r'(https?://\S+)', text)
-    if not links:
-        return ""
-    descriptions = []
-    for link in links:
-        desc_prompt = f"Provide a one-sentence description for the following link: {link}"
-        try:
-            response = temporary.llm.create_chat_completion(
-                messages=[{"role": "user", "content": desc_prompt}],
-                max_tokens=50,
-                temperature=0.5,
-                stream=False
-            )
-            description = response['choices'][0]['message']['content'].strip()
-            descriptions.append(f"{link}: {description}")
-        except Exception as e:
-            descriptions.append(f"{link}: Unable to generate description due to {str(e)}")
-    return "\n".join(descriptions)
 
 def get_saved_sessions():
     """Get list of saved session files sorted by modification time."""

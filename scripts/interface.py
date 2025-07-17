@@ -90,7 +90,7 @@ def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, prin
     temporary.SELECTED_GPU = gpu
     temporary.SELECTED_CPU = cpu  # Add this line
     temporary.MODEL_NAME = model
-    temporary.PRINT_RAW_MODEL_OUTPUT = bool(print_raw)
+    temporary.PRINT_RAW_OUTPUT = bool(print_raw)
     status_message = (
         f"Updated settings: Context Size={ctx}, Batch Size={batch}, "
         f"Temperature={temp}, Repeat Penalty={repeat}, VRAM Size={vram}, "
@@ -147,15 +147,25 @@ def format_response(output: str) -> str:
     think_blocks = re.findall(r'<think>(.*?)</think>', output, re.DOTALL)
     for thought in think_blocks:
         formatted.append(f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>')
-    
+
     # Process remaining content
     clean_output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL)
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
     for lang, code in code_blocks:
         lexer = get_lexer_by_name(lang, stripall=True)
         formatted_code = highlight(code, lexer, HtmlFormatter())
-        output = output.replace(f'```{lang}\n{code}```', formatted_code)
-    return '<br>'.join(formatted) + final_output
+        clean_output = clean_output.replace(f'```{lang}\n{code}```', formatted_code)
+
+    # Collapse multiple new-lines and trim
+    clean_output = clean_output.strip()
+    clean_output = re.sub(r'\n{2,}', '\n', clean_output)   # remove double blanks
+    clean_output = clean_output.replace('\n', '<br>')      # single <br> per line-break
+
+    # Combine think blocks (if any) with the cleaned answer
+    if formatted:
+        return '<br>'.join(formatted) + '<br><br>' + clean_output
+    else:
+        return clean_output
 
 def get_initial_model_value():
     available_models = temporary.AVAILABLE_MODELS or get_available_models()
@@ -563,11 +573,13 @@ async def conversation_interface(
                 original_input,
                 num_results=3
             )
-            status = "✅ Web search completed." if search_results else "⚠️ No relevant results."
+            status = "✅ Web search completed." if search_results and "No results" not in search_results else "⚠️ No relevant results. Try more specific keywords."
+            if "No results" in search_results:
+                search_results = None  # Prevent injecting error messages into prompt
         except Exception as e:
-            search_results = f"Search error: {str(e)}"
-            status = "⚠️ Search failed"
-        
+            search_results = None
+            status = f"⚠️ Search failed: {str(e)}. Try refining your query."
+
         session_log[-1]['content'] = f"AI-Chat:\n{status}"
         yield (
             session_log,
@@ -580,7 +592,7 @@ async def conversation_interface(
             gr.update(),
             gr.update()
         )
-
+    
     # Set up streaming with enhanced error handling
     q = queue.Queue()
     cancel_event = threading.Event()
@@ -949,8 +961,8 @@ def launch_interface():
                             scale=5
                         )
                         config_components["print_raw"] = gr.Checkbox(
-                            label="Print raw model output to terminal",
-                            value=temporary.PRINT_RAW_MODEL_OUTPUT,
+                            label="Print raw output to terminal",
+                            value=temporary.PRINT_RAW_OUTPUT,
                             scale=5
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -1034,7 +1046,7 @@ def launch_interface():
         )
 
         config_components["print_raw"].change(
-            fn=lambda v: setattr(temporary, "PRINT_RAW_MODEL_OUTPUT", bool(v)),
+            fn=lambda v: setattr(temporary, "PRINT_RAW_OUTPUT", bool(v)),
             inputs=[config_components["print_raw"]],
             outputs=[]
         )
@@ -1322,7 +1334,7 @@ def launch_interface():
             inputs=[],
             outputs=[config_components["cpu_threads"]]
         ).then(
-            fn=lambda: gr.update(value=temporary.PRINT_RAW_MODEL_OUTPUT),
+            fn=lambda: gr.update(value=temporary.PRINT_RAW_OUTPUT),
             inputs=[],
             outputs=[config_components["print_raw"]]
         ).then(

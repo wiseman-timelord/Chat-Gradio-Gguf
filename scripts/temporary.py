@@ -68,7 +68,7 @@ MID_SEPARATOR = "-" * 30
 ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}
 MAX_POSSIBLE_HISTORY_SLOTS = 16
 MAX_POSSIBLE_ATTACH_SLOTS = 10
-PRINT_RAW_MODEL_OUTPUT = False
+PRINT_RAW_OUTPUT = False
 demo = None
 
 # Status text entries  

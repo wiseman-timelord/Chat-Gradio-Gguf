@@ -23,7 +23,7 @@ DEFAULTS = {
     "MAX_ATTACH_SLOTS": 8,
     "SESSION_LOG_HEIGHT": 650,
     "INPUT_LINES": 27,
-    "PRINT_RAW_MODEL_OUTPUT": False,
+    "PRINT_RAW_OUTPUT": False,
     "VRAM_OPTIONS": [2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536],
     "CTX_OPTIONS": [8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072],
     "BATCH_OPTIONS": [128, 256, 512, 1024, 2048, 4096],
@@ -68,7 +68,7 @@ def load_config():
             "max_history_slots": "MAX_HISTORY_SLOTS",
             "max_attach_slots": "MAX_ATTACH_SLOTS",
             "session_log_height": "SESSION_LOG_HEIGHT",
-            "print_raw_model_output": "PRINT_RAW_MODEL_OUTPUT",
+            "print_raw_output": "PRINT_RAW_OUTPUT",
             "cpu_threads": "CPU_THREADS",
         }.items():
             if key in model_settings:
@@ -128,7 +128,7 @@ def save_config():
             "max_history_slots": temporary.MAX_HISTORY_SLOTS,
             "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
             "session_log_height": temporary.SESSION_LOG_HEIGHT,
-            "print_raw_model_output": temporary.PRINT_RAW_MODEL_OUTPUT,
+            "print_raw_output": temporary.PRINT_RAW_OUTPUT,
             "cpu_threads": temporary.CPU_THREADS,
         },
         "backend_config": {
