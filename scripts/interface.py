@@ -765,6 +765,7 @@ def launch_interface():
         .scrollable .message { white-space: pre-wrap; word-break: break-word; }
         """
     ) as demo:
+        temporary.demo = demo        # keep global handle
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
         states = dict(
             attached_files=gr.State([]),
@@ -828,8 +829,10 @@ def launch_interface():
                         scale=20
                     )
                     temporary.global_status = global_status
-                    exit_button = gr.Button("Exit", variant="stop", elem_classes=["double-height"], scale=1 , min_width=110)
-                    exit_button.click(fn=shutdown_program, inputs=[states["llm"], states["models_loaded"], conversation_components["session_log"], states["attached_files"]])
+
+                    exit_config = gr.Button(
+                        "⏻ Exit", variant="stop", elem_classes=["double-height"], scale=1
+                    )
 
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
@@ -987,12 +990,6 @@ def launch_interface():
                             scale=20
                         )
                         temporary.global_status = global_status
-                        exit_config = gr.Button(
-                            "⏻ Exit", 
-                            variant="stop", 
-                            elem_classes=["double-height"], 
-                            scale=1
-                        )
 
         def handle_edit_previous(session_log):
             if len(session_log) < 2:
