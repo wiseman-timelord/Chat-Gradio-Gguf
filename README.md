@@ -82,36 +82,9 @@ Installing Chat-Gradio-Gguf on linux...
 [✓] Verified virtual environment setup
 [✓] Installing Python dependencies...
 Requirement already satisfied: pip in ./.venv/lib/python3.13/site-packages (25.0)
-Collecting pip
-  Using cached pip-25.1.1-py3-none-any.whl.metadata (3.6 kB)
-Using cached pip-25.1.1-py3-none-any.whl (1.8 MB)
-Installing collected packages: pip
-  Attempting uninstall: pip
-    Found existing installation: pip 25.0
-    Uninstalling pip-25.0:
-      Successfully uninstalled pip-25.0
-Successfully installed pip-25.1.1
-[✓] Upgraded pip successfully
-[✓] Installing system dependencies for tkinter...
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-python3-tk is already the newest version (3.13.3-1).
-python3.13-tk is already the newest version (3.13.3-1ubuntu0.2).
-Solving dependencies... Done
-0 upgraded, 0 newly installed, 0 to remove and 37 not upgraded.
-[✓] System dependencies for tkinter installed
-[✓] Verifying tkinter installation...
-Tkinter verified
-[✓] Tkinter verified with Python 3.13
-[✓] Installing Python packages...
-Collecting gradio>=4.25.0
-  Using cached gradio-5.36.2-py3-none-any.whl.metadata (16 kB)
 ...
 
 ...
-Requirement already satisfied: MarkupSafe>=2.0 in ./.venv/lib/python3.13/site-packages (from jinja2>=2.11.3->llama-cpp-python) (3.0.2)
-[✓] llama-cpp-python installed successfully
 [✓] Python dependencies installation completed
 [✓] Downloading llama.cpp (GPU/CPU - Vulkan)...
 Downloading GPU/CPU - Vulkan: [=========================] 100% (19.7MB/19.7MB)
@@ -121,11 +94,10 @@ Extracting: [=========================] 100% (37.0B/37.0B)
 [✓] Copied 16 binary files
 [✓] llama.cpp (GPU/CPU - Vulkan) installed successfully
 [✓] Configuration file created
-[✓] 
-Chat-Gradio-Gguf installation completed successfully!
+[✓] Chat-Gradio-Gguf installation completed successfully!
 
-You can now run the application using:
-  ./Chat-Gradio-Gguf.sh
+You can now run the application with Option 1 on the Bash/Batch Menu.
+
 Deactivated: .venv
 Press Enter to continue...
 ```
