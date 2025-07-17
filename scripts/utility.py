@@ -14,6 +14,7 @@ from .temporary import (
     current_session_id, session_label
 )
 from . import temporary
+from ddgs import DDGS
 
 # Conditional imports based on platform
 if temporary.PLATFORM == "windows":
@@ -409,7 +410,7 @@ def chunk_text_for_speech(text, max_chars=500):
 def web_search(query: str, num_results: int = 3) -> str:
     """Perform a web search using DuckDuckGo and extract article content for relevant results."""
     try:
-        results = DuckDuckGoSearchAPIWrapper().results(query, num_results)
+        results = DDGS().text(query, max_results=num_results)
         if not results:
             return "No results found."
 
