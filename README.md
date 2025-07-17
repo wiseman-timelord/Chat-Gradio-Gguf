@@ -230,7 +230,6 @@ project_root/
 # Development
 1. Output looks ok, but why is it printing it wrong in the session log then fixing it, while in the terminal it is fixed. Surely it should be other way round because the session log needs to fix it, or is the session log printing it wrong to begin with. Possibly the session log can just stream it correctly decoding correct formatting on the fly, instead of some overly complicated process?
 2. the Speech option did not work in linux.
-3. python said something about a new duckduckgo library name. possibly references in, installer and main program, needs updating. 
 1. windows mode requires testing/bugfixing.
 2. No CPU options anymore, but we had to add back in some of the cpu code to get the gpu to work, so possibly add back in the cpu binaries as most of other code is already there.
 3. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
