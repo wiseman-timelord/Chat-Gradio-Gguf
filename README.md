@@ -1,7 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 <br>Status: Beta
-- Ubuntu mode working best in v0.70. working means it works, on my machine and with the models I tested and for normal chat.
-- Windows mode untested, if v0.70 doesnt work, then try A068.
+- Ubuntu mode working best in v0.71. working means it works, on my machine and with the models I tested and for normal chat.
+- Windows mode untested, if v0.71 doesnt work, then try A068.
 - This project is actively worked on, check back later for fully working/tested version (see, Development section and release notes).
 
 ## Description
