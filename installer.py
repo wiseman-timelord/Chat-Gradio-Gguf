@@ -402,7 +402,8 @@ def install_linux_system_dependencies(backend: str) -> bool:
         "libvulkan-dev",
         "espeak",
         "libespeak-dev",
-        "ffmpeg"  # For potential audio processing
+        "ffmpeg",  # For potential audio processing
+        "xclip"
     ]
     
     optional_packages = [
@@ -657,7 +658,7 @@ def install():
             sys.exit(1)
     
     create_config(BACKEND_TYPE)
-    
+ 
     print_status(f"{APP_NAME} installation completed successfully!")
     print("\nYou can now run the application from option 1 on the Bash/Batch Menu\n")
 
