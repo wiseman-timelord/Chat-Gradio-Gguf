@@ -98,7 +98,7 @@ REQUIREMENTS = [
     "pyperclip",
     "yake",
     "psutil",
-    "ddgs",
+    "duckduckgo-search",
     "newspaper3k",
     "llama-cpp-python",
     "langchain-community==0.3.18",
@@ -206,7 +206,7 @@ def build_config(backend: str) -> dict:
             "dynamic_gpu_layers": True,
             "max_history_slots": 12,
             "max_attach_slots": 6,
-            "print_raw_model_output": False,
+            "print_raw_output": False,
             "session_log_height": 500
         },
         "backend_config": {
