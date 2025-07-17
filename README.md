@@ -228,7 +228,7 @@ project_root/
 ```
 
 # Development
-1. Output looks ok, but why is it printing it wrong in the session log then fixing it, while in the terminal it is fixed. Surely it should be other way round because the session log needs to fix it, or is the session log printing it wrong to begin with. Possibly the session log can just stream it correctly decoding correct formatting on the fly, instead of some overly complicated process?
+1. there is annoying glitchy graphic objects when typing input to the model.
 2. the Speech option did not work in linux.
 1. windows mode requires testing/bugfixing.
 2. No CPU options anymore, but we had to add back in some of the cpu code to get the gpu to work, so possibly add back in the cpu binaries as most of other code is already there.
