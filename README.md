@@ -228,7 +228,6 @@ project_root/
 ```
 
 # Development
-1. error with "Copy Output".
 1. there is annoying glitchy graphic objects when typing input to the model.
 2. the Speech option did not work in linux.
 1. windows mode requires testing/bugfixing.
@@ -238,6 +237,7 @@ project_root/
 4. Need to optimize streaming output and relating displaying of text/animations. Design needs work, doesnt work how I want.
 5. The stop button wont work because the button freezes during certain/all phases of generation. Or just change the message from "Cancel Sending" to "Please Wait".
 6. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
+7. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently.
 7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
 - a row with a square box, that visualizes the thinking/generation, in some simple method, that is somehow interesting, and under that, a row with a buttton to turn "Visualize" ON/OFF.
 - a row with 3 boxes each with 1 stat for generation speed/whatever else is typically of interest to people.
