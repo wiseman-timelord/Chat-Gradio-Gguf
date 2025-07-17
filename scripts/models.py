@@ -362,7 +362,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     messages.append({"role": "user", "content": user_query})
 
     # Buffer to accumulate the entire response
-    full_response_parts = []
+    yield "AI-Chat:\n"
 
     try:
         if should_stream(user_query, settings):
@@ -395,8 +395,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 print(complete_raw, flush=True)
                 print("***RAW_OUTPUT_FROM_MODEL_END***\n")
 
-            # Final yield so caller can replace the bubble with fully-formatted text
-            yield complete_raw
+            yield complete_raw        # <-- RESTORED
 
         else:
             response = llm_state.create_chat_completion(
@@ -416,7 +415,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 print(content, flush=True)
                 print("***RAW_OUTPUT_FROM_MODEL_END***\n")
 
-            yield content
+            yield content             # <-- RESTORED
 
     except Exception as e:
         yield f"Error generating response: {str(e)}"

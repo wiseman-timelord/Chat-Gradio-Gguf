@@ -376,15 +376,15 @@ def format_session_id(session_id):
 
 def update_action_button(phase):
     if phase == "waiting_for_input":
-        return gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True)
+        return gr.update(value="Send Input..", variant="secondary", elem_classes=["send-button-green"], interactive=True)
     elif phase == "afterthought_countdown":
-        return gr.update(value="Cancel Submission", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
+        return gr.update(value="..Input Submitted..", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
     elif phase == "generating_response":
-        return gr.update(value="Wait For Response", variant="secondary", elem_classes=["send-button-red"], interactive=True)  # Interactive for cancellation
+        return gr.update(value="..Wait For Response..", variant="secondary", elem_classes=["send-button-red"], interactive=True)  # Interactive for cancellation
     elif phase == "speaking":
-        return gr.update(value="Outputting Speak", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
+        return gr.update(value="..Outputting Speak", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
     else:
-        return gr.update(value="Unknown Phase", variant="secondary", elem_classes=["send-button-green"], interactive=False)
+        return gr.update(value="..Unknown Phase..", variant="secondary", elem_classes=["send-button-green"], interactive=False)
 
 def update_cpu_threads_display():
     """Update the CPU threads slider display based on detected threads"""
@@ -604,12 +604,10 @@ async def conversation_interface(
                     break
                 
                 # Clean and process the chunk
-                clean_chunk = re.sub(r'^AI-Chat:\s*', '', chunk, flags=re.IGNORECASE)
-                clean_chunk = re.sub(r'\n{2,}', '\n', clean_chunk).strip()
-                if clean_chunk:
-                    q.put(clean_chunk)
+                q.put(chunk)
             
             q.put(None)  # Signal completion
+            
         except Exception as e:
             error_occurred = True
             error_msg = f"Error generating response: {str(e)}"
@@ -684,21 +682,6 @@ async def conversation_interface(
                 await asyncio.sleep(0.01)
             else:
                 break  # Thread finished but didn't signal completion
-
-    # Finalize response
-    if visible_response and not error_occurred:
-        # Clean once and overwrite the last assistant bubble
-        cleaned = filter_operational_content(visible_response)
-        cleaned = re.sub(r'^AI-Chat:\s*', '', cleaned, flags=re.I).strip()
-
-        # Optional link extraction (keep existing logic if you like)
-        links_match = re.search(r'\nLinks:\n(.*?)$', cleaned, re.DOTALL)
-        if links_match:
-            links_block = links_match.group(1).strip()
-            cleaned = re.sub(r'\nLinks:\n.*?$', '', cleaned, flags=re.DOTALL).strip()
-            cleaned += f"\n\nLinks:\n{links_block}"
-
-        session_log[-1]['content'] = f"AI-Chat:\n{cleaned}"
         
         # Handle speech synthesis if enabled
         if speech_enabled:
