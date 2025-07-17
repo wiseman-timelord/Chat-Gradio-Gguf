@@ -28,7 +28,7 @@ if PLATFORM == "windows":
         "yake",
         "psutil",
         "pywin32",
-        "duckduckgo-search",
+        "ddgs",
         "newspaper3k",
         "llama-cpp-python",
         "langchain-community==0.3.18",
@@ -50,7 +50,8 @@ elif PLATFORM == "linux":
         "langchain-community==0.3.18",
         "pygments==2.17.2",
         "lxml",  # Replaced lxml_html_clean
-        "pyttsx3"
+        "pyttsx3",
+        "xclip"
     ]
     # Note: python3-tk is a system package on Linux
 
