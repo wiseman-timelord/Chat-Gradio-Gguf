@@ -114,31 +114,6 @@ if PLATFORM == "windows":
 elif PLATFORM == "linux":
     REQUIREMENTS.append("python3-tk")  # Required for tkinter
 
-CONFIG_TEMPLATE = """{
-    "model_settings": {
-        "model_dir": "models",
-        "model_name": "",
-        "context_size": 8192,
-        "temperature": 0.66,
-        "repeat_penalty": 1.1,
-        "use_python_bindings": false,
-        "llama_cli_path": "data/llama-vulkan-bin/llama-cli.exe",
-        "vram_size": 8192,
-        "selected_gpu": null,
-        "mmap": true,
-        "mlock": true,
-        "n_batch": 2048,
-        "dynamic_gpu_layers": true,
-        "max_history_slots": 12,
-        "max_attach_slots": 6,
-        "session_log_height": 500
-    },
-    "backend_config": {
-        "backend_type": "GPU/CPU - Vulkan",
-        "llama_bin_path": "data/llama-vulkan-bin"
-    }
-}"""
-
 # Utility functions
 def print_header(title: str) -> None:
     os.system('clear' if PLATFORM == "linux" else 'cls')
@@ -207,23 +182,48 @@ def create_directories() -> None:
             print_status(f"Permission denied for: {dir_path}", False)
             sys.exit(1)
 
+def build_config(backend: str) -> dict:
+    """
+    Build a complete, backend-specific configuration dictionary
+    that will be written to data/persistent.json
+    """
+    info = BACKEND_OPTIONS[backend]
+    cli_relative = f"{info['dest']}/llama-cli{'.exe' if PLATFORM == 'windows' else ''}"
+    return {
+        "model_settings": {
+            "model_dir": "models",
+            "model_name": "",
+            "context_size": 8192,
+            "temperature": 0.66,
+            "repeat_penalty": 1.1,
+            "use_python_bindings": info["needs_python_bindings"],
+            "llama_cli_path": str(BASE_DIR / cli_relative),
+            "vram_size": 8192,
+            "selected_gpu": None,
+            "mmap": True,
+            "mlock": True,
+            "n_batch": 2048,
+            "dynamic_gpu_layers": True,
+            "max_history_slots": 12,
+            "max_attach_slots": 6,
+            "print_raw_model_output": False,
+            "session_log_height": 500
+        },
+        "backend_config": {
+            "backend_type": backend,
+            "llama_bin_path": info["dest"],
+            "cuda_required": info.get("cuda_required", False),
+            "vulkan_required": info.get("vulkan_required", False)
+        }
+    }
+
 def create_config(backend: str) -> None:
     config_path = BASE_DIR / "data" / "persistent.json"
-    config = json.loads(CONFIG_TEMPLATE)
-    backend_info = BACKEND_OPTIONS[backend]
-    
-    config["backend_config"]["backend_type"] = backend
-    config["backend_config"]["llama_bin_path"] = backend_info.get("dest", "")
-    config["model_settings"]["use_python_bindings"] = backend_info["needs_python_bindings"]
-    
-    if not backend_info["needs_python_bindings"]:
-        config["model_settings"]["llama_cli_path"] = str(BASE_DIR / backend_info["cli_path"])
-    else:
-        config["model_settings"]["llama_cli_path"] = None
-    
+    config = build_config(backend)
+
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, 'w') as f:
+        with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
         print_status("Configuration file created")
     except Exception as e:
@@ -658,7 +658,7 @@ def install():
     
     create_config(BACKEND_TYPE)
     
-    print_status(f"\n{APP_NAME} installation completed successfully!")
+    print_status(f"{APP_NAME} installation completed successfully!")
     print("\nYou can now run the application using:")
     print(f"  {'Chat-Gradio-Gguf.bat' if PLATFORM == 'windows' else './Chat-Gradio-Gguf.sh'}")
 
