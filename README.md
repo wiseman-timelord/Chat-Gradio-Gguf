@@ -2,7 +2,7 @@
 <br>Status: Beta
 - Ubuntu mode working best in v0.70. working means it works, on my machine and with the models I tested and for normal chat.
 - Windows mode untested, if v0.70 doesnt work, then try A068.
-- Check back for fully working/tested version (see Development section).
+- This project is actively worked on, check back later for fully working/tested version (see, Development section and release notes).
 
 ## Description
 The goal is a chatbot, that is simpler to configure than `TextGeneration-Webui`, while having features I want ie, attach, session history, speech, websearch, step back. Programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. It will have web features, but will not feature online services requiring registration, and everything is privatly run on your own hardware with your own models. 
