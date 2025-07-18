@@ -93,7 +93,7 @@ elif PLATFORM == "linux":
 
 # CPU-only packages
 CPU_ONLY_REQ = [
-    "gradio>=4.25.0",
+    "gradio",
     "requests==2.31.0",
     "pyperclip",
     "yake",
@@ -114,7 +114,7 @@ CPU_ONLY_REQ = [
 
 # CUDA packages
 CUDA_REQ = [
-    "gradio>=4.25.0",
+    "gradio",
     "requests==2.31.0",
     "pyperclip",
     "yake",
@@ -515,33 +515,41 @@ def install_python_deps(backend: str) -> bool:
             except subprocess.CalledProcessError as e:
                 print_status(f"Failed to install tk for Windows: {e}", False)
 
-        # Install Python packages (excluding python3-tk)
+        # ---------- decide which list to use ----------
         use_cuda = BACKEND_OPTIONS[backend].get("cuda_required", False)
-        requirements = CUDA_REQ if use_cuda else CPU_ONLY_REQ
-        
-        index_url = (
-            "https://download.pytorch.org/whl/cpu"
-            if not use_cuda
-            else None
-        )
+        requirements = CUDA_REQ[:] if use_cuda else CPU_ONLY_REQ[:]
 
-        print_status("Installing Python packages...")
-        for req in requirements:
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    cmd = [pip_exe, "install", req]
-                    if index_url:
-                        cmd.extend(["--index-url", index_url])
-                    subprocess.run(cmd, check=True)
-                    print_status(f"Installed {req}")
-                    break
-                except subprocess.CalledProcessError as e:
-                    if attempt == max_retries - 1:
-                        print_status(f"Failed to install {req} after {max_retries} attempts: {e}", False)
-                        continue
-                    print_status(f"Retrying {req} (attempt {attempt + 2}/{max_retries})", False)
-                    time.sleep(2)
+        # ---------- helper: install with retries ----------
+        def _install(reqs, extra_args=None):
+            for req in reqs:
+                cmd = [pip_exe, "install", req]
+                if extra_args:
+                    cmd.extend(extra_args)
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        subprocess.run(cmd, check=True)
+                        print_status(f"Installed {req}")
+                        break
+                    except subprocess.CalledProcessError as e:
+                        if attempt == max_retries - 1:
+                            print_status(f"Failed to install {req} after {max_retries} attempts: {e}", False)
+                            return False
+                        print_status(f"Retrying {req} (attempt {attempt + 2}/{max_retries})", False)
+                        time.sleep(2)
+            return True
+
+        # ---------- step 1: install everything except torch ----------
+        non_torch = [r for r in requirements if not r.startswith("torch")]
+        if not _install(non_torch):
+            return False
+
+        # ---------- step 2: install torch (with index if CPU) ----------
+        torch_args = ["--index-url", "https://download.pytorch.org/whl/cpu"] if not use_cuda else []
+        if not _install(["torch"], extra_args=torch_args):
+            return False
+        if not _install(["sentence-transformers>=2.3.0"], extra_args=torch_args):
+            return False
 
         # Install llama-cpp-python with appropriate backend
         print_status("Installing llama-cpp-python...")
