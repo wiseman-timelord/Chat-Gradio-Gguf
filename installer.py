@@ -91,17 +91,43 @@ elif PLATFORM == "linux":
         }
     }
 
-# Python dependencies
-REQUIREMENTS = [
+# CPU-only packages
+CPU_ONLY_REQ = [
     "gradio>=4.25.0",
     "requests==2.31.0",
     "pyperclip",
     "yake",
     "psutil",
-    "duckduckgo-search",
+    "ddgs",
     "newspaper3k",
     "llama-cpp-python",
-    "langchain-community==0.3.18",
+    "langchain-community>=0.3.18",
+    "faiss-cpu>=1.8.0",
+    # RAG stack, CPU build
+    "torch",                   # ← plain package name
+    "sentence-transformers>=2.3.0"
+    "langchain>=0.3.18",
+    "pygments==2.17.2",
+    "lxml[html_clean]",
+    "pyttsx3"
+]
+
+# CUDA packages
+CUDA_REQ = [
+    "gradio>=4.25.0",
+    "requests==2.31.0",
+    "pyperclip",
+    "yake",
+    "psutil",
+    "ddgs",
+    "newspaper3k",
+    "llama-cpp-python[cuda]",
+    "langchain-community>=0.3.18",
+    "faiss-cpu>=1.8.0",
+    # RAG stack, CUDA build
+    "torch",
+    "sentence-transformers>=2.3.0",
+    "langchain>=0.3.18",
     "pygments==2.17.2",
     "lxml[html_clean]",
     "pyttsx3"
@@ -109,10 +135,13 @@ REQUIREMENTS = [
 
 # Add platform-specific requirements
 if PLATFORM == "windows":
-    REQUIREMENTS.append("pywin32")
-    REQUIREMENTS.append("tk") 
+    CPU_ONLY_REQ.append("pywin32")
+    CPU_ONLY_REQ.append("tk")
+    CUDA_REQ.append("pywin32")
+    CUDA_REQ.append("tk")
 elif PLATFORM == "linux":
-    REQUIREMENTS.append("python3-tk")  # Required for tkinter
+    CPU_ONLY_REQ.append("python3-tk")
+    CUDA_REQ.append("python3-tk")
 
 # Utility functions
 def print_header(title: str) -> None:
@@ -487,14 +516,24 @@ def install_python_deps(backend: str) -> bool:
                 print_status(f"Failed to install tk for Windows: {e}", False)
 
         # Install Python packages (excluding python3-tk)
-        requirements = [req for req in REQUIREMENTS if req != "python3-tk"]
+        use_cuda = BACKEND_OPTIONS[backend].get("cuda_required", False)
+        requirements = CUDA_REQ if use_cuda else CPU_ONLY_REQ
         
+        index_url = (
+            "https://download.pytorch.org/whl/cpu"
+            if not use_cuda
+            else None
+        )
+
         print_status("Installing Python packages...")
         for req in requirements:
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    subprocess.run([pip_exe, "install", req], check=True)
+                    cmd = [pip_exe, "install", req]
+                    if index_url:
+                        cmd.extend(["--index-url", index_url])
+                    subprocess.run(cmd, check=True)
                     print_status(f"Installed {req}")
                     break
                 except subprocess.CalledProcessError as e:
