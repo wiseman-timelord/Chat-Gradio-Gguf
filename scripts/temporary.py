@@ -3,7 +3,7 @@
 # Imports
 import time
 from scripts.prompts import prompt_templates
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 import faiss
 import numpy as np
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -80,7 +80,7 @@ demo = None
 # Rag CONSTANTS
 RAG_CHUNK_SIZE_DIVIDER = 4          # typo fix
 RAG_CHUNK_OVERLAP_DIVIDER = 32      # typo fix
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"   # 384-dim, 22 MB
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 # Status text entries  
 STATUS_MESSAGES = {
@@ -125,11 +125,12 @@ current_model_settings = {
 class ContextInjector:
     """
     End-to-end RAG:
-      - ingest files ? chunks ? embeddings ? FAISS
+      - ingest files → chunks → embeddings → FAISS
       - retrieve top-k relevant chunks for a query
     """
     def __init__(self):
-        self.embedding = SentenceTransformer(EMBEDDING_MODEL_NAME)
+        # CPU-only embedding
+        self.embedding = TextEmbedding(EMBEDDING_MODEL_NAME)
         self.index = None          # faiss index
         self.chunks = []           # parallel list to index
 
@@ -161,7 +162,8 @@ class ContextInjector:
             return
 
         texts = [d.page_content for d in all_docs]
-        embeddings = self.embedding.encode(texts, show_progress_bar=False)
+        # fastembed returns np.ndarray already
+        embeddings = self.embedding.embed(texts)
         embeddings = np.array(embeddings).astype('float32')
 
         self.index = faiss.IndexFlatIP(embeddings.shape[1])  # cosine via inner-product
@@ -175,12 +177,14 @@ class ContextInjector:
         """Return top-k most relevant chunks concatenated as string."""
         if self.index is None or not query.strip():
             return None
-        q_vec = self.embedding.encode([query], show_progress_bar=False)
+        q_vec = self.embedding.embed([query])
         q_vec = np.array(q_vec).astype('float32')
         faiss.normalize_L2(q_vec)
         scores, idxs = self.index.search(q_vec, k)
         top = [self.chunks[i] for i in idxs[0] if i < len(self.chunks)]
         return "\n\n".join(top)
+
+context_injector = ContextInjector()
 
 # Status Updater
 def set_status(msg: str, console=False):
