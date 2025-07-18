@@ -6,9 +6,8 @@ import re, subprocess, json, time, random, psutil, shutil, os, zipfile, yake, sy
 from pathlib import Path
 from datetime import datetime
 from newspaper import Article
-from duckduckgo_search import DDGS
-from duckduckgo_search import DDGS          # pip install duckduckgo-search>=6.0
-from duckduckgo_search.exceptions import DuckDuckGoSearchException
+from ddgs import DDGS
+from ddgs.exceptions import DDGSException
 import requests.exceptions  # For HTTPError and Timeout
 from .models import load_models, clean_content
 import scripts.settings as settings
@@ -421,7 +420,7 @@ def web_search(query: str, num_results, max_hits: int = 6) -> str:
 
     try:
         hits = DDGS().text(query, max_results=max_hits)
-    except DuckDuckGoSearchException as e:
+    except DDGSException as e:
         raw = f"DuckDuckGo error: {e}"
         if tmp.PRINT_RAW_OUTPUT:
             print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
@@ -505,6 +504,14 @@ def get_saved_sessions():
     history_dir = Path(HISTORY_DIR)
     session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
     return [f.name for f in session_files]
+
+def create_session_vectorstore(file_paths):
+    """
+    Thin wrapper so interface.py can call the injector transparently.
+    Returns nothing; side-effect is that context_injector now has data.
+    """
+    from scripts.temporary import context_injector
+    context_injector.set_session_vectorstore(file_paths)
 
 def process_files(files, existing_files, max_files, is_attach=True):
     """

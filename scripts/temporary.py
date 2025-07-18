@@ -2,7 +2,13 @@
 
 # Imports
 import time
-from scripts.prompts import prompt_templates 
+from scripts.prompts import prompt_templates
+from sentence_transformers import SentenceTransformer
+import faiss
+import numpy as np
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import TextLoader
+from pathlib import Path
 
 # Configuration variables with defaults
 PLATFORM = None          # will be set by launcher.py
@@ -71,6 +77,11 @@ MAX_POSSIBLE_ATTACH_SLOTS = 10
 PRINT_RAW_OUTPUT = False
 demo = None
 
+# Rag CONSTANTS
+RAG_CHUNK_SIZE_DIVIDER = 4          # typo fix
+RAG_CHUNK_OVERLAP_DIVIDER = 32      # typo fix
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"   # 384-dim, 22 MB
+
 # Status text entries  
 STATUS_MESSAGES = {
     "model_loading": "Loading model...",
@@ -107,14 +118,69 @@ handling_keywords = {
 
 # prompt template table
 current_model_settings = {
-    "category": "chat"  # Simplified; prompt_template removed as it’s not needed
+    "category": "chat"  # prompt_template removed as not needed
 }
 
-# RAG / vector-store placeholder
-class _ContextInjector:
-    def set_session_vectorstore(self, vectorstore):
-        pass           # no-op stub until full RAG is wired up
-context_injector = _ContextInjector()
+# Rag
+class ContextInjector:
+    """
+    End-to-end RAG:
+      - ingest files ? chunks ? embeddings ? FAISS
+      - retrieve top-k relevant chunks for a query
+    """
+    def __init__(self):
+        self.embedding = SentenceTransformer(EMBEDDING_MODEL_NAME)
+        self.index = None          # faiss index
+        self.chunks = []           # parallel list to index
+
+    # ingestion
+    def set_session_vectorstore(self, file_paths):
+        """Create/refresh vector store from list of file paths."""
+        if not file_paths:
+            self.index = None
+            self.chunks = []
+            return
+
+        all_docs = []
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=temporary.CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER,
+            chunk_overlap=temporary.CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
+        )
+        for fp in file_paths:
+            if Path(fp).suffix[1:].lower() not in ALLOWED_EXTENSIONS:
+                continue
+            try:
+                docs = TextLoader(fp).load()
+                all_docs.extend(splitter.split_documents(docs))
+            except Exception as e:
+                print(f"[RAG] Skip {fp}: {e}")
+
+        if not all_docs:
+            self.index = None
+            self.chunks = []
+            return
+
+        texts = [d.page_content for d in all_docs]
+        embeddings = self.embedding.encode(texts, show_progress_bar=False)
+        embeddings = np.array(embeddings).astype('float32')
+
+        self.index = faiss.IndexFlatIP(embeddings.shape[1])  # cosine via inner-product
+        faiss.normalize_L2(embeddings)
+        self.index.add(embeddings)
+        self.chunks = texts
+        print(f"[RAG] Ingested {len(texts)} chunks from {len(file_paths)} files")
+
+    # retrieval
+    def get_relevant_context(self, query, k=4):
+        """Return top-k most relevant chunks concatenated as string."""
+        if self.index is None or not query.strip():
+            return None
+        q_vec = self.embedding.encode([query], show_progress_bar=False)
+        q_vec = np.array(q_vec).astype('float32')
+        faiss.normalize_L2(q_vec)
+        scores, idxs = self.index.search(q_vec, k)
+        top = [self.chunks[i] for i in idxs[0] if i < len(self.chunks)]
+        return "\n\n".join(top)
 
 # Status Updater
 def set_status(msg: str, console=False):
