@@ -9,12 +9,12 @@
 The goal is a chatbot, that is simpler to configure than `TextGeneration-Webui`, while having features I want ie, attach, session history, speech, websearch, step back. Programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is without options reported to make no difference on most models, ensuring a comprehensive yet streamlined experience. It will have web features, but will not feature online services requiring registration, and everything is privatly run on your own hardware with your own models. 
 
 ### Features
-- **Comprihensive CPU/GPU Support**: CPUs AVX2/AVX512 Compatible and GPUs AMD/nVIDIA, with dropdown list selection supporting multi CPU/GPU setup.
-- **Research-Grade Tools**: Includes RAG, web search, chunking, summarization, TOT, no-THINK, and code formatting, and with file attachments. 
+- **Comprihensive GPU Support**: CUDA/Vulkan/ROCm, with dropdown list selection supporting multi CPU/GPU setup.
+- **Research-Grade Tools**: Includes RAG, web search, chunking, THINK, and Markdown formatting, and file attachments. 
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
-- **Configurable Context**: Set model context to 8192-138072, and batch output to 1028-4096.
+- **Configurable Context**: Set model context to 8192-138072, and batch output to 1028-32768.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
-- **Highly Customizable UI**: Configurable; 10-20 Session History slots, 2-10 file slots, Session Log 400-550px height, 2-8 Lines of input. 
+- **Highly Customizable UI**: Configurable; 4-16 Session History slots, 2-10 file slots, Session Log 450-1300px height, 2-8 Lines of input. 
 - **Speak Summaries**: Click `Say Summary` for a special prompt for a concise spoken summary of the generated output. Text to speak uses `PyWin32`.
 - **Attach Files**: Attach Files is complete raw input, there is no Vectorise Files anymore, so the files should ideally be small enough to fit in context. 
 - **Collapsable Left Column**: Like one would find on modern AI interface, but with concise 3 button interface for commonly used buttons. 
@@ -24,7 +24,7 @@ The goal is a chatbot, that is simpler to configure than `TextGeneration-Webui`,
 - **Correct Vulkan Installs**: If Vulkan selected, then, `Windows 7-8 = v1.1.126.0` and `Windows 8.1-11 = v1.4.3.04.1`, avoiding API issues.
 
 ### Preview
-- When Requires are installed, startup looks like this in the command console...
+- When Requires are installed, startup looks like this in the command console (outdated)...
 ```
 ================================================================================
     Chat-Gradio-Gguf: Launcher
@@ -66,7 +66,7 @@ Launching Gradio Interface...
 - The "Configuration" page - for configuration of, models and hardware, and relevant components, as well as ui customization...
 ![preview_image](media/configuration_page.jpg)
 
-- The "Installation" Processes for Ubuntu Linux installation...
+- The "Installation" Processes for Ubuntu Linux installation (outdated)...
 ```
 ================================================================================
     Chat-Gradio-Gguf: Installation
@@ -106,7 +106,7 @@ Press Enter to continue...
 ## Requirements
 - Windows 7-11 - Its a Windows program, batch menu has auto-sized-layout for modern/old OS.
 - Llama.Cpp - Options here for, Vulkan, ROCM, Cuda 11, Cuda 12. Llama.cpp are limiting the options now.
-- Python => 3.8 - "Based on provided scripts, Chat-Windows-Gguf requires Python 3.8+" -deepseek.
+- Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section.
 - Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. Tested with Vulkan install.  
 
@@ -229,7 +229,8 @@ project_root/
 ```
 
 # Development
-1. there are serious issues with RAG, check the previous session in KIMI K2, the initial prompt to fix is already done.
+1. Issues with exit button.
+2. Issues with attach files.
 1. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
 1. there is annoying glitchy graphic objects when typing input to the model.
 2. the Speech option did not work in linux.
