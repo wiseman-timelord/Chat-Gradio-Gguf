@@ -10,7 +10,8 @@ import time
 from pathlib import Path
 import shutil
 
-# Constants
+# Constants/Variables
+_PY_TAG = f"cp{sys.version_info.major}{sys.version_info.minor}"
 APP_NAME = "Chat-Gradio-Gguf"
 BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
@@ -51,7 +52,7 @@ if PLATFORM == "windows":
             "dest": "data/llama-hip-radeon-bin",
             "cli_path": "data/llama-hip-radeon-bin/llama-cli.exe",
             "needs_python_bindings": False,
-            "vulkan_required": True,
+            "rocm_required": True,       # ← NEW
             "build_flags": {}
         },
         "GPU/CPU - CUDA 11.7": {
@@ -91,29 +92,21 @@ elif PLATFORM == "linux":
         }
     }
 
-# CPU-only packages
-CPU_ONLY_REQ = [
-    "gradio",
-    "requests==2.31.0",
-    "pyperclip",
-    "yake",
-    "psutil",
-    "ddgs",
-    "newspaper3k",
-    "llama-cpp-python",
-    "langchain-community>=0.3.18",
-    "faiss-cpu>=1.8.0",
-    # RAG stack, CPU build
-    "torch",                   # ← plain package name
-    "sentence-transformers>=2.3.0"
-    "langchain>=0.3.18",
-    "pygments==2.17.2",
-    "lxml[html_clean]",
-    "pyttsx3"
-]
+TORCH_WHEELS = {
+    "GPU/CPU - Vulkan": (
+        "https://download.pytorch.org/whl/cpu",
+        f"torch-2.7.1+cpu.{_PY_TAG}-{_PY_TAG}-manylinux_2_28_x86_64.whl"
+    ),
+    "GPU/CPU - HIP-Radeon": (
+        "https://download.pytorch.org/whl/rocm6.3",
+        f"torch-2.7.1+rocm6.3.{_PY_TAG}-{_PY_TAG}-manylinux_2_28_x86_64.whl"
+    ),
+    # CUDA wheels are many, let pip pick the right one automatically
+    "GPU/CPU - CUDA": (None, None),
+}
 
-# CUDA packages
-CUDA_REQ = [
+# CPU-only packages
+BASE_REQ = [
     "gradio",
     "requests==2.31.0",
     "pyperclip",
@@ -121,27 +114,18 @@ CUDA_REQ = [
     "psutil",
     "ddgs",
     "newspaper3k",
-    "llama-cpp-python[cuda]",
     "langchain-community>=0.3.18",
     "faiss-cpu>=1.8.0",
-    # RAG stack, CUDA build
-    "torch",
     "sentence-transformers>=2.3.0",
     "langchain>=0.3.18",
     "pygments==2.17.2",
     "lxml[html_clean]",
-    "pyttsx3"
+    "pyttsx3",
 ]
 
 # Add platform-specific requirements
 if PLATFORM == "windows":
-    CPU_ONLY_REQ.append("pywin32")
-    CPU_ONLY_REQ.append("tk")
-    CUDA_REQ.append("pywin32")
-    CUDA_REQ.append("tk")
-elif PLATFORM == "linux":
-    CPU_ONLY_REQ.append("python3-tk")
-    CUDA_REQ.append("python3-tk")
+    BASE_REQ.extend(["pywin32", "tk"])
 
 # Utility functions
 def print_header(title: str) -> None:
@@ -495,7 +479,7 @@ def install_python_deps(backend: str) -> bool:
                 subprocess.run([
                     "sudo", "apt-get", "install", "-y",
                     "python3-tk",
-                    "python3.13-tk"  # Specific package for Python 3.13
+                    "python3.13-tk"
                 ], check=True)
                 print_status("System dependencies for tkinter installed")
 
@@ -505,8 +489,7 @@ def install_python_deps(backend: str) -> bool:
                 print_status("Tkinter verified with Python 3.13")
             except subprocess.CalledProcessError as e:
                 print_status(f"Failed to install system dependencies for tkinter: {e}", False)
-                # Continue installation but tkinter may not work
-                
+
         # Windows-specific tk installation
         elif PLATFORM == "windows":
             try:
@@ -515,50 +498,29 @@ def install_python_deps(backend: str) -> bool:
             except subprocess.CalledProcessError as e:
                 print_status(f"Failed to install tk for Windows: {e}", False)
 
-        # ---------- decide which list to use ----------
-        use_cuda = BACKEND_OPTIONS[backend].get("cuda_required", False)
-        requirements = CUDA_REQ[:] if use_cuda else CPU_ONLY_REQ[:]
+        # ---------- unified base list, no torch ----------
+        subprocess.run([pip_exe, "install", *BASE_REQ], check=True)
 
-        # ---------- helper: install with retries ----------
-        def _install(reqs, extra_args=None):
-            for req in reqs:
-                cmd = [pip_exe, "install", req]
-                if extra_args:
-                    cmd.extend(extra_args)
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        subprocess.run(cmd, check=True)
-                        print_status(f"Installed {req}")
-                        break
-                    except subprocess.CalledProcessError as e:
-                        if attempt == max_retries - 1:
-                            print_status(f"Failed to install {req} after {max_retries} attempts: {e}", False)
-                            return False
-                        print_status(f"Retrying {req} (attempt {attempt + 2}/{max_retries})", False)
-                        time.sleep(2)
-            return True
+        # ---------- backend-specific torch wheel ----------
+        index_url, wheel = TORCH_WHEELS.get(backend, (None, None))
+        if index_url and wheel:
+            # Vulkan / HIP-Radeon: exact CPU/ROCm wheel, no CUDA deps
+            wheel_url = f"{index_url}/{wheel}"
+            subprocess.run([pip_exe, "install", "--no-deps", wheel_url], check=True)
+            # sentence-transformers will now accept the existing wheel
+            subprocess.run([pip_exe, "install", "sentence-transformers>=2.3.0"], check=True)
+        else:
+            # CUDA: let pip auto-select wheel
+            subprocess.run([pip_exe, "install", "torch", "sentence-transformers>=2.3.0"], check=True)
 
-        # ---------- step 1: install everything except torch ----------
-        non_torch = [r for r in requirements if not r.startswith("torch")]
-        if not _install(non_torch):
-            return False
-
-        # ---------- step 2: install torch (with index if CPU) ----------
-        torch_args = ["--index-url", "https://download.pytorch.org/whl/cpu"] if not use_cuda else []
-        if not _install(["torch"], extra_args=torch_args):
-            return False
-        if not _install(["sentence-transformers>=2.3.0"], extra_args=torch_args):
-            return False
-
-        # Install llama-cpp-python with appropriate backend
+        # ---------- llama-cpp-python ----------
         print_status("Installing llama-cpp-python...")
         llama_cmd = [pip_exe, "install"]
         if backend == "GPU/CPU - CUDA":
             llama_cmd.extend(["llama-cpp-python[cuda]"])
         else:
             llama_cmd.extend(["llama-cpp-python"])
-        
+
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -572,7 +534,7 @@ def install_python_deps(backend: str) -> bool:
                     break
                 print_status(f"Retrying llama-cpp-python (attempt {attempt + 2}/{max_retries})", False)
                 time.sleep(5)
-        
+
         print_status("Python dependencies installation completed")
         return True
     except subprocess.CalledProcessError as e:
