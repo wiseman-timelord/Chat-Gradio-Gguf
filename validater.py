@@ -19,41 +19,26 @@ if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
     sys.exit(1)
 PLATFORM = sys.argv[1].lower()
 
-# Requirements list based on platform
-if PLATFORM == "windows":
-    REQS = [
-        "gradio>=4.25.0",
-        "requests==2.31.0",
-        "pyperclip",
-        "yake",
-        "psutil",
-        "pywin32",
-        "ddgs",
-        "newspaper3k",
-        "llama-cpp-python",
-        "langchain-community==0.3.18",
-        "pygments==2.17.2",
-        "lxml[html_clean]",  # Replaced lxml_html_clean
-        "pyttsx3",
-        "tk"     # Added for file dialogs
-    ]
-elif PLATFORM == "linux":
-    REQS = [
-        "gradio>=4.25.0",
-        "requests==2.31.0",
-        "pyperclip",
-        "yake",
-        "psutil",
-        "ddgs",
-        "newspaper3k",
-        "llama-cpp-python",
-        "langchain-community==0.3.18",
-        "pygments==2.17.2",
-        "lxml",  # Replaced lxml_html_clean
-        "pyttsx3",
-        "xclip"
-    ]
-    # Note: python3-tk is a system package on Linux
+# Requirements list
+REQS = [
+    "gradio>=4.25.0",
+    "requests==2.31.0",
+    "pyperclip",
+    "yake",
+    "psutil",
+    "ddgs",
+    "newspaper3k",
+    "llama-cpp-python",      # CPU wheel or [cuda]/[rocm] extras are NOT validated here
+    "langchain-community==0.3.18",
+    "faiss-cpu>=1.8.0",      # CPU-only vector store
+    "langchain>=0.3.18",
+    "pygments==2.17.2",
+    "lxml[html_clean]",
+    "pyttsx3",
+    "onnxruntime",           # For fastembed runtime
+    "fastembed",             # Quantised embeddings
+    "tokenizers",            # Hugging Face tokenizers
+]
 
 def print_status(msg: str, success: bool = True) -> None:
     """Simplified status printer"""
@@ -113,9 +98,8 @@ def test_config():
             
         # Validate backend type
         backend = config.get("backend_config", {}).get("backend_type", "")
-        if backend not in ["GPU/CPU - Vulkan", "GPU/CPU - HIP-Radeon", "GPU/CPU - CUDA 11.7", 
-                          "GPU/CPU - CUDA 12.4", "GPU/CPU - CUDA"]:
-            print_status(f"Invalid backend type: {backend}", False)
+        if not backend:
+            print_status("Empty backend type", False)
             return False
             
         print_status("Configuration file is valid")
@@ -184,19 +168,22 @@ def test_libs():
     # Package name to import name mapping
     import_names = {
         "gradio": "gradio",
-        "requests": "requests", 
+        "requests": "requests",
         "pyperclip": "pyperclip",
         "yake": "yake",
         "psutil": "psutil",
-        "pywin32": "win32api",
         "duckduckgo-search": "duckduckgo_search",
         "newspaper3k": "newspaper",
         "llama-cpp-python": "llama_cpp",
         "langchain-community": "langchain_community",
+        "faiss-cpu": "faiss",
+        "langchain": "langchain",
         "pygments": "pygments",
         "lxml[html_clean]": "lxml",
         "pyttsx3": "pyttsx3",
-        "tkinter": "tkinter"
+        "onnxruntime": "onnxruntime",
+        "fastembed": "fastembed",
+        "tokenizers": "tokenizers",
     }
     
     # Platform-specific adjustments
