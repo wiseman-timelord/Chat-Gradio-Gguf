@@ -228,16 +228,17 @@ project_root/
 └────── *
 ```
 
+### the Speech option did not work in ubuntu 25, solution at the moment is this plan...
+| Ubuntu series     | Default audio server | System packages to install                                   |
+| ----------------- | -------------------- | ------------------------------------------------------------ |
+| **22.04 – 23.10** | **PulseAudio**       | `pulseaudio`, `pulseaudio-utils`, `libpulse-dev`             |
+| **24.04 – 25.x**  | **PipeWire**         | `pipewire`, `pipewire-alsa`, `pipewire-pulse`, `wireplumber` |
+
 # Development
 1. Issues with exit button.
 2. Issues with attach files.
 1. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
 1. there is annoying glitchy graphic objects when typing input to the model.
-2. the Speech option did not work in ubuntu 25, solution at the moment is this plan...
-| Ubuntu series     | Default audio server | System packages to install                                   |
-| ----------------- | -------------------- | ------------------------------------------------------------ |
-| **22.04 – 23.10** | **PulseAudio**       | `pulseaudio`, `pulseaudio-utils`, `libpulse-dev`             |
-| **24.04 – 25.x**  | **PipeWire**         | `pipewire`, `pipewire-alsa`, `pipewire-pulse`, `wireplumber` |
 1. windows mode requires testing/bugfixing.
 2. No CPU options anymore, but we had to add back in some of the cpu code to get the gpu to work, so possibly add back in the cpu binaries as most of other code is already there.
 3. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
