@@ -228,7 +228,7 @@ project_root/
 └────── *
 ```
 
-### the Speech option did not work in ubuntu 25, solution at the moment is this plan...
+### Plan for the Sound/Tts system
 | Mode     | TTS engine       | Audio *player* | Extra Python deps |
 | -------- | ---------------- | -------------- | ----------------- |
 | Windows  | `pyttsx3` (SAPI) | **built-in**   | `pyttsx3`         |
@@ -237,6 +237,7 @@ project_root/
 
 
 # Development
+1. the Speech option did not work in ubuntu 25.
 1. Issues with exit button.
 2. Issues with attach files.
 1. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
