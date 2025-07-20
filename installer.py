@@ -1,13 +1,9 @@
 # Script: installer.py (Installation script for Chat-Gradio-Gguf)
 # Updated: 2025-07-19 – PyTorch-free, Vulkan/CUDA-12 only, HIP-Radeon removed
+# Do not include validation code, instead that goes in `./validater.py`.
 
 # Imports
-import os
-import json
-import subprocess
-import sys
-import contextlib
-import time
+import os, json, subprocess, sys, contextlib, time
 from pathlib import Path
 import shutil
 
@@ -98,7 +94,17 @@ BASE_REQ = [
     "onnxruntime",
     "fastembed",
     "tokenizers",
+    "asynco",
 ]
+
+AUDIO_SYSTEMS = {
+    "windows": "windows",
+    "linux": {
+        "pulse": "pulseaudio",
+        "pipe": "pipewire",
+        "alsa": "alsa"
+    }
+}
 
 if PLATFORM == "windows":
     BASE_REQ.extend(["pywin32", "tk"])
@@ -175,11 +181,15 @@ def create_directories() -> None:
 def build_config(backend: str) -> dict:
     info = BACKEND_OPTIONS[backend]
     cli_relative = f"{info['dest']}/llama-cli{'.exe' if PLATFORM == 'windows' else ''}"
+    
+    # Detect audio system
+    audio_system = select_linux_audio_mode() if PLATFORM == "linux" else "windows"
+    
     return {
         "model_settings": {
             "model_dir": "models",
             "model_name": "",
-            "context_size": 8192,
+            "context_size": 32768,
             "temperature": 0.66,
             "repeat_penalty": 1.1,
             "use_python_bindings": info["needs_python_bindings"],
@@ -200,6 +210,13 @@ def build_config(backend: str) -> dict:
             "llama_bin_path": info["dest"],
             "cuda_required": info.get("cuda_required", False),
             "vulkan_required": info.get("vulkan_required", False)
+        },
+        "audio_config": {
+            "audio_system": audio_system,
+            "default_device": "default",
+            "sample_rate": 44100,
+            "volume": 0.9,
+            "rate": 150
         }
     }
 
@@ -340,39 +357,225 @@ def verify_backend_dependencies(backend: str) -> bool:
             return False
     return True
 
+def detect_audio_system() -> str:
+    """Detect the actual audio system in use"""
+    if PLATFORM == "windows":
+        return "windows"
+    
+    # Linux detection - enhanced for Ubuntu 25.04
+    try:
+        # Get Ubuntu version for better detection
+        try:
+            release_output = subprocess.check_output(["lsb_release", "-rs"], text=True).strip()
+            ubuntu_version = float(release_output)
+        except:
+            ubuntu_version = 22.04  # Default fallback
+        
+        # Ubuntu 24.04+ defaults to PipeWire
+        if ubuntu_version >= 24.0:
+            # Check if PipeWire is actually running
+            try:
+                result = subprocess.run(
+                    ["systemctl", "--user", "is-active", "pipewire"], 
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    return "pipewire"
+            except:
+                pass
+        
+        # Check for PulseAudio
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", "is-active", "pulseaudio"], 
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                return "pulseaudio"
+        except:
+            pass
+        
+        # Check if PipeWire processes are running (alternative detection)
+        try:
+            result = subprocess.run(
+                ["pgrep", "-x", "pipewire"], 
+                capture_output=True, timeout=3
+            )
+            if result.returncode == 0:
+                return "pipewire"
+        except:
+            pass
+            
+        # Fallback to ALSA
+        return "alsa"
+        
+    except Exception as e:
+        print_status(f"Audio detection failed: {e}")
+        return "alsa"
+
 def install_linux_system_dependencies(backend: str) -> bool:
+    """
+    Install Linux system packages based on **user-selected** audio mode.
+    Prompts the user to choose between PulseAudio (Ubuntu 22-23)
+    and PipeWire (Ubuntu 24-25).  No automatic version detection.
+    """
     if PLATFORM != "linux":
         return True
 
-    print_status("Installing Linux system dependencies...")
+    # 1. Prompt user → PulseAudio vs PipeWire
+    audio_mode = select_linux_audio_mode()   # returns "pulseaudio" or "pipewire"
+    print_status(f"Installing packages for {audio_mode}")
 
-    packages = [
+    # 2. Common base packages (compilers, dev headers, TTS engine)
+    base_packages = [
         "build-essential",
         "portaudio19-dev",
         "libasound2-dev",
         "python3-tk",
-        "vulkan-tools",
-        "libvulkan-dev",
-        "espeak",
-        "libespeak-dev",
+        "python3-dev",
         "ffmpeg",
-        "xclip"
+        "xclip",
+        "espeak-ng",
+        "espeak-ng-data",
+        "libespeak-ng-dev",
     ]
 
-    if backend.startswith("GPU/CPU - Vulkan"):
-        packages.extend(["mesa-utils", "libvulkan1"])
-    elif backend.startswith("GPU/CPU - CUDA"):
-        packages.extend(["nvidia-cuda-toolkit"])
+    # 3. Audio-mode-specific packages (NO compatibility shim on PipeWire)
+    audio_packages = {
+        "pulseaudio": [
+            "pulseaudio",
+            "pulseaudio-utils",
+            "paplay",
+        ],
+        "pipewire": [
+            "pipewire",
+            "pipewire-alsa",
+            "pipewire-bin",
+            "wireplumber",
+        ],
+    }[audio_mode]
 
+    # 4. Backend packages (Vulkan / CUDA)
+    backend_packages = []
+    if "Vulkan" in backend:
+        backend_packages.extend([
+            "vulkan-tools",
+            "libvulkan-dev",
+            "libvulkan1",
+            "mesa-vulkan-drivers",
+            "mesa-utils"
+        ])
+    elif "CUDA" in backend:
+        backend_packages.extend(["nvidia-cuda-toolkit"])
+
+    # 5. Install everything in phases
     try:
-        subprocess.run(["sudo", "apt-get", "update"], check=True)
-        subprocess.run(["sudo", "apt-get", "install", "-y"] + list(set(packages)), check=True)
-        print_status("Linux dependencies installed")
+        print_status("Updating package lists...")
+        subprocess.run(["sudo", "apt-get", "update"], check=True, capture_output=True)
+
+        print_status(f"Installing {len(base_packages)} base packages...")
+        subprocess.run(["sudo", "apt-get", "install", "-y"] + base_packages,
+                       check=True, capture_output=True, text=True)
+
+        print_status(f"Installing {len(audio_packages)} {audio_mode} packages...")
+        subprocess.run(["sudo", "apt-get", "install", "-y"] + audio_packages,
+                       check=True, capture_output=True, text=True)
+
+        if backend_packages:
+            print_status(f"Installing {len(backend_packages)} backend packages...")
+            subprocess.run(["sudo", "apt-get", "install", "-y"] + backend_packages,
+                           check=True, capture_output=True, text=True)
+
+        print_status("All system packages installed successfully")
         return True
+
     except subprocess.CalledProcessError as e:
-        print_status(f"System dependencies failed: {e}", False)
+        error_msg = f"Package installation failed: {e}"
+        if hasattr(e, 'stderr') and e.stderr:
+            error_msg += f"\nError output: {e.stderr}"
+        print_status(error_msg, False)
         return False
 
+def setup_pipewire_audio() -> bool:
+    """
+    Set up PipeWire audio system properly for the current user.
+    """
+    if PLATFORM != "linux":
+        return True
+        
+    try:
+        print_status("Configuring PipeWire audio services...")
+        
+        # Stop any existing PulseAudio first
+        try:
+            subprocess.run(["systemctl", "--user", "stop", "pulseaudio.service"], 
+                         capture_output=True, timeout=5)
+            subprocess.run(["systemctl", "--user", "disable", "pulseaudio.service"], 
+                         capture_output=True, timeout=5)
+        except:
+            pass  # PulseAudio might not be running
+        
+        # Enable and start PipeWire services
+        services_to_setup = [
+            "pipewire.service",
+            "pipewire-pulse.service", 
+            "wireplumber.service"
+        ]
+        
+        for service in services_to_setup:
+            try:
+                # Enable the service
+                result = subprocess.run(
+                    ["systemctl", "--user", "enable", service], 
+                    capture_output=True, text=True, timeout=10
+                )
+                
+                # Start the service
+                result = subprocess.run(
+                    ["systemctl", "--user", "start", service], 
+                    capture_output=True, text=True, timeout=10
+                )
+                
+                # Verify it started
+                result = subprocess.run(
+                    ["systemctl", "--user", "is-active", service],
+                    capture_output=True, text=True, timeout=5
+                )
+                
+                if result.returncode == 0:
+                    print_status(f"✓ {service} configured and active")
+                else:
+                    print_status(f"⚠ {service} may not be active")
+                    
+            except subprocess.TimeoutExpired:
+                print_status(f"⚠ Timeout configuring {service}")
+            except Exception as e:
+                print_status(f"⚠ Error with {service}: {e}")
+        
+        # Give services time to initialize
+        import time
+        time.sleep(3)
+        
+        # Final verification
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", "is-active", "pipewire"], 
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                print_status("✓ PipeWire audio system is active")
+                return True
+            else:
+                print_status("⚠ PipeWire may not be fully active")
+                return False
+                
+        except Exception as e:
+            print_status(f"PipeWire verification failed: {e}")
+            return False
+            
+    except Exception as e:
+        print_status(f"PipeWire setup failed: {e}")
+        return False
 
 # Python dependencies (no torch)
 def install_python_deps(backend: str) -> bool:
@@ -490,6 +693,14 @@ def select_backend_type() -> str:
     else:  # Linux
         return "GPU/CPU - Vulkan"
 
+def select_linux_audio_mode() -> str:
+    """Prompt the user to choose between PulseAudio and PipeWire."""
+    opts = [
+        "PulseAudio (Ubuntu 22-23)",
+        "PipeWire   (Ubuntu 24-25)"
+    ]
+    choice = get_user_choice("Select Linux audio mode:", opts)
+    return "pulseaudio" if choice.startswith("Pulse") else "pipewire"
 
 # Main install flow
 def install():
@@ -506,8 +717,11 @@ def install():
         sys.exit(1)
 
     create_directories()
+    
     if PLATFORM == "linux":
-        install_linux_system_dependencies(backend)
+        if not install_linux_system_dependencies(backend):
+            print_status("System dependencies failed", False)
+            sys.exit(1)
 
     if not create_venv():
         print_status("Virtual environment failed", False)
@@ -524,9 +738,9 @@ def install():
             sys.exit(1)
 
     create_config(backend)
+    
     print_status("Installation complete!")
     print("\nRun the launcher to start Chat-Gradio-Gguf\n")
-
 
 if __name__ == "__main__":
     try:
