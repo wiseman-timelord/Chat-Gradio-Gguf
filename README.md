@@ -235,7 +235,6 @@ project_root/
 | Pulse    | `espeak-ng`      | `paplay`       |
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
-
 # Development
 1. the Speech option did not work in ubuntu 25.
 1. Issues with exit button.
