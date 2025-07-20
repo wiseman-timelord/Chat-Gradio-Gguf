@@ -229,10 +229,12 @@ project_root/
 ```
 
 ### the Speech option did not work in ubuntu 25, solution at the moment is this plan...
-| Ubuntu series     | Default audio server | System packages to install                                   |
-| ----------------- | -------------------- | ------------------------------------------------------------ |
-| **22.04 – 23.10** | **PulseAudio**       | `pulseaudio`, `pulseaudio-utils`, `libpulse-dev`             |
-| **24.04 – 25.x**  | **PipeWire**         | `pipewire`, `pipewire-alsa`, `pipewire-pulse`, `wireplumber` |
+| Mode     | TTS engine       | Audio *player* | Extra Python deps |
+| -------- | ---------------- | -------------- | ----------------- |
+| Windows  | `pyttsx3` (SAPI) | **built-in**   | `pyttsx3`         |
+| Pulse    | `espeak-ng`      | `paplay`       | `espeak-ng`       |
+| PipeWire | `espeak-ng`      | `pw-play`      | `espeak-ng`       |
+
 
 # Development
 1. Issues with exit button.
