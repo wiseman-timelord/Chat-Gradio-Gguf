@@ -229,11 +229,11 @@ project_root/
 ```
 
 ### Plan for the Sound/Tts system
-| Mode     | TTS engine       | Audio *player* | Extra Python deps |
-| -------- | ---------------- | -------------- | ----------------- |
-| Windows  | `pyttsx3` (SAPI) | **built-in**   | `pyttsx3`         |
-| Pulse    | `espeak-ng`      | `paplay`       | `espeak-ng`       |
-| PipeWire | `espeak-ng`      | `pw-play`      | `espeak-ng`       |
+| Mode     | TTS engine       | Audio *player* |
+| -------- | ---------------- | -------------- |
+| Windows  | `pyttsx3` (SAPI) | **built-in**   |
+| Pulse    | `espeak-ng`      | `paplay`       |
+| PipeWire | `espeak-ng`      | `pw-play`      |
 
 
 # Development
