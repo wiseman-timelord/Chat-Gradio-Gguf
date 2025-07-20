@@ -8,19 +8,19 @@ from pathlib import Path
 import shutil
 
 
-# Constants
+# Constants/Variables
 _PY_TAG = f"cp{sys.version_info.major}{sys.version_info.minor}"
 APP_NAME = "Chat-Gradio-Gguf"
 BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
 LLAMACPP_TARGET_VERSION = "b5937"
+SELECTED_LINUX_AUDIO_MODE = None
 
 DIRECTORIES = [
     "data", "scripts", "models",
     "data/history", "data/temp", "data/vectors"
 ]
-
 
 # Platform detection (windows / linux)
 PLATFORM = None
@@ -181,10 +181,10 @@ def create_directories() -> None:
 def build_config(backend: str) -> dict:
     info = BACKEND_OPTIONS[backend]
     cli_relative = f"{info['dest']}/llama-cli{'.exe' if PLATFORM == 'windows' else ''}"
-    
-    # Detect audio system
-    audio_system = select_linux_audio_mode() if PLATFORM == "linux" else "windows"
-    
+
+    # reuse the single choice
+    audio_system = SELECTED_LINUX_AUDIO_MODE if PLATFORM == "linux" else "windows"
+
     return {
         "model_settings": {
             "model_dir": "models",
@@ -415,18 +415,15 @@ def detect_audio_system() -> str:
 
 def install_linux_system_dependencies(backend: str) -> bool:
     """
-    Install Linux system packages based on **user-selected** audio mode.
-    Prompts the user to choose between PulseAudio (Ubuntu 22-23)
-    and PipeWire (Ubuntu 24-25).  No automatic version detection.
+    Install Linux system packages based on the **already-chosen** audio mode.
+    (The choice is stored in SELECTED_LINUX_AUDIO_MODE.)
     """
     if PLATFORM != "linux":
         return True
 
-    # 1. Prompt user → PulseAudio vs PipeWire
-    audio_mode = select_linux_audio_mode()   # returns "pulseaudio" or "pipewire"
+    audio_mode = SELECTED_LINUX_AUDIO_MODE   # ← reuse saved choice
     print_status(f"Installing packages for {audio_mode}")
 
-    # 2. Common base packages (compilers, dev headers, TTS engine)
     base_packages = [
         "build-essential",
         "portaudio19-dev",
@@ -440,7 +437,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
         "libespeak-ng-dev",
     ]
 
-    # 3. Audio-mode-specific packages (NO compatibility shim on PipeWire)
     audio_packages = {
         "pulseaudio": [
             "pulseaudio",
@@ -455,7 +451,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
         ],
     }[audio_mode]
 
-    # 4. Backend packages (Vulkan / CUDA)
     backend_packages = []
     if "Vulkan" in backend:
         backend_packages.extend([
@@ -468,7 +463,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
     elif "CUDA" in backend:
         backend_packages.extend(["nvidia-cuda-toolkit"])
 
-    # 5. Install everything in phases
     try:
         print_status("Updating package lists...")
         subprocess.run(["sudo", "apt-get", "update"], check=True, capture_output=True)
@@ -488,7 +482,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
 
         print_status("All system packages installed successfully")
         return True
-
     except subprocess.CalledProcessError as e:
         error_msg = f"Package installation failed: {e}"
         if hasattr(e, 'stderr') and e.stderr:
@@ -705,6 +698,10 @@ def select_linux_audio_mode() -> str:
 # Main install flow
 def install():
     backend = select_backend_type()
+    global SELECTED_LINUX_AUDIO_MODE
+    if PLATFORM == "linux":
+        SELECTED_LINUX_AUDIO_MODE = select_linux_audio_mode()
+
     print_header("Installation")
     print(f"Installing {APP_NAME} on {PLATFORM} using {backend}")
 
@@ -717,7 +714,7 @@ def install():
         sys.exit(1)
 
     create_directories()
-    
+
     if PLATFORM == "linux":
         if not install_linux_system_dependencies(backend):
             print_status("System dependencies failed", False)
@@ -738,7 +735,7 @@ def install():
             sys.exit(1)
 
     create_config(backend)
-    
+
     print_status("Installation complete!")
     print("\nRun the launcher to start Chat-Gradio-Gguf\n")
 
