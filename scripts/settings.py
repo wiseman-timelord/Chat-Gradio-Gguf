@@ -10,7 +10,7 @@ CONFIG_PATH = Path("data/persistent.json")
 
 # Default settings
 DEFAULTS = {
-    "MODEL_FOLDER": "path/to/your/models",
+    "MODEL_FOLDER": str(Path("models").resolve()),
     "CONTEXT_SIZE": 8192,
     "VRAM_SIZE": 8192,
     "BATCH_SIZE": 1024,

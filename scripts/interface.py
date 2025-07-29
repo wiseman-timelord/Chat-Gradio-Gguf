@@ -206,7 +206,8 @@ def browse_on_click(current_path):
     root.withdraw()
     root.attributes('-topmost', True)  # Optional enhancement
     root.update_idletasks()            # Optional enhancement
-    folder_selected = filedialog.askdirectory(initialdir=current_path or os.path.expanduser("~"))
+    initial = os.path.normpath(current_path or os.path.expanduser("~"))
+    folder_selected = filedialog.askdirectory(initialdir=initial)
     root.attributes('-topmost', False) # Optional enhancement
     root.destroy()
     return folder_selected if folder_selected else current_path
