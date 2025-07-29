@@ -12,7 +12,8 @@ def parse_args():
 args = parse_args()
 import scripts.temporary as temporary
 temporary.PLATFORM = args.platform
-temporary.BACKEND_TYPE = "Vulkan"
+from scripts.settings import load_config
+load_config()   # sets temporary.BACKEND_TYPE from persistent.json
 from scripts.settings import load_config
 from scripts.interface import launch_interface
 from scripts.utility import detect_cpu_config
@@ -24,12 +25,14 @@ def initialize_platform_settings():
     load_config()  # Ensure config is loaded
     
     if temporary.PLATFORM == "windows":
-        if "vulkan" in temporary.BACKEND_TYPE.lower():
-            temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
-        elif "cuda" in temporary.BACKEND_TYPE.lower():
-            temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli.exe"
-        elif "hip" in temporary.BACKEND_TYPE.lower():
-            temporary.LLAMA_CLI_PATH = "data/llama-hip-radeon-bin/llama-cli.exe"
+        base = Path(__file__).parent
+        key = temporary.BACKEND_TYPE.lower()
+        if key == "gpu/cpu - vulkan":
+            temporary.LLAMA_CLI_PATH = str(base / "data" / "llama-vulkan-bin" / "llama-cli.exe")
+        elif key == "gpu/cpu - cuda 12.x":
+            temporary.LLAMA_CLI_PATH = str(base / "data" / "llama-cuda-12-bin" / "llama-cli.exe")
+        elif key == "gpu/cpu - hip-radeon":
+            temporary.LLAMA_CLI_PATH = str(base / "data" / "llama-hip-radeon-bin" / "llama-cli.exe")"
     elif temporary.PLATFORM == "linux":
         if "vulkan" in temporary.BACKEND_TYPE.lower():
             temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
@@ -137,7 +140,8 @@ def main():
               f"{temporary.CPU_LOGICAL_CORES} logical cores")
         
         # Set platform-specific defaults
-        temporary.BACKEND_TYPE = "Vulkan"  # Default for both platforms
+        from scripts.settings import load_config
+        load_config()
         
         # Print final configuration
         from scripts.temporary import set_status
