@@ -156,10 +156,12 @@ def format_response(output: str) -> str:
         formatted_code = highlight(code, lexer, HtmlFormatter())
         clean_output = clean_output.replace(f'```{lang}\n{code}```', formatted_code)
 
-    # Collapse multiple new-lines and trim
+    # --- NEW: Windows-safe newline handling ---
+    clean_output = clean_output.replace('\r\n', '\n')          # normalize
+    clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)   # collapse
     clean_output = clean_output.strip()
-    clean_output = re.sub(r'\n{2,}', '\n', clean_output)   # remove double blanks
-    clean_output = clean_output.replace('\n', '<br>')      # single <br> per line-break
+    clean_output = clean_output.replace('\n', '<br>')          # convert
+    # ----------------------------------------
 
     # Combine think blocks (if any) with the cleaned answer
     if formatted:
@@ -206,8 +208,7 @@ def browse_on_click(current_path):
     root.withdraw()
     root.attributes('-topmost', True)  # Optional enhancement
     root.update_idletasks()            # Optional enhancement
-    initial = os.path.normpath(current_path or os.path.expanduser("~"))
-    folder_selected = filedialog.askdirectory(initialdir=initial)
+    folder_selected = filedialog.askdirectory(initialdir=current_path or os.path.expanduser("~"))
     root.attributes('-topmost', False) # Optional enhancement
     root.destroy()
     return folder_selected if folder_selected else current_path
