@@ -236,6 +236,7 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development
+1. Updating model compatibility and Handling is now number 1 priority, looking at this model "luxia-21.4b-alignment-v1.2", i found it available in K6 gguf. with little search. it beats 99% of 70b models and is only 21b!
 1. the Speech option did not work in ubuntu 25.
 1. Issues with exit button.
 2. Issues with attach files.
