@@ -19,11 +19,8 @@ from . import temporary
 
 # Conditional imports based on platform
 if temporary.PLATFORM == "windows":
-    try:
-        import win32com.client
-        import pythoncom
-    except ImportError:
-        print("Warning: pywin32 not available – TTS will be disabled.")
+    import win32com.client
+    import pythoncom
 elif temporary.PLATFORM == "linux":
     try:
         import pyttsx3
@@ -80,8 +77,7 @@ def get_available_gpus_windows():
     """
     try:
         output = subprocess.check_output("wmic path win32_VideoController get name", shell=True).decode()
-        gpus = [line.strip().lstrip('\ufeff') for line in output.splitlines()
-                if line.strip() and 'Name' not in line]
+        gpus = [line.strip() for line in output.split('\n') if line.strip() and 'Name' not in line]
         return gpus if gpus else ["CPU Only"]
     except Exception:
         try:
@@ -476,7 +472,7 @@ def load_and_chunk_documents(file_paths: list) -> list:
     from .temporary import CONTEXT_SIZE, RAG_CHUNK_SIZE_DEVIDER, RAG_CHUNK_OVERLAP_DEVIDER
     documents = []
     try:
-        chunk_size = CONTEXT_SIZE // (RAG_CHUNK_SIZE_DIVIDER if RAG_CHUNK_SIZE_DIVIDER != 0 else 4)
+        chunk_size = CONTEXT_SIZE // (RAG_CHUNK_SIZE_DEVIDER if RAG_CHUNK_SIZE_DEVIDER != 0 else 4)
         chunk_overlap = CONTEXT_SIZE // (RAG_CHUNK_OVERLAP_DEVIDER if RAG_CHUNK_OVERLAP_DEVIDER != 0 else 32)
         for file_path in file_paths:
             if Path(file_path).suffix[1:].lower() in ALLOWED_EXTENSIONS:

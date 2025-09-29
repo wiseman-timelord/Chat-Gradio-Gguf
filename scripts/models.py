@@ -112,18 +112,153 @@ def calculate_gpu_layers(models, available_vram):
 
 # Get Model MetaData
 def get_model_metadata(model_path: str) -> dict:
-    """Extract metadata from a GGUF model file – read-only, no context."""
+    """Extract metadata from a GGUF model file with multiple fallback methods."""
+    from pathlib import Path
+    
+    # Method 1: Try with llama-cpp-python
     try:
         from llama_cpp import Llama
         print(f"[META] Opening {Path(model_path).name} for metadata…")
-        llm = Llama(model_path=model_path, n_ctx=0, verbose=False)
-        meta = llm.metadata
-        llm.close()
-        print(f"[META] Keys found: {list(meta.keys())}")
-        return meta
+        
+        # Try with minimal context
+        try:
+            llm = Llama(model_path=model_path, n_ctx=0, verbose=False, n_gpu_layers=0)
+            meta = llm.metadata
+            llm.close()
+            print(f"[META] Keys found: {list(meta.keys())}")
+            return meta
+        except Exception as e1:
+            print(f"[META] First attempt failed: {e1}")
+            
+            # Try with small context and no GPU
+            try:
+                llm = Llama(model_path=model_path, n_ctx=512, verbose=False, n_gpu_layers=0, n_threads=1)
+                meta = llm.metadata
+                llm.close()
+                print(f"[META] Keys found (fallback): {list(meta.keys())}")
+                return meta
+            except Exception as e2:
+                print(f"[META] Second attempt failed: {e2}")
+    except ImportError:
+        print("[META] llama-cpp-python not available")
+    
+    # Method 2: Parse GGUF header directly (basic implementation)
+    try:
+        import struct
+        
+        print(f"[META] Attempting direct GGUF header parsing...")
+        with open(model_path, 'rb') as f:
+            # Read GGUF magic and version
+            magic = f.read(4)
+            if magic != b'GGUF':
+                print("[META] Not a valid GGUF file")
+                return {}
+            
+            version = struct.unpack('<I', f.read(4))[0]
+            print(f"[META] GGUF version: {version}")
+            
+            # For Qwen 2.5 models, we can make educated guesses
+            model_name = Path(model_path).name.lower()
+            
+            # Detect architecture from filename
+            if 'qwen2.5' in model_name or 'qwen-2.5' in model_name:
+                arch = 'qwen2'  # Use qwen2 as base
+                if '14b' in model_name:
+                    layers = 40  # Qwen2.5-14B typically has 40 layers
+                elif '7b' in model_name:
+                    layers = 32  # Qwen2.5-7B typically has 32 layers
+                elif '32b' in model_name:
+                    layers = 64  # Qwen2.5-32B typically has 64 layers
+                elif '72b' in model_name:
+                    layers = 80  # Qwen2.5-72B typically has 80 layers
+                else:
+                    layers = 40  # Default for unknown Qwen2.5 variants
+                    
+                return {
+                    'general.architecture': arch,
+                    f'{arch}.block_count': layers,
+                    f'{arch}.context_length': 131072,  # Qwen2.5 default
+                    'general.name': 'qwen2.5',
+                    '_fallback': True  # Mark as fallback data
+                }
+            elif 'qwen' in model_name:
+                arch = 'qwen2'
+                layers = 32  # Default
+                return {
+                    'general.architecture': arch,
+                    f'{arch}.block_count': layers,
+                    '_fallback': True
+                }
+            
     except Exception as e:
-        print(f"[META] Error reading metadata: {e}")
-        return {}
+        print(f"[META] Direct parsing failed: {e}")
+    
+    # Method 3: Return minimal defaults based on filename patterns
+    print("[META] Using filename-based defaults")
+    model_name = Path(model_path).name.lower()
+    
+    # Common patterns
+    if 'llama' in model_name:
+        return {'general.architecture': 'llama', 'llama.block_count': 32}
+    elif 'mistral' in model_name:
+        return {'general.architecture': 'llama', 'llama.block_count': 32}
+    elif 'qwen' in model_name:
+        return {'general.architecture': 'qwen2', 'qwen2.block_count': 40}
+    
+    return {}
+
+def get_model_layers(model_path: str) -> int:
+    """Return layer count for the model with enhanced fallbacks."""
+    from pathlib import Path
+    
+    meta = get_model_metadata(model_path)
+    
+    # Check if we used fallback data
+    if meta.get('_fallback'):
+        print(f"[LAYERS] Using fallback layer count")
+    
+    arch = meta.get("general.architecture", "unknown")
+    
+    # Extended list of keys to try
+    keys_to_try = [
+        f"{arch}.block_count",
+        "llama.block_count",
+        "qwen2.block_count",
+        "qwen.block_count",
+        "layers",
+        "n_layers",
+        "num_hidden_layers",
+    ]
+    
+    for k in keys_to_try:
+        if k in meta:
+            try:
+                layers = int(meta[k])
+                print(f"[LAYERS] Using key '{k}' → {layers}")
+                return layers
+            except (ValueError, TypeError):
+                print(f"[LAYERS] Bad value for key '{k}': {meta[k]}")
+    
+    # Final fallback based on model size (filename heuristics)
+    model_name = Path(model_path).name.lower()
+    print(f"[LAYERS] Using heuristic fallback for {model_name}")
+    
+    # Common model size to layer mappings
+    size_patterns = {
+        '3b': 26, '7b': 32, '8b': 32, '13b': 40, '14b': 40,
+        '20b': 48, '30b': 60, '32b': 64, '34b': 60, '40b': 60,
+        '70b': 80, '72b': 80, '120b': 120, '180b': 180
+    }
+    
+    for pattern, layer_count in size_patterns.items():
+        if pattern in model_name:
+            print(f"[LAYERS] Heuristic match '{pattern}' → {layer_count} layers")
+            return layer_count
+    
+    # Absolute fallback
+    print("[LAYERS] No pattern matched, using default 32 layers")
+    return 32  # Better than 0 for attempting load
+
 
 def inspect_model(model_dir, model_name, vram_size):
     from scripts.settings import save_config
@@ -250,20 +385,34 @@ def calculate_single_model_gpu_layers_with_layers(
     num_layers: int,
     dynamic_gpu_layers: bool = True
 ) -> int:
-    """Compute how many layers fit on GPU (b5587)."""
+    """Compute how many layers fit on GPU with safety checks."""
     from math import floor
-
-    if num_layers <= 0 or available_vram <= 0:
-        print(f"[GPU-LAYERS] Invalid input: layers={num_layers}, VRAM={available_vram} MB")
+    
+    # Safety check for invalid layer count
+    if num_layers <= 0:
+        print(f"[GPU-LAYERS] Invalid layer count {num_layers}, using fallback 32")
+        num_layers = 32  # Use reasonable default instead of failing
+    
+    if available_vram <= 0:
+        print(f"[GPU-LAYERS] Invalid VRAM {available_vram} MB")
         return 0
-
+    
     model_mb = get_model_size(model_path)
     meta = get_model_metadata(model_path)
-    factor = 1.2 if meta.get("general.architecture") == "llama" else 1.1
+    
+    # Adjust factor based on architecture
+    arch = meta.get("general.architecture", "unknown")
+    if arch in ["qwen2", "qwen2.5", "qwen"]:
+        factor = 1.15  # Qwen models typically need less overhead
+    elif arch == "llama":
+        factor = 1.2
+    else:
+        factor = 1.25  # Conservative for unknown architectures
+    
     adjusted_mb = model_mb * factor
     layer_mb = adjusted_mb / num_layers
     max_layers = floor(available_vram / layer_mb)
-
+    
     if not dynamic_gpu_layers:
         gpu_layers = num_layers
         print(f"[GPU-LAYERS] Dynamic off-load disabled → {gpu_layers} layers")
@@ -274,7 +423,7 @@ def calculate_single_model_gpu_layers_with_layers(
         cpu_fallback = num_layers - gpu_layers
         print(f"[GPU-LAYERS] Model {adjusted_mb:.0f} MB, layer {layer_mb:.1f} MB")
         print(f"[GPU-LAYERS] VRAM {available_vram} MB → GPU {gpu_layers}/{num_layers} (CPU {cpu_fallback})")
-
+    
     return gpu_layers
 
 def unload_models(llm_state, models_loaded_state):

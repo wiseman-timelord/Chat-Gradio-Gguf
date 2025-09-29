@@ -99,7 +99,7 @@ STATUS_MESSAGES = {
 }
 
 CHAT_FORMAT_MAP = {
-    'qwen2': 'chatml',
+    'qwen2': 'chatml', # Note, includes qwen2.5
     'llama': 'llama-2',
     'qwen3': 'chatml',
     'qwen3moe': 'chatml',
