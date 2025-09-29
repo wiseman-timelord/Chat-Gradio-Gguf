@@ -107,7 +107,7 @@ Press Enter to continue...
 - Windows 7-11 - Its a Windows program, batch menu has auto-sized-layout for modern/old OS.
 - Llama.Cpp - Options here for, Vulkan, ROCM, Cuda 11, Cuda 12. Llama.cpp are limiting the options now.
 - Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
-- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section.
+- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use (T3Q-qwen2.5-14b-v1.0-e3-GGUF)[https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF].
 - Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. Tested with Vulkan install.  
 
 ### Instructions (W = Windows, U = Ubuntu)...
@@ -151,7 +151,7 @@ If installing with ROCM option, you will need to have installed the `ROCm Softwa
 | Qwen2.5-Dyanka-7B-Preview-GGUF           | 76.40%   | 36.62%   | 48.79%   | 8.95%    | 15.51%   | 37.51% (MMLU-PRO) | 0.62 kg   |
 | T.B.A.           | N/A      | N/A    | N/A   | N/A      | N/A      | N/A            | N/A       |
 
-### Models working with version A068 (with gpt for comparrisson).
+### Models working with version A068 (with gpt for comparrisson). 
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
 | Early GPT-4 (compare stats)                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
