@@ -107,7 +107,7 @@ Press Enter to continue...
 - Windows 7-11 - Its a Windows program, batch menu has auto-sized-layout for modern/old OS.
 - Llama.Cpp - Options here for, Vulkan, ROCM, Cuda 11, Cuda 12. Llama.cpp are limiting the options now.
 - Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
-- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use (T3Q-qwen2.5-14b-v1.0-e3-GGUF)[https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF].
+- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF).
 - Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. Tested with Vulkan install.  
 
 ### Instructions (W = Windows, U = Ubuntu)...
