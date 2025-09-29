@@ -48,20 +48,18 @@ def print_status(msg: str, success: bool = True) -> None:
 def find_llama_cli() -> Path:
     """Search for llama-cli in expected locations"""
     # Look in all llama-* directories under data
-    search_pattern = str(BASE_DIR / "data" / "llama-*" / "llama-cli*")
-        candidates = glob.glob(search_pattern)
-        if PLATFORM == "windows":
-            candidates = [p for p in candidates if p.lower().endswith(".exe")]
-
+    search_pattern = str(BASE_DIR / "data" / "llama-*" / "llama-cli")
+    candidates = glob.glob(search_pattern)
+    
     if candidates:
-        return Path(candidates[0]).resolve()
-
+        return Path(candidates[0])
+    
     # Also check the build directory for Linux
     if PLATFORM == "linux":
         linux_build = BASE_DIR / "data" / "llama-bin" / "build" / "bin" / "llama-cli"
         if linux_build.exists():
             return linux_build
-
+            
     return None
 
 def test_directories():
@@ -141,14 +139,14 @@ def test_llama_cli():
                 [str(llama_cli_path), "--help"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                timeout=15
+                timeout=5
             )
             if result.returncode == 0:
                 print_status(f"llama-cli verified at: {llama_cli_path}")
                 return True
         except Exception:
             pass
-
+            
         print_status("llama-cli failed to execute", False)
         return False
 
@@ -248,23 +246,23 @@ except Exception as e:
             # Check for both python3-tk and python3.13-tk
             tk_packages = ["python3-tk", "python3.13-tk"]
             found = False
-
+            
             for pkg in tk_packages:
                 result = subprocess.run(
                     ["dpkg", "-s", pkg],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
                 )
-
+                
                 if result.returncode == 0:
                     print_status(f"{pkg} (system)")
                     found = True
                     break
-
+            
             if not found:
                 print_status("python3-tk/python3.13-tk not found!", False)
                 success = False
-
+            
             # Verify tkinter is actually importable
             try:
                 import_result = subprocess.run(
@@ -282,11 +280,11 @@ except Exception as e:
             except subprocess.TimeoutExpired:
                 print_status("tkinter (timeout during test)", False)
                 success = False
-
+                
         except Exception as e:
             print_status(f"System package check failed: {str(e)}", False)
             success = False
-
+    
     return success
 
 def main():

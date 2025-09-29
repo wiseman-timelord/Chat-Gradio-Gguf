@@ -1,5 +1,5 @@
 # Script: installer.py (Installation script for Chat-Gradio-Gguf)
-# Updated: 2025-07-19 – PyTorch-free, Vulkan/CUDA-12 only, HIP-Radeon removed
+# The GPU Selection MUST retain options of, Vulkan, CUDA-12, HIP-Radeon.
 
 # Imports
 import os
@@ -18,7 +18,7 @@ APP_NAME = "Chat-Gradio-Gguf"
 BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
-LLAMACPP_TARGET_VERSION = "b5937"
+LLAMACPP_TARGET_VERSION = "b6586"
 
 DIRECTORIES = [
     "data", "scripts", "models",
