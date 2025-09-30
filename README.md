@@ -1,9 +1,5 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
-<br>Status: Beta
-- Ubuntu/Linux mode working best in latest Release version.
-- Windows mode untested with latest release, currently A068 is verified all features working but A068 is windows only.
-- This project is actively worked on, check back later for progress, I try to release every 2 significant updates (see, Development section and release notes).
-- By "working" I mean I likely tested it in chat/websearch with, the model Dyanka 8b and the backend Vulkan and a 8GB AMD card.
+<br>Status: Beta (Mostly there, but is also ongoing project, with options for further development)
 
 ## Description
 Intended as a high-quality chat interface programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is intended to be intelligent, while without options reported in forums to make no difference on most models, using offline libraries where possible instead of services requiring registration, and everything is privatly run on your own hardware with your own models. 
@@ -237,12 +233,12 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development
-1. Updating model compatibility and Handling is now number 1 priority, looking at this model "luxia-21.4b-alignment-v1.2", i found it available in K6 gguf. with little search. it beats 99% of 70b models and is only 21b!
 1. the Speech option did not work in ubuntu 25.
-1. Issues with exit button.
+2. Issues with exit button.
 2. Issues with attach files.
-1. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
-1. there is annoying glitchy graphic objects when typing input to the model.
+3. Ubuntu/Linux mode requires testing, as has not been tested for a while (on hold due to internet).
+5. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
+6. there is annoying glitchy graphic objects when typing input to the model.
 1. windows mode requires testing/bugfixing.
 2. No CPU options anymore, but we had to add back in some of the cpu code to get the gpu to work, so possibly add back in the cpu binaries as most of other code is already there.
 3. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
