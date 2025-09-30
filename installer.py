@@ -22,9 +22,9 @@ LLAMACPP_TARGET_VERSION = "b6586"
 
 DIRECTORIES = [
     "data", "scripts", "models",
-    "data/history", "data/temp", "data/vectors"
+    "data/history", "data/temp", "data/vectors",
+    "data/fastembed_cache"
 ]
-
 
 # Platform detection (windows / linux)
 PLATFORM = None
@@ -37,7 +37,6 @@ def set_platform() -> None:
     PLATFORM = sys.argv[1].lower()
 
 set_platform()
-
 
 # Backend definitions (PyTorch wheels removed)
 if PLATFORM == "windows":
@@ -250,6 +249,63 @@ def simple_progress_bar(current: int, total: int, width: int = 25) -> str:
         return f"{b:.1f}TB"
 
     return f"[{bar}] {percent}% ({format_bytes(current)}/{format_bytes(total)})"
+
+def download_fastembed_model() -> bool:
+    """Download and cache FastEmbed model during installation."""
+    print_status("Downloading embedding model (FastEmbed)...")
+    
+    try:
+        # Use the virtual environment's Python
+        python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                        ("python.exe" if PLATFORM == "windows" else "python"))
+        
+        # Create a simple script to download the model
+        download_script = '''
+import os
+from pathlib import Path
+from fastembed import TextEmbedding
+
+# Set cache directory
+cache_dir = Path("data/fastembed_cache")
+cache_dir.mkdir(parents=True, exist_ok=True)
+
+# Override default cache location
+os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
+
+# Download the model
+model_name = "sentence-transformers/all-MiniLM-L6-v2"
+print(f"Downloading {model_name}...")
+embedding = TextEmbedding(model_name=model_name, cache_dir=str(cache_dir))
+print("Model downloaded successfully!")
+'''
+        
+        # Write temporary download script
+        download_script_path = TEMP_DIR / "download_fastembed.py"
+        with open(download_script_path, 'w') as f:
+            f.write(download_script)
+        
+        # Run the download script
+        result = subprocess.run(
+            [python_exe, str(download_script_path)],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode == 0:
+            print_status("Embedding model downloaded")
+            download_script_path.unlink(missing_ok=True)
+            return True
+        else:
+            print_status(f"Model download failed: {result.stderr}", False)
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print_status("Model download timed out", False)
+        return False
+    except Exception as e:
+        print_status(f"Model download error: {e}", False)
+        return False
 
 def download_with_progress(url: str, filepath: Path, description: str = "Downloading") -> None:
     import requests
@@ -516,6 +572,12 @@ def install():
     if not install_python_deps(backend):
         print_status("Python dependencies failed", False)
         sys.exit(1)
+
+    # NEW: Download FastEmbed model
+    if not download_fastembed_model():
+        print_status("WARNING: Embedding model download failed", False)
+        print("RAG features may not work until model is downloaded")
+        # Don't exit - allow installation to continue
 
     info = BACKEND_OPTIONS[backend]
     if not info["needs_python_bindings"]:
