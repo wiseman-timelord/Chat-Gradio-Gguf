@@ -359,10 +359,10 @@ def generate_session_label(session_log):
             words = [token.text for token in doc if not token.is_stop and token.is_alpha][:3]
             description = ' '.join(words) if words else "No description"
         
-        # Trim to 25 characters
-        if len(description) > 30:
-            description = description[:30]
-        
+        # Label Maximum Characters
+        MAX_LABEL_LEN = 50
+        if len(description) > MAX_LABEL_LEN:
+            description = description[:MAX_LABEL_LEN]
         return description
         
     except Exception as e:
