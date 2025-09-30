@@ -3,7 +3,7 @@
 # Imports...
 import gradio as gr
 from gradio import themes
-import re, os, json, pyperclip, yake, random, asyncio, queue, threading, time
+import os, re, json, pyperclip, random, asyncio, queue, threading, spacy, time
 from pathlib import Path
 from datetime import datetime
 import tkinter as tk
@@ -22,7 +22,7 @@ from scripts.temporary import (
     VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
     ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
     REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
-    ATTACH_SLOT_OPTIONS, HISTORY_DIR
+    ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR
 )
 from scripts import utility
 from scripts.utility import (
@@ -33,6 +33,7 @@ from scripts.utility import (
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings, inspect_model, load_models
 )
+
 
 # Functions...
 def get_panel_choices(model_settings):
@@ -747,7 +748,7 @@ def launch_interface():
         ATTACH_SLOT_OPTIONS
     )
     from launcher import shutdown_program
-
+       
     with gr.Blocks(
         title="Conversation-Gradio-Gguf",
         css="""
@@ -1264,8 +1265,7 @@ def launch_interface():
         )
 
         custom_components["max_hist"].change(
-            fn=lambda s: (setattr(temporary, "MAX_HISTORY_SLOTS", s), 
-                          setattr(temporary, "yake_history_detail", [None] * s)),
+            fn=lambda s: setattr(temporary, "MAX_HISTORY_SLOTS", s),
             inputs=[custom_components["max_hist"]],
             outputs=[]
         ).then(
@@ -1350,8 +1350,14 @@ def launch_interface():
             inputs=[global_status],
             outputs=[global_status]
         )
-
-    demo.launch(server_name="127.0.0.1", server_port=7860, show_error=True, show_api=False)
+    
+    demo.launch(
+        server_name="127.0.0.1", 
+        server_port=7860, 
+        show_error=True, 
+        show_api=False,
+        share=False,  # Ensure no tunneling
+    )
 
 if __name__ == "__main__":
     launch_interface()

@@ -2,7 +2,7 @@
 
 # Imports
 import tempfile
-import re, subprocess, json, time, random, psutil, shutil, os, zipfile, yake, sys
+import re, subprocess, json, time, random, psutil, shutil, os, zipfile, spacy, sys
 from pathlib import Path
 from datetime import datetime
 from newspaper import Article
@@ -16,6 +16,9 @@ from .temporary import (
     current_session_id, session_label
 )
 from . import temporary
+
+# Variables
+_nlp_model = None
 
 # Conditional imports based on platform
 if temporary.PLATFORM == "windows":
@@ -286,18 +289,87 @@ def speak_text(text):
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
 
+def get_nlp_model():
+    """Lazy load spaCy model on first use."""
+    global _nlp_model
+    if _nlp_model is None:
+        try:
+            _nlp_model = spacy.load("en_core_web_sm")
+            print("[SPACY] Language model loaded")
+        except OSError:
+            print("[SPACY] WARNING: Model not found. Run: python -m spacy download en_core_web_sm")
+            _nlp_model = False  # Mark as failed to avoid repeated attempts
+    return _nlp_model if _nlp_model is not False else None
+
+# Replace generate_session_label function:
 def generate_session_label(session_log):
-    """Generate a session label using YAKE on the entire session log, up to 25 characters."""
+    """Generate a session label using spaCy keyword extraction, up to 25 characters."""
     if not session_log:
         return "Untitled"
-    text_for_yake = " ".join([clean_content(msg['role'], msg['content']) for msg in session_log])
-    text_for_yake = filter_operational_content(text_for_yake)
-    kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
-    keywords = kw_extractor.extract_keywords(text_for_yake)
-    description = keywords[0][0] if keywords else "No description"
-    if len(description) > 25:
-        description = description[:25]
-    return description
+    
+    # Get the NLP model
+    nlp = get_nlp_model()
+    if nlp is None:
+        # Fallback: use first few words from first user message
+        for msg in session_log:
+            if msg['role'] == 'user':
+                content = clean_content(msg['role'], msg['content'])
+                words = content.split()[:3]
+                return ' '.join(words)[30] if words else "Untitled"
+        return "Untitled"
+    
+    # Combine all messages for analysis
+    text_for_analysis = " ".join([
+        clean_content(msg['role'], msg['content']) 
+        for msg in session_log
+    ])
+    text_for_analysis = filter_operational_content(text_for_analysis)
+    
+    if not text_for_analysis.strip():
+        return "Untitled"
+    
+    # Process with spaCy
+    try:
+        doc = nlp(text_for_analysis[:1000])  # Limit to first 1000 chars for speed
+        
+        # Extract noun chunks and entities as potential keywords
+        candidates = []
+        
+        # Get named entities
+        for ent in doc.ents:
+            if ent.label_ in ['PERSON', 'ORG', 'GPE', 'PRODUCT', 'EVENT']:
+                candidates.append((ent.text, len(ent.text.split())))
+        
+        # Get important noun chunks
+        for chunk in doc.noun_chunks:
+            if chunk.root.pos_ in ['NOUN', 'PROPN']:
+                candidates.append((chunk.text, len(chunk.text.split())))
+        
+        # Get important standalone nouns
+        for token in doc:
+            if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+                candidates.append((token.text, 1))
+        
+        if candidates:
+            # Sort by word count (prefer multi-word phrases) then by position
+            candidates.sort(key=lambda x: (-x[1], text_for_analysis.find(x[0])))
+            description = candidates[0][0]
+        else:
+            # Fallback: first significant words
+            words = [token.text for token in doc if not token.is_stop and token.is_alpha][:3]
+            description = ' '.join(words) if words else "No description"
+        
+        # Trim to 25 characters
+        if len(description) > 30:
+            description = description[:30]
+        
+        return description
+        
+    except Exception as e:
+        print(f"[SPACY] Error generating label: {e}")
+        # Fallback to first few words
+        words = text_for_analysis.split()[:3]
+        return ' '.join(words)[:30] if words else "Untitled"
 
 def save_session_history(session_log, attached_files):
     """Save session history with error handling and timestamp."""
@@ -443,14 +515,41 @@ def web_search(query: str, num_results, max_hits: int = 6) -> str:
     return raw
 
 def summarize_document(file_path):
-    """Summarize the contents of a document using YAKE, up to 100 characters."""
+    """Summarize the contents of a document using spaCy, up to 100 characters."""
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             content = file.read()
-        kw_extractor = yake.KeywordExtractor(lan="en", n=4, dedupLim=0.9, top=1)
-        keywords = kw_extractor.extract_keywords(content)
-        summary = keywords[0][0] if keywords else "No summary available"
+        
+        nlp = get_nlp_model()
+        if nlp is None:
+            # Fallback: first few words
+            words = content.split()[:10]
+            return ' '.join(words)[:100] if words else "No summary available"
+        
+        # Process with spaCy
+        doc = nlp(content[:2000])  # Limit to first 2000 chars
+        
+        # Extract key phrases
+        candidates = []
+        
+        # Get entities
+        for ent in doc.ents:
+            candidates.append(ent.text)
+        
+        # Get noun chunks
+        for chunk in doc.noun_chunks:
+            if chunk.root.pos_ in ['NOUN', 'PROPN']:
+                candidates.append(chunk.text)
+        
+        if candidates:
+            summary = candidates[0]
+        else:
+            # Fallback to first sentence
+            sentences = [sent.text.strip() for sent in doc.sents]
+            summary = sentences[0] if sentences else "No summary available"
+        
         return summary[:100]
+        
     except Exception as e:
         print(f"Error summarizing document {file_path}: {e}")
         return "Error generating summary"
