@@ -126,13 +126,50 @@ class ContextInjector:
     """
     End-to-end RAG:
       - ingest files → chunks → embeddings → FAISS
-      - retrieve top-k relevant chunks for a query
+      - retrieve top-k most relevant chunks for a query
     """
     def __init__(self):
-        # CPU-only embedding
-        self.embedding = TextEmbedding(EMBEDDING_MODEL_NAME)
-        self.index = None          # faiss index
-        self.chunks = []           # parallel list to index
+        # Lazy initialization - don't load model until needed
+        self.embedding = None
+        self.index = None
+        self.chunks = []
+        self._model_load_attempted = False
+    
+    def _ensure_embedding_model(self):
+        """Initialize embedding model on first use with proper cache path."""
+        if self._model_load_attempted:
+            return  # Don't retry if already attempted
+        
+        self._model_load_attempted = True
+        
+        import os
+        from pathlib import Path
+        
+        # Set cache directory to local path
+        cache_dir = Path("data/fastembed_cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Override FastEmbed's cache location
+        os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
+        
+        # Disable online model checking/updates
+        os.environ["FASTEMBED_OFFLINE"] = "1"
+        
+        try:
+            # Import here to avoid module-level import issues
+            from fastembed import TextEmbedding
+            
+            # Load from local cache with offline mode
+            self.embedding = TextEmbedding(
+                model_name=EMBEDDING_MODEL_NAME,
+                cache_dir=str(cache_dir),
+                providers=["CPUExecutionProvider"]  # Force CPU, no online checks
+            )
+            print("[RAG] Embedding model loaded from cache")
+        except Exception as e:
+            print(f"[RAG] Warning: Could not load embedding model: {e}")
+            print("[RAG] RAG features will be disabled. Run installer to download model.")
+            self.embedding = None
 
     # ingestion
     def set_session_vectorstore(self, file_paths):
@@ -141,11 +178,18 @@ class ContextInjector:
             self.index = None
             self.chunks = []
             return
+        
+        # Initialize model if needed
+        self._ensure_embedding_model()
+        
+        if self.embedding is None:
+            print("[RAG] Cannot create vectorstore - embedding model unavailable")
+            return
 
         all_docs = []
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=temporary.CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER,
-            chunk_overlap=temporary.CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
+            chunk_size=CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER,
+            chunk_overlap=CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
         )
         for fp in file_paths:
             if Path(fp).suffix[1:].lower() not in ALLOWED_EXTENSIONS:
@@ -177,13 +221,20 @@ class ContextInjector:
         """Return top-k most relevant chunks concatenated as string."""
         if self.index is None or not query.strip():
             return None
+        
+        # Ensure model is loaded
+        self._ensure_embedding_model()
+            
+        if self.embedding is None:
+            return None
+            
         q_vec = self.embedding.embed([query])
         q_vec = np.array(q_vec).astype('float32')
         faiss.normalize_L2(q_vec)
         scores, idxs = self.index.search(q_vec, k)
         top = [self.chunks[i] for i in idxs[0] if i < len(self.chunks)]
         return "\n\n".join(top)
-
+        
 context_injector = ContextInjector()
 
 # Status Updater
