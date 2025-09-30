@@ -84,7 +84,7 @@ BASE_REQ = [
     "gradio",
     "requests==2.31.0",
     "pyperclip",
-    "yake",
+    "spacy>=3.7.0",
     "psutil",
     "ddgs",
     "newspaper3k",
@@ -305,6 +305,36 @@ print("Model downloaded successfully!")
         return False
     except Exception as e:
         print_status(f"Model download error: {e}", False)
+        return False
+
+def download_spacy_model() -> bool:
+    """Download spaCy English model during installation."""
+    print_status("Downloading spaCy language model...")
+    
+    try:
+        python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                        ("python.exe" if PLATFORM == "windows" else "python"))
+        
+        # Download the small English model
+        result = subprocess.run(
+            [python_exe, "-m", "spacy", "download", "en_core_web_sm"],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result.returncode == 0:
+            print_status("spaCy model downloaded")
+            return True
+        else:
+            print_status(f"spaCy download failed: {result.stderr}", False)
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print_status("spaCy download timed out", False)
+        return False
+    except Exception as e:
+        print_status(f"spaCy download error: {e}", False)
         return False
 
 def download_with_progress(url: str, filepath: Path, description: str = "Downloading") -> None:
@@ -577,6 +607,11 @@ def install():
     if not download_fastembed_model():
         print_status("WARNING: Embedding model download failed", False)
         print("RAG features may not work until model is downloaded")
+
+    # NEW: Download spaCy model
+    if not download_spacy_model():
+        print_status("WARNING: spaCy model download failed", False)
+        print("Session labeling may not work until model is downloaded")
         # Don't exit - allow installation to continue
 
     info = BACKEND_OPTIONS[backend]

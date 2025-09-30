@@ -1,5 +1,14 @@
 # launcher.py
 
+# Disable Logging
+import os, logging, logging.config
+# 1.  replace dictConfig by a no-op
+logging.config.dictConfig = lambda *_, **__: None
+# 2.  replace fileConfig by a no-op
+logging.config.fileConfig = lambda *_, **__: None
+# 3.  make basicConfig a no-op as well
+logging.basicConfig = lambda *_, **__: None
+
 # Early Imports
 import sys, argparse
 from pathlib import Path
@@ -16,6 +25,8 @@ temporary.BACKEND_TYPE = "Vulkan"
 from scripts.settings import load_config
 from scripts.interface import launch_interface
 from scripts.utility import detect_cpu_config
+
+
 
 # Functions
 def initialize_platform_settings():
