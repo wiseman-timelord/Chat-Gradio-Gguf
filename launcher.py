@@ -2,11 +2,8 @@
 
 # Disable Logging
 import os, logging, logging.config
-# 1.  replace dictConfig by a no-op
 logging.config.dictConfig = lambda *_, **__: None
-# 2.  replace fileConfig by a no-op
 logging.config.fileConfig = lambda *_, **__: None
-# 3.  make basicConfig a no-op as well
 logging.basicConfig = lambda *_, **__: None
 
 # Early Imports
