@@ -34,7 +34,6 @@ from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings, inspect_model, load_models
 )
 
-
 # Functions...
 def get_panel_choices(model_settings):
     """Determine available panel choices based on model settings."""
@@ -737,6 +736,7 @@ def launch_interface():
     import os
     import gradio as gr
     from pathlib import Path
+    from launcher import shutdown_program
     from scripts import temporary, utility, models
     from scripts.temporary import (
         MODEL_NAME, SESSION_ACTIVE,
@@ -829,8 +829,15 @@ def launch_interface():
                     temporary.global_status = global_status
 
                     exit_config = gr.Button(
-                        "⏻ Exit", variant="stop", elem_classes=["double-height"], scale=1
+                         "Exit Program", variant="stop", elem_classes=["double-height"], scale=1
                     )
+                    exit_config.click(
+                        fn=shutdown_program,
+                        inputs=[states["llm"], states["models_loaded"],
+                                conversation_components["session_log"], states["attached_files"]],
+                        outputs=[]
+                    ).then(lambda: gr.update(visible=False), outputs=[demo])
+
 
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
