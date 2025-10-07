@@ -42,7 +42,7 @@ set_platform()
 if PLATFORM == "windows":
     BACKEND_OPTIONS = {
         "GPU/CPU - Vulkan": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/ {LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
             "dest": "data/llama-vulkan-bin",
             "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
             "needs_python_bindings": False,
@@ -50,7 +50,7 @@ if PLATFORM == "windows":
             "build_flags": {}
         },
         "GPU/CPU - HIP-Radeon": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-hip-radeon-x64.zip",
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/ {LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-hip-radeon-x64.zip",
             "dest": "data/llama-hip-radeon-bin",
             "cli_path": "data/llama-hip-radeon-bin/llama-cli.exe",
             "needs_python_bindings": False,
@@ -58,7 +58,7 @@ if PLATFORM == "windows":
             "build_flags": {}
         },
         "GPU/CPU - CUDA 12.x": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-cuda-12.4-x64.zip",
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/ {LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-cuda-12.4-x64.zip",
             "dest": "data/llama-cuda-12-bin",
             "cli_path": "data/llama-cuda-12-bin/llama-cli.exe",
             "needs_python_bindings": False,
@@ -69,7 +69,7 @@ if PLATFORM == "windows":
 else:  # Linux
     BACKEND_OPTIONS = {
         "GPU/CPU - Vulkan": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip",
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/ {LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip",
             "dest": "data/llama-vulkan-bin",
             "cli_path": "data/llama-vulkan-bin/llama-cli",
             "needs_python_bindings": False,
@@ -97,6 +97,11 @@ BASE_REQ = [
     "onnxruntime",
     "fastembed",
     "tokenizers",
+    # NEW: File format support libraries
+    "PyPDF2>=3.0.0",           # PDF reading
+    "python-docx>=0.8.11",     # Word documents
+    "openpyxl>=3.0.0",         # Excel files
+    "python-pptx>=0.6.21",     # PowerPoint files
 ]
 
 if PLATFORM == "windows":
@@ -409,7 +414,7 @@ def verify_backend_dependencies(backend: str) -> bool:
             print("\n" + "!" * 80)
             print(f"Vulkan not detected but required for {backend} backend!")
             if PLATFORM == "windows":
-                print("  Download from: https://vulkan.lunarg.com/sdk/home")
+                print("  Download from: https://vulkan.lunarg.com/sdk/home ")
             else:
                 print("  Install with: sudo apt install vulkan-tools libvulkan-dev")
             print("!" * 80 + "\n")
@@ -419,7 +424,7 @@ def verify_backend_dependencies(backend: str) -> bool:
             print("\n" + "!" * 80)
             print(f"CUDA not detected but required for {backend} backend!")
             if PLATFORM == "windows":
-                print("  Download from: https://developer.nvidia.com/cuda-downloads")
+                print("  Download from: https://developer.nvidia.com/cuda-downloads ")
             else:
                 print("  Install with: sudo apt install nvidia-cuda-toolkit")
             print("!" * 80 + "\n")
@@ -577,6 +582,45 @@ def select_backend_type() -> str:
         return "GPU/CPU - Vulkan"
 
 
+# ===== ALTERNATIVE: OPTIONAL FILE SUPPORT =====
+# If you want to make file format support optional (install but don't fail):
+
+def install_optional_file_support() -> bool:
+    """Install optional file format libraries (PDF, DOCX, etc.)"""
+    print_status("Installing optional file format support...")
+    
+    optional_packages = [
+        "PyPDF2>=3.0.0",
+        "python-docx>=0.8.11", 
+        "openpyxl>=3.0.0",
+        "python-pptx>=0.6.21"
+    ]
+    
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                    ("python.exe" if PLATFORM == "windows" else "python"))
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                 ("pip.exe" if PLATFORM == "windows" else "pip"))
+    
+    failed_packages = []
+    for package in optional_packages:
+        try:
+            subprocess.run([pip_exe, "install", package], 
+                          check=True, 
+                          capture_output=True)
+            print_status(f"Installed {package.split('>=')[0]}")
+        except subprocess.CalledProcessError:
+            failed_packages.append(package.split('>=')[0])
+            print_status(f"Optional package {package.split('>=')[0]} failed", False)
+    
+    if failed_packages:
+        print(f"\nNote: Some file formats may not be supported: {', '.join(failed_packages)}")
+        print("The program will work with text files only for these formats.\n")
+    else:
+        print_status("All file format support installed")
+    
+    return True  # Don't fail installation
+
+
 # Main install flow
 def install():
     backend = select_backend_type()
@@ -602,6 +646,10 @@ def install():
     if not install_python_deps(backend):
         print_status("Python dependencies failed", False)
         sys.exit(1)
+
+    # NEW: Install optional file format support
+    # (Using graceful degradation approach)
+    install_optional_file_support()
 
     # NEW: Download FastEmbed model
     if not download_fastembed_model():
