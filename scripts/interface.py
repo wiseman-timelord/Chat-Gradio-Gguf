@@ -28,7 +28,7 @@ from scripts import utility
 from scripts.utility import (
     web_search, get_saved_sessions, get_cpu_info,
     load_session_history, save_session_history,
-    get_available_gpus, filter_operational_content, speak_text, process_file
+    get_available_gpus, filter_operational_content, speak_text, process_files
 )
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings, inspect_model, load_models
@@ -1367,3 +1367,4 @@ def launch_interface():
 
 if __name__ == "__main__":
     launch_interface()
+
