@@ -430,7 +430,7 @@ async def conversation_interface(
     speech_enabled
 ):
     """
-    Handle user input and generate AI responses asynchronously for the Chat-Gradio-Gguf interface.
+    UPDATED: Now properly injects attached file contents into the prompt
     """
     import gradio as gr
     from scripts import temporary, utility
@@ -442,6 +442,7 @@ async def conversation_interface(
     from pathlib import Path
     import random
     import re
+    import time
 
     # Check if model is loaded
     if not models_loaded_state or not llm_state:
@@ -473,28 +474,27 @@ async def conversation_interface(
         )
         return
 
-    # Prepare user input with context and attachments
+    # === UPDATED: Build context with file contents ===
     original_input = user_input
     processed_input = user_input
     
-    # Add RAG context if available
-    if hasattr(context_injector, 'session_vectorstore'):
-        try:
-            relevant_context = context_injector.get_relevant_context(user_input)
-            if relevant_context:
-                processed_input = f"Context:\n{relevant_context}\n\nUser Query:\n{user_input}"
-        except Exception as e:
-            print(f"Error getting RAG context: {e}")
-
-    # Add attached file contents
+    # Add attached file context (includes both RAG and direct content)
     if temporary.session_attached_files:
-        for file in temporary.session_attached_files:
-            try:
-                with open(file, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-                processed_input += f"\n\nAttached File Content ({Path(file).name}):\n{file_content}"
-            except Exception as e:
-                print(f"Error reading attached file {file}: {e}")
+        try:
+            file_context = utility.get_attached_files_context(
+                temporary.session_attached_files,
+                query=user_input,
+                max_total_chars=temporary.CONTEXT_SIZE // 4  # Reserve 25% of context for files
+            )
+            
+            if file_context:
+                processed_input = f"{file_context}\n\n{'='*50}\n\nUser Query:\n{user_input}"
+                print(f"[ATTACH] Added context from {len(temporary.session_attached_files)} files")
+        except Exception as e:
+            print(f"[ATTACH] Error processing files: {e}")
+            # Fallback to basic filename list
+            file_names = [Path(f).name for f in temporary.session_attached_files]
+            processed_input = f"Attached files: {', '.join(file_names)}\n\n{user_input}"
 
     # Append messages to session log
     session_log.append({'role': 'user', 'content': f"User:\n{processed_input}"})
@@ -515,8 +515,8 @@ async def conversation_interface(
 
     # Afterthought countdown with visual feedback
     input_length = len(original_input.strip())
-    countdown_seconds = max(1, min(5, int(input_length / 50)))  # 1-5 seconds based on input length
-    progress_indicators = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    countdown_seconds = max(1, min(5, int(input_length / 50)))
+    progress_indicators = ["⋋", "⋙", "⋹", "⋸", "⋼", "⋴", "⋦", "⋧", "⋇", "⋗"]
 
     for i in range(countdown_seconds, -1, -1):
         if cancel_flag:
@@ -536,7 +536,7 @@ async def conversation_interface(
         await asyncio.sleep(1)
 
     if cancel_flag:
-        session_log.pop()  # Remove empty assistant message
+        session_log.pop()
         interaction_phase = "waiting_for_input"
         yield (
             session_log,
@@ -575,12 +575,12 @@ async def conversation_interface(
                 original_input,
                 num_results=3
             )
-            status = "✅ Web search completed." if search_results and "No results" not in search_results else "⚠️ No relevant results. Try more specific keywords."
+            status = "✅ Web search completed." if search_results and "No results" not in search_results else "⚠️ No relevant results."
             if "No results" in search_results:
-                search_results = None  # Prevent injecting error messages into prompt
+                search_results = None
         except Exception as e:
             search_results = None
-            status = f"⚠️ Search failed: {str(e)}. Try refining your query."
+            status = f"⚠️ Search failed: {str(e)}"
 
         session_log[-1]['content'] = f"AI-Chat:\n{status}"
         yield (
@@ -595,7 +595,7 @@ async def conversation_interface(
             gr.update()
         )
     
-    # Set up streaming with enhanced error handling
+    # Set up streaming
     q = queue.Queue()
     cancel_event = threading.Event()
     visible_response = ""
@@ -616,28 +616,24 @@ async def conversation_interface(
                 if cancel_event.is_set():
                     q.put("<CANCELLED>")
                     break
-                
-                # Clean and process the chunk
                 q.put(chunk)
-            
-            q.put(None)  # Signal completion
-            
+            q.put(None)
         except Exception as e:
             error_occurred = True
-            error_msg = f"Error generating response: {str(e)}"
-            print(f"{error_msg}\n{traceback.format_exc()}")
+            error_msg = f"Error: {str(e)}"
+            print(error_msg)
             q.put(error_msg)
 
     thread = threading.Thread(target=run_generator, daemon=True)
     thread.start()
 
-    # Process stream with timeout handling
+    # Process stream
     last_update_time = time.time()
     while True:
         try:
             chunk = q.get_nowait()
             
-            if chunk is None:  # Normal completion
+            if chunk is None:
                 break
                 
             if chunk == "<CANCELLED>":
@@ -671,11 +667,9 @@ async def conversation_interface(
                 )
                 return
 
-            # Update visible response
             visible_response += chunk
             session_log[-1]['content'] = visible_response.strip()
             
-            # Throttle updates to ~20fps
             current_time = time.time()
             if current_time - last_update_time >= 0.05:
                 yield (
@@ -695,24 +689,23 @@ async def conversation_interface(
             if thread.is_alive():
                 await asyncio.sleep(0.01)
             else:
-                break  # Thread finished but didn't signal completion
-        
-        # Handle speech synthesis if enabled
-        if speech_enabled:
-            try:
-                speech_text = clean_response
-                clean_speech = re.sub(r'^AI-Chat:\s*', '', speech_text, flags=re.IGNORECASE)
-                chunks = utility.chunk_text_for_speech(clean_speech, 500)
-                for chunk in chunks:
-                    if cancel_flag:
-                        break
-                    utility.speak_text(chunk)
-                    await asyncio.sleep(0.5)
-            except Exception as e:
-                print(f"Error during speech synthesis: {e}")
+                break
 
-        # Save session
-        utility.save_session_history(session_log, temporary.session_attached_files)
+    # Handle speech if enabled
+    if speech_enabled and visible_response:
+        try:
+            clean_speech = re.sub(r'^AI-Chat:\s*', '', visible_response, flags=re.IGNORECASE)
+            chunks = utility.chunk_text_for_speech(clean_speech, 500)
+            for chunk in chunks:
+                if cancel_flag:
+                    break
+                utility.speak_text(chunk)
+                await asyncio.sleep(0.5)
+        except Exception as e:
+            print(f"Speech error: {e}")
+
+    # Save session
+    utility.save_session_history(session_log, temporary.session_attached_files)
 
     interaction_phase = "waiting_for_input"
     yield (
@@ -1367,4 +1360,3 @@ def launch_interface():
 
 if __name__ == "__main__":
     launch_interface()
-

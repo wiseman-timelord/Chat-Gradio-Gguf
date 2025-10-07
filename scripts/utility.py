@@ -2,13 +2,16 @@
 
 # Imports
 import tempfile
-import re, subprocess, json, time, random, psutil, shutil, os, zipfile, spacy, sys
+import re, subprocess, json, time, random, psutil, shutil, os, zipfile, spacy, sys, PyPDF2
 from pathlib import Path
 from datetime import datetime
 from newspaper import Article
 from ddgs import DDGS
 from ddgs.exceptions import DDGSException
 import requests.exceptions  # For HTTPError and Timeout
+from docx import Document
+from openpyxl import load_workbook
+from pptx import Presentation
 from .models import load_models, clean_content
 import scripts.settings as settings
 from .temporary import (
@@ -16,6 +19,7 @@ from .temporary import (
     current_session_id, session_label
 )
 from . import temporary
+
 
 # Variables
 _nlp_model = None
@@ -300,6 +304,180 @@ def get_nlp_model():
             print("[SPACY] WARNING: Model not found. Run: python -m spacy download en_core_web_sm")
             _nlp_model = False  # Mark as failed to avoid repeated attempts
     return _nlp_model if _nlp_model is not False else None
+
+def read_file_content(file_path, max_chars=50000):
+    """
+    Read file content with support for multiple formats.
+    Returns tuple: (content: str, file_type: str, success: bool, error: str)
+    
+    Supported formats:
+    - Text: .txt, .py, .json, .yaml, .md, .xml, .html, .css, .js, .sh, .bat, .ps1
+    - PDF: .pdf
+    - Word: .docx
+    - Excel: .xlsx, .xls
+    - PowerPoint: .pptx
+    """
+    from pathlib import Path
+    
+    file_path = Path(file_path)
+    if not file_path.exists():
+        return "", "unknown", False, f"File not found: {file_path}"
+    
+    extension = file_path.suffix.lower()
+    
+    try:
+        # Text-based files
+        text_extensions = {'.txt', '.py', '.json', '.yaml', '.yml', '.md', 
+                          '.xml', '.html', '.css', '.js', '.sh', '.bat', 
+                          '.ps1', '.psd1', '.xaml', '.csv', '.log'}
+        
+        if extension in text_extensions:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read(max_chars)
+                return content, "text", True, ""
+        
+        # PDF files
+        elif extension == '.pdf':
+            try:
+                import PyPDF2
+                content = []
+                with open(file_path, 'rb') as f:
+                    reader = PyPDF2.PdfReader(f)
+                    max_pages = min(10, len(reader.pages))  # Limit to 10 pages
+                    for page_num in range(max_pages):
+                        page = reader.pages[page_num]
+                        content.append(page.extract_text())
+                text = '\n'.join(content)[:max_chars]
+                return text, "pdf", True, ""
+            except ImportError:
+                return "", "pdf", False, "PyPDF2 not installed. Run: pip install PyPDF2"
+            except Exception as e:
+                return "", "pdf", False, f"PDF error: {str(e)}"
+        
+        # Word documents
+        elif extension == '.docx':
+            try:
+                from docx import Document
+                doc = Document(file_path)
+                content = '\n'.join([para.text for para in doc.paragraphs])[:max_chars]
+                return content, "docx", True, ""
+            except ImportError:
+                return "", "docx", False, "python-docx not installed. Run: pip install python-docx"
+            except Exception as e:
+                return "", "docx", False, f"DOCX error: {str(e)}"
+        
+        # Excel files
+        elif extension in {'.xlsx', '.xls'}:
+            try:
+                from openpyxl import load_workbook
+                wb = load_workbook(file_path, read_only=True, data_only=True)
+                content = []
+                for sheet_name in wb.sheetnames[:3]:  # Limit to 3 sheets
+                    sheet = wb[sheet_name]
+                    content.append(f"=== Sheet: {sheet_name} ===")
+                    for row in list(sheet.rows)[:50]:  # Limit to 50 rows per sheet
+                        row_data = [str(cell.value) if cell.value is not None else "" 
+                                   for cell in row]
+                        content.append(" | ".join(row_data))
+                text = '\n'.join(content)[:max_chars]
+                return text, "excel", True, ""
+            except ImportError:
+                return "", "excel", False, "openpyxl not installed. Run: pip install openpyxl"
+            except Exception as e:
+                return "", "excel", False, f"Excel error: {str(e)}"
+        
+        # PowerPoint files
+        elif extension == '.pptx':
+            try:
+                from pptx import Presentation
+                prs = Presentation(file_path)
+                content = []
+                for i, slide in enumerate(prs.slides[:10], 1):  # Limit to 10 slides
+                    content.append(f"=== Slide {i} ===")
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text"):
+                            content.append(shape.text)
+                text = '\n'.join(content)[:max_chars]
+                return text, "pptx", True, ""
+            except ImportError:
+                return "", "pptx", False, "python-pptx not installed. Run: pip install python-pptx"
+            except Exception as e:
+                return "", "pptx", False, f"PowerPoint error: {str(e)}"
+        
+        else:
+            return "", "unsupported", False, f"Unsupported file type: {extension}"
+    
+    except Exception as e:
+        return "", "error", False, f"Unexpected error: {str(e)}"
+
+def get_attached_files_context(attached_files, query=None, max_total_chars=8000):
+    """
+    Generate context string from attached files for model input.
+    
+    Args:
+        attached_files: List of file paths
+        query: Optional user query for RAG-based filtering
+        max_total_chars: Maximum total characters to include
+    
+    Returns:
+        str: Formatted context string with file contents
+    """
+    if not attached_files:
+        return ""
+    
+    from pathlib import Path
+    import scripts.temporary as temporary
+    
+    context_parts = []
+    total_chars = 0
+    
+    # Build list of files with their names
+    file_list = [Path(f).name for f in attached_files]
+    context_parts.append(f"📎 Attached Files ({len(file_list)}): {', '.join(file_list)}")
+    context_parts.append("")
+    
+    # Try RAG-based retrieval first if query provided
+    rag_context = None
+    if query and hasattr(temporary.context_injector, 'get_relevant_context'):
+        try:
+            rag_context = temporary.context_injector.get_relevant_context(query, k=3)
+            if rag_context:
+                context_parts.append("📖 Relevant Content from Files:")
+                context_parts.append(rag_context[:max_total_chars // 2])
+                context_parts.append("")
+                total_chars += len(rag_context)
+        except Exception as e:
+            print(f"[ATTACH] RAG retrieval error: {e}")
+    
+    # For small files, include full content
+    remaining_chars = max_total_chars - total_chars
+    if remaining_chars > 1000:
+        for file_path in attached_files:
+            if total_chars >= max_total_chars:
+                context_parts.append(f"... ({len(attached_files) - len(context_parts) + 3} more files)")
+                break
+            
+            content, file_type, success, error = read_file_content(
+                file_path, 
+                max_chars=remaining_chars // len(attached_files)
+            )
+            
+            file_name = Path(file_path).name
+            
+            if success and content.strip():
+                # Skip if content already in RAG context
+                if rag_context and content[:500] in rag_context:
+                    continue
+                    
+                context_parts.append(f"--- {file_name} ({file_type}) ---")
+                context_parts.append(content)
+                context_parts.append("")
+                total_chars += len(content)
+                remaining_chars -= len(content)
+            elif not success:
+                context_parts.append(f"⚠️ {file_name}: {error}")
+    
+    return "\n".join(context_parts)
 
 # Replace generate_session_label function:
 def generate_session_label(session_log):
