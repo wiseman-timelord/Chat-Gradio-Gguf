@@ -811,7 +811,6 @@ def launch_interface():
                         initial_max_lines = max(3, int(((temporary.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
                         temporary.USER_INPUT_MAX_LINES = initial_max_lines
                         conversation_components["user_input"] = gr.Textbox(label="User Input", lines=3, max_lines=initial_max_lines, interactive=False, placeholder="Enter text here...")
-                        conversation_components["user_input"].change(fn=update_session_log_height, inputs=[conversation_components["user_input"]], outputs=[conversation_components["session_log"]])
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=10)
                             action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="huggingface", scale=1)
