@@ -274,23 +274,30 @@ def eject_file(file_list, slot_index, is_attach=True):
     return [file_list, status_msg] + updates
 
 def start_new_session(models_loaded):
-    from scripts import temporary
+    import scripts.temporary as temporary
     import gradio as gr
+
     if not models_loaded:
         return (
             [],                                # session_log
-            "Load model first on Configuration page...",  # global_status
-            gr.update(interactive=False),     # user_input
-            gr.update()                       # web_search
+            "Load model first on Configuration page...",
+            gr.update(interactive=False),
+            gr.update()
         )
+
+    # --- NEW: wipe the real attached-files list ---
+    temporary.session_attached_files.clear()
+    # ---------------------------------------------
+
     temporary.current_session_id = None
     temporary.session_label = ""
     temporary.SESSION_ACTIVE = True
+
     return (
         [],                                # session_log
-        "Type input and click Send to begin...",  # global_status
-        gr.update(interactive=True),      # user_input
-        gr.update()                       # web_search
+        "Type input and click Send to begin...",
+        gr.update(interactive=True),
+        gr.update()
     )
 
 def load_session_by_index(index):
@@ -706,6 +713,7 @@ async def conversation_interface(
 
     # Save session
     utility.save_session_history(session_log, temporary.session_attached_files)
+    temporary.session_attached_files.clear()
 
     interaction_phase = "waiting_for_input"
     yield (
