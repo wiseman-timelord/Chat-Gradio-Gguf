@@ -254,7 +254,7 @@ project_root/
 - sliders for, context size and batch size, affecting them will affect the ones on the configuration page, and vice versa. They use the same global in temporary. we would then need to ensure that whatever settings are selected on either/both, will then be active for when the next time the user clicks send.
 
 ## Credits
-Thanks to all the following teams, for the free/paid use of their software/platforms...
+Thanks to all the following teams, for the use of their software/platforms...
 - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - The binaries used for interference with models.
 - [Yake](https://github.com/LIAAD/yake) - Library used for generating the labels for the history slots.
 - [Kimi K2](https://www.kimi.com) - For most work after its release in July 2025, like Grok4 but free.
