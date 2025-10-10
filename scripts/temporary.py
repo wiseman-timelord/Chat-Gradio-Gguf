@@ -12,6 +12,8 @@ from pathlib import Path
 
 # Configuration variables with defaults
 PLATFORM = None          # will be set by launcher.py
+VULKAN_AVAILABLE = False   # set by settings.load_config() - whether Vulkan binary exists
+BACKEND_TYPE = "CPU-Only"  # current runtime mode: "CPU-Only" or "Vulkan"
 MODEL_FOLDER = "path/to/your/models"
 CONTEXT_SIZE = 8192
 VRAM_SIZE = 8192
@@ -48,14 +50,13 @@ GPU_LAYERS = 0
 SELECTED_GPU = None
 STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True
-BACKEND_TYPE = "Not Configured"
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
 SPEECH_ENABLED = False
 LLAMA_CLI_PATH = None  # will be set by launcher.py
 global_status = None 
 
-# CPU COnfiguration
+# CPU Configuration
 CPU_THREADS = None  # Will be auto-detected
 CPU_THREAD_OPTIONS = []  # Will be populated with available thread counts
 CPU_PHYSICAL_CORES = 1
@@ -77,9 +78,9 @@ MAX_POSSIBLE_ATTACH_SLOTS = 10
 PRINT_RAW_OUTPUT = False
 demo = None
 
-# Rag CONSTANTS
-RAG_CHUNK_SIZE_DIVIDER = 4          # typo fix
-RAG_CHUNK_OVERLAP_DIVIDER = 32      # typo fix
+# RAG CONSTANTS
+RAG_CHUNK_SIZE_DIVIDER = 4
+RAG_CHUNK_OVERLAP_DIVIDER = 32
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 # Status text entries  
@@ -99,7 +100,7 @@ STATUS_MESSAGES = {
 }
 
 CHAT_FORMAT_MAP = {
-    'qwen2': 'chatml', # Note, includes qwen2.5
+    'qwen2': 'chatml',
     'llama': 'llama-2',
     'qwen3': 'chatml',
     'qwen3moe': 'chatml',
@@ -118,10 +119,10 @@ handling_keywords = {
 
 # prompt template table
 current_model_settings = {
-    "category": "chat"  # prompt_template removed as not needed
+    "category": "chat"
 }
 
-# Rag
+# RAG Context Injector
 class ContextInjector:
     """
     End-to-end RAG:
@@ -129,7 +130,6 @@ class ContextInjector:
       - retrieve top-k most relevant chunks for a query
     """
     def __init__(self):
-        # Lazy initialization - don't load model until needed
         self.embedding = None
         self.index = None
         self.chunks = []
@@ -138,32 +138,26 @@ class ContextInjector:
     def _ensure_embedding_model(self):
         """Initialize embedding model on first use with proper cache path."""
         if self._model_load_attempted:
-            return  # Don't retry if already attempted
+            return
         
         self._model_load_attempted = True
         
         import os
         from pathlib import Path
         
-        # Set cache directory to local path
         cache_dir = Path("data/fastembed_cache")
         cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # Override FastEmbed's cache location
         os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-        
-        # Disable online model checking/updates
         os.environ["FASTEMBED_OFFLINE"] = "1"
         
         try:
-            # Import here to avoid module-level import issues
             from fastembed import TextEmbedding
             
-            # Load from local cache with offline mode
             self.embedding = TextEmbedding(
                 model_name=EMBEDDING_MODEL_NAME,
                 cache_dir=str(cache_dir),
-                providers=["CPUExecutionProvider"]  # Force CPU, no online checks
+                providers=["CPUExecutionProvider"]
             )
             print("[RAG] Embedding model loaded from cache")
         except Exception as e:
@@ -171,7 +165,6 @@ class ContextInjector:
             print("[RAG] RAG features will be disabled. Run installer to download model.")
             self.embedding = None
 
-    # ingestion
     def set_session_vectorstore(self, file_paths):
         """Create/refresh vector store from list of file paths."""
         if not file_paths:
@@ -179,7 +172,6 @@ class ContextInjector:
             self.chunks = []
             return
         
-        # Initialize model if needed
         self._ensure_embedding_model()
         
         if self.embedding is None:
@@ -206,23 +198,20 @@ class ContextInjector:
             return
 
         texts = [d.page_content for d in all_docs]
-        # fastembed returns np.ndarray already
         embeddings = self.embedding.embed(texts)
         embeddings = np.array(embeddings).astype('float32')
 
-        self.index = faiss.IndexFlatIP(embeddings.shape[1])  # cosine via inner-product
+        self.index = faiss.IndexFlatIP(embeddings.shape[1])
         faiss.normalize_L2(embeddings)
         self.index.add(embeddings)
         self.chunks = texts
         print(f"[RAG] Ingested {len(texts)} chunks from {len(file_paths)} files")
 
-    # retrieval
     def get_relevant_context(self, query, k=4):
         """Return top-k most relevant chunks concatenated as string."""
         if self.index is None or not query.strip():
             return None
         
-        # Ensure model is loaded
         self._ensure_embedding_model()
             
         if self.embedding is None:
@@ -240,7 +229,7 @@ context_injector = ContextInjector()
 # Status Updater
 def set_status(msg: str, console=False):
     """Update both UI and/or terminal"""
-    if global_status is not None:          # UI ready?
+    if global_status is not None:
         global_status.value = msg
     if console or len(msg.split()) > 3:
         print(msg)

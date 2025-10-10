@@ -82,6 +82,52 @@ def get_model_settings(model_name):
         "detected_keywords": [kw for kw in handling_keywords if any(k in model_name_lower for k in handling_keywords[kw])]
     }
 
+def calculate_single_model_gpu_layers_with_layers(
+    model_path: str,
+    available_vram: int,
+    num_layers: int,
+    dynamic_gpu_layers: bool = True
+) -> int:
+    """Compute how many layers fit on GPU with safety checks."""
+    from math import floor
+
+    if temporary.CPU_ONLY_MODE:          # NEW – pure CPU
+        return 0
+
+    if num_layers <= 0:
+        print(f"[GPU-LAYERS] Invalid layer count {num_layers}, using fallback 32")
+        num_layers = 32
+    if available_vram <= 0:
+        print(f"[GPU-LAYERS] Invalid VRAM {available_vram} MB")
+        return 0
+
+    model_mb = get_model_size(model_path)
+    meta = get_model_metadata(model_path)
+    arch = meta.get("general.architecture", "unknown")
+    if arch in ["qwen2", "qwen2.5", "qwen"]:
+        factor = 1.15
+    elif arch == "llama":
+        factor = 1.2
+    else:
+        factor = 1.25
+
+    adjusted_mb = model_mb * factor
+    layer_mb = adjusted_mb / num_layers
+    max_layers = floor(available_vram / layer_mb)
+
+    if not dynamic_gpu_layers:
+        gpu_layers = num_layers
+        print(f"[GPU-LAYERS] Dynamic off-load disabled → {gpu_layers} layers")
+    else:
+        gpu_layers = min(max_layers, num_layers)
+        if temporary.VULKAN_AVAILABLE:
+            gpu_layers = max(1, gpu_layers - 2)
+        cpu_fallback = num_layers - gpu_layers
+        print(f"[GPU-LAYERS] Model {adjusted_mb:.0f} MB, layer {layer_mb:.1f} MB")
+        print(f"[GPU-LAYERS] VRAM {available_vram} MB → GPU {gpu_layers}/{num_layers} (CPU {cpu_fallback})")
+
+    return gpu_layers
+
 def calculate_gpu_layers(models, available_vram):
     from math import floor
     if not models or available_vram <= 0:
@@ -387,7 +433,14 @@ def calculate_single_model_gpu_layers_with_layers(
 ) -> int:
     """Compute how many layers fit on GPU with safety checks."""
     from math import floor
-    
+    import scripts.temporary as tmp
+
+    # ===== CPU-Only fast-path =====
+    if tmp.BACKEND_TYPE == "CPU-Only":
+        print("[GPU-LAYERS] CPU-Only mode – forcing 0 GPU layers")
+        return 0
+    # ==============================
+
     # Safety check for invalid layer count
     if num_layers <= 0:
         print(f"[GPU-LAYERS] Invalid layer count {num_layers}, using fallback 32")
@@ -418,7 +471,7 @@ def calculate_single_model_gpu_layers_with_layers(
         print(f"[GPU-LAYERS] Dynamic off-load disabled → {gpu_layers} layers")
     else:
         gpu_layers = min(max_layers, num_layers)
-        if "vulkan" in str(temporary.BACKEND_TYPE).lower():
+        if "vulkan" in str(tmp.BACKEND_TYPE).lower():
             gpu_layers = max(1, gpu_layers - 2)
         cpu_fallback = num_layers - gpu_layers
         print(f"[GPU-LAYERS] Model {adjusted_mb:.0f} MB, layer {layer_mb:.1f} MB")

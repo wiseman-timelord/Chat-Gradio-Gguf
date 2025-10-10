@@ -833,106 +833,98 @@ def launch_interface():
 
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
-                    is_cpu = temporary.BACKEND_TYPE.startswith("CPU Only")
-                    is_vk = "vulkan" in temporary.BACKEND_TYPE.lower()
-                    
-                    gpus = utility.get_available_gpus()
-                    g_choices = ["Auto-Select"] + gpus if gpus != ["CPU Only"] else ["CPU Only"]
-                    def_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in g_choices else g_choices[0]
 
-                    with gr.Row(elem_classes=["clean-elements"]): 
-                        gr.Markdown("Hardware")
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["backend_type"] = gr.Textbox(
-                            label="Backend", 
-                            value=temporary.BACKEND_TYPE, 
-                            interactive=False, 
-                            scale=5
+                    # ---------------------------------------------------------
+                    # 1  Execution-mode switch  (radio only if Vulkan present)
+                    # ---------------------------------------------------------
+                    if temporary.VULKAN_AVAILABLE:
+                        backend_radio = gr.Radio(
+                            choices=["CPU-Only", "Vulkan"],
+                            value=temporary.BACKEND_TYPE,
+                            label="Execution Mode",
+                            interactive=True,
+                            scale=10,
                         )
+                    else:
+                        backend_radio = gr.Label(
+                            value="CPU-Only (Vulkan not detected)",
+                            label="Execution Mode",
+                        )
+
+                    # ---------------------------------------------------------
+                    # 2  Hardware header
+                    # ---------------------------------------------------------
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("**Hardware**")
+
+                    # ---------------------------------------------------------
+                    # 3  GPU row   (visible only when Vulkan is *selected*)
+                    # ---------------------------------------------------------
+                    gpu_row_visible = temporary.VULKAN_AVAILABLE and temporary.BACKEND_TYPE == "Vulkan"
+
+                    with gr.Row(elem_classes=["clean-elements"], visible=gpu_row_visible) as gpu_row:
+                        gpus = utility.get_available_gpus()
+                        gpu_choices = ["Auto-Select"] + gpus if gpus != ["CPU Only"] else ["CPU Only"]
+                        def_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in gpu_choices else gpu_choices[0]
+
                         config_components["gpu"] = gr.Dropdown(
-                            choices=g_choices, 
-                            label="GPU", 
-                            value=def_gpu, 
-                            scale=10
+                            choices=gpu_choices, label="GPU", value=def_gpu, scale=10
                         )
                         config_components["vram"] = gr.Dropdown(
-                            choices=temporary.VRAM_OPTIONS, 
-                            label="VRAM MB", 
-                            value=temporary.VRAM_SIZE, 
-                            scale=5
+                            choices=temporary.VRAM_OPTIONS,
+                            label="VRAM MB",
+                            value=temporary.VRAM_SIZE,
+                            scale=5,
                         )
 
-                    with gr.Row(visible=is_cpu or is_vk, elem_classes=["clean-elements"]) as cpu_row:
-                        cpu_labs = [c["label"] for c in utility.get_cpu_info()] or ["Default CPU"]
-                        cpu_opts = ["Select..."] + cpu_labs if len(cpu_labs) > 1 else cpu_labs
-                        def_cpu = temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_opts else cpu_opts[0]
-                        config_components["cpu"] = gr.Dropdown(
-                            choices=cpu_opts, 
-                            label="CPU Device", 
-                            value=def_cpu, 
-                            scale=4
-                        )
+                    # ---------------------------------------------------------
+                    # 4  CPU threads  (always shown)
+                    # ---------------------------------------------------------
+                    with gr.Row(elem_classes=["clean-elements"]) as cpu_row:
                         max_threads = max(temporary.CPU_THREAD_OPTIONS or [8])
                         config_components["cpu_threads"] = gr.Slider(
-                            minimum=1, 
-                            maximum=max(temporary.CPU_THREAD_OPTIONS or [8]),  # Dynamic max
-                            value=temporary.CPU_THREADS or min(4, max(temporary.CPU_THREAD_OPTIONS or [8])), 
-                            step=1, 
-                            label="Threads", 
-                            scale=3, 
-                            info=f"Available: {max(temporary.CPU_THREAD_OPTIONS or [8])} threads",
-                            interactive=True  # Ensure it's not disabled
+                            minimum=1,
+                            maximum=max_threads,
+                            value=temporary.CPU_THREADS or min(4, max_threads),
+                            step=1,
+                            label="CPU Threads",
+                            scale=3,
+                            info=f"Available: {max_threads} threads",
+                            interactive=True,
                         )
 
-                    with gr.Row(elem_classes=["clean-elements"]): 
-                        gr.Markdown("Model")
+                    # ---------------------------------------------------------
+                    # 5  Rest of the original Configuration UI
+                    # ---------------------------------------------------------
+                    # --- Model section -------------------------------------------------
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("**Model**")
+
                     with gr.Row(elem_classes=["clean-elements"]):
                         avail = temporary.AVAILABLE_MODELS or get_available_models()
                         mods = ["Select_a_model..."] + [m for m in avail if m != "Select_a_model..."]
                         def_m = temporary.MODEL_NAME if temporary.MODEL_NAME in mods else (mods[1] if len(mods) > 1 else mods[0])
+
                         config_components["model_path"] = gr.Textbox(
-                            label="Folder", 
-                            value=temporary.MODEL_FOLDER, 
-                            interactive=False, 
-                            scale=10
+                            label="Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=10
                         )
                         config_components["model"] = gr.Dropdown(
-                            choices=mods, 
-                            label="File", 
-                            value=def_m, 
-                            scale=10, 
-                            info=".gguf"
+                            choices=mods, label="File", value=def_m, scale=10, info=".gguf"
                         )
-                        keywords_display = gr.Textbox(
-                            label="Features", 
-                            interactive=False, 
-                            scale=10
-                        )
+                        keywords_display = gr.Textbox(label="Features", interactive=False, scale=10)
 
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["ctx"] = gr.Dropdown(
-                            temporary.CTX_OPTIONS, 
-                            label="Ctx", 
-                            value=temporary.CONTEXT_SIZE, 
-                            scale=5
+                            temporary.CTX_OPTIONS, label="Ctx", value=temporary.CONTEXT_SIZE, scale=5
                         )
                         config_components["batch"] = gr.Dropdown(
-                            temporary.BATCH_OPTIONS, 
-                            label="Batch", 
-                            value=temporary.BATCH_SIZE, 
-                            scale=5
+                            temporary.BATCH_OPTIONS, label="Batch", value=temporary.BATCH_SIZE, scale=5
                         )
                         config_components["temp"] = gr.Dropdown(
-                            temporary.TEMP_OPTIONS, 
-                            label="Temp", 
-                            value=temporary.TEMPERATURE, 
-                            scale=5
+                            temporary.TEMP_OPTIONS, label="Temp", value=temporary.TEMPERATURE, scale=5
                         )
                         config_components["repeat"] = gr.Dropdown(
-                            temporary.REPEAT_OPTIONS, 
-                            label="Repeat", 
-                            value=temporary.REPEAT_PENALTY, 
-                            scale=5
+                            temporary.REPEAT_OPTIONS, label="Repeat", value=temporary.REPEAT_PENALTY, scale=5
                         )
 
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -941,52 +933,46 @@ def launch_interface():
                         config_components["inspect"] = gr.Button("🔍 Inspect")
                         config_components["unload"] = gr.Button("🗑️ Unload", variant="stop")
 
-                    with gr.Row(elem_classes=["clean-elements"]): 
-                        gr.Markdown("Program")
+                    # --- Program section ----------------------------------------------
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        gr.Markdown("**Program**")
+
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components["max_hist"] = gr.Dropdown(
-                            temporary.HISTORY_SLOT_OPTIONS, 
-                            label="Sessions", 
-                            value=temporary.MAX_HISTORY_SLOTS, 
-                            scale=5
+                            temporary.HISTORY_SLOT_OPTIONS, label="Sessions", value=temporary.MAX_HISTORY_SLOTS, scale=5
                         )
                         custom_components["height"] = gr.Dropdown(
-                            temporary.SESSION_LOG_HEIGHT_OPTIONS, 
-                            label="Height", 
-                            value=temporary.SESSION_LOG_HEIGHT, 
-                            scale=5
+                            temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Height", value=temporary.SESSION_LOG_HEIGHT, scale=5
                         )
                         custom_components["max_att"] = gr.Dropdown(
-                            temporary.ATTACH_SLOT_OPTIONS, 
-                            label="Attach", 
-                            value=temporary.MAX_ATTACH_SLOTS, 
-                            scale=5
+                            temporary.ATTACH_SLOT_OPTIONS, label="Attach", value=temporary.MAX_ATTACH_SLOTS, scale=5
                         )
                         config_components["print_raw"] = gr.Checkbox(
-                            label="Print raw output to terminal",
-                            value=temporary.PRINT_RAW_OUTPUT,
-                            scale=5
-                        )
-                    with gr.Row(elem_classes=["clean-elements"]):
-                        config_components["save_settings"] = gr.Button(
-                            "💾 Save Settings", 
-                            variant="primary"
-                        )
-                        config_components["delete_all_history"] = gr.Button(
-                            "🗑️ Clear All History", 
-                            variant="stop"
+                            label="Print raw output to terminal", value=temporary.PRINT_RAW_OUTPUT, scale=5
                         )
 
                     with gr.Row(elem_classes=["clean-elements"]):
-                        global_status = gr.Textbox(
-                            value="Ready",
-                            label="Status",
-                            interactive=False,
-                            max_lines=1,
-                            elem_classes=["clean-elements"],
-                            scale=20
+                        config_components["save_settings"] = gr.Button("💾 Save Settings", variant="primary")
+                        config_components["delete_all_history"] = gr.Button("🗑️ Clear All History", variant="stop")
+
+                    # ---------------------------------------------------------
+                    # 6  Event wiring for the new radio
+                    # ---------------------------------------------------------
+                    if temporary.VULKAN_AVAILABLE:
+
+                        def _switch_backend(mode):
+                            # 1. store choice   2. toggle GPU row visibility
+                            temporary.BACKEND_TYPE = mode
+                            return (
+                                gr.update(visible=(mode == "Vulkan")),  # gpu_row
+                                f"Switched to {mode}",
+                            )
+
+                        backend_radio.change(
+                            fn=_switch_backend,
+                            inputs=[backend_radio],
+                            outputs=[gpu_row, global_status],
                         )
-                        temporary.global_status = global_status
 
         def handle_edit_previous(session_log):
             if len(session_log) < 2:
@@ -1213,12 +1199,23 @@ def launch_interface():
             outputs=[attach_group, history_slots_group]
         )
 
-        for comp in [config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]]:
+        for comp in [config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu_threads", "model"]]:
             comp.change(
                 fn=update_config_settings,
-                inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu", "model"]] + [config_components["print_raw"]],
+                inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu_threads", "model"]] + [config_components["print_raw"]],
                 outputs=[global_status]
             )
+
+        if temporary.VULKAN_AVAILABLE:
+            backend_radio.change(
+                fn=lambda mode: [mode, gr.update(visible=(mode == "Vulkan"))],
+                inputs=[backend_radio],
+                outputs=[backend_radio, gpu_row]
+			).then(
+				fn=lambda mode: setattr(temporary, "BACKEND_TYPE", mode) or None,
+				inputs=[backend_radio],
+				outputs=[]
+			)
 
         config_components["unload"].click(
             fn=unload_models,

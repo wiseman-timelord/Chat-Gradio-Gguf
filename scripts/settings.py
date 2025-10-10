@@ -24,6 +24,7 @@ DEFAULTS = {
     "SESSION_LOG_HEIGHT": 650,
     "INPUT_LINES": 27,
     "PRINT_RAW_OUTPUT": False,
+    "CPU_ONLY_MODE": True,
     "VRAM_OPTIONS": [2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536],
     "CTX_OPTIONS": [8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072],
     "BATCH_OPTIONS": [128, 256, 512, 1024, 2048, 4096],
@@ -76,10 +77,10 @@ def load_config():
 
         # Load backend_config
         backend_config = config.get("backend_config", {})
-        if "backend_type" in backend_config:
-            temporary.BACKEND_TYPE = backend_config["backend_type"]
-        if "llama_bin_path" in backend_config:
-            temporary.LLAMA_CLI_PATH = backend_config["llama_bin_path"]
+        temporary.VULKAN_AVAILABLE = config.get("vulkan_available", False)
+        temporary.LLAMA_CLI_PATH = backend_config.get("llama_bin_path", "data/llama-vulkan-bin/llama-cli.exe")
+        temporary.SELECTED_GPU = backend_config.get("selected_gpu")
+        temporary.VULKAN_AVAILABLE = backend_config.get("vulkan_available", False)
     else:
         # Set defaults if JSON doesn't exist
         for key, value in DEFAULTS.items():
@@ -87,7 +88,7 @@ def load_config():
         temporary.BACKEND_TYPE = "Not Configured"
         temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
         temporary.SELECTED_GPU = None
-        temporary.MODEL_NAME = "Select_a_model..."
+        temporary.MODEL_NAME = "Select_a_model..."                                  # NEW
         print(f"⚠️  Config file not found, using defaults: {CONFIG_PATH.resolve()}")
 
     # Scan for available models and cache the result
@@ -130,9 +131,7 @@ def save_config():
             "session_log_height": temporary.SESSION_LOG_HEIGHT,
             "print_raw_output": temporary.PRINT_RAW_OUTPUT,
             "cpu_threads": temporary.CPU_THREADS,
-        },
-        "backend_config": {
-            "backend_type": temporary.BACKEND_TYPE,
+            "vulkan_available": getattr(temporary, "VULKAN_AVAILABLE", False),
             "llama_bin_path": temporary.LLAMA_CLI_PATH,
         }
     }
@@ -174,7 +173,7 @@ def update_setting(key, value):
             reload_required = True
         elif key == "model_name":
             temporary.MODEL_NAME = value
-            reload_required = True
+            reload_required = True       
         elif key == "max_history_slots":
             temporary.MAX_HISTORY_SLOTS = int(value)
         elif key == "max_attach_slots":
