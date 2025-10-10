@@ -1,5 +1,5 @@
 # Script: installer.py (Installation script for Chat-Gradio-Gguf)
-# The GPU Selection MUST retain options of, Vulkan, CUDA-12, HIP-Radeon.
+# The GPU Selection MUST retain options of Vulkan.
 
 # Imports
 import os
@@ -18,7 +18,7 @@ APP_NAME = "Chat-Gradio-Gguf"
 BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
-LLAMACPP_TARGET_VERSION = "b6586"
+LLAMACPP_TARGET_VERSION = "b6713"
 
 DIRECTORIES = [
     "data", "scripts", "models",
@@ -39,44 +39,23 @@ def set_platform() -> None:
 set_platform()
 
 # Backend definitions (PyTorch wheels removed)
-if PLATFORM == "windows":
-    BACKEND_OPTIONS = {
-        "GPU/CPU - Vulkan": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/ {LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
-            "needs_python_bindings": False,
-            "vulkan_required": True,
-            "build_flags": {}
-        },
-        "GPU/CPU - HIP-Radeon": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/ {LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-hip-radeon-x64.zip",
-            "dest": "data/llama-hip-radeon-bin",
-            "cli_path": "data/llama-hip-radeon-bin/llama-cli.exe",
-            "needs_python_bindings": False,
-            "rocm_required": True,
-            "build_flags": {}
-        },
-        "GPU/CPU - CUDA 12.x": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/ {LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-cuda-12.4-x64.zip",
-            "dest": "data/llama-cuda-12-bin",
-            "cli_path": "data/llama-cuda-12-bin/llama-cli.exe",
-            "needs_python_bindings": False,
-            "cuda_required": True,
-            "build_flags": {}
-        }
-    }
-else:  # Linux
-    BACKEND_OPTIONS = {
-        "GPU/CPU - Vulkan": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/ {LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli",
-            "needs_python_bindings": False,
-            "vulkan_required": True,
-            "build_flags": {}
-        }
-    }
+CPU_BIN = {
+    "url": {
+        "windows":  f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-cpu-x64.zip",
+        "linux":    f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-x64.zip"
+    },
+    "dest": "data/llama-cpu-bin",
+    "cli_path": "data/llama-cpu-bin/llama-cli"
+}
+
+VULKAN_BIN = {
+    "url": {
+        "windows":  f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
+        "linux":    f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip"
+    },
+    "dest": "data/llama-vulkan-bin",
+    "cli_path": "data/llama-vulkan-bin/llama-cli"
+}
 
 
 # Python requirements (CPU-only, no torch)
@@ -97,7 +76,6 @@ BASE_REQ = [
     "onnxruntime",
     "fastembed",
     "tokenizers",
-    # NEW: File format support libraries
     "PyPDF2>=3.0.0",           # PDF reading
     "python-docx>=0.8.11",     # Word documents
     "openpyxl>=3.0.0",         # Excel files
@@ -176,18 +154,25 @@ def create_directories() -> None:
             print_status(f"Permission denied for: {dir_path}", False)
             sys.exit(1)
 
-def build_config(backend: str) -> dict:
-    info = BACKEND_OPTIONS[backend]
-    cli_relative = f"{info['dest']}/llama-cli{'.exe' if PLATFORM == 'windows' else ''}"
-    return {
+def create_config(backend: str, vulkan_available: bool) -> None:
+    """Create persistent.json with the chosen back-end and flags."""
+    config_path = BASE_DIR / "data" / "persistent.json"
+
+    # choose correct relative path for the *initial* back-end
+    if backend == "CPU-Only":
+        cli_rel = CPU_BIN["cli_path"]
+    else:  # Vulkan
+        cli_rel = VULKAN_BIN["cli_path"]
+
+    config = {
         "model_settings": {
             "model_dir": "models",
             "model_name": "",
             "context_size": 8192,
             "temperature": 0.66,
             "repeat_penalty": 1.1,
-            "use_python_bindings": info["needs_python_bindings"],
-            "llama_cli_path": str(BASE_DIR / cli_relative),
+            "use_python_bindings": False,
+            "llama_cli_path": str(BASE_DIR / cli_rel),
             "vram_size": 8192,
             "selected_gpu": None,
             "mmap": True,
@@ -197,26 +182,15 @@ def build_config(backend: str) -> dict:
             "max_history_slots": 12,
             "max_attach_slots": 6,
             "print_raw_output": False,
-            "session_log_height": 500
-        },
-        "backend_config": {
-            "backend_type": backend,
-            "llama_bin_path": info["dest"],
-            "cuda_required": info.get("cuda_required", False),
-            "vulkan_required": info.get("vulkan_required", False)
+            "session_log_height": 500,
+            "cpu_threads": None,
+            "vulkan_available": False  # always false as requested
         }
     }
-
-def create_config(backend: str) -> None:
-    config_path = BASE_DIR / "data" / "persistent.json"
-    config = build_config(backend)
-    try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, "w") as f:
-            json.dump(config, f, indent=2)
-        print_status("Configuration file created")
-    except Exception as e:
-        print_status(f"Failed to create config: {str(e)}", False)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+    print_status("Configuration file created")
 
 def create_venv() -> bool:
     try:
@@ -376,61 +350,6 @@ def download_with_progress(url: str, filepath: Path, description: str = "Downloa
 
 
 # Dependency checks
-def is_vulkan_installed() -> bool:
-    if PLATFORM == "windows":
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Khronos\Vulkan\Drivers"):
-                return True
-        except:
-            return False
-    else:
-        try:
-            result1 = subprocess.run(["vulkaninfo", "--summary"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            result2 = subprocess.run(["ldconfig", "-p"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            return result1.returncode == 0 or b"libvulkan" in result2.stdout
-        except FileNotFoundError:
-            return False
-
-def is_cuda_installed() -> bool:
-    if PLATFORM == "windows":
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\NVIDIA Corporation\CUDA"):
-                return True
-        except:
-            return False
-    else:
-        try:
-            result = subprocess.run(["nvcc", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return result.returncode == 0
-        except FileNotFoundError:
-            return False
-
-def verify_backend_dependencies(backend: str) -> bool:
-    info = BACKEND_OPTIONS[backend]
-    if info.get("vulkan_required", False):
-        if not is_vulkan_installed():
-            print("\n" + "!" * 80)
-            print(f"Vulkan not detected but required for {backend} backend!")
-            if PLATFORM == "windows":
-                print("  Download from: https://vulkan.lunarg.com/sdk/home ")
-            else:
-                print("  Install with: sudo apt install vulkan-tools libvulkan-dev")
-            print("!" * 80 + "\n")
-            return False
-    if info.get("cuda_required", False):
-        if not is_cuda_installed():
-            print("\n" + "!" * 80)
-            print(f"CUDA not detected but required for {backend} backend!")
-            if PLATFORM == "windows":
-                print("  Download from: https://developer.nvidia.com/cuda-downloads ")
-            else:
-                print("  Install with: sudo apt install nvidia-cuda-toolkit")
-            print("!" * 80 + "\n")
-            return False
-    return True
-
 def install_linux_system_dependencies(backend: str) -> bool:
     if PLATFORM != "linux":
         return True
@@ -450,11 +369,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
         "xclip"
     ]
 
-    if backend.startswith("GPU/CPU - Vulkan"):
-        packages.extend(["mesa-utils", "libvulkan1"])
-    elif backend.startswith("GPU/CPU - CUDA"):
-        packages.extend(["nvidia-cuda-toolkit"])
-
     try:
         subprocess.run(["sudo", "apt-get", "update"], check=True)
         subprocess.run(["sudo", "apt-get", "install", "-y"] + list(set(packages)), check=True)
@@ -464,6 +378,27 @@ def install_linux_system_dependencies(backend: str) -> bool:
         print_status(f"System dependencies failed: {e}", False)
         return False
 
+def is_vulkan_installed() -> bool:
+    if PLATFORM == "windows":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Khronos\Vulkan\Drivers"):
+                return True
+        except:
+            return False
+    else:  # Linux
+        try:
+            # 1. loader present?
+            result = subprocess.run(["vulkaninfo", "--summary"],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL,
+                                    text=True)
+            if result.returncode != 0:
+                return False
+            # 2. at least one physical GPU?
+            return "deviceType = PHYSICAL_DEVICE" in result.stdout
+        except FileNotFoundError:
+            return False
 
 # Python dependencies (no torch)
 def install_python_deps(backend: str) -> bool:
@@ -479,11 +414,7 @@ def install_python_deps(backend: str) -> bool:
         subprocess.run([pip_exe, "install", *BASE_REQ], check=True)
 
         # Backend-specific llama-cpp-python
-        llama_cmd = [pip_exe, "install"]
-        if backend.startswith("GPU/CPU - CUDA"):
-            llama_cmd.extend(["llama-cpp-python[cuda]"])
-        else:
-            llama_cmd.extend(["llama-cpp-python"])
+        llama_cmd = [pip_exe, "install", "llama-cpp-python"]
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -523,15 +454,16 @@ def copy_linux_binaries(source_dir: Path, dest_dir: Path) -> None:
     else:
         raise FileNotFoundError("No llama binaries")
 
-def download_extract_backend(backend: str) -> bool:
-    print_status(f"Downloading llama.cpp ({backend})...")
-    info = BACKEND_OPTIONS[backend]
+def download_extract_backend(info: dict) -> bool:
+    """Download and extract a llama.cpp back-end package."""
+    print_status(f"Downloading llama.cpp ({info['dest']})...")
     TEMP_DIR.mkdir(exist_ok=True)
     temp_zip = TEMP_DIR / "llama.zip"
 
     try:
         import zipfile
-        download_with_progress(info["url"], temp_zip, f"Downloading {backend}")
+        # use the url that matches current platform
+        download_with_progress(info["url"][PLATFORM], temp_zip, f"Downloading {info['dest']}")
 
         dest_path = BASE_DIR / info["dest"]
         dest_path.mkdir(parents=True, exist_ok=True)
@@ -542,7 +474,8 @@ def download_extract_backend(backend: str) -> bool:
             for i, m in enumerate(members):
                 zf.extract(m, dest_path)
                 if i % 25 == 0 or i == total - 1:
-                    print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
+                    print(f"\rExtracting: {simple_progress_bar(i + 1, total)}",
+                          end='', flush=True)
             print()
 
         if PLATFORM == "linux":
@@ -562,29 +495,7 @@ def download_extract_backend(backend: str) -> bool:
     finally:
         temp_zip.unlink(missing_ok=True)
 
-
-# Backend selection
-def select_backend_type() -> str:
-    if PLATFORM == "windows":
-        opts = [
-            "Vulkan - GPU/CPU – AMD/Intel/NVIDIA GPUs",
-            "HIP-Radeon - GPU/CPU – AMD ROCm",
-            "CUDA 12.x - GPU/CPU – NVIDIA GPUs"
-        ]
-        mapping = {
-            opts[0]: "GPU/CPU - Vulkan",
-            opts[1]: "GPU/CPU - HIP-Radeon",
-            opts[2]: "GPU/CPU - CUDA 12.x"
-        }
-        choice = get_user_choice("Select backend:", opts)
-        return mapping[choice]
-    else:  # Linux
-        return "GPU/CPU - Vulkan"
-
-
-# ===== ALTERNATIVE: OPTIONAL FILE SUPPORT =====
-# If you want to make file format support optional (install but don't fail):
-
+# FILE SUPPORT =====
 def install_optional_file_support() -> bool:
     """Install optional file format libraries (PDF, DOCX, etc.)"""
     print_status("Installing optional file format support...")
@@ -623,55 +534,55 @@ def install_optional_file_support() -> bool:
 
 # Main install flow
 def install():
-    backend = select_backend_type()
     print_header("Installation")
-    print(f"Installing {APP_NAME} on {PLATFORM} using {backend}")
-
     if sys.version_info < (3, 8):
         print_status("Python ≥3.8 required", False)
         sys.exit(1)
 
-    if not verify_backend_dependencies(backend):
-        print_status("Missing system dependencies", False)
-        sys.exit(1)
-
     create_directories()
+    vulkan_ok = is_vulkan_installed()          # ← detect once
+
     if PLATFORM == "linux":
-        install_linux_system_dependencies(backend)
+        # always install base deps; Vulkan extras only if detected
+        install_linux_system_dependencies("Vulkan" if vulkan_ok else "CPU-Only")
 
     if not create_venv():
         print_status("Virtual environment failed", False)
         sys.exit(1)
 
-    if not install_python_deps(backend):
+    # always install plain llama-cpp-python
+    if not install_python_deps("CPU-Only"):
         print_status("Python dependencies failed", False)
         sys.exit(1)
 
-    # NEW: Install optional file format support
-    # (Using graceful degradation approach)
     install_optional_file_support()
-
-    # NEW: Download FastEmbed model
     if not download_fastembed_model():
         print_status("WARNING: Embedding model download failed", False)
-        print("RAG features may not work until model is downloaded")
-
-    # NEW: Download spaCy model
     if not download_spacy_model():
         print_status("WARNING: spaCy model download failed", False)
-        print("Session labeling may not work until model is downloaded")
-        # Don't exit - allow installation to continue
 
-    info = BACKEND_OPTIONS[backend]
-    if not info["needs_python_bindings"]:
-        if not download_extract_backend(backend):
-            print_status("Backend download failed", False)
-            sys.exit(1)
+    # ------------------------------------------------------------------
+    # FIXED: Download CPU **always**; Vulkan **only** if detected
+    # ------------------------------------------------------------------
+    backends_to_fetch = [CPU_BIN]  # Always download CPU
+    if vulkan_ok:
+        backends_to_fetch.append(VULKAN_BIN)
+        print_status("Vulkan detected – will install CPU + Vulkan backends")
+    else:
+        print_status("Vulkan not detected – installing CPU-Only")
 
-    create_config(backend)
+    for backend_info in backends_to_fetch:
+        # FIXED: Don't modify the original dict, pass it directly
+        if not download_extract_backend(backend_info):
+            print_status(f"Binary download failed for {backend_info['dest']} – continuing", False)
+
+    # ------------------------------------------------------------------
+    # Write JSON – default to CPU-Only, but record Vulkan availability
+    # ------------------------------------------------------------------
+    initial_backend = "CPU-Only"
+    create_config(initial_backend, vulkan_available=vulkan_ok)
     print_status("Installation complete!")
     print("\nRun the launcher to start Chat-Gradio-Gguf\n")
-
 
 if __name__ == "__main__":
     try:
