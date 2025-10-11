@@ -62,41 +62,32 @@ Launching Gradio Interface...
 - The "Configuration" page - for configuration of, models and hardware, and relevant components, as well as ui customization...
 ![preview_image](media/configuration_page.jpg)
 
-- The "Installation" Processes for Ubuntu Linux installation (outdated)...
+- The refined Install Options menu...
 ```
 ================================================================================
-    Chat-Gradio-Gguf: Installation
+    Chat-Gradio-Gguf - Gpu Options
 ================================================================================
 
-Installing Chat-Gradio-Gguf on linux...
-[✓] Selected backend: GPU/CPU - Vulkan
-[✓] Verified directory: data
-[✓] Verified directory: scripts
-[✓] Verified directory: models
-[✓] Verified directory: data/history
-[✓] Verified directory: data/temp
-[✓] Created new virtual environment
-[✓] Verified virtual environment setup
-[✓] Installing Python dependencies...
-Requirement already satisfied: pip in ./.venv/lib/python3.13/site-packages (25.0)
-...
 
-...
-[✓] Python dependencies installation completed
-[✓] Downloading llama.cpp (GPU/CPU - Vulkan)...
-Downloading GPU/CPU - Vulkan: [=========================] 100% (19.7MB/19.7MB)
-[✓] Extracting backend files...
-Extracting: [=========================] 100% (37.0B/37.0B)
-[✓] Copying Linux binaries to destination...
-[✓] Copied 16 binary files
-[✓] llama.cpp (GPU/CPU - Vulkan) installed successfully
-[✓] Configuration file created
-[✓] Chat-Gradio-Gguf installation completed successfully!
 
-You can now run the application with Option 1 on the Bash/Batch Menu.
 
-Deactivated: .venv
-Press Enter to continue...
+
+
+
+    1) x64 CPU Only (No GPU Option)
+
+    2) Vulkan GPU with x64 CPU Backend
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+Selecton; Menu Options 1-2, Abandon Install = A: 
+
+
 ```
 
 ## Requirements
