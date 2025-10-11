@@ -11,44 +11,42 @@ import sys, argparse
 from pathlib import Path
 import os
 from scripts.utility import short_path
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('platform', choices=['windows', 'linux'], help='Target platform')
     return parser.parse_args()
-
 args = parse_args()
 import scripts.temporary as temporary
 temporary.PLATFORM = args.platform
-
+temporary.BACKEND_TYPE = "Vulkan"
 from scripts.settings import load_config
 from scripts.interface import launch_interface
 from scripts.utility import detect_cpu_config
 
+
+
 # Functions
 def initialize_platform_settings():
-    """
-    Load config and set the correct binary path based on current backend mode.
-    """
-    load_config()  # This sets VULKAN_AVAILABLE and BACKEND_TYPE from JSON
+    """Set platform-specific paths and configurations"""
+    from scripts.settings import load_config
+    load_config()  # Ensure config is loaded
     
-    ext = ".exe" if temporary.PLATFORM == "windows" else ""
-    
-    # Set binary path based on current runtime mode
-    if temporary.BACKEND_TYPE == "Vulkan" and temporary.VULKAN_AVAILABLE:
-        temporary.LLAMA_CLI_PATH = f"data/llama-vulkan-bin/llama-cli{ext}"
-        print(f"✓ Backend: Vulkan (binary: {temporary.LLAMA_CLI_PATH})")
+    if temporary.PLATFORM == "windows":
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
+        elif "cuda" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli.exe"
+        elif "hip" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-hip-radeon-bin/llama-cli.exe"
+    elif temporary.PLATFORM == "linux":
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
+        elif "cuda" in temporary.BACKEND_TYPE.lower():
+            temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli"
     else:
-        # Fallback to CPU-Only if Vulkan not available or not selected
-        temporary.LLAMA_CLI_PATH = f"data/llama-cpu-bin/llama-cli{ext}"
-        temporary.BACKEND_TYPE = "CPU-Only"
-        print(f"✓ Backend: CPU-Only (binary: {temporary.LLAMA_CLI_PATH})")
+        raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
     
-    # Verify binary exists
-    binary_path = Path(temporary.LLAMA_CLI_PATH)
-    if not binary_path.exists():
-        print(f"⚠️  Warning: Binary not found at {binary_path}")
-        print(f"   Please run the installer for {temporary.PLATFORM}")
+    print(f"Script mode `{temporary.PLATFORM}` with backend `{temporary.BACKEND_TYPE}`")
 
 def shutdown_program(llm_state, models_loaded_state, session_log, attached_files):
     """Gracefully shutdown the program, saving current session if active."""
@@ -78,26 +76,28 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
             print(f"Error unloading model: {str(e)}")
     
     # Graceful shutdown sequence
-    for i in range(3, -1, -1):
+    for i in range(3, -1, -1):        # include 0
         print(f"Closing in...{i}", end="\r")
         time.sleep(1)
-    print()
+    print()                           # newline after countdown
 
     print("Shutdown complete. Goodbye!")
     shutdown_platform()
     if temporary.demo is not None:
-        temporary.demo.close()
+        temporary.demo.close()        # stops the Gradio server
     os._exit(0)  
 
 def shutdown_platform():
     """Platform-specific shutdown procedures"""
     if temporary.PLATFORM == "windows":
+        # Windows-specific cleanup
         try:
             import pythoncom
             pythoncom.CoUninitialize()
         except:
             pass
     elif temporary.PLATFORM == "linux":
+        # Linux-specific cleanup
         try:
             from scripts import utility
             if hasattr(utility, 'tts_engine'):
@@ -139,21 +139,23 @@ def main():
         print(f"Temp Directory: {short_path(temporary.TEMP_DIR)}")
         
         # Initialize CPU configuration
+        from scripts.utility import detect_cpu_config
         detect_cpu_config()
         print(f"CPU Configuration: {temporary.CPU_PHYSICAL_CORES} physical cores, "
               f"{temporary.CPU_LOGICAL_CORES} logical cores")
+        
+        # Set platform-specific defaults
+        temporary.BACKEND_TYPE = "Vulkan"  # Default for both platforms
         
         # Print final configuration
         from scripts.temporary import set_status
         set_status("Config loaded")
         print("\nConfiguration:")
-        print(f"  Platform: {temporary.PLATFORM}")
         print(f"  Backend: {temporary.BACKEND_TYPE}")
-        print(f"  Vulkan Available: {temporary.VULKAN_AVAILABLE}")
         print(f"  Model: {temporary.MODEL_NAME or 'None'}")
         print(f"  Context Size: {temporary.CONTEXT_SIZE}")
         print(f"  VRAM Allocation: {temporary.VRAM_SIZE} MB")
-        print(f"  CPU Threads: {temporary.CPU_THREADS or 'Auto'}")
+        print(f"  CPU Threads: {temporary.CPU_THREADS}")
         print(f"  GPU Layers: {temporary.GPU_LAYERS if hasattr(temporary, 'GPU_LAYERS') else 'Auto'}")
         
         # Launch interface
@@ -162,14 +164,10 @@ def main():
             launch_interface()
         except Exception as e:
             print(f"Error launching interface: {str(e)}")
-            import traceback
-            traceback.print_exc()
             raise
         
     except Exception as e:
         print(f"Fatal error in launcher: {str(e)}")
-        import traceback
-        traceback.print_exc()
         shutdown_platform()
         sys.exit(1)
 
