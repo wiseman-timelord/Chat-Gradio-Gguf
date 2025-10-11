@@ -71,25 +71,14 @@ def load_config():
             "session_log_height": "SESSION_LOG_HEIGHT",
             "print_raw_output": "PRINT_RAW_OUTPUT",
             "cpu_threads": "CPU_THREADS",
+            "vulkan_available": "VULKAN_AVAILABLE",
+            "llama_bin_path": "LLAMA_CLI_PATH"
         }.items():
             if key in model_settings:
                 setattr(temporary, attr, model_settings[key])
-
-        # Load backend_config
-        backend_config = config.get("backend_config", {})
-        temporary.VULKAN_AVAILABLE = config.get("vulkan_available", False)
-        temporary.LLAMA_CLI_PATH = backend_config.get("llama_bin_path", "data/llama-vulkan-bin/llama-cli.exe")
-        temporary.SELECTED_GPU = backend_config.get("selected_gpu")
-        temporary.VULKAN_AVAILABLE = backend_config.get("vulkan_available", False)
+               
     else:
-        # Set defaults if JSON doesn't exist
-        for key, value in DEFAULTS.items():
-            setattr(temporary, key, value)
-        temporary.BACKEND_TYPE = "Not Configured"
-        temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
-        temporary.SELECTED_GPU = None
-        temporary.MODEL_NAME = "Select_a_model..."                                  # NEW
-        print(f"⚠️  Config file not found, using defaults: {CONFIG_PATH.resolve()}")
+        print(f"⚠️  Config missing/corrupted, re-run installer.")
 
     # Scan for available models and cache the result
     available_models = get_available_models()

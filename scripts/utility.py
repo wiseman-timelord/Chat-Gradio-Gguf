@@ -60,22 +60,32 @@ def detect_cpu_config():
         temporary.CPU_PHYSICAL_CORES = cpu_info["physical_cores"]
         temporary.CPU_LOGICAL_CORES = cpu_info["logical_cores"]
         
-        # Generate thread options (1 to logical_cores-1)
-        max_threads = max(1, temporary.CPU_LOGICAL_CORES - 1)
+        # Generate thread options (1 to logical_cores, not logical_cores-1)
+        # This allows full utilization of available threads
+        max_threads = temporary.CPU_LOGICAL_CORES
         temporary.CPU_THREAD_OPTIONS = list(range(1, max_threads + 1))
-        if temporary.CPU_THREADS is None:            # keep user’s saved value
-            temporary.CPU_THREADS = min(4, max_threads)
+        
+        # Set default threads if not already configured
+        if temporary.CPU_THREADS is None or temporary.CPU_THREADS > max_threads:
+            # Default to 50% of available threads, minimum 1
+            temporary.CPU_THREADS = max(1, max_threads // 2)
         
         # Vulkan-specific: Even with all layers on GPU, still uses some CPU threads
         if "vulkan" in temporary.BACKEND_TYPE.lower():
-            temporary.CPU_THREADS = max(2, temporary.CPU_THREADS)  # Ensure at least 2 threads
+            temporary.CPU_THREADS = max(2, temporary.CPU_THREADS)
+            
+        print(f"[CPU] Detected: {temporary.CPU_PHYSICAL_CORES} cores, "
+              f"{temporary.CPU_LOGICAL_CORES} threads")
+        print(f"[CPU] Available thread range: 1-{max_threads}, "
+              f"Current: {temporary.CPU_THREADS}")
             
     except Exception as e:
         temporary.set_status("CPU fallback", console=True)
+        print(f"[CPU] Detection error: {e}")
         # Fallback values
         temporary.CPU_PHYSICAL_CORES = 4
         temporary.CPU_LOGICAL_CORES = 8
-        temporary.CPU_THREAD_OPTIONS = [1, 2, 3, 4, 5, 6, 7]
+        temporary.CPU_THREAD_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
         temporary.CPU_THREADS = 4
 
 def get_available_gpus_windows():

@@ -843,27 +843,50 @@ def launch_interface():
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
 
                     # ---------------------------------------------------------
-                    # 1  Execution-mode switch  (radio only if Vulkan present)
-                    # ---------------------------------------------------------
-                    if temporary.VULKAN_AVAILABLE:
-                        backend_radio = gr.Radio(
-                            choices=["CPU-Only", "Vulkan"],
-                            value=temporary.BACKEND_TYPE,
-                            label="Execution Mode",
-                            interactive=True,
-                            scale=10,
-                        )
-                    else:
-                        backend_radio = gr.Label(
-                            value="CPU-Only (Vulkan not detected)",
-                            label="Execution Mode",
-                        )
-
-                    # ---------------------------------------------------------
-                    # 2  Hardware header
+                    # 1  Hardware header
                     # ---------------------------------------------------------
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("**Hardware**")
+
+
+                    # ---------------------------------------------------------
+                    # 234  Execution-mode switch, radio only if Vulkan present. CPU threads  (always shown)
+                    # ---------------------------------------------------------
+                    with gr.Row(elem_classes=["clean-elements"]) as cpu_row:
+                        if temporary.VULKAN_AVAILABLE:
+                            backend_radio = gr.Radio(
+                                choices=["CPU-Only", "Vulkan"],
+                                value=temporary.BACKEND_TYPE,
+                                label="Execution Mode",
+                                interactive=True,
+                            )
+                        else:
+                            backend_radio = gr.Label(
+                                value="CPU-Only",
+                                label="Execution Mode",
+                            )
+
+                        cpu_labs = [c["label"] for c in utility.get_cpu_info()] or ["Default CPU"]
+                        cpu_opts = ["Select..."] + cpu_labs if len(cpu_labs) > 1 else cpu_labs
+                        def_cpu = temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_opts else cpu_opts[0]
+                        config_components["cpu"] = gr.Dropdown(
+                            choices=cpu_opts, 
+                            label="CPU Device", 
+                            value=def_cpu, 
+                            scale=4
+                        )
+                        max_threads = max(temporary.CPU_THREAD_OPTIONS or [8])
+                        config_components["cpu_threads"] = gr.Slider(
+                            minimum=1, 
+                            maximum=max(temporary.CPU_THREAD_OPTIONS or [8]),  # Dynamic max
+                            value=temporary.CPU_THREADS or min(4, max(temporary.CPU_THREAD_OPTIONS or [8])), 
+                            step=1, 
+                            label="Threads", 
+                            scale=3, 
+                            info=f"Available: {max(temporary.CPU_THREAD_OPTIONS or [8])} threads",
+                            interactive=True  # Ensure it's not disabled
+                        )
+
 
                     # ---------------------------------------------------------
                     # 3  GPU row   (visible only when Vulkan is *selected*)
@@ -885,21 +908,9 @@ def launch_interface():
                             scale=5,
                         )
 
-                    # ---------------------------------------------------------
-                    # 4  CPU threads  (always shown)
-                    # ---------------------------------------------------------
-                    with gr.Row(elem_classes=["clean-elements"]) as cpu_row:
-                        max_threads = max(temporary.CPU_THREAD_OPTIONS or [8])
-                        config_components["cpu_threads"] = gr.Slider(
-                            minimum=1,
-                            maximum=max_threads,
-                            value=temporary.CPU_THREADS or min(4, max_threads),
-                            step=1,
-                            label="CPU Threads",
-                            scale=3,
-                            info=f"Available: {max_threads} threads",
-                            interactive=True,
-                        )
+
+
+
 
                     # ---------------------------------------------------------
                     # 5  Rest of the original Configuration UI
@@ -963,6 +974,17 @@ def launch_interface():
                         config_components["save_settings"] = gr.Button("💾 Save Settings", variant="primary")
                         config_components["delete_all_history"] = gr.Button("🗑️ Clear All History", variant="stop")
 
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        global_status = gr.Textbox(
+                            value="Ready",
+                            label="Status",
+                            interactive=False,
+                            max_lines=1,
+                            elem_classes=["clean-elements"],
+                            scale=20
+                        )
+                        temporary.global_status = global_status                        
+                        
                     # ---------------------------------------------------------
                     # 6  Event wiring for the new radio
                     # ---------------------------------------------------------
@@ -982,6 +1004,8 @@ def launch_interface():
                             outputs=[gpu_row, global_status],
                         )
 
+                        
+                        
         def handle_edit_previous(session_log):
             if len(session_log) < 2:
                 return session_log, gr.update(), "No previous input to edit."
