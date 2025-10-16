@@ -225,12 +225,12 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development
-5. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
-3. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
-6. Improve model support.
-5. The stop button is..."Interesting".
-6. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-7. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently.
+1. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
+2. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
+3. Improve model support.
+4. The stop button is..."Interesting".
+5. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
+6. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently.
 7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
 - a row with a square box, that visualizes the thinking/generation, in some simple method, that is somehow interesting, and under that, a row with a buttton to turn "Visualize" ON/OFF.
 - a row with 3 boxes each with 1 stat for generation speed/whatever else is typically of interest to people.
