@@ -225,18 +225,10 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development
-1. the Speech option did not work in ubuntu 25.
-2. Issues with exit button.
-2. Issues with attach files.
-3. Ubuntu/Linux mode requires testing, as has not been tested for a while (on hold due to internet).
 5. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
-6. there is annoying glitchy graphic objects when typing input to the model.
-1. windows mode requires testing/bugfixing.
-2. No CPU options anymore, but we had to add back in some of the cpu code to get the gpu to work, so possibly add back in the cpu binaries as most of other code is already there.
 3. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
-6. Qwen 3 and Deepseek 3, compatibility/integration/features. Make test script for both had issues, instead make individual test scripts, just getting one of them working first may be in order.
-4. Need to optimize streaming output and relating displaying of text/animations. Design needs work, doesnt work how I want.
-5. The stop button wont work because the button freezes during certain/all phases of generation. Or just change the message from "Cancel Sending" to "Please Wait".
+6. Improve model support.
+5. The stop button is..."Interesting".
 6. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 7. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently.
 7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
