@@ -231,37 +231,70 @@ def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def speak_text(text):
-    """Speak the given text using platform-specific text-to-speech."""
+    """Speak the given text using platform-specific text-to-speech with improved Windows support."""
     if not text or not isinstance(text, str):
         return
+    
+    # Clean the text
+    text = text.strip()
+    if not text:
+        return
         
-    # Check if we just spoke this text
+    # Check if we just spoke this exact text (optional - can be removed if too restrictive)
     if hasattr(temporary, 'LAST_SPOKEN') and temporary.LAST_SPOKEN == text:
+        print("[TTS] Skipping duplicate speech")
         return
         
     if temporary.PLATFORM == "windows":
-        try:
+        import threading
+        
+        def _speak_windows_threaded():
+            """Windows TTS in dedicated thread with proper COM initialization."""
             import pythoncom
             import win32com.client
             
-            if not pythoncom.CoInitialized():
-                pythoncom.CoInitialize()
-                
-            speaker = win32com.client.Dispatch("SAPI.SpVoice")
-            speaker.Speak(text)
-            temporary.LAST_SPOKEN = text
-            
-        except Exception as e:
-            print(f"Windows TTS error: {str(e)}")
+            # Initialize COM with Single-Threaded Apartment (STA) - CRITICAL for Windows 8.1
             try:
-                import winsound
-                winsound.Beep(1000, 200)
-            except:
-                pass
+                pythoncom.CoInitialize()  # STA initialization
                 
-        finally:
-            if pythoncom.CoInitialized():
-                pythoncom.CoUninitialize()
+                try:
+                    # Create SAPI voice object
+                    speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                    
+                    # Optional: Configure voice properties
+                    # speaker.Rate = 0  # -10 to 10, 0 is default
+                    # speaker.Volume = 100  # 0 to 100
+                    
+                    # Speak synchronously (blocks until complete)
+                    speaker.Speak(text)
+                    
+                    # Mark as spoken
+                    temporary.LAST_SPOKEN = text
+                    print(f"[TTS-WIN] Spoke: {text[:50]}...")
+                    
+                except Exception as e:
+                    print(f"[TTS-WIN] SAPI error: {str(e)}")
+                    # Fallback beep to indicate speech failure
+                    try:
+                        import winsound
+                        winsound.Beep(1000, 200)
+                    except:
+                        pass
+                        
+            finally:
+                # CRITICAL: Always uninitialize COM
+                try:
+                    pythoncom.CoUninitialize()
+                except:
+                    pass
+        
+        # Run speech in dedicated thread to avoid COM/async conflicts
+        thread = threading.Thread(target=_speak_windows_threaded, daemon=True)
+        thread.start()
+        thread.join(timeout=30)  # Wait up to 30 seconds
+        
+        if thread.is_alive():
+            print("[TTS-WIN] Speech timed out")
                 
     elif temporary.PLATFORM == "linux":
         try:
@@ -278,28 +311,33 @@ def speak_text(text):
             temporary.tts_engine.say(text)
             temporary.tts_engine.runAndWait()
             temporary.LAST_SPOKEN = text
+            print(f"[TTS-LINUX] Spoke: {text[:50]}...")
             
         except Exception as e:
-            print(f"Linux TTS error (pyttsx3): {str(e)}")
+            print(f"[TTS-LINUX] pyttsx3 error: {str(e)}")
             try:
                 # Fallback to direct espeak
                 subprocess.run(
                     ['espeak', '-v', 'en-us', '-s', '150', text],
-                    check=False
+                    check=False,
+                    timeout=30
                 )
+                print(f"[TTS-LINUX] Fallback espeak: {text[:50]}...")
             except FileNotFoundError:
                 try:
                     # Final fallback to spd-say
                     subprocess.run(
                         ['spd-say', '--wait', '-r', '-50', '-t', 'female3', text],
-                        check=False
+                        check=False,
+                        timeout=30
                     )
+                    print(f"[TTS-LINUX] Fallback spd-say: {text[:50]}...")
                 except FileNotFoundError:
-                    print("All Linux TTS methods failed - no speech available")
+                    print("[TTS-LINUX] All TTS methods unavailable")
                 except Exception as e:
-                    print(f"spd-say error: {str(e)}")
+                    print(f"[TTS-LINUX] spd-say error: {str(e)}")
             except Exception as e:
-                print(f"espeak error: {str(e)}")
+                print(f"[TTS-LINUX] espeak error: {str(e)}")
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
 
@@ -491,89 +529,78 @@ def get_attached_files_context(attached_files, query=None, max_total_chars=8000)
 
 # Replace generate_session_label function:
 def generate_session_label(session_log):
-    """Generate a session label using spaCy keyword extraction, up to 25 characters."""
+    """
+    Generate a session label using spaCy keyword extraction, up to 50 characters.
+    Output is sanitised for JSON safety.
+    """
     if not session_log:
         return "Untitled"
-    
-    # Get the NLP model
+
     nlp = get_nlp_model()
     if nlp is None:
-        # Fallback: use first few words from first user message
+        # fallback: first few words of first user message
         for msg in session_log:
             if msg['role'] == 'user':
                 content = clean_content(msg['role'], msg['content'])
                 words = content.split()[:3]
-                return ' '.join(words)[30] if words else "Untitled"
+                label = ' '.join(words) if words else "Untitled"
+                return sanitize_label(label)
         return "Untitled"
-    
-    # Combine all messages for analysis
-    text_for_analysis = " ".join([
-        clean_content(msg['role'], msg['content']) 
-        for msg in session_log
-    ])
+
+    text_for_analysis = " ".join(
+        clean_content(msg['role'], msg['content']) for msg in session_log
+    )
     text_for_analysis = filter_operational_content(text_for_analysis)
-    
     if not text_for_analysis.strip():
         return "Untitled"
-    
-    # Process with spaCy
+
     try:
-        doc = nlp(text_for_analysis[:1000])  # Limit to first 1000 chars for speed
-        
-        # Extract noun chunks and entities as potential keywords
+        doc = nlp(text_for_analysis[:1000])   # speed guard
         candidates = []
-        
-        # Get named entities
+
         for ent in doc.ents:
-            if ent.label_ in ['PERSON', 'ORG', 'GPE', 'PRODUCT', 'EVENT']:
+            if ent.label_ in {'PERSON', 'ORG', 'GPE', 'PRODUCT', 'EVENT'}:
                 candidates.append((ent.text, len(ent.text.split())))
-        
-        # Get important noun chunks
+
         for chunk in doc.noun_chunks:
-            if chunk.root.pos_ in ['NOUN', 'PROPN']:
+            if chunk.root.pos_ in {'NOUN', 'PROPN'}:
                 candidates.append((chunk.text, len(chunk.text.split())))
-        
-        # Get important standalone nouns
+
         for token in doc:
-            if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+            if token.pos_ in {'NOUN', 'PROPN'} and not token.is_stop:
                 candidates.append((token.text, 1))
-        
+
         if candidates:
-            # Sort by word count (prefer multi-word phrases) then by position
             candidates.sort(key=lambda x: (-x[1], text_for_analysis.find(x[0])))
             description = candidates[0][0]
         else:
-            # Fallback: first significant words
-            words = [token.text for token in doc if not token.is_stop and token.is_alpha][:3]
+            words = [t.text for t in doc if not t.is_stop and t.is_alpha][:3]
             description = ' '.join(words) if words else "No description"
-        
-        # Label Maximum Characters
-        MAX_LABEL_LEN = 50
-        if len(description) > MAX_LABEL_LEN:
-            description = description[:MAX_LABEL_LEN]
-        return description
-        
+
+        return sanitize_label(description)          # ← critical
     except Exception as e:
-        print(f"[SPACY] Error generating label: {e}")
-        # Fallback to first few words
+        print(f"[SPACY] label error: {e}")
         words = text_for_analysis.split()[:3]
-        return ' '.join(words)[:30] if words else "Untitled"
+        label = ' '.join(words) if words else "Untitled"
+        return sanitize_label(label)
 
 def save_session_history(session_log, attached_files):
-    """Save session history with error handling and timestamp."""
+    """
+    Save session history with UTF-8 encoding.
+    Preserves the current label if already present (prevents re-editing corruption).
+    """
     try:
-        # Ensure directories exist
         Path(HISTORY_DIR).mkdir(parents=True, exist_ok=True)
         Path(TEMP_DIR).mkdir(parents=True, exist_ok=True)
-        
+
         if not temporary.current_session_id:
             temporary.current_session_id = generate_session_id()
-        
+
+        # ← do NOT regenerate label if one exists
         if not temporary.session_label or temporary.session_label == "Untitled":
             temporary.session_label = generate_session_label(session_log)
-        
+
         session_file = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}.json"
-        
         session_data = {
             "session_id": temporary.current_session_id,
             "label": temporary.session_label,
@@ -581,35 +608,42 @@ def save_session_history(session_log, attached_files):
             "attached_files": [str(Path(f).resolve()) for f in attached_files] if attached_files else [],
             "last_saved": datetime.now().isoformat()
         }
-        
-        # Atomic write using temporary file
+
         temp_file = Path(TEMP_DIR) / f"temp_{temporary.current_session_id}.json"
-        with open(temp_file, 'w', encoding='utf-8') as f:
+        with open(temp_file, 'w', encoding='utf-8') as f:   # ← UTF-8 enforced
             json.dump(session_data, f, ensure_ascii=False, indent=2)
-        
-        # Atomic move
+
         temp_file.replace(session_file)
         temporary.set_status("Ready")
         manage_session_history()
         return True
-        
     except Exception as e:
-        print(f"Error saving session: {str(e)}")
+        print(f"Error saving session: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def load_session_history(session_file):
-    """Load session history from a file."""
     try:
-        with open(session_file, "r") as f:
+        with open(session_file, 'r', encoding='utf-8', errors='replace') as f:
             data = json.load(f)
+    except UnicodeDecodeError as e:
+        print(f"Encoding error in {session_file}: {e}")
+        try:
+            with open(session_file, 'r', encoding='utf-8', errors='ignore') as f:
+                data = json.load(f)
+            print("Recovered session with ignored errors")
+        except Exception as e2:
+            print(f"Failed to recover {session_file}: {e2}")
+            return None, "Corrupted", [], []
     except Exception as e:
         print(f"Error loading session file {session_file}: {e}")
         return None, "Error", [], []
 
     session_id = data.get("session_id", session_file.stem.replace('session_', ''))
-    label = data.get("label", "Untitled")
+    label = sanitize_label(data.get("label", "Untitled"))
     history = data.get("history", [])
-    attached_files = [str(Path(file).resolve()) for file in data.get("attached_files", []) if Path(file).exists()]
+    attached_files = [str(Path(f).resolve()) for f in data.get("attached_files", []) if Path(f).exists()]
 
     if len(attached_files) != len(data.get("attached_files", [])):
         print(f"Removed missing attached files from session {session_id}")
