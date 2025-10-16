@@ -91,11 +91,12 @@ Selecton; Menu Options 1-2, Abandon Install = A:
 ```
 
 ## Requirements
-- Windows 7-11 - Its a Windows program, batch menu has auto-sized-layout for modern/old OS.
-- Llama.Cpp - Options here for, Vulkan, ROCM, Cuda 11, Cuda 12. Llama.cpp are limiting the options now.
+- Windows 7-11 and/or ~Ubuntu 22-25, Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
+- Llama.Cpp - Options here for, Vulkan or X64. This has been limited to what I can test (though its possible to replace llama.cpp with for eg Cuda12).
 - Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF).
 - Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. Tested with Vulkan install.  
+- System Ram - Your system should cover the size of the model not able to be covered by the GPU.
 
 ### Instructions (W = Windows, U = Ubuntu)...
 - Pre-Installation...
