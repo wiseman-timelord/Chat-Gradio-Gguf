@@ -527,6 +527,38 @@ def get_attached_files_context(attached_files, query=None, max_total_chars=8000)
     
     return "\n".join(context_parts)
 
+def sanitize_label(label: str) -> str:
+    """
+    Make a session-label JSON-safe and Windows-cp1252-safe.
+    Returns 'Untitled' if nothing usable remains.
+    """
+    if not label:
+        return "Untitled"
+
+    # 1. Remove C0 / C1 control codes (0x00-0x1F, 0x7F-0x9F) incl. 0x9d
+    label = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', label)
+
+    # 2. Replace common Unicode punctuation with ASCII
+    label = (label
+             .replace('\u2018', "'").replace('\u2019', "'")   # ‘ ’
+             .replace('\u201C', '"').replace('\u201D', '"')   # “ ”
+             .replace('\u2013', '-').replace('\u2014', '-')   # – —
+             .replace('\u2026', '...')                        # …
+             .replace('\u00A0', ' '))                         # non-breaking space
+
+    # 3. Drop any remaining non-printable / non-basic-plane code-points
+    label = ''.join(c for c in label if c.isprintable() and ord(c) < 0x10000)
+
+    # 4. Collapse multiple spaces / leading-trailing junk
+    label = re.sub(r'\s+', ' ', label).strip()
+
+    # 5. Final guard
+    if not label:
+        return "Untitled"
+
+    # 6. Length cap
+    return label[:50].strip()
+
 # Replace generate_session_label function:
 def generate_session_label(session_log):
     """
