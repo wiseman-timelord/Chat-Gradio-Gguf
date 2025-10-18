@@ -1,9 +1,4 @@
 # Script: installer.py (Installation script for Chat-Gradio-Gguf)
-# FIXES:
-# 1. Removed spaces in download URLs (404 error fix)
-# 2. Added GPU selection menu (2 options: CPU-Only / Vulkan)
-# 3. Restored install_optional_file_support() function
-# 4. Kept all original functionality
 
 # Imports
 import os
@@ -42,11 +37,11 @@ def set_platform() -> None:
 
 set_platform()
 
-# Backend definitions - FIXED: Removed spaces in URLs
+# Backend definitions
 if PLATFORM == "windows":
     BACKEND_OPTIONS = {
         "x64 CPU Only": {
-            "url": None,  # CPU-only doesn't need binary download
+            "url": None,
             "dest": None,
             "cli_path": None,
             "needs_python_bindings": True,
@@ -98,8 +93,7 @@ BASE_REQ = [
     "pygments==2.17.2",
     "lxml[html_clean]",
     "pyttsx3",
-    "onnxruntime",
-    "fastembed",
+    # onnxruntime and fastembed will be installed separately with special handling
     "tokenizers",
 ]
 
@@ -181,7 +175,6 @@ def build_config(backend: str) -> dict:
     """Build configuration with CPU-Only or Vulkan settings"""
     info = BACKEND_OPTIONS[backend]
     
-    # Determine if Vulkan is available
     vulkan_available = backend == "Vulkan GPU"
     
     config = {
@@ -191,7 +184,7 @@ def build_config(backend: str) -> dict:
             "context_size": 8192,
             "temperature": 0.66,
             "repeat_penalty": 1.1,
-            "use_python_bindings": True,  # Always use Python bindings
+            "use_python_bindings": True,
             "vram_size": 8192 if vulkan_available else 0,
             "selected_gpu": None,
             "mmap": True,
@@ -202,17 +195,15 @@ def build_config(backend: str) -> dict:
             "max_attach_slots": 6,
             "print_raw_output": False,
             "session_log_height": 500,
-            "cpu_threads": 4,  # Default, will be auto-detected on launch
+            "cpu_threads": 4,
             "vulkan_available": vulkan_available,
             "backend_type": "Vulkan" if vulkan_available else "CPU-Only"
         }
     }
     
-    # Add llama_cli_path only if binary was downloaded
     if info["cli_path"]:
         config["model_settings"]["llama_cli_path"] = str(BASE_DIR / info["cli_path"])
     
-    # Add llama_bin_path only if binary was downloaded
     if info["dest"]:
         config["model_settings"]["llama_bin_path"] = info["dest"]
     
@@ -229,7 +220,6 @@ def create_config(backend: str) -> None:
             json.dump(config, f, indent=4)
         print_status("Configuration file created")
         
-        # Display the configuration
         print("\nGenerated configuration:")
         print(f"  Backend: {config['model_settings']['backend_type']}")
         print(f"  Vulkan Available: {config['model_settings']['vulkan_available']}")
@@ -280,6 +270,160 @@ def simple_progress_bar(current: int, total: int, width: int = 25) -> str:
 
     return f"[{bar}] {percent}% ({format_bytes(current)}/{format_bytes(total)})"
 
+def check_vcredist_windows() -> bool:
+    """Check if Visual C++ Redistributables are installed on Windows"""
+    try:
+        import winreg
+        key_paths = [
+            r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",  # VS 2015+
+            r"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
+        ]
+        
+        for key_path in key_paths:
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path):
+                    return True
+            except FileNotFoundError:
+                continue
+        return False
+    except Exception as e:
+        print(f"Warning: Could not check VC++ Redistributables: {e}")
+        return False
+
+def install_vcredist_windows() -> bool:
+    """Download and install Visual C++ Redistributable on Windows"""
+    print_status("Visual C++ Redistributable not found")
+    print_status("Downloading Visual C++ 2015-2022 Redistributable...")
+    
+    TEMP_DIR.mkdir(exist_ok=True)
+    vcredist_url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+    vcredist_path = TEMP_DIR / "vc_redist.x64.exe"
+    
+    try:
+        # Download with progress bar (matching your theme)
+        download_with_progress(vcredist_url, vcredist_path, "Downloading VC++ Redistributable")
+        
+        print_status("Installing Visual C++ Redistributable (silent mode)...")
+        print("  This may take 1-2 minutes...")
+        
+        # Silent install: /install /quiet /norestart
+        result = subprocess.run(
+            [str(vcredist_path), "/install", "/quiet", "/norestart"],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        # Clean up installer
+        vcredist_path.unlink(missing_ok=True)
+        
+        # Check if installation succeeded
+        if result.returncode == 0:
+            print_status("Visual C++ Redistributable installed successfully")
+            return True
+        elif result.returncode == 1638:
+            # Already installed (edge case)
+            print_status("Visual C++ Redistributable already present")
+            return True
+        elif result.returncode == 3010:
+            # Success but reboot required
+            print_status("Visual C++ Redistributable installed (reboot recommended)")
+            print("\nNote: A system reboot is recommended but not required.")
+            return True
+        else:
+            print_status(f"Installation returned code {result.returncode}", False)
+            print(f"Output: {result.stdout}")
+            print(f"Error: {result.stderr}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print_status("Visual C++ installation timed out", False)
+        vcredist_path.unlink(missing_ok=True)
+        return False
+    except Exception as e:
+        print_status(f"Failed to install VC++ Redistributable: {e}", False)
+        vcredist_path.unlink(missing_ok=True)
+        return False
+
+def install_onnxruntime() -> bool:
+    """Install onnxruntime with proper error handling"""
+    print_status("Installing onnxruntime (required for embeddings)...")
+    
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                    ("python.exe" if PLATFORM == "windows" else "python"))
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                 ("pip.exe" if PLATFORM == "windows" else "pip"))
+    
+    # On Windows, ensure VC++ Redistributables are installed FIRST
+    if PLATFORM == "windows":
+        if not check_vcredist_windows():
+            print("\n" + "=" * 80)
+            print("CRITICAL DEPENDENCY: Visual C++ Redistributable Required")
+            print("=" * 80)
+            
+            if not install_vcredist_windows():
+                print("\n" + "!" * 80)
+                print("CRITICAL ERROR: Visual C++ Redistributable installation failed!")
+                print("!" * 80)
+                print("\nonnxruntime cannot function without this component.")
+                print("Installation cannot continue.\n")
+                print("Manual installation required:")
+                print("  1. Download: https://aka.ms/vs/17/release/vc_redist.x64.exe")
+                print("  2. Run the installer as Administrator")
+                print("  3. Re-run this installer\n")
+                return False
+            
+            # Verify installation worked
+            time.sleep(2)  # Give registry time to update
+            if not check_vcredist_windows():
+                print_status("VC++ Redistributable verification failed", False)
+                print("Installation reported success but registry not updated.")
+                print("Attempting onnxruntime installation anyway...")
+    
+    try:
+        # Install onnxruntime
+        subprocess.run(
+            [pip_exe, "install", "onnxruntime"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        print_status("onnxruntime installed")
+        
+        # Test if it loads
+        result = subprocess.run(
+            [python_exe, "-c", "import onnxruntime; print('OK')"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0 and "OK" in result.stdout:
+            print_status("onnxruntime verified")
+            return True
+        else:
+            print_status("onnxruntime installed but failed to load", False)
+            print(f"Error: {result.stderr}")
+            print("\n" + "!" * 80)
+            print("CRITICAL ERROR: onnxruntime verification failed!")
+            print("!" * 80)
+            return False
+            
+    except subprocess.CalledProcessError as e:
+        print_status(f"onnxruntime installation failed", False)
+        print(f"Error: {e.stderr}")
+        print("\n" + "!" * 80)
+        print("CRITICAL ERROR: Failed to install onnxruntime")
+        print("!" * 80)
+        return False
+    except subprocess.TimeoutExpired:
+        print_status("onnxruntime installation timed out", False)
+        return False
+    except Exception as e:
+        print_status(f"onnxruntime installation error: {e}", False)
+        return False
+
 def download_fastembed_model() -> bool:
     """Download and cache FastEmbed model during installation."""
     print_status("Downloading embedding model (FastEmbed)...")
@@ -291,17 +435,24 @@ def download_fastembed_model() -> bool:
         download_script = '''
 import os
 from pathlib import Path
-from fastembed import TextEmbedding
 
 cache_dir = Path("data/fastembed_cache")
 cache_dir.mkdir(parents=True, exist_ok=True)
 
 os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
 
-model_name = "sentence-transformers/all-MiniLM-L6-v2"
-print(f"Downloading {model_name}...")
-embedding = TextEmbedding(model_name=model_name, cache_dir=str(cache_dir))
-print("Model downloaded successfully!")
+try:
+    from fastembed import TextEmbedding
+    model_name = "sentence-transformers/all-MiniLM-L6-v2"
+    print(f"Downloading {model_name}...")
+    embedding = TextEmbedding(model_name=model_name, cache_dir=str(cache_dir))
+    print("Model downloaded successfully!")
+except ImportError as e:
+    print(f"Import error: {e}")
+    exit(1)
+except Exception as e:
+    print(f"Download error: {e}")
+    exit(1)
 '''
         
         download_script_path = TEMP_DIR / "download_fastembed.py"
@@ -320,7 +471,8 @@ print("Model downloaded successfully!")
             download_script_path.unlink(missing_ok=True)
             return True
         else:
-            print_status(f"Model download failed: {result.stderr}", False)
+            print_status(f"Model download failed", False)
+            print(f"Error output: {result.stderr}")
             return False
             
     except subprocess.TimeoutExpired:
@@ -415,7 +567,7 @@ def verify_backend_dependencies(backend: str) -> bool:
     if backend == "Vulkan GPU":
         if not is_vulkan_installed():
             print("\n" + "!" * 80)
-            print(f"⚠ WARNING: Vulkan not detected!")
+            print(f"⚠️  WARNING: Vulkan not detected!")
             if PLATFORM == "windows":
                 print("  Download from: https://vulkan.lunarg.com/sdk/home")
             else:
@@ -430,8 +582,11 @@ def install_linux_system_dependencies(backend: str) -> bool:
 
     print_status("Installing Linux system dependencies...")
 
+    # Core packages including python3-venv which is CRITICAL for venv creation
     packages = [
         "build-essential",
+        "python3-venv",      # CRITICAL: Required for virtual environment creation
+        "python3-dev",       # Often needed for compiling Python packages
         "portaudio19-dev",
         "libasound2-dev",
         "python3-tk",
@@ -464,10 +619,31 @@ def install_python_deps(backend: str) -> bool:
         subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", "pip"], check=True)
         print_status("Upgraded pip")
 
-        # Base CPU packages
+        # Install base packages
         subprocess.run([pip_exe, "install", *BASE_REQ], check=True)
+        print_status("Base dependencies installed")
 
-        # Always install llama-cpp-python (needed for both CPU and Vulkan)
+        # Install onnxruntime separately with error handling
+        if not install_onnxruntime():
+            print("\n" + "!" * 80)
+            print("CRITICAL ERROR: onnxruntime installation failed!")
+            print("!" * 80)
+            print("\nThis is a required dependency for RAG features.")
+            print("Installation cannot continue without it.\n")
+            return False
+
+        # Install fastembed (only if onnxruntime succeeded)
+        try:
+            subprocess.run([pip_exe, "install", "fastembed"], check=True, timeout=120)
+            print_status("fastembed installed")
+        except Exception as e:
+            print_status(f"fastembed installation failed: {e}", False)
+            print("\n" + "!" * 80)
+            print("CRITICAL ERROR: fastembed installation failed!")
+            print("!" * 80)
+            return False
+
+        # Always install llama-cpp-python
         llama_cmd = [pip_exe, "install", "llama-cpp-python"]
         
         max_retries = 3
@@ -489,7 +665,6 @@ def install_python_deps(backend: str) -> bool:
         return False
 
 
-# RESTORED: Optional file format support
 def install_optional_file_support() -> bool:
     """Install optional file format libraries (PDF, DOCX, etc.)"""
     print_status("Installing optional file format support...")
@@ -523,7 +698,7 @@ def install_optional_file_support() -> bool:
     else:
         print_status("All file format support installed")
     
-    return True  # Don't fail installation
+    return True
 
 
 # Backend download & extraction
@@ -592,14 +767,13 @@ def download_extract_backend(backend: str) -> bool:
 
 # Backend selection
 def select_backend_type() -> str:
-    """Show simplified 2-option menu exactly as specified"""
+    """Show simplified 2-option menu"""
     opts = [
         "x64 CPU Only (No GPU Option)",
         "Vulkan GPU with x64 CPU Backend"
     ]
     choice = get_user_choice("Select backend:", opts)
     
-    # Map display names to internal keys
     mapping = {
         "x64 CPU Only (No GPU Option)": "x64 CPU Only",
         "Vulkan GPU with x64 CPU Backend": "Vulkan GPU"
@@ -633,24 +807,30 @@ def install():
         print_status("Python dependencies failed", False)
         sys.exit(1)
 
-    # RESTORED: Install optional file format support
     install_optional_file_support()
 
-    # Download model data
-    if not download_fastembed_model():
-        print_status("WARNING: Embedding model download failed", False)
-        print("RAG features may not work until model is downloaded")
+    # Try to download models (now critical - must succeed)
+    embedding_ok = download_fastembed_model()
+    if not embedding_ok:
+        print("\n" + "!" * 80)
+        print("CRITICAL ERROR: Embedding model download failed!")
+        print("!" * 80)
+        print("\nRAG features require this model to function.")
+        print("Installation cannot continue.\n")
+        sys.exit(1)
 
-    if not download_spacy_model():
+    spacy_ok = download_spacy_model()
+    if not spacy_ok:
         print_status("WARNING: spaCy model download failed", False)
-        print("Session labeling may not work until model is downloaded")
+        print("Session labeling may not work properly")
+        # Non-critical, can continue
 
-    # Download binary only for Vulkan
     if not download_extract_backend(backend):
         print_status("Backend download failed", False)
         sys.exit(1)
 
     create_config(backend)
+    
     print_status("Installation complete!")
     print("\nRun the launcher to start Chat-Gradio-Gguf\n")
 
