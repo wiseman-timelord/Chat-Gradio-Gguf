@@ -44,6 +44,7 @@ def short_path(path_str, max_len=44):
 
 def filter_operational_content(text):
     """Remove operational tags and metadata from the text."""
+    text = re.sub(r'^AI-Chat:\s*', '', text, flags=re.MULTILINE)
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
     return text.strip()
