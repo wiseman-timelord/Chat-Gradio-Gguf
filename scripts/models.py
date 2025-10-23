@@ -517,9 +517,9 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         messages.insert(1, {"role": msg["role"], "content": clean_content(msg["role"], msg["content"])})
     messages.append({"role": "user", "content": clean_content("user", session_log[-2]["content"])})
 
-    yield "AI-Chat:\n"  # Gradio will replace this line with the streaming block below
+    yield "AI-Chat:\n"          # Gradio strips this line
 
-    buffer = []
+    seen_real_text = False      # <-- NEW: swallow leading whitespace
     for chunk in llm_state.create_chat_completion(
         messages=messages,
         max_tokens=temporary.BATCH_SIZE,
@@ -530,16 +530,26 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         if cancel_event and cancel_event.is_set():
             yield "<CANCELLED>"
             return
-        token = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
-        if token:
-            buffer.append(token)
-            yield token
 
-    # Final output wrapped in ``` so Gradio renders it exactly
-    final = "".join(buffer).lstrip()
-    if temporary.PRINT_RAW_OUTPUT and final:
+        token = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+        if not token:
+            continue
+
+        # drop pure-whitespace tokens until real text arrives
+        if not seen_real_text:
+            if token.strip() == "":
+                continue
+            seen_real_text = True
+
+        # [INST] guard: stop generation if model tries to speak as user
+        if token.strip().startswith("[INST]"):
+            return
+
+        yield token
+
+    if temporary.PRINT_RAW_OUTPUT:
         print("\n***RAW_OUTPUT_FROM_MODEL_START***")
-        print(final, flush=True)
+        print("streaming output shown above", flush=True)
         print("***RAW_OUTPUT_FROM_MODEL_END***\n")
 
 # Helper function to reload model with new settings
