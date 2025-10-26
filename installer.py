@@ -189,7 +189,7 @@ def build_config(backend: str) -> dict:
         "model_settings": {
             "model_dir": "models",
             "model_name": "",
-            "context_size": 8192,
+            "context_size": 32768,
             "temperature": 0.66,
             "repeat_penalty": 1.1,
             "use_python_bindings": True,
