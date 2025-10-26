@@ -104,7 +104,7 @@ if PLATFORM == "windows":
 # Utility helpers
 def print_header(title: str) -> None:
     os.system('clear' if PLATFORM == "linux" else 'cls')
-    width = shutil.get_terminal_size().columns - 1          # ← fix here
+    width = shutil.get_terminal_size().columns - 1
     print("=" * width)
     print(f"    {APP_NAME} - {title}")
     print("=" * width)
@@ -175,7 +175,15 @@ def build_config(backend: str) -> dict:
     """Build configuration with CPU-Only or Vulkan settings"""
     info = BACKEND_OPTIONS[backend]
     
-    vulkan_available = backend == "Vulkan GPU"
+    # FIX: Determine backend type correctly
+    if backend == "Vulkan GPU":
+        backend_type = "Vulkan"
+        vulkan_available = True
+        vram_size = 8192
+    else:  # x64 CPU Only
+        backend_type = "CPU-Only"
+        vulkan_available = False
+        vram_size = 0
     
     config = {
         "model_settings": {
@@ -185,7 +193,7 @@ def build_config(backend: str) -> dict:
             "temperature": 0.66,
             "repeat_penalty": 1.1,
             "use_python_bindings": True,
-            "vram_size": 8192 if vulkan_available else 0,
+            "vram_size": vram_size,
             "selected_gpu": None,
             "mmap": True,
             "mlock": True,
@@ -197,15 +205,15 @@ def build_config(backend: str) -> dict:
             "session_log_height": 500,
             "cpu_threads": 4,
             "vulkan_available": vulkan_available,
-            "backend_type": "Vulkan" if vulkan_available else "CPU-Only"
+            "backend_type": backend_type  # CRITICAL: This was missing proper assignment
         }
     }
     
-    if info["cli_path"]:
+    # FIX: Only add llama-cli paths for Vulkan backend
+    if backend == "Vulkan GPU" and info["cli_path"]:
         config["model_settings"]["llama_cli_path"] = str(BASE_DIR / info["cli_path"])
-    
-    if info["dest"]:
-        config["model_settings"]["llama_bin_path"] = info["dest"]
+        if info["dest"]:
+            config["model_settings"]["llama_bin_path"] = info["dest"]
     
     return config
 
@@ -432,11 +440,14 @@ def download_fastembed_model() -> bool:
         python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
                         ("python.exe" if PLATFORM == "windows" else "python"))
         
-        download_script = '''
+        # FIX: Ensure cache directory path matches what validator expects
+        cache_dir = BASE_DIR / "data" / "fastembed_cache"
+        
+        download_script = f'''
 import os
 from pathlib import Path
 
-cache_dir = Path("data/fastembed_cache")
+cache_dir = Path(r"{str(cache_dir.absolute())}")
 cache_dir.mkdir(parents=True, exist_ok=True)
 
 os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
@@ -444,14 +455,14 @@ os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
 try:
     from fastembed import TextEmbedding
     model_name = "sentence-transformers/all-MiniLM-L6-v2"
-    print(f"Downloading {model_name}...")
+    print(f"Downloading {{model_name}}...")
     embedding = TextEmbedding(model_name=model_name, cache_dir=str(cache_dir))
     print("Model downloaded successfully!")
 except ImportError as e:
-    print(f"Import error: {e}")
+    print(f"Import error: {{e}}")
     exit(1)
 except Exception as e:
-    print(f"Download error: {e}")
+    print(f"Download error: {{e}}")
     exit(1)
 '''
         
