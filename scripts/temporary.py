@@ -145,18 +145,22 @@ class ContextInjector:
         import os
         from pathlib import Path
         
-        cache_dir = Path("data/fastembed_cache")
+        # FIX: Use absolute path consistently
+        cache_dir = Path(__file__).parent.parent / "data" / "fastembed_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         
+        # Set environment variables BEFORE importing fastembed
         os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-        os.environ["FASTEMBED_OFFLINE"] = "1"
+        os.environ["FASTEMBED_OFFLINE"] = "1"  # Prefer local cache
         
         try:
             from fastembed import TextEmbedding
             
+            print(f"[RAG] Loading embedding model from: {cache_dir}")
+            
             self.embedding = TextEmbedding(
                 model_name=EMBEDDING_MODEL_NAME,
-                cache_dir=str(cache_dir),
+                cache_dir=str(cache_dir.absolute()),
                 providers=["CPUExecutionProvider"]
             )
             print("[RAG] Embedding model loaded from cache")
@@ -225,6 +229,7 @@ class ContextInjector:
         return "\n\n".join(top)
         
 context_injector = ContextInjector()
+
 
 # Status Updater
 def set_status(msg: str, console=False):
