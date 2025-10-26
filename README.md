@@ -236,12 +236,11 @@ project_root/
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
 - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - The binaries used for interference with models.
-- [Yake](https://github.com/LIAAD/yake) - Library used for generating the labels for the history slots.
 - [Kimi K2](https://www.kimi.com) - For most work after its release in July 2025, like Grok4 but free.
 - [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
 - [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
 - [Perplexity](https://www.perplexity.ai) - For circumstances of extensive web research requierd.
-
+- Python Libraries - Python libraries change, so no specific detail, but thanks to all creators of the libraries/packages currently in installer/use.
 
 ## License
 This repository features **Wiseman-Timelord's Glorified License** in the file `.\Licence.txt`, in short, `if you wish to use most of the code, then you should fork` or `if you want to use a section of the code from one of the scripts, as an example, to make something work you mostly already have implemented, then go ahead`.
