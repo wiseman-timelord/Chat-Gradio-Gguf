@@ -54,6 +54,10 @@ def load_config():
         else:
             temporary.MODEL_FOLDER = DEFAULTS["MODEL_FOLDER"]
 
+        # CRITICAL: Load backend_type FIRST
+        temporary.BACKEND_TYPE = model_settings.get("backend_type", "CPU-Only")
+        temporary.VULKAN_AVAILABLE = model_settings.get("vulkan_available", False)
+
         # Load other settings
         for key, attr in {
             "context_size": "CONTEXT_SIZE",
@@ -70,15 +74,16 @@ def load_config():
             "max_attach_slots": "MAX_ATTACH_SLOTS",
             "session_log_height": "SESSION_LOG_HEIGHT",
             "print_raw_output": "PRINT_RAW_OUTPUT",
-            "cpu_threads": "CPU_THREADS",
-            "vulkan_available": "VULKAN_AVAILABLE",
-            "llama_bin_path": "LLAMA_CLI_PATH"
+            "cpu_threads": "CPU_THREADS"
         }.items():
             if key in model_settings:
                 setattr(temporary, attr, model_settings[key])
                
     else:
         print(f"⚠️  Config missing/corrupted, re-run installer.")
+        # Set defaults when no config exists
+        temporary.BACKEND_TYPE = "CPU-Only"
+        temporary.VULKAN_AVAILABLE = False
 
     # Scan for available models and cache the result
     available_models = get_available_models()
@@ -108,7 +113,7 @@ def save_config():
             "context_size": temporary.CONTEXT_SIZE,
             "temperature": temporary.TEMPERATURE,
             "repeat_penalty": temporary.REPEAT_PENALTY,
-            "llama_cli_path": temporary.LLAMA_CLI_PATH,
+            "llama_cli_path": getattr(temporary, "LLAMA_CLI_PATH", None),
             "vram_size": temporary.VRAM_SIZE,
             "selected_gpu": temporary.SELECTED_GPU,
             "mmap": temporary.MMAP,
@@ -121,7 +126,7 @@ def save_config():
             "print_raw_output": temporary.PRINT_RAW_OUTPUT,
             "cpu_threads": temporary.CPU_THREADS,
             "vulkan_available": getattr(temporary, "VULKAN_AVAILABLE", False),
-            "llama_bin_path": temporary.LLAMA_CLI_PATH,
+            "backend_type": getattr(temporary, "BACKEND_TYPE", "CPU-Only")  # ADD THIS LINE
         }
     }
 
