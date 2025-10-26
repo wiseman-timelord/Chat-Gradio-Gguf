@@ -104,7 +104,7 @@ if PLATFORM == "windows":
 # Utility helpers
 def print_header(title: str) -> None:
     os.system('clear' if PLATFORM == "linux" else 'cls')
-    width = shutil.get_terminal_size().columns
+    width = shutil.get_terminal_size().columns - 1          # ← fix here
     print("=" * width)
     print(f"    {APP_NAME} - {title}")
     print("=" * width)
@@ -122,7 +122,7 @@ def get_user_choice(prompt: str, options: list) -> str:
     for i, option in enumerate(options, 1):
         print(f"    {i}) {option}\n")
     print("\n\n\n\n\n")
-    print("-" * shutil.get_terminal_size().columns)
+    print("-" * (shutil.get_terminal_size().columns - 1))
 
     while True:
         choice = input(f"Selecton; Menu Options 1-{len(options)}, Abandon Install = A: ").strip().upper()
