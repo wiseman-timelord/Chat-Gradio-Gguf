@@ -94,9 +94,9 @@ Selecton; Menu Options 1-2, Abandon Install = A:
 - Windows 7-11 and/or ~Ubuntu 22-25, Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
 - Llama.Cpp - Options here for, Vulkan or X64. This has been limited to what I can test (though its possible to replace llama.cpp with for eg Cuda12).
 - Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
-- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [T3Q-qwen2.5-14b-v1.0-e3-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-GGUF).
-- Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. Tested with Vulkan install.  
-- System Ram - Your system should cover the size of the model not able to be covered by the GPU.
+- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [Qwen3-30B-A3B-abliterated-GGUF](https://huggingface.co/mradermacher/Qwen3-30B-A3B-abliterated-GGUF), as this will be somewhat compitent while only requiring a 4GB GPU to store the 3B active parameters, but if you want simple testing model, then use [Dolphin3.0-Qwen2.5-0.5B-GGUF](https://huggingface.co/bartowski/Dolphin3.0-Qwen2.5-0.5B-GGUF), which will run like lightning on any GPU.
+- Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. It must have Vulkan capability/drivers (if the installer contains files referring to Vulkan).  
+- System Ram - Your system should cover the size of the model not able to be covered by the GPU (ie 2GB card with 4GB model, would require ~2.5GB additional system memory, or if no GPU then ~4.5GB spare System Ram).
 
 ### Instructions (W = Windows, U = Ubuntu)...
 - Pre-Installation...
