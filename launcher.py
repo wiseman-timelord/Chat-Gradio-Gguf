@@ -6,7 +6,7 @@ logging.config.dictConfig = lambda *_, **__: None
 logging.config.fileConfig = lambda *_, **__: None
 logging.basicConfig = lambda *_, **__: None
 
-# Early Imports
+# Imports
 import sys, argparse
 from pathlib import Path
 import os
@@ -23,14 +23,14 @@ from scripts.settings import load_config
 from scripts.interface import launch_interface
 from scripts.utility import detect_cpu_config
 
-
-
 # Functions
 def initialize_platform_settings():
     """Set platform-specific paths and configurations"""
     from scripts.settings import load_config
-    load_config()  # Ensure config is loaded
     
+    # CRITICAL: Load config FIRST to get backend_type
+    load_config()  
+        
     if temporary.PLATFORM == "windows":
         if "vulkan" in temporary.BACKEND_TYPE.lower():
             temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
@@ -38,11 +38,13 @@ def initialize_platform_settings():
             temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli.exe"
         elif "hip" in temporary.BACKEND_TYPE.lower():
             temporary.LLAMA_CLI_PATH = "data/llama-hip-radeon-bin/llama-cli.exe"
+        # CPU-Only needs no llama-cli path
     elif temporary.PLATFORM == "linux":
         if "vulkan" in temporary.BACKEND_TYPE.lower():
             temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
         elif "cuda" in temporary.BACKEND_TYPE.lower():
             temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli"
+        # CPU-Only needs no llama-cli path
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
     
@@ -118,6 +120,8 @@ def main():
         
         # Initialize platform
         temporary.PLATFORM = args.platform
+        
+        # Load config and initialize (this sets BACKEND_TYPE correctly)
         initialize_platform_settings()
         
         # Set up directories and paths
@@ -144,10 +148,7 @@ def main():
         print(f"CPU Configuration: {temporary.CPU_PHYSICAL_CORES} physical cores, "
               f"{temporary.CPU_LOGICAL_CORES} logical cores")
         
-        # Set platform-specific defaults
-        temporary.BACKEND_TYPE = "Vulkan"  # Default for both platforms
-        
-        # Print final configuration
+        # Print final configuration (BACKEND_TYPE already set by load_config)
         from scripts.temporary import set_status
         set_status("Config loaded")
         print("\nConfiguration:")
