@@ -128,8 +128,7 @@ If installing with ROCM option, you will need to have installed the `ROCm Softwa
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 - This project is for a chat interface, and is not intended to overlap with my other projects, `Rpg-Gradio-Gguf`, or the blueprints for, `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
 - Afterthought Countdown is, <25 characters then 1s or 26-100 charactrs then 3s or >100 lines then 5s, cooldown before proceeding, enabling cancelation relative to input.
-- "Chat-Windows-Gguf" is intended as the Windows version of [Chat-Linux-Gguf](https://github.com/wiseman-timelord/Chat-Linux-Gguf).
-- This was the command to make a python script file created in windows to be compatible with linux `sed -i 's/\xE2\x80\x8B//g' scripts/interface.py`.
+- "Chat-Windows-Gguf" and "Chat-Linux-Gguf", is now "Chat-Gradio-Gguf", as yes, these dual-mode scripts used to be 2 different/same programs.
 
 ### New Models working recently since Revision ~0.8x (with gpt for comparrisson).
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
@@ -223,17 +222,16 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development
-1. there is still extra lines being inputted into the output of "AI-Chat". The raw output printed to the terminal is correct, so somewhere there is a, "\n" or " ", where it doesnt belong, and is for some reasoning adding an additional blank line to each line it prints for "AI-Chat" responses.
-2. Check Speech Summary, it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration. 
-3. Improve model support.
-4. The stop button is..."Interesting".
+1. Still additional blank line to each line it prints for "AI-Chat" responses, its not the raw output, its the actual interface.
+2. Check Speech Summary. Speech needs to be 2 step process, while progress is indicated for each of the 2 phases in the status bar. it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration, then returning it to the normal number set in the json after.
+3. Find new models I want to use, and that dont work yet in order to Improve model support. Currently having issues with downloading models on public wifi. Footlocker closed, next best place is ~£2.80/pint. People need to fund WiseMan-TimeLord.
+4. The stop button is... `**Very Interesting**`.
 5. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-6. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently.
+6. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently. Investigate/upgrade.
 7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
-- a row with a square box, that visualizes the thinking/generation, in some simple method, that is somehow interesting, and under that, a row with a buttton to turn "Visualize" ON/OFF.
-- a row with 3 boxes each with 1 stat for generation speed/whatever else is typically of interest to people.
-- a row with 2 butttons, 1 to turn "Visualize" ON/OFF and 1 to turn "Statistics" on/off. Same kind of on/off buttons as web-Search/Speech/Summary.
-- sliders for, context size and batch size, affecting them will affect the ones on the configuration page, and vice versa. They use the same global in temporary. we would then need to ensure that whatever settings are selected on either/both, will then be active for when the next time the user clicks send.
+- a button switching right panel to visualizes the thinking/generation, in some simple method, that is somehow interesting, with a buttton under to turn "Visualize" ON/OFF, so we know its def off or on (off by default), for the next generation.
+- a button switching right panel to quick settings sliders for, "Context Size" and "Batch Output", with save button, and will update relating settings in json, as well as ensure the settings are then consistent between, "the sidebar and configuration tab".
+8. The "RPG Mode" will require an additional switch position on left panel for the mode "Rpg", enabling the left or right panel for Rpg settings sliders, `ai_name` and `ai_role` and `human_name` and `human_role` and `location`, in order for the user to configure the `RPG Mode`. 
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
