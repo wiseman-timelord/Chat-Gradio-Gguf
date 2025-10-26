@@ -197,7 +197,7 @@ def build_config(backend: str) -> dict:
             "selected_gpu": None,
             "mmap": True,
             "mlock": True,
-            "n_batch": 2048,
+            "n_batch": 1024,
             "dynamic_gpu_layers": True,
             "max_history_slots": 12,
             "max_attach_slots": 6,
