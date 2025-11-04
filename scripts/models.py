@@ -520,9 +520,10 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
     # State tracking for <think> phase
     in_think_block = False
-    think_buffer = ""
-    response_buffer = ""
+    buffer = ""  # Accumulate tokens to detect tags
     seen_real_text = False
+    thinking_started = False
+    raw_output = ""  # Track complete raw output for printing
     
     for chunk in llm_state.create_chat_completion(
         messages=messages,
@@ -549,60 +550,69 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         if token.strip().startswith("[INST]"):
             return
 
-        # Accumulate all tokens for parsing
-        response_buffer += token
+        # Accumulate tokens in buffer for tag detection
+        buffer += token
         
-        # Check for <think> opening
-        if "<think>" in response_buffer and not in_think_block:
+        # Check for <think> opening tag
+        if not in_think_block and "<think>" in buffer:
             in_think_block = True
-            # Start yielding dots for thinking phase
-            think_start_idx = response_buffer.index("<think>") + len("<think>")
-            think_buffer = response_buffer[think_start_idx:]
-            response_buffer = response_buffer[:response_buffer.index("<think>")]
+            thinking_started = True
             
-            # Yield any content before <think>
-            if response_buffer.strip():
-                yield response_buffer
-            response_buffer = ""
+            # Split buffer at <think>
+            before_think = buffer.split("<think>")[0]
+            after_think = buffer.split("<think>", 1)[1]
             
-            # Yield initial "Thinking" with dots for existing buffer
-            space_count = think_buffer.count(" ")
+            # Yield content before <think> if any
+            if before_think:
+                yield before_think
+            
+            # Start "Thinking" line with dots for existing content
+            buffer = after_think
+            space_count = buffer.count(" ")
             yield "Thinking" + ("." * space_count)
             continue
         
-        # If in thinking block, count spaces and yield dots
+        # If inside <think> block
         if in_think_block:
-            think_buffer += token
-            
-            # Check for </think> closing
-            if "</think>" in think_buffer:
-                # Extract everything after </think>
-                think_end_idx = think_buffer.index("</think>") + len("</think>")
-                after_think = think_buffer[think_end_idx:]
+            # Check for </think> closing tag
+            if "</think>" in buffer:
+                # Extract content after </think>
+                after_close = buffer.split("</think>", 1)[1]
                 
                 # End thinking phase
                 in_think_block = False
-                think_buffer = ""
+                buffer = after_close
                 
                 # Yield newline to separate thinking from answer
                 yield "\n"
                 
-                # Start yielding the actual response
-                if after_think.strip():
-                    yield after_think
-                response_buffer = after_think
+                # Yield content after </think>
+                if after_close:
+                    yield after_close
+                    buffer = ""  # Clear buffer after yielding
             else:
-                # Count new spaces in this token and yield equivalent dots
-                new_spaces = token.count(" ")
-                if new_spaces > 0:
-                    yield "." * new_spaces
+                # Count spaces in new token and yield dots
+                space_count = token.count(" ")
+                if space_count > 0:
+                    yield "." * space_count
         else:
-            # Normal streaming outside <think> block
-            yield token
+            # Normal streaming: yield the token and clear buffer
+            if not thinking_started or buffer == token:
+                # Direct yield if no thinking or buffer is just current token
+                yield token
+                buffer = ""
+            else:
+                # We have accumulated buffer after </think>, yield it
+                yield buffer
+                buffer = ""
+
+    # Yield any remaining buffer content
+    if buffer and not in_think_block:
+        yield buffer
 
     if temporary.PRINT_RAW_OUTPUT:
         print("\n***RAW_OUTPUT_FROM_MODEL_START***")
-        print("streaming output shown above", flush=True)
+        print("(streaming output shown above)", flush=True)
         print("***RAW_OUTPUT_FROM_MODEL_END***\n")
 
 # Helper function to reload model with new settings
