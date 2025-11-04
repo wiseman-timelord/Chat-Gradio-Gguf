@@ -494,7 +494,6 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     import re
     from scripts import temporary
     from scripts.utility import clean_content
-    from scripts.utility import web_search
 
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
@@ -511,15 +510,20 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     if web_search_enabled and search_results:
         system_message += f"\n\nWeb search results:\n{search_results}"
 
-    # Build message list up to context limit (omitted for brevity)
+    # Build message list
     messages = [{"role": "system", "content": system_message}]
     for msg in reversed(session_log[:-2]):
         messages.insert(1, {"role": msg["role"], "content": clean_content(msg["role"], msg["content"])})
     messages.append({"role": "user", "content": clean_content("user", session_log[-2]["content"])})
 
-    yield "AI-Chat:\n"          # Gradio strips this line
+    yield "AI-Chat:\n"
 
-    seen_real_text = False      # <-- NEW: swallow leading whitespace
+    # State tracking for <think> phase
+    in_think_block = False
+    think_buffer = ""
+    response_buffer = ""
+    seen_real_text = False
+    
     for chunk in llm_state.create_chat_completion(
         messages=messages,
         max_tokens=temporary.BATCH_SIZE,
@@ -535,17 +539,66 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         if not token:
             continue
 
-        # drop pure-whitespace tokens until real text arrives
+        # Drop pure-whitespace tokens until real text arrives
         if not seen_real_text:
             if token.strip() == "":
                 continue
             seen_real_text = True
 
-        # [INST] guard: stop generation if model tries to speak as user
+        # [INST] guard: stop if model tries to speak as user
         if token.strip().startswith("[INST]"):
             return
 
-        yield token
+        # Accumulate all tokens for parsing
+        response_buffer += token
+        
+        # Check for <think> opening
+        if "<think>" in response_buffer and not in_think_block:
+            in_think_block = True
+            # Start yielding dots for thinking phase
+            think_start_idx = response_buffer.index("<think>") + len("<think>")
+            think_buffer = response_buffer[think_start_idx:]
+            response_buffer = response_buffer[:response_buffer.index("<think>")]
+            
+            # Yield any content before <think>
+            if response_buffer.strip():
+                yield response_buffer
+            response_buffer = ""
+            
+            # Yield initial "Thinking" with dots for existing buffer
+            space_count = think_buffer.count(" ")
+            yield "Thinking" + ("." * space_count)
+            continue
+        
+        # If in thinking block, count spaces and yield dots
+        if in_think_block:
+            think_buffer += token
+            
+            # Check for </think> closing
+            if "</think>" in think_buffer:
+                # Extract everything after </think>
+                think_end_idx = think_buffer.index("</think>") + len("</think>")
+                after_think = think_buffer[think_end_idx:]
+                
+                # End thinking phase
+                in_think_block = False
+                think_buffer = ""
+                
+                # Yield newline to separate thinking from answer
+                yield "\n"
+                
+                # Start yielding the actual response
+                if after_think.strip():
+                    yield after_think
+                response_buffer = after_think
+            else:
+                # Count new spaces in this token and yield equivalent dots
+                new_spaces = token.count(" ")
+                if new_spaces > 0:
+                    yield "." * new_spaces
+        else:
+            # Normal streaming outside <think> block
+            yield token
 
     if temporary.PRINT_RAW_OUTPUT:
         print("\n***RAW_OUTPUT_FROM_MODEL_START***")

@@ -313,11 +313,28 @@ def load_session_by_index(index):
     return [], [], "No session to load"
 
 def copy_last_response(session_log):
+    """Copy last AI response to clipboard, excluding thinking phase"""
     if session_log and session_log[-1]['role'] == 'assistant':
         response = session_log[-1]['content']
+        
+        # Remove HTML tags
         clean_response = re.sub(r'<[^>]+>', '', response)
+        
+        # Remove "Thinking..." lines
+        lines = clean_response.split('\n')
+        filtered_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # Skip lines that are just "Thinking" followed by dots/spaces
+            if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
+                continue
+            filtered_lines.append(line)
+        
+        clean_response = '\n'.join(filtered_lines).strip()
+        
+        # Copy to clipboard
         pyperclip.copy(clean_response)
-        return "AI Response copied to clipboard."
+        return "AI Response copied to clipboard (thinking phase excluded)."
     return "No response available to copy."
 
 def update_file_slot_ui(file_list, is_attach=True):
@@ -437,7 +454,7 @@ async def conversation_interface(
     speech_enabled
 ):
     """
-    UPDATED: Now properly injects attached file contents into the prompt
+    UPDATED: Handles thinking phase properly, removes <think> content from speech
     """
     import gradio as gr
     from scripts import temporary, utility
@@ -606,6 +623,7 @@ async def conversation_interface(
     q = queue.Queue()
     cancel_event = threading.Event()
     visible_response = ""
+    raw_output_buffer = ""  # Track raw output for print_raw feature
     error_occurred = False
 
     def run_generator():
@@ -701,13 +719,32 @@ async def conversation_interface(
     # Handle speech if enabled
     if speech_enabled and visible_response:
         try:
-            clean_speech = re.sub(r'^AI-Chat:\s*', '', visible_response, flags=re.IGNORECASE)
-            chunks = utility.chunk_text_for_speech(clean_speech, 500)
-            for chunk in chunks:
-                if cancel_flag:
-                    break
-                utility.speak_text(chunk)
-                await asyncio.sleep(0.5)
+            # Extract speech content (remove thinking phase and AI-Chat prefix)
+            speech_content = visible_response
+            
+            # Remove AI-Chat prefix
+            speech_content = re.sub(r'^AI-Chat:\s*', '', speech_content, flags=re.IGNORECASE | re.MULTILINE)
+            
+            # Remove "Thinking...." lines completely
+            lines = speech_content.split('\n')
+            filtered_lines = []
+            for line in lines:
+                stripped = line.strip()
+                # Skip lines that are just "Thinking" followed by dots/spaces
+                if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
+                    continue
+                filtered_lines.append(line)
+            
+            speech_content = '\n'.join(filtered_lines).strip()
+            
+            # Only speak if there's actual content left
+            if speech_content:
+                chunks = utility.chunk_text_for_speech(speech_content, 500)
+                for chunk in chunks:
+                    if cancel_flag:
+                        break
+                    utility.speak_text(chunk)
+                    await asyncio.sleep(0.5)
         except Exception as e:
             print(f"Speech error: {e}")
 
