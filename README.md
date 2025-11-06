@@ -102,8 +102,6 @@ Selecton; Menu Options 1-2, Abandon Install = A:
 - Pre-Installation...
 ```
 If installing with Vulkan option, you will need to have installed the `Vulkan SDK`,
-If installing with CUDA option, you will need to have installed the `CUDA Toolkit`.
-If installing with ROCM option, you will need to have installed the `ROCm Software Stack`.
 ```
 - Installation...
 ```
@@ -119,14 +117,12 @@ If installing with ROCM option, you will need to have installed the `ROCm Softwa
 ```
 
 ### Notation 
-- For AMD hardware, do not use models with an "iMatrix", those are for nVidia GPUs. Just to save some issues for people that dont know.
-- For Vulkan installations, you must install the Vulkan SDK; I will be adding this to [Ubuntu25-TweakInstall](https://github.com/wiseman-timelord/Ubuntu25-TweakInstall), otherwise you must go here [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
-- For CUDA installations, you must install the CUDA Toolkit; I added this to [Ubuntu25-TweakInstall](https://github.com/wiseman-timelord/Ubuntu25-TweakInstall), but if you have other OS, then research/instal first.
+- The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know.
+- For Vulkan installations, you must install the Vulkan SDK, it may come with your graphics card, otherwise you must go here [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
 - VRAM dropdown, 1GB to 64GB in steps, this should be your FREE ram available on the selected card, if you are using the card at the time then this is why we have for example, 6GB for a 8GB GPU in use, safely allowing 2GB for the system, while in compute more one would use for example, the full 8GB on the 8GB GPU.
-- I advise GPU can cover the Q6_K version, the Q6_K useually has negligable quality loss, while allowing good estimation of if the model will fit on a card, ie 8GB card will typically be mostly/completely cover a 7B/8B model in Q6_K compression, so the numbers also relate.
+- I advise GPU can cover the Q6_K version, the Q6_K useually has negligable quality loss, while allowing good estimation of if the model will fit on a card, ie 8GB card will typically be mostly/completely cover a 7B/8B model in Q6_K compression, with a little extra to display the gradio interface, so the numbers somewhat relate with Q6_K when using same card as display.
 - We use a calculation of `1.125`, the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
-- This project is for a chat interface, and is not intended to overlap with my other projects, `Rpg-Gradio-Gguf`, or the blueprints for, `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
 - Afterthought Countdown is, <25 characters then 1s or 26-100 charactrs then 3s or >100 lines then 5s, cooldown before proceeding, enabling cancelation relative to input.
 - "Chat-Windows-Gguf" and "Chat-Linux-Gguf", is now "Chat-Gradio-Gguf", as yes, these dual-mode scripts used to be 2 different/same programs.
 
@@ -215,16 +211,15 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development
+- Remember: This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
+1. Limit the batch output to 8192, until 8192 is seen. Other settings are excessive.
 1. Still additional blank line to each line it prints for "AI-Chat" responses, its not the raw output, its the actual interface.
-2. Check Speech Summary. Speech needs to be 2 step process, while progress is indicated for each of the 2 phases in the status bar. it should be now intelligent, as after recieving the response, an additional prompt is sent, to, determine and select, the best contents to say, then reads that to the user. This will need to be Optimized, ie one idea, limiting context length to the batch output size for the relating iteration, then returning it to the normal number set in the json after.
-3. Find new models I want to use, and that dont work yet in order to Improve model support. Currently having issues with downloading models on public wifi. Footlocker closed, next best place is ~£2.80/pint. People need to fund WiseMan-TimeLord.
-4. The stop button is... `**Very Interesting**`.
-5. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-6. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently. Investigate/upgrade.
-7. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
-- a button switching right panel to visualizes the thinking/generation, in some simple method, that is somehow interesting, with a buttton under to turn "Visualize" ON/OFF, so we know its def off or on (off by default), for the next generation.
-- a button switching right panel to quick settings sliders for, "Context Size" and "Batch Output", with save button, and will update relating settings in json, as well as ensure the settings are then consistent between, "the sidebar and configuration tab".
-8. The "RPG Mode" will require an additional switch position on left panel for the mode "Rpg", enabling the left or right panel for Rpg settings sliders, `ai_name` and `ai_role` and `human_name` and `human_role` and `location`, in order for the user to configure the `RPG Mode`. 
+2. The stop button is interesting, but lacking an actual ability to break the processes of prompting and displaying response, it should be able to do this, having same effect as edit previous, so as to be going back to the state of writing the prompt with content still in chat input box.
+3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
+4. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently. Investigate/upgrade.
+5. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
+6. a button switching right panel to visualizes the thinking/generation, in some simple method, that is somehow interesting, with a buttton under to turn "Vis" ON/OFF (visualize), so we know its def off or on (off by default), for the next generation.
+7. a button switching right panel to quick settings sliders for, "Context Size" and "Batch Output", with save button, and will update relating settings in json, as well as ensure the settings are then consistent between, "the sidebar and configuration tab".
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
