@@ -202,6 +202,7 @@ def build_config(backend: str) -> dict:
             "max_history_slots": 12,
             "max_attach_slots": 6,
             "print_raw_output": False,
+            "show_think_phase": False, 
             "session_log_height": 500,
             "cpu_threads": 4,
             "vulkan_available": vulkan_available,
