@@ -991,9 +991,13 @@ def launch_interface():
                         custom_components["max_att"] = gr.Dropdown(
                             temporary.ATTACH_SLOT_OPTIONS, label="Attach", value=temporary.MAX_ATTACH_SLOTS, scale=5
                         )
-                        config_components["print_raw"] = gr.Checkbox(
-                            label="Print raw output to terminal", value=temporary.PRINT_RAW_OUTPUT, scale=5
-                        )
+                        with gr.Column(scale=5):
+                            config_components["show_think_phase"] = gr.Checkbox(
+                                label="Show Think Phase Output", value=temporary.SHOW_THINK_PHASE
+                            )
+                            config_components["print_raw"] = gr.Checkbox(
+                                label="Show Raw Output In Terminal", value=temporary.PRINT_RAW_OUTPUT
+                            )
 
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["save_settings"] = gr.Button("💾 Save Settings", variant="primary")
@@ -1089,6 +1093,12 @@ def launch_interface():
         config_components["print_raw"].change(
             fn=lambda v: setattr(temporary, "PRINT_RAW_OUTPUT", bool(v)),
             inputs=[config_components["print_raw"]],
+            outputs=[]
+        )
+
+        config_components["show_think_phase"].change(
+            fn=lambda v: setattr(temporary, "SHOW_THINK_PHASE", bool(v)),
+            inputs=[config_components["show_think_phase"]],
             outputs=[]
         )
 
@@ -1389,6 +1399,10 @@ def launch_interface():
             fn=lambda: gr.update(value=temporary.PRINT_RAW_OUTPUT),
             inputs=[],
             outputs=[config_components["print_raw"]]
+        ).then(                                               #  <-- NEW
+            fn=lambda: gr.update(value=temporary.SHOW_THINK_PHASE),
+            inputs=[],
+            outputs=[config_components["show_think_phase"]]
         ).then(
             fn=lambda model_settings: "none" if not model_settings.get("detected_keywords", []) else ", ".join(model_settings.get("detected_keywords", [])),
             inputs=[states["model_settings"]],

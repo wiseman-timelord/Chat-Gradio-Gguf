@@ -11,7 +11,7 @@ CONFIG_PATH = Path("data/persistent.json")
 # Default settings
 DEFAULTS = {
     "MODEL_FOLDER": "path/to/your/models",
-    "CONTEXT_SIZE": 8192,
+    "CONTEXT_SIZE": 32768,
     "VRAM_SIZE": 8192,
     "BATCH_SIZE": 1024,
     "TEMPERATURE": 0.66,
@@ -24,10 +24,11 @@ DEFAULTS = {
     "SESSION_LOG_HEIGHT": 650,
     "INPUT_LINES": 27,
     "PRINT_RAW_OUTPUT": False,
+    "SHOW_THINK_PHASE": False,
     "CPU_ONLY_MODE": True,
     "VRAM_OPTIONS": [0, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536],
     "CTX_OPTIONS": [8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072],
-    "BATCH_OPTIONS": [128, 256, 512, 1024, 2048, 4096],
+    "BATCH_OPTIONS": [128, 256, 512, 1024, 2048, 4096, 8192],
     "TEMP_OPTIONS": [0.0, 0.1, 0.25, 0.33, 0.5, 0.66, 0.75, 1.0],
     "REPEAT_OPTIONS": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
     "HISTORY_SLOT_OPTIONS": [4, 8, 10, 12, 16],
@@ -74,6 +75,7 @@ def load_config():
             "max_attach_slots": "MAX_ATTACH_SLOTS",
             "session_log_height": "SESSION_LOG_HEIGHT",
             "print_raw_output": "PRINT_RAW_OUTPUT",
+            "show_think_phase": "SHOW_THINK_PHASE", 
             "cpu_threads": "CPU_THREADS"
         }.items():
             if key in model_settings:
@@ -124,6 +126,7 @@ def save_config():
             "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
             "session_log_height": temporary.SESSION_LOG_HEIGHT,
             "print_raw_output": temporary.PRINT_RAW_OUTPUT,
+            "show_think_phase": temporary.SHOW_THINK_PHASE,
             "cpu_threads": temporary.CPU_THREADS,
             "vulkan_available": getattr(temporary, "VULKAN_AVAILABLE", False),
             "backend_type": getattr(temporary, "BACKEND_TYPE", "CPU-Only")  # ADD THIS LINE

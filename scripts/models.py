@@ -520,11 +520,11 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
     # State tracking for <think> phase
     in_think_block = False
-    buffer = ""  # Accumulate tokens to detect tags
+    buffer = ""          # Accumulate tokens to detect tags
     seen_real_text = False
     thinking_started = False
-    raw_output = "AI-Chat:\n"  # Track complete raw output for printing - FIXED: Start with prefix
-    
+    raw_output = "AI-Chat:\n"   # Track complete raw output for printing
+
     for chunk in llm_state.create_chat_completion(
         messages=messages,
         max_tokens=temporary.BATCH_SIZE,
@@ -539,8 +539,6 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         token = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
         if not token:
             continue
-
-        # FIXED: Accumulate ALL tokens to raw_output
         raw_output += token
 
         # Drop pure-whitespace tokens until real text arrives
@@ -551,74 +549,70 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
         # [INST] guard: stop if model tries to speak as user
         if token.strip().startswith("[INST]"):
-            # FIXED: Print raw output before returning
             if temporary.PRINT_RAW_OUTPUT:
                 print("\n***RAW_OUTPUT_FROM_MODEL_START***")
                 print(raw_output, flush=True)
                 print("***RAW_OUTPUT_FROM_MODEL_END***\n")
             return
 
-        # Accumulate tokens in buffer for tag detection
         buffer += token
-        
-        # Check for <think> opening tag
+
+        # Detect <think> opening
         if not in_think_block and "<think>" in buffer:
             in_think_block = True
             thinking_started = True
-            
-            # Split buffer at <think>
-            before_think = buffer.split("<think>")[0]
-            after_think = buffer.split("<think>", 1)[1]
-            
-            # Yield content before <think> if any
-            if before_think:
-                yield before_think
-            
-            # Start "Thinking" line with dots for existing content
-            buffer = after_think
-            space_count = buffer.count(" ")
-            yield "Thinking" + ("." * space_count)
+            before, after = buffer.split("<think>", 1)
+            if before:
+                yield before
+            buffer = after
+
+            if temporary.SHOW_THINK_PHASE:
+                yield "<think>"          # show opening tag
+            else:
+                # Classic dots mode
+                spaces = buffer.count(" ")
+                yield "Thinking" + ("." * spaces)
             continue
-        
-        # If inside <think> block
+
+        # Inside think block
         if in_think_block:
-            # Check for </think> closing tag
             if "</think>" in buffer:
-                # Extract content after </think>
+                # Found closing tag
                 after_close = buffer.split("</think>", 1)[1]
-                
-                # End thinking phase
-                in_think_block = False
                 buffer = after_close
-                
-                # Yield newline to separate thinking from answer
-                yield "\n"
-                
-                # Yield content after </think>
+                in_think_block = False
+
+                if temporary.SHOW_THINK_PHASE:
+                    yield "</think>\n"
+                else:
+                    yield "\n"          # separator before answer
+
                 if after_close:
                     yield after_close
-                    buffer = ""  # Clear buffer after yielding
+                    buffer = ""
             else:
-                # Count spaces in new token and yield dots
-                space_count = token.count(" ")
-                if space_count > 0:
-                    yield "." * space_count
+                # Still thinking – choose display mode
+                if temporary.SHOW_THINK_PHASE:
+                    yield buffer
+                    buffer = ""
+                else:
+                    # Dots mode
+                    spaces = token.count(" ")
+                    if spaces:
+                        yield "." * spaces
         else:
-            # Normal streaming: yield the token and clear buffer
+            # Normal streaming
             if not thinking_started or buffer == token:
-                # Direct yield if no thinking or buffer is just current token
                 yield token
                 buffer = ""
             else:
-                # We have accumulated buffer after </think>, yield it
                 yield buffer
                 buffer = ""
 
-    # Yield any remaining buffer content
+    # Final buffer flush
     if buffer and not in_think_block:
         yield buffer
 
-    # FIXED: Print the actual accumulated raw output
     if temporary.PRINT_RAW_OUTPUT:
         print("\n***RAW_OUTPUT_FROM_MODEL_START***")
         print(raw_output, flush=True)
