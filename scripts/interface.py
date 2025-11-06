@@ -996,7 +996,7 @@ def launch_interface():
                                 label="Show Think Phase Output", value=temporary.SHOW_THINK_PHASE
                             )
                             config_components["print_raw"] = gr.Checkbox(
-                                label="Show Raw Output In Terminal", value=temporary.PRINT_RAW_OUTPUT
+                                label="Print Debug Model Output", value=temporary.PRINT_RAW_OUTPUT
                             )
 
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -1013,6 +1013,16 @@ def launch_interface():
                             elem_classes=["clean-elements"],
                             scale=20
                         )
+
+                        exit_config = gr.Button(
+                             "Exit Program", variant="stop", elem_classes=["double-height"], scale=1
+                        )
+                        exit_config.click(
+                            fn=shutdown_program,
+                            inputs=[states["llm"], states["models_loaded"],
+                                    conversation_components["session_log"], states["attached_files"]],
+                            outputs=[]
+                        ).then(lambda: gr.update(visible=False), outputs=[demo])
 
         def handle_edit_previous(session_log):
             if len(session_log) < 2:
