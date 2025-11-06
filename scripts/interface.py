@@ -767,7 +767,7 @@ async def conversation_interface(
 
 # Core Gradio Interface    
 def launch_interface():
-    """Launch the Gradio interface for the Chat-Gradio-Gguf conversationbot with an updated layout."""
+    """Launch the Gradio interface for the Chat-Gradio-Gguf conversationbot with unified status bars."""
     global demo
     import tkinter as tk
     from tkinter import filedialog
@@ -801,8 +801,12 @@ def launch_interface():
         .scrollable .message { white-space: pre-wrap; word-break: break-word; }
         """
     ) as demo:
-        temporary.demo = demo        # keep global handle
+        temporary.demo = demo
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
+        
+        # SHARED STATUS STATE - ensures both tabs show same status
+        shared_status_state = gr.State("Ready")
+        
         states = dict(
             attached_files=gr.State([]),
             models_loaded=gr.State(False),
@@ -821,6 +825,10 @@ def launch_interface():
         conversation_components = {}
         buttons = {}
         action_buttons = {}
+
+        # Status update function for shared state
+        def update_shared_status(message):
+            return message, message, message
 
         with gr.Tabs():
             with gr.Tab("Interaction"):
@@ -855,7 +863,8 @@ def launch_interface():
                             action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1)
 
                 with gr.Row():
-                    global_status = gr.Textbox(
+                    # INTERACTION TAB STATUS BAR - uses shared state
+                    interaction_global_status = gr.Textbox(
                         value="Ready",
                         label="Status",
                         interactive=False,
@@ -863,7 +872,6 @@ def launch_interface():
                         elem_classes=["clean-elements"],
                         scale=20
                     )
-                    temporary.global_status = global_status
 
                     exit_config = gr.Button(
                          "Exit Program", variant="stop", elem_classes=["double-height"], scale=1
@@ -879,16 +887,9 @@ def launch_interface():
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
 
-                    # ---------------------------------------------------------
-                    # 1  Hardware header
-                    # ---------------------------------------------------------
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("**Hardware**")
 
-
-                    # ---------------------------------------------------------
-                    # 234  Execution-mode switch, radio only if Vulkan present. CPU threads  (always shown)
-                    # ---------------------------------------------------------
                     with gr.Row(elem_classes=["clean-elements"]) as cpu_row:
                         if temporary.VULKAN_AVAILABLE:
                             backend_radio = gr.Radio(
@@ -915,19 +916,15 @@ def launch_interface():
                         max_threads = max(temporary.CPU_THREAD_OPTIONS or [8])
                         config_components["cpu_threads"] = gr.Slider(
                             minimum=1, 
-                            maximum=max(temporary.CPU_THREAD_OPTIONS or [8]),  # Dynamic max
+                            maximum=max(temporary.CPU_THREAD_OPTIONS or [8]),
                             value=temporary.CPU_THREADS or min(4, max(temporary.CPU_THREAD_OPTIONS or [8])), 
                             step=1, 
                             label="Threads", 
                             scale=3, 
                             info=f"Available: {max(temporary.CPU_THREAD_OPTIONS or [8])} threads",
-                            interactive=True  # Ensure it's not disabled
+                            interactive=True
                         )
 
-
-                    # ---------------------------------------------------------
-                    # 3  GPU row   (visible only when Vulkan is *selected*)
-                    # ---------------------------------------------------------
                     gpu_row_visible = temporary.VULKAN_AVAILABLE and temporary.BACKEND_TYPE == "Vulkan"
 
                     with gr.Row(elem_classes=["clean-elements"], visible=gpu_row_visible) as gpu_row:
@@ -945,14 +942,6 @@ def launch_interface():
                             scale=5,
                         )
 
-
-
-
-
-                    # ---------------------------------------------------------
-                    # 5  Rest of the original Configuration UI
-                    # ---------------------------------------------------------
-                    # --- Model section -------------------------------------------------
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("**Model**")
 
@@ -971,7 +960,7 @@ def launch_interface():
 
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["ctx"] = gr.Dropdown(
-                            temporary.CTX_OPTIONS, label="Ctx", value=temporary.CONTEXT_SIZE, scale=5
+                            temporary.CTX_OPTIONS, label="Context", value=temporary.CONTEXT_SIZE, scale=5
                         )
                         config_components["batch"] = gr.Dropdown(
                             temporary.BATCH_OPTIONS, label="Batch", value=temporary.BATCH_SIZE, scale=5
@@ -989,7 +978,6 @@ def launch_interface():
                         config_components["inspect"] = gr.Button("🔍 Inspect")
                         config_components["unload"] = gr.Button("🗑️ Unload", variant="stop")
 
-                    # --- Program section ----------------------------------------------
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("**Program**")
 
@@ -1012,7 +1000,8 @@ def launch_interface():
                         config_components["delete_all_history"] = gr.Button("🗑️ Clear All History", variant="stop")
 
                     with gr.Row(elem_classes=["clean-elements"]):
-                        global_status = gr.Textbox(
+                        # CONFIGURATION TAB STATUS BAR - uses shared state
+                        config_global_status = gr.Textbox(
                             value="Ready",
                             label="Status",
                             interactive=False,
@@ -1020,35 +1009,30 @@ def launch_interface():
                             elem_classes=["clean-elements"],
                             scale=20
                         )
-                        temporary.global_status = global_status                        
-                        
-                    # ---------------------------------------------------------
-                    # 6  Event wiring for the new radio
-                    # ---------------------------------------------------------
-                    if temporary.VULKAN_AVAILABLE:
 
-                        def _switch_backend(mode):
-                            # 1. store choice   2. toggle GPU row visibility
-                            temporary.BACKEND_TYPE = mode
-                            return (
-                                gr.update(visible=(mode == "Vulkan")),  # gpu_row
-                                f"Switched to {mode}",
-                            )
-
-                        backend_radio.change(
-                            fn=_switch_backend,
-                            inputs=[backend_radio],
-                            outputs=[gpu_row, global_status],
-                        )
-
-                        
-                        
         def handle_edit_previous(session_log):
             if len(session_log) < 2:
                 return session_log, gr.update(), "No previous input to edit."
             new_log = session_log[:-2]
             last_user_input = session_log[-2]['content'].replace("User:\n", "", 1)
             return new_log, gr.update(value=last_user_input), "Previous input restored. Edit and resend."
+
+        # Wire up shared status state to both status bars
+        shared_status_state.change(
+            fn=update_shared_status,
+            inputs=[shared_status_state],
+            outputs=[shared_status_state, interaction_global_status, config_global_status]
+        )
+
+        # Update temporary.set_status to use shared state
+        def set_status_both(message, console=False):
+            """Update both status bars via shared state"""
+            # Update the shared state which triggers the change event
+            return message
+
+        # Store reference to shared status state for temporary module
+        temporary.shared_status_state = shared_status_state
+        temporary.set_status = lambda msg, console=False: set_status_both(msg, console)
 
         model_folder_state.change(
             fn=lambda f: setattr(temporary, "MODEL_FOLDER", f) or None,
@@ -1061,13 +1045,13 @@ def launch_interface():
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
             inputs=[model_folder_state],
-            outputs=[global_status]
+            outputs=[shared_status_state]
         )
 
         start_new_session_btn.click(
             fn=start_new_session,
             inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], global_status, conversation_components["user_input"], states["web_search_enabled"]]
+            outputs=[conversation_components["session_log"], shared_status_state, conversation_components["user_input"], states["web_search_enabled"]]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1081,7 +1065,7 @@ def launch_interface():
         new_session_btn_collapsed.click(
             fn=start_new_session,
             inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], global_status, conversation_components["user_input"], states["web_search_enabled"]]
+            outputs=[conversation_components["session_log"], shared_status_state, conversation_components["user_input"], states["web_search_enabled"]]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1095,7 +1079,7 @@ def launch_interface():
         add_attach_files_collapsed.upload(
             fn=process_attach_files,
             inputs=[add_attach_files_collapsed, states["attached_files"], states["models_loaded"]],
-            outputs=[global_status, states["attached_files"]]
+            outputs=[shared_status_state, states["attached_files"]]
         ).then(
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
@@ -1123,7 +1107,7 @@ def launch_interface():
         ).then(
             fn=lambda f: f"Model directory updated to: {f}",
             inputs=[model_folder_state],
-            outputs=[global_status]
+            outputs=[shared_status_state]
         )
 
         action_buttons["action"].click(
@@ -1146,7 +1130,7 @@ def launch_interface():
             ],
             outputs=[
                 conversation_components["session_log"],
-                global_status,
+                shared_status_state,
                 action_buttons["action"],
                 states["cancel_flag"],
                 states["attached_files"],
@@ -1164,7 +1148,7 @@ def launch_interface():
         action_buttons["copy_response"].click(
             fn=copy_last_response,
             inputs=[conversation_components["session_log"]],
-            outputs=[global_status]
+            outputs=[shared_status_state]
         )
 
         action_buttons["web_search"].click(
@@ -1190,13 +1174,13 @@ def launch_interface():
         action_buttons["edit_previous"].click(
             fn=handle_edit_previous,
             inputs=[conversation_components["session_log"]],
-            outputs=[conversation_components["session_log"], conversation_components["user_input"], global_status]
+            outputs=[conversation_components["session_log"], conversation_components["user_input"], shared_status_state]
         )
 
         attach_files.upload(
             fn=process_attach_files,
             inputs=[attach_files, states["attached_files"], states["models_loaded"]],
-            outputs=[global_status, states["attached_files"]]
+            outputs=[shared_status_state, states["attached_files"]]
         ).then(
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
@@ -1207,14 +1191,14 @@ def launch_interface():
             btn.click(
                 fn=lambda files, idx=i: eject_file(files, idx, True),
                 inputs=[states["attached_files"]],
-                outputs=[states["attached_files"], global_status] + attach_slots + [attach_files]
+                outputs=[states["attached_files"], shared_status_state] + attach_slots + [attach_files]
             )
 
         for i, btn in enumerate(buttons["session"]):
             btn.click(
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
-                outputs=[conversation_components["session_log"], states["attached_files"], global_status]
+                outputs=[conversation_components["session_log"], states["attached_files"], shared_status_state]
             ).then(
                 fn=update_session_buttons,
                 inputs=[],
@@ -1234,7 +1218,7 @@ def launch_interface():
         config_components["model"].change(
             fn=handle_model_selection,
             inputs=[config_components["model"], model_folder_state],
-            outputs=[model_folder_state, config_components["model"], global_status]
+            outputs=[model_folder_state, config_components["model"], shared_status_state]
         ).then(
             fn=lambda model_name: models.get_model_settings(model_name)["is_reasoning"],
             inputs=[config_components["model"]],
@@ -1256,7 +1240,7 @@ def launch_interface():
         config_components["cpu_threads"].change(
             fn=handle_cpu_threads_change,
             inputs=[config_components["cpu_threads"]],
-            outputs=[global_status]
+            outputs=[shared_status_state]
         )
 
         states["selected_panel"].change(
@@ -1272,7 +1256,7 @@ def launch_interface():
             comp.change(
                 fn=update_config_settings,
                 inputs=[config_components[k] for k in ["ctx", "batch", "temp", "repeat", "vram", "gpu", "cpu_threads", "model"]] + [config_components["print_raw"]],
-                outputs=[global_status]
+                outputs=[shared_status_state]
             )
 
         if temporary.VULKAN_AVAILABLE:
@@ -1280,16 +1264,16 @@ def launch_interface():
                 fn=lambda mode: [mode, gr.update(visible=(mode == "Vulkan"))],
                 inputs=[backend_radio],
                 outputs=[backend_radio, gpu_row]
-			).then(
-				fn=lambda mode: setattr(temporary, "BACKEND_TYPE", mode) or None,
-				inputs=[backend_radio],
-				outputs=[]
-			)
+            ).then(
+                fn=lambda mode: setattr(temporary, "BACKEND_TYPE", mode) or None,
+                inputs=[backend_radio],
+                outputs=[]
+            )
 
         config_components["unload"].click(
             fn=unload_models,
             inputs=[states["llm"], states["models_loaded"]],
-            outputs=[global_status, states["llm"], states["models_loaded"]]
+            outputs=[shared_status_state, states["llm"], states["models_loaded"]]
         ).then(
             fn=lambda: gr.update(interactive=False),
             outputs=[conversation_components["user_input"]]
@@ -1297,26 +1281,27 @@ def launch_interface():
 
         config_components["load"].click(
             fn=lambda: temporary.set_status("Loading...", console=True),
-            outputs=[global_status]
+            outputs=[shared_status_state]
         ).then(
             fn=load_models,
             inputs=[model_folder_state, config_components["model"], config_components["vram"], states["llm"], states["models_loaded"]],
-            outputs=[global_status, states["models_loaded"], states["llm"], states["models_loaded"]]
+            outputs=[shared_status_state, states["models_loaded"], states["llm"], states["models_loaded"]]
         ).then(
             fn=lambda status, ml: (status, gr.update(interactive=ml)),
-            inputs=[global_status, states["models_loaded"]],
-            outputs=[global_status, conversation_components["user_input"]]
+            inputs=[shared_status_state, states["models_loaded"]],
+            outputs=[shared_status_state, conversation_components["user_input"]]
         )
 
         config_components["save_settings"].click(
-            fn=lambda: settings.save_config(),  # returns "Settings saved."
+            fn=lambda: settings.save_config(),
             inputs=[],
-            outputs=[global_status] 
+            outputs=[shared_status_state] 
         )
 
         config_components["delete_all_history"].click(
             fn=utility.delete_all_session_histories,
-            outputs=[global_status]
+            inputs=[],
+            outputs=[shared_status_state]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1410,10 +1395,10 @@ def launch_interface():
             outputs=[keywords_display]
         )
 
-        global_status.change(
+        shared_status_state.change(
             fn=lambda status: status,
-            inputs=[global_status],
-            outputs=[global_status]
+            inputs=[shared_status_state],
+            outputs=[shared_status_state]
         )
     
     demo.launch(
@@ -1421,7 +1406,7 @@ def launch_interface():
         server_port=7860, 
         show_error=True, 
         show_api=False,
-        share=False,  # Ensure no tunneling
+        share=False,
     )
 
 if __name__ == "__main__":

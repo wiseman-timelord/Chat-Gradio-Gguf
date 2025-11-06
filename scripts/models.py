@@ -523,7 +523,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     buffer = ""  # Accumulate tokens to detect tags
     seen_real_text = False
     thinking_started = False
-    raw_output = ""  # Track complete raw output for printing
+    raw_output = "AI-Chat:\n"  # Track complete raw output for printing - FIXED: Start with prefix
     
     for chunk in llm_state.create_chat_completion(
         messages=messages,
@@ -540,6 +540,9 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         if not token:
             continue
 
+        # FIXED: Accumulate ALL tokens to raw_output
+        raw_output += token
+
         # Drop pure-whitespace tokens until real text arrives
         if not seen_real_text:
             if token.strip() == "":
@@ -548,6 +551,11 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
         # [INST] guard: stop if model tries to speak as user
         if token.strip().startswith("[INST]"):
+            # FIXED: Print raw output before returning
+            if temporary.PRINT_RAW_OUTPUT:
+                print("\n***RAW_OUTPUT_FROM_MODEL_START***")
+                print(raw_output, flush=True)
+                print("***RAW_OUTPUT_FROM_MODEL_END***\n")
             return
 
         # Accumulate tokens in buffer for tag detection
@@ -610,9 +618,10 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     if buffer and not in_think_block:
         yield buffer
 
+    # FIXED: Print the actual accumulated raw output
     if temporary.PRINT_RAW_OUTPUT:
         print("\n***RAW_OUTPUT_FROM_MODEL_START***")
-        print("(streaming output shown above)", flush=True)
+        print(raw_output, flush=True)
         print("***RAW_OUTPUT_FROM_MODEL_END***\n")
 
 # Helper function to reload model with new settings
