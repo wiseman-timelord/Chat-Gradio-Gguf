@@ -212,7 +212,6 @@ project_root/
 
 # Development
 - Remember: This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
-1. Limit the batch output to 8192, until 8192 is seen. Other settings are excessive.
 1. Still additional blank line to each line it prints for "AI-Chat" responses, its not the raw output, its the actual interface.
 2. The stop button is interesting, but lacking an actual ability to break the processes of prompting and displaying response, it should be able to do this, having same effect as edit previous, so as to be going back to the state of writing the prompt with content still in chat input box.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
