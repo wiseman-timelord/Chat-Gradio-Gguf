@@ -217,8 +217,8 @@ project_root/
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 4. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently. Investigate/upgrade.
 5. Introduce a collapseable right side bar, lilke the left one but on the right, again a "C-G-G" button, that expands out to a "Chat-Gradio-Gguf" button, in the expanded panel here I want...
-6. a button switching right panel to visualizes the thinking/generation, in some simple method, that is somehow interesting, with a buttton under to turn "Vis" ON/OFF (visualize), so we know its def off or on (off by default), for the next generation.
-7. a button switching right panel to quick settings sliders for, "Context Size" and "Batch Output", with save button, and will update relating settings in json, as well as ensure the settings are then consistent between, "the sidebar and configuration tab".
+- a button switching right panel to visualizes the thinking/generation, in some simple method, that is somehow interesting, with a buttton under to turn "Vis" ON/OFF (visualize), so we know its def off or on (off by default), for the next generation.
+- a button switching right panel to quick settings sliders for, "Context Size" and "Batch Output", with save button, and will update relating settings in json, as well as ensure the settings are then consistent between, "the sidebar and configuration tab".
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
