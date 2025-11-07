@@ -37,70 +37,73 @@ DEFAULTS = {
 }
 
 # scripts/settings.py
-
 def load_config():
     """
     Load configuration from persistent.json and set in temporary.py.
     Always scan for available models and cache the result.
     """
+    config = {}  # Initialize config variable
+    
     if CONFIG_PATH.exists():
-        with open(CONFIG_PATH, 'r') as f:
-            config = json.load(f)
-        temporary.set_status("Config loaded", console=True)
-
-        # Load model_settings
-        model_settings = config.get("model_settings", {})
-        if "model_dir" in model_settings:
-            temporary.MODEL_FOLDER = model_settings["model_dir"]
-        else:
-            temporary.MODEL_FOLDER = DEFAULTS["MODEL_FOLDER"]
-
-        # CRITICAL: Load backend_type FIRST
-        temporary.BACKEND_TYPE = model_settings.get("backend_type", "CPU-Only")
-        temporary.VULKAN_AVAILABLE = model_settings.get("vulkan_available", False)
-
-        # Load other settings
-        for key, attr in {
-            "context_size": "CONTEXT_SIZE",
-            "temperature": "TEMPERATURE",
-            "repeat_penalty": "REPEAT_PENALTY",
-            "llama_cli_path": "LLAMA_CLI_PATH",
-            "vram_size": "VRAM_SIZE",
-            "selected_gpu": "SELECTED_GPU",
-            "mmap": "MMAP",
-            "mlock": "MLOCK",
-            "n_batch": "BATCH_SIZE",
-            "dynamic_gpu_layers": "DYNAMIC_GPU_LAYERS",
-            "max_history_slots": "MAX_HISTORY_SLOTS",
-            "max_attach_slots": "MAX_ATTACH_SLOTS",
-            "session_log_height": "SESSION_LOG_HEIGHT",
-            "print_raw_output": "PRINT_RAW_OUTPUT",
-            "show_think_phase": "SHOW_THINK_PHASE", 
-            "cpu_threads": "CPU_THREADS"
-        }.items():
-            if key in model_settings:
-                setattr(temporary, attr, model_settings[key])
-               
+        try:
+            with open(CONFIG_PATH, 'r') as f:
+                config = json.load(f)
+            temporary.set_status("Config loaded", console=True)
+        except json.JSONDecodeError:
+            print(f"⚠️  Config file corrupted, using defaults.")
+            config = {}
     else:
         print(f"⚠️  Config missing/corrupted, re-run installer.")
         # Set defaults when no config exists
         temporary.BACKEND_TYPE = "CPU-Only"
         temporary.VULKAN_AVAILABLE = False
 
+    # Load model_settings with safe fallback
+    model_settings = config.get("model_settings", {})
+    
+    if "model_dir" in model_settings:
+        temporary.MODEL_FOLDER = model_settings["model_dir"]
+    else:
+        temporary.MODEL_FOLDER = DEFAULTS["MODEL_FOLDER"]
+
+    # CRITICAL: Load backend_type FIRST
+    temporary.BACKEND_TYPE = model_settings.get("backend_type", "CPU-Only")
+    temporary.VULKAN_AVAILABLE = model_settings.get("vulkan_available", False)
+    temporary.SHOW_THINK_PHASE = model_settings.get("show_think_phase", False)
+    temporary.PRINT_RAW_OUTPUT = model_settings.get("print_raw_output", False)
+
+    # Load other settings
+    for key, attr in {
+        "context_size": "CONTEXT_SIZE",
+        "temperature": "TEMPERATURE",
+        "repeat_penalty": "REPEAT_PENALTY",
+        "llama_cli_path": "LLAMA_CLI_PATH",
+        "vram_size": "VRAM_SIZE",
+        "selected_gpu": "SELECTED_GPU",
+        "mmap": "MMAP",
+        "mlock": "MLOCK",
+        "n_batch": "BATCH_SIZE",
+        "dynamic_gpu_layers": "DYNAMIC_GPU_LAYERS",
+        "max_history_slots": "MAX_HISTORY_SLOTS",
+        "max_attach_slots": "MAX_ATTACH_SLOTS",
+        "session_log_height": "SESSION_LOG_HEIGHT",
+        "print_raw_output": "PRINT_RAW_OUTPUT",
+        "show_think_phase": "SHOW_THINK_PHASE",
+        "cpu_threads": "CPU_THREADS"
+    }.items():
+        if key in model_settings:
+            setattr(temporary, attr, model_settings[key])
+           
     # Scan for available models and cache the result
     available_models = get_available_models()
     temporary.AVAILABLE_MODELS = available_models
 
     # Validate model_name against available models
-    if CONFIG_PATH.exists():
-        model_settings = config.get("model_settings", {})
-        temporary.MODEL_NAME = (
-            model_settings.get("model_name")
-            if model_settings.get("model_name") in available_models
-            else (available_models[0] if available_models else "Select_a_model...")
-        )
-    else:
-        temporary.MODEL_NAME = "Select_a_model..."
+    temporary.MODEL_NAME = (
+        model_settings.get("model_name")
+        if model_settings.get("model_name") in available_models
+        else (available_models[0] if available_models else "Select_a_model...")
+    )
 
     return "Configuration loaded."
 
@@ -125,8 +128,8 @@ def save_config():
             "max_history_slots": temporary.MAX_HISTORY_SLOTS,
             "max_attach_slots": temporary.MAX_ATTACH_SLOTS,
             "session_log_height": temporary.SESSION_LOG_HEIGHT,
-            "print_raw_output": temporary.PRINT_RAW_OUTPUT,
             "show_think_phase": temporary.SHOW_THINK_PHASE,
+            "print_raw_output": temporary.PRINT_RAW_OUTPUT,
             "cpu_threads": temporary.CPU_THREADS,
             "vulkan_available": getattr(temporary, "VULKAN_AVAILABLE", False),
             "backend_type": getattr(temporary, "BACKEND_TYPE", "CPU-Only")  # ADD THIS LINE
