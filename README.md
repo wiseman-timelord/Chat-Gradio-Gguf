@@ -213,7 +213,7 @@ project_root/
 # Development
 - Remember: This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
 1. Model Compatibility, specifically the new gpt oss models.
-2. If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model.
+2. (possibly fixed now) If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model.
 1. Still additional blank line to each line it prints for "AI-Chat" responses, its not the raw output, its the actual interface, it seemed fine on laptop though, so possibly this is a browser issue or my desktop pc setup.
 2. The stop button is interesting, but lacking an actual ability to break the processes of prompting and displaying response, it should be able to do this, having same effect as edit previous, so as to be going back to the state of writing the prompt with content still in chat input box.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
