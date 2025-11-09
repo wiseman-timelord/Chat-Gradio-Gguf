@@ -49,7 +49,10 @@ def get_model_size(model_path: str) -> float:
 def clean_content(role, content):
     """Remove prefixes from session_log content for model input."""
     if role == 'user':
-        return content.replace("User:\n", "", 1).strip()
+        # Handle both "User:\n" prefix and structured "User Query:\n" format
+        content = content.replace("User:\n", "", 1)
+        # Don't strip "User Query:" header as it's part of structured context
+        return content.strip()
     return content.strip()
 
 def get_available_models():

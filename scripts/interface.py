@@ -340,7 +340,7 @@ def copy_last_response(session_log):
 def update_file_slot_ui(file_list, is_attach=True):
     from pathlib import Path
     button_updates = []
-    max_slots = temporary.MAX_POSSIBLE_ATTACH_SLOTS if is_attach else temporary.MAX_POSSIBLE_ATTACH_SLOTS  # Reuse for vector
+    max_slots = temporary.MAX_POSSIBLE_ATTACH_SLOTS if is_attach else temporary.MAX_POSSIBLE_ATTACH_SLOTS
     for i in range(max_slots):
         if i < len(file_list):
             filename = Path(file_list[i]).name
@@ -353,7 +353,7 @@ def update_file_slot_ui(file_list, is_attach=True):
             variant = "primary"
             visible = False
         button_updates.append(gr.update(value=label, visible=visible, variant=variant))
-    visible = len(file_list) < temporary.MAX_ATTACH_SLOTS if is_attach else True  # Vector has no limit UI-wise
+    visible = len(file_list) < temporary.MAX_ATTACH_SLOTS if is_attach else True
     return button_updates + [gr.update(visible=visible)]
 
 def filter_operational_content(text):
@@ -508,11 +508,10 @@ async def conversation_interface(
             file_context = utility.get_attached_files_context(
                 temporary.session_attached_files,
                 query=user_input,
-                max_total_chars=temporary.CONTEXT_SIZE // 4  # Reserve 25% of context for files
+                max_total_chars=temporary.CONTEXT_SIZE // 4
             )
-            
             if file_context:
-                processed_input = f"{file_context}\n\n{'='*50}\n\nUser Query:\n{user_input}"
+                processed_input = f"User Query:\n{user_input}\n\n{'='*50}\n\n{file_context}"
                 print(f"[ATTACH] Added context from {len(temporary.session_attached_files)} files")
         except Exception as e:
             print(f"[ATTACH] Error processing files: {e}")
@@ -521,7 +520,10 @@ async def conversation_interface(
             processed_input = f"Attached files: {', '.join(file_names)}\n\n{user_input}"
 
     # Append messages to session log
-    session_log.append({'role': 'user', 'content': f"User:\n{processed_input}"})
+    if temporary.session_attached_files and file_context:
+        session_log.append({'role': 'user', 'content': processed_input})
+    else:
+        session_log.append({'role': 'user', 'content': f"User:\n{processed_input}"})
     session_log.append({'role': 'assistant', 'content': "AI-Chat:\n"})
     interaction_phase = "afterthought_countdown"
 
@@ -753,12 +755,16 @@ async def conversation_interface(
     temporary.session_attached_files.clear()
 
     interaction_phase = "waiting_for_input"
+    
+    # Clear the Gradio state for attached files
+    cleared_files = []
+    
     yield (
         session_log,
         "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
         update_action_button(interaction_phase),
         False,
-        loaded_files,
+        cleared_files,  # ← Update Gradio state to empty list
         interaction_phase,
         gr.update(interactive=True, value=""),
         gr.update(value=web_search_enabled),
@@ -1163,6 +1169,11 @@ def launch_interface():
             fn=update_session_buttons,
             inputs=[],
             outputs=buttons["session"]
+        ).then(
+            # ← NEW: Clear attachment UI slots after response completes
+            fn=lambda files: update_file_slot_ui(files, True),
+            inputs=[states["attached_files"]],
+            outputs=attach_slots + [attach_files]
         )
 
         action_buttons["copy_response"].click(

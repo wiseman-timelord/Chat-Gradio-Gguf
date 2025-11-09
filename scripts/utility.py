@@ -514,6 +514,7 @@ def get_attached_files_context(attached_files, query=None, max_total_chars=8000)
             file_name = Path(file_path).name
             
             if success and content.strip():
+                print(f"[ATTACH] Read {len(content)} chars from {file_name}")  # DEBUG
                 # Skip if content already in RAG context
                 if rag_context and content[:500] in rag_context:
                     continue
