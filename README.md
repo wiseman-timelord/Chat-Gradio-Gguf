@@ -1,5 +1,5 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
-<br>Status: Beta - One main critical issue; do not attach files, or you must delete all history.
+<br>Status: Beta - Working good now, still some minor things before complete.
 
 ## Description
 Intended as a high-quality chat interface programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is intended to be intelligent, while without options reported in forums to make no difference on most models, using offline libraries where possible instead of services requiring registration, and everything is privatly run on your own hardware with your own models. 
@@ -212,7 +212,9 @@ project_root/
 
 # Development
 - Remember: This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`.
-1. Still additional blank line to each line it prints for "AI-Chat" responses, its not the raw output, its the actual interface.
+1. Model Compatibility, specifically the new gpt oss models.
+2. If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model.
+1. Still additional blank line to each line it prints for "AI-Chat" responses, its not the raw output, its the actual interface, it seemed fine on laptop though, so possibly this is a browser issue or my desktop pc setup.
 2. The stop button is interesting, but lacking an actual ability to break the processes of prompting and displaying response, it should be able to do this, having same effect as edit previous, so as to be going back to the state of writing the prompt with content still in chat input box.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 4. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently. Investigate/upgrade.
