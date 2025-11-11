@@ -274,6 +274,7 @@ def get_model_layers(model_path: str) -> int:
         "llama.block_count",
         "qwen2.block_count",
         "qwen.block_count",
+        "gpt-oss.block_count",  # ✅ Add this
         "layers",
         "n_layers",
         "num_hidden_layers",
@@ -523,10 +524,16 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
     # State tracking for <think> phase
     in_think_block = False
-    buffer = ""          # Accumulate tokens to detect tags
+    buffer = ""
     seen_real_text = False
     thinking_started = False
-    raw_output = "AI-Chat:\n"   # Track complete raw output for printing
+    raw_output = "AI-Chat:\n"
+    
+    # Define tag constants for clarity
+    STANDARD_OPEN = "<think>"
+    STANDARD_CLOSE = "</think>"
+    GPT_OSS_OPEN = "<|start|>assistant<|channel|>think<|message|>"
+    GPT_OSS_CLOSE = "<|end|><|start|>assistant<|end|><|start|>assistant<|message|>"
 
     for chunk in llm_state.create_chat_completion(
         messages=messages,
@@ -560,59 +567,96 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
         buffer += token
 
-        # Detect <think> opening
-        if not in_think_block and "<think>" in buffer:
-            in_think_block = True
-            thinking_started = True
-            before, after = buffer.split("<think>", 1)
-            if before:
-                yield before
-            buffer = after
+        # === MAIN LOGIC: Check for opening/closing tags ===
+        if not in_think_block:
+            # Check for opening tags
+            if STANDARD_OPEN in buffer or GPT_OSS_OPEN in buffer:
+                in_think_block = True
+                thinking_started = True
 
-            if temporary.SHOW_THINK_PHASE:
-                yield "<think>"          # show opening tag
-            else:
-                # Classic dots mode
-                spaces = buffer.count(" ")
-                yield "Thinking" + ("." * spaces)
-            continue
-
-        # Inside think block
-        if in_think_block:
-            if "</think>" in buffer:
-                # Found closing tag
-                after_close = buffer.split("</think>", 1)[1]
-                buffer = after_close
-                in_think_block = False
-
-                if temporary.SHOW_THINK_PHASE:
-                    yield "</think>\n"
+                # Determine which tag was found
+                if STANDARD_OPEN in buffer:
+                    before, after = buffer.split(STANDARD_OPEN, 1)
+                    opening_tag = STANDARD_OPEN
                 else:
-                    yield "\n"          # separator before answer
+                    before, after = buffer.split(GPT_OSS_OPEN, 1)
+                    opening_tag = GPT_OSS_OPEN
 
-                if after_close:
-                    yield after_close
-                    buffer = ""
-            else:
-                # Still thinking – choose display mode
+                # Emit any text that precedes the tag
+                if before:
+                    yield before
+
+                buffer = after
+
+                # Show the opening tag or "Thinking..." indicator
                 if temporary.SHOW_THINK_PHASE:
+                    yield opening_tag
+                else:
+                    # Start with "Thinking" - dots will be added as spaces appear
+                    yield "Thinking"
+                    
+            else:
+                # Normal streaming (not in think block, no opening tag detected)
+                if not thinking_started:
+                    # Haven't seen any think tags yet - stream normally
                     yield buffer
                     buffer = ""
                 else:
-                    # Dots mode
+                    # We've been through thinking before, but not in block now
+                    # Check if we have a complete token to emit
+                    if len(buffer) > len(GPT_OSS_OPEN):  # Larger than longest tag
+                        yield buffer
+                        buffer = ""
+                        
+        else:  # in_think_block == True
+            # Check for closing tags
+            if STANDARD_CLOSE in buffer or GPT_OSS_CLOSE in buffer:
+                # Found closing tag
+                if GPT_OSS_CLOSE in buffer:
+                    before_close, after_close = buffer.split(GPT_OSS_CLOSE, 1)
+                    closing_tag = GPT_OSS_CLOSE
+                else:
+                    before_close, after_close = buffer.split(STANDARD_CLOSE, 1)
+                    closing_tag = STANDARD_CLOSE
+                
+                # Handle content before closing tag
+                if temporary.SHOW_THINK_PHASE and before_close:
+                    yield before_close
+                elif not temporary.SHOW_THINK_PHASE:
+                    # Add dots for spaces in thinking content
+                    spaces = before_close.count(" ")
+                    if spaces:
+                        yield "." * spaces
+                
+                # Exit think block
+                in_think_block = False
+                buffer = after_close
+                
+                # Show closing tag if enabled
+                if temporary.SHOW_THINK_PHASE:
+                    yield closing_tag
+                else:
+                    yield "\n"  # Newline separator before answer
+                
+                # Yield any content after the closing tag
+                if after_close:
+                    yield after_close
+                    buffer = ""
+                    
+            else:
+                # Still thinking - no closing tag yet
+                if temporary.SHOW_THINK_PHASE:
+                    # Show thinking content as-is
+                    yield buffer
+                    buffer = ""
+                else:
+                    # Dots mode - show dots for spaces
                     spaces = token.count(" ")
                     if spaces:
                         yield "." * spaces
-        else:
-            # Normal streaming
-            if not thinking_started or buffer == token:
-                yield token
-                buffer = ""
-            else:
-                yield buffer
-                buffer = ""
+                    # Keep accumulating buffer to detect closing tag
 
-    # Final buffer flush
+    # Final buffer flush (only if not in think block)
     if buffer and not in_think_block:
         yield buffer
 

@@ -107,13 +107,14 @@ CHAT_FORMAT_MAP = {
     'qwen3moe': 'chatml',
     'deepseek2': 'deepseek',
     'stablelm': 'chatml',
+    'gpt-oss': 'chatml',  # ✅ Add this line
 }
 
 # Handling Keywords for Special Model Behaviors
 handling_keywords = {
     "code": ["code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell"],
     "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
-    "reasoning": ["reason", "r1", "think"],
+    "reasoning": ["reason", "r1", "think", "gpt-oss"],
     "nsfw": ["nsfw", "adult", "mature", "explicit", "lewd"],
     "roleplay": ["rp", "role", "adventure"]
 }

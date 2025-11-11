@@ -113,6 +113,45 @@ def save_all_settings():
     settings.save_config()
     return temporary.STATUS_MESSAGES["config_saved"]
 
+def save_and_reload_if_needed(models_loaded, llm_state, new_ctx_size):
+    """
+    Save settings and reload model if context size changed.
+    Compares new context size with the model's loaded context size.
+    """
+    settings.save_config()
+    
+    # If no model loaded, just save and return
+    if not models_loaded or llm_state is None:
+        return "Settings saved.", models_loaded, llm_state
+    
+    # Check if context size actually changed from what the model has
+    try:
+        current_model_ctx = llm_state.n_ctx()
+        new_ctx = int(new_ctx_size)
+        
+        if current_model_ctx != new_ctx:
+            temporary.set_status("Context changed - reloading model...", console=True)
+            
+            # Unload current model
+            _, llm_state, models_loaded = unload_models(llm_state, models_loaded)
+            
+            # Reload with new context size
+            status, models_loaded, llm_state, _ = load_models(
+                temporary.MODEL_FOLDER,
+                temporary.MODEL_NAME,
+                temporary.VRAM_SIZE,
+                llm_state,
+                models_loaded
+            )
+            
+            return f"Settings saved. Model reloaded with {new_ctx} context.", models_loaded, llm_state
+        else:
+            return "Settings saved.", models_loaded, llm_state
+            
+    except Exception as e:
+        print(f"Error checking/reloading model: {e}")
+        return f"Settings saved (reload check failed: {str(e)})", models_loaded, llm_state
+
 def set_session_log_base_height(new_height):
     """Set the base session log height from the Configuration page dropdown."""
     temporary.SESSION_LOG_HEIGHT = int(new_height)
@@ -143,13 +182,20 @@ def update_session_log_height(text):
 
 def format_response(output: str) -> str:
     formatted = []
-    # Preserve think blocks during streaming
-    think_blocks = re.findall(r'<think>(.*?)</think>', output, re.DOTALL)
+
+    # --- NEW: Include non-standard think tags ---
+    think_blocks = re.findall(r'<|start|>assistant<|channel|>think<|message|>(.*?)</|end|><|start|>assistant<|end|><|start|>assistant<|message|>', output, re.DOTALL)
     for thought in think_blocks:
-        formatted.append(f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>')
+        formatted.append(f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span')
+    # --------------------------------------------
+
+    # Preserve think blocks during streaming
+    standard_think_blocks = re.findall(r'<think>(.*?)</think>', output, re.DOTALL)
+    for thought in standard_think_blocks:
+        formatted.append(f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span')
 
     # Process remaining content
-    clean_output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL)
+    clean_output = re.sub(r'<|start|>assistant<|channel|>think<|message|>.*?</|end|><|start|>assistant<|end|><|start|>assistant<|message|>', '', output, flags=re.DOTALL)
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
     for lang, code in code_blocks:
         lexer = get_lexer_by_name(lang, stripall=True)
@@ -157,17 +203,8 @@ def format_response(output: str) -> str:
         clean_output = clean_output.replace(f'```{lang}\n{code}```', formatted_code)
 
     # --- NEW: Windows-safe newline handling ---
-    clean_output = clean_output.replace('\r\n', '\n')          # normalize
-    clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)   # collapse
-    clean_output = clean_output.strip()
-    clean_output = clean_output.replace('\n', '<br>')          # convert
-    # ----------------------------------------
-
-    # Combine think blocks (if any) with the cleaned answer
-    if formatted:
-        return '<br>'.join(formatted) + '<br><br>' + clean_output
-    else:
-        return clean_output
+    clean_output = clean_output.replace('\r\n', '\n')            # normalize
+    clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)
 
 def get_initial_model_value():
     available_models = temporary.AVAILABLE_MODELS or get_available_models()
@@ -1324,9 +1361,13 @@ def launch_interface():
         )
 
         config_components["save_settings"].click(
-            fn=lambda: settings.save_config(),
-            inputs=[],
-            outputs=[shared_status_state] 
+            fn=save_and_reload_if_needed,
+            inputs=[states["models_loaded"], states["llm"], config_components["ctx"]],
+            outputs=[shared_status_state, states["models_loaded"], states["llm"]]
+        ).then(
+            fn=lambda status: status,
+            inputs=[shared_status_state],
+            outputs=[shared_status_state]
         )
 
         config_components["delete_all_history"].click(
