@@ -80,9 +80,26 @@ SHOW_THINK_PHASE = False
 demo = None
 
 # RAG CONSTANTS
-RAG_CHUNK_SIZE_DIVIDER = 4
-RAG_CHUNK_OVERLAP_DIVIDER = 32
+RAG_CHUNK_SIZE_DIVIDER = 6
+RAG_CHUNK_OVERLAP_DIVIDER = 24
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+
+# Thinking Phase
+THINK_MIN_CHARS_BEFORE_CLOSE = 100
+THINK_OPENING_TAGS = [
+    "<think>",
+    "<|start|>assistant<|channel|>think<|message|>",
+    # Add more opening tags here as needed
+]
+THINK_CLOSING_TAGS = [
+    "</think>",
+    "<|end|><|start|>assistant<|end|><|start|>assistant<|message|>",
+    # Add more closing tags here as needed
+]
+THINK_CLOSING_PARTIAL_PATTERNS = [
+    "<|end|>",  # Will match any occurrence and continue to final '>'
+    # Add more partial patterns here as needed
+]
 
 # Status text entries  
 STATUS_MESSAGES = {
@@ -101,18 +118,17 @@ STATUS_MESSAGES = {
 }
 
 CHAT_FORMAT_MAP = {
-    'qwen2': 'chatml',
-    'llama': 'llama-2',
-    'qwen3': 'chatml',
-    'qwen3moe': 'chatml',
-    'deepseek2': 'deepseek',
-    'stablelm': 'chatml',
-    'gpt-oss': 'chatml',  # ✅ Add this line
+    'qwen2'     : 'chatml',
+    'llama'     : 'llama-2',
+    'qwen3'     : 'chatml',
+    'qwen3moe'  : 'chatml',
+    'deepseek2' : 'deepseek',
+    'stablelm'  : 'chatml',
 }
 
 # Handling Keywords for Special Model Behaviors
 handling_keywords = {
-    "code": ["code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell"],
+    "code": ["code", "code", "program", "dev", "copilot", "Python", "Powershell"],
     "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
     "reasoning": ["reason", "r1", "think", "gpt-oss"],
     "nsfw": ["nsfw", "adult", "mature", "explicit", "lewd"],
@@ -127,9 +143,7 @@ current_model_settings = {
 # RAG Context Injector
 class ContextInjector:
     """
-    End-to-end RAG:
-      - ingest files → chunks → embeddings → FAISS
-      - retrieve top-k most relevant chunks for a query
+    End-to-end RAG with improved chunking for large files
     """
     def __init__(self):
         self.embedding = None
@@ -172,7 +186,7 @@ class ContextInjector:
             self.embedding = None
 
     def set_session_vectorstore(self, file_paths):
-        """Create/refresh vector store from list of file paths."""
+        """Create/refresh vector store from list of file paths with improved chunking."""
         if not file_paths:
             self.index = None
             self.chunks = []
@@ -185,16 +199,40 @@ class ContextInjector:
             return
 
         all_docs = []
+        
+        # Dynamic chunk sizing based on context size
+        from scripts.temporary import CONTEXT_SIZE
+        base_chunk_size = CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER
+        base_chunk_overlap = CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
+        
+        # Adjust chunk size based on file count and size
+        total_files = len(file_paths)
+        avg_file_size = sum(Path(fp).stat().st_size for fp in file_paths if Path(fp).exists()) / total_files if total_files > 0 else 0
+        
+        # Smaller chunks for larger files to improve retrieval
+        if avg_file_size > 100000:  # Files larger than 100KB
+            chunk_size = min(base_chunk_size, 1000)
+            chunk_overlap = min(base_chunk_overlap, 100)
+        else:
+            chunk_size = base_chunk_size
+            chunk_overlap = base_chunk_overlap
+        
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER,
-            chunk_overlap=CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
         )
+        
         for fp in file_paths:
             if Path(fp).suffix[1:].lower() not in ALLOWED_EXTENSIONS:
                 continue
             try:
                 docs = TextLoader(fp).load()
-                all_docs.extend(splitter.split_documents(docs))
+                # Split into smaller chunks for better retrieval
+                chunks = splitter.split_documents(docs)
+                all_docs.extend(chunks)
+                print(f"[RAG] Split {fp} into {len(chunks)} chunks")
             except Exception as e:
                 print(f"[RAG] Skip {fp}: {e}")
 
@@ -204,8 +242,17 @@ class ContextInjector:
             return
 
         texts = [d.page_content for d in all_docs]
-        embeddings = self.embedding.embed(texts)
-        embeddings = np.array(embeddings).astype('float32')
+        
+        # Create embeddings in batches to avoid memory issues
+        batch_size = 32
+        all_embeddings = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i:i+batch_size]
+            batch_embeddings = self.embedding.embed(batch_texts)
+            all_embeddings.extend(batch_embeddings)
+        
+        embeddings = np.array(all_embeddings).astype('float32')
 
         self.index = faiss.IndexFlatIP(embeddings.shape[1])
         faiss.normalize_L2(embeddings)
@@ -226,9 +273,24 @@ class ContextInjector:
         q_vec = self.embedding.embed([query])
         q_vec = np.array(q_vec).astype('float32')
         faiss.normalize_L2(q_vec)
-        scores, idxs = self.index.search(q_vec, k)
-        top = [self.chunks[i] for i in idxs[0] if i < len(self.chunks)]
-        return "\n\n".join(top)
+        
+        # Search for more chunks than needed to allow for deduplication
+        scores, idxs = self.index.search(q_vec, k * 2)
+        
+        # Deduplicate and select top k unique chunks
+        seen_chunks = set()
+        top_chunks = []
+        
+        for i in idxs[0]:
+            if i < len(self.chunks) and len(top_chunks) < k:
+                chunk = self.chunks[i]
+                # Simple deduplication based on first 50 characters
+                chunk_key = chunk[:50].strip()
+                if chunk_key not in seen_chunks:
+                    seen_chunks.add(chunk_key)
+                    top_chunks.append(chunk)
+        
+        return "\n\n".join(top_chunks)
         
 context_injector = ContextInjector()
 

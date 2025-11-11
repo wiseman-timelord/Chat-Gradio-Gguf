@@ -459,14 +459,15 @@ def read_file_content(file_path, max_chars=50000):
     except Exception as e:
         return "", "error", False, f"Unexpected error: {str(e)}"
 
-def get_attached_files_context(attached_files, query=None, max_total_chars=8000):
+def get_attached_files_context(attached_files, query=None, max_total_chars=8000, context_size=None):
     """
-    Generate context string from attached files for model input.
+    Generate context string from attached files with smart chunking for large content.
     
     Args:
         attached_files: List of file paths
         query: Optional user query for RAG-based filtering
-        max_total_chars: Maximum total characters to include
+        max_total_chars: Maximum total characters to include (soft limit)
+        context_size: Total context size to calculate appropriate limits
     
     Returns:
         str: Formatted context string with file contents
@@ -477,6 +478,35 @@ def get_attached_files_context(attached_files, query=None, max_total_chars=8000)
     from pathlib import Path
     import scripts.temporary as temporary
     
+    # Use provided context_size or fall back to temporary.CONTEXT_SIZE
+    if context_size is None:
+        context_size = temporary.CONTEXT_SIZE
+    
+    # Calculate dynamic limits based on context size and query complexity
+    base_context_reserve = min(context_size // 3, 8000)  # Reserve space for conversation
+    available_for_files = context_size - base_context_reserve
+    
+    # If we have a query, prioritize RAG retrieval
+    rag_context = None
+    if query and hasattr(temporary.context_injector, 'get_relevant_context'):
+        try:
+            # Get relevant chunks using RAG
+            rag_context = temporary.context_injector.get_relevant_context(query, k=6)
+            if rag_context:
+                # RAG found relevant content, use it as primary source
+                file_list = [Path(f).name for f in attached_files]
+                context_parts = [
+                    f"📎 Attached Files ({len(file_list)}): {', '.join(file_list)}",
+                    "",
+                    "📖 Relevant Content from Files:",
+                    rag_context[:available_for_files],
+                    ""
+                ]
+                return "\n".join(context_parts)
+        except Exception as e:
+            print(f"[ATTACH] RAG retrieval error: {e}")
+    
+    # No RAG or RAG failed, fall back to direct content inclusion with smart chunking
     context_parts = []
     total_chars = 0
     
@@ -485,47 +515,56 @@ def get_attached_files_context(attached_files, query=None, max_total_chars=8000)
     context_parts.append(f"📎 Attached Files ({len(file_list)}): {', '.join(file_list)}")
     context_parts.append("")
     
-    # Try RAG-based retrieval first if query provided
-    rag_context = None
-    if query and hasattr(temporary.context_injector, 'get_relevant_context'):
-        try:
-            rag_context = temporary.context_injector.get_relevant_context(query, k=3)
-            if rag_context:
-                context_parts.append("📖 Relevant Content from Files:")
-                context_parts.append(rag_context[:max_total_chars // 2])
-                context_parts.append("")
-                total_chars += len(rag_context)
-        except Exception as e:
-            print(f"[ATTACH] RAG retrieval error: {e}")
+    # Process each file with intelligent chunking
+    remaining_chars = available_for_files
+    files_processed = 0
     
-    # For small files, include full content
-    remaining_chars = max_total_chars - total_chars
-    if remaining_chars > 1000:
-        for file_path in attached_files:
-            if total_chars >= max_total_chars:
-                context_parts.append(f"... ({len(attached_files) - len(context_parts) + 3} more files)")
-                break
-            
-            content, file_type, success, error = read_file_content(
-                file_path, 
-                max_chars=remaining_chars // len(attached_files)
-            )
-            
-            file_name = Path(file_path).name
+    for file_path in attached_files:
+        if total_chars >= available_for_files:
+            # Add indicator for remaining files
+            remaining_count = len(attached_files) - files_processed
+            if remaining_count > 0:
+                context_parts.append(f"... ({remaining_count} more files not shown due to context limits)")
+            break
+        
+        file_name = Path(file_path).name
+        
+        try:
+            # Read file content with dynamic chunk size
+            chunk_size = min(remaining_chars // (len(attached_files) - files_processed), 10000)
+            content, file_type, success, error = read_file_content(file_path, max_chars=chunk_size)
             
             if success and content.strip():
-                print(f"[ATTACH] Read {len(content)} chars from {file_name}")  # DEBUG
-                # Skip if content already in RAG context
-                if rag_context and content[:500] in rag_context:
-                    continue
+                # Smart truncation for large files
+                if len(content) > chunk_size * 0.9:  # File was truncated
+                    # Try to find a good break point (end of sentence/paragraph)
+                    truncated_content = content[:chunk_size]
+                    last_period = truncated_content.rfind('.')
+                    last_newline = truncated_content.rfind('\n')
+                    break_point = max(last_period, last_newline)
                     
+                    if break_point > len(truncated_content) * 0.7:  # Found good break point
+                        content = truncated_content[:break_point + 1]
+                        content += f"\n...[Content truncated - {len(content)} chars shown]"
+                    else:
+                        content = truncated_content
+                        content += f"\n...[File truncated due to context limits]"
+                
                 context_parts.append(f"--- {file_name} ({file_type}) ---")
                 context_parts.append(content)
                 context_parts.append("")
+                
                 total_chars += len(content)
                 remaining_chars -= len(content)
+                files_processed += 1
+                
             elif not success:
                 context_parts.append(f"⚠️ {file_name}: {error}")
+                files_processed += 1
+                
+        except Exception as e:
+            context_parts.append(f"⚠️ {file_name}: Error reading file - {str(e)}")
+            files_processed += 1
     
     return "\n".join(context_parts)
 

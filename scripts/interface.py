@@ -22,7 +22,8 @@ from scripts.temporary import (
     VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
     ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
     REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
-    ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR
+    ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR,
+    THINK_OPENING_TAGS, THINK_CLOSING_TAGS, THINK_CLOSING_PARTIAL_PATTERNS  # NEW
 )
 from scripts import utility
 from scripts.utility import (
@@ -113,45 +114,6 @@ def save_all_settings():
     settings.save_config()
     return temporary.STATUS_MESSAGES["config_saved"]
 
-def save_and_reload_if_needed(models_loaded, llm_state, new_ctx_size):
-    """
-    Save settings and reload model if context size changed.
-    Compares new context size with the model's loaded context size.
-    """
-    settings.save_config()
-    
-    # If no model loaded, just save and return
-    if not models_loaded or llm_state is None:
-        return "Settings saved.", models_loaded, llm_state
-    
-    # Check if context size actually changed from what the model has
-    try:
-        current_model_ctx = llm_state.n_ctx()
-        new_ctx = int(new_ctx_size)
-        
-        if current_model_ctx != new_ctx:
-            temporary.set_status("Context changed - reloading model...", console=True)
-            
-            # Unload current model
-            _, llm_state, models_loaded = unload_models(llm_state, models_loaded)
-            
-            # Reload with new context size
-            status, models_loaded, llm_state, _ = load_models(
-                temporary.MODEL_FOLDER,
-                temporary.MODEL_NAME,
-                temporary.VRAM_SIZE,
-                llm_state,
-                models_loaded
-            )
-            
-            return f"Settings saved. Model reloaded with {new_ctx} context.", models_loaded, llm_state
-        else:
-            return "Settings saved.", models_loaded, llm_state
-            
-    except Exception as e:
-        print(f"Error checking/reloading model: {e}")
-        return f"Settings saved (reload check failed: {str(e)})", models_loaded, llm_state
-
 def set_session_log_base_height(new_height):
     """Set the base session log height from the Configuration page dropdown."""
     temporary.SESSION_LOG_HEIGHT = int(new_height)
@@ -181,30 +143,93 @@ def update_session_log_height(text):
     return gr.update(height=new_height)
 
 def format_response(output: str) -> str:
+    """
+    Format response with thinking phase detection and code highlighting.
+    Handles both standard <think> tags and custom tags like gpt-oss.
+    """
+    import re
+    from pygments import highlight
+    from pygments.lexers import get_lexer_by_name
+    from pygments.formatters import HtmlFormatter
+    from scripts.temporary import (
+        THINK_COLOR, THINK_OPENING_TAGS, THINK_CLOSING_TAGS, 
+        THINK_CLOSING_PARTIAL_PATTERNS
+    )
+    
     formatted = []
-
-    # --- NEW: Include non-standard think tags ---
-    think_blocks = re.findall(r'<|start|>assistant<|channel|>think<|message|>(.*?)</|end|><|start|>assistant<|end|><|start|>assistant<|message|>', output, re.DOTALL)
-    for thought in think_blocks:
-        formatted.append(f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span')
-    # --------------------------------------------
-
-    # Preserve think blocks during streaming
-    standard_think_blocks = re.findall(r'<think>(.*?)</think>', output, re.DOTALL)
-    for thought in standard_think_blocks:
-        formatted.append(f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span')
-
-    # Process remaining content
-    clean_output = re.sub(r'<|start|>assistant<|channel|>think<|message|>.*?</|end|><|start|>assistant<|end|><|start|>assistant<|message|>', '', output, flags=re.DOTALL)
+    
+    # Build comprehensive regex pattern for all thinking phase formats
+    # This handles standard <think>, gpt-oss format, and any custom tags
+    all_patterns = []
+    
+    # Create patterns from the configurable tag lists
+    for open_tag in THINK_OPENING_TAGS:
+        for close_tag in THINK_CLOSING_TAGS:
+            # Escape special regex characters
+            escaped_open = re.escape(open_tag)
+            escaped_close = re.escape(close_tag)
+            pattern = f'{escaped_open}(.*?){escaped_close}'
+            all_patterns.append(pattern)
+    
+    # Also handle partial closing patterns (e.g., <|end|> followed by >)
+    for open_tag in THINK_OPENING_TAGS:
+        for partial in THINK_CLOSING_PARTIAL_PATTERNS:
+            escaped_open = re.escape(open_tag)
+            escaped_partial = re.escape(partial)
+            # Match from open tag to partial pattern followed by any chars up to >
+            pattern = f'{escaped_open}(.*?){escaped_partial}[^>]*?>'
+            all_patterns.append(pattern)
+    
+    # Extract all thinking blocks using combined pattern
+    if all_patterns:
+        combined_pattern = '|'.join(all_patterns)
+        think_blocks = re.findall(combined_pattern, output, re.DOTALL)
+        
+        for thought in think_blocks:
+            if thought and thought.strip():
+                formatted.append(
+                    f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>'
+                )
+    
+    # Remove all thinking phase content from output
+    clean_output = output
+    for pattern in all_patterns:
+        clean_output = re.sub(pattern, '', clean_output, flags=re.DOTALL)
+    
+    # Also remove "Thinking..." lines (dots mode output)
+    lines = clean_output.split('\n')
+    filtered_lines = []
+    for line in lines:
+        stripped = line.strip()
+        # Skip lines that are just "Thinking" followed by dots/spaces
+        if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
+            continue
+        filtered_lines.append(line)
+    clean_output = '\n'.join(filtered_lines)
+    
+    # Process code blocks with syntax highlighting
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
     for lang, code in code_blocks:
-        lexer = get_lexer_by_name(lang, stripall=True)
-        formatted_code = highlight(code, lexer, HtmlFormatter())
-        clean_output = clean_output.replace(f'```{lang}\n{code}```', formatted_code)
-
-    # --- NEW: Windows-safe newline handling ---
-    clean_output = clean_output.replace('\r\n', '\n')            # normalize
-    clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)
+        if lang:
+            try:
+                lexer = get_lexer_by_name(lang, stripall=True)
+                formatted_code = highlight(code, lexer, HtmlFormatter())
+                clean_output = clean_output.replace(f'```{lang}\n{code}```', formatted_code)
+            except:
+                # If lexer not found, leave code as-is
+                pass
+    
+    # Windows-safe newline handling
+    clean_output = clean_output.replace('\r\n', '\n')  # Normalize
+    clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)  # Collapse multiple newlines
+    clean_output = clean_output.strip()
+    clean_output = clean_output.replace('\n', '<br>')  # Convert for HTML
+    
+    # Combine thinking blocks (if any) with cleaned answer
+    if formatted:
+        return '<br>'.join(formatted) + '<br><br>' + clean_output
+    else:
+        return clean_output
 
 def get_initial_model_value():
     available_models = temporary.AVAILABLE_MODELS or get_available_models()
@@ -491,7 +516,7 @@ async def conversation_interface(
     speech_enabled
 ):
     """
-    UPDATED: Handles thinking phase properly, removes <think> content from speech
+    UPDATED: Enhanced attachment handling with smart context management
     """
     import gradio as gr
     from scripts import temporary, utility
@@ -535,32 +560,46 @@ async def conversation_interface(
         )
         return
 
-    # === UPDATED: Build context with file contents ===
+    # === ENHANCED: Build context with intelligent file handling ===
     original_input = user_input
     processed_input = user_input
     
-    # Add attached file context (includes both RAG and direct content)
+    # Add attached file context with dynamic context management
     if temporary.session_attached_files:
         try:
+            # Use enhanced get_attached_files_context with proper context sizing
             file_context = utility.get_attached_files_context(
                 temporary.session_attached_files,
                 query=user_input,
-                max_total_chars=temporary.CONTEXT_SIZE // 4
+                max_total_chars=temporary.CONTEXT_SIZE // 2,  # More generous allocation
+                context_size=temporary.CONTEXT_SIZE
             )
             if file_context:
+                # Use consistent format with direct paste
                 processed_input = f"User Query:\n{user_input}\n\n{'='*50}\n\n{file_context}"
-                print(f"[ATTACH] Added context from {len(temporary.session_attached_files)} files")
+                print(f"[ATTACH] Added enhanced context from {len(temporary.session_attached_files)} files")
+                print(f"[ATTACH] Context length: {len(file_context)} chars")
+            else:
+                # Fallback to basic file list if context generation fails
+                file_names = [Path(f).name for f in temporary.session_attached_files]
+                processed_input = f"Attached files: {', '.join(file_names)}\n\n{user_input}"
+                print(f"[ATTACH] Fallback to file list for {len(temporary.session_attached_files)} files")
         except Exception as e:
             print(f"[ATTACH] Error processing files: {e}")
-            # Fallback to basic filename list
+            import traceback
+            traceback.print_exc()
+            # Minimal fallback
             file_names = [Path(f).name for f in temporary.session_attached_files]
             processed_input = f"Attached files: {', '.join(file_names)}\n\n{user_input}"
 
-    # Append messages to session log
-    if temporary.session_attached_files and file_context:
+    # Append messages to session log with consistent formatting
+    if temporary.session_attached_files and 'file_context' in locals() and file_context:
+        # Use structured format for attachment context
         session_log.append({'role': 'user', 'content': processed_input})
     else:
+        # Standard format for regular input
         session_log.append({'role': 'user', 'content': f"User:\n{processed_input}"})
+    
     session_log.append({'role': 'assistant', 'content': "AI-Chat:\n"})
     interaction_phase = "afterthought_countdown"
 
@@ -578,7 +617,10 @@ async def conversation_interface(
 
     # Afterthought countdown with visual feedback
     input_length = len(original_input.strip())
-    countdown_seconds = max(1, min(5, int(input_length / 50)))
+    # Adjust countdown based on attachment complexity
+    file_complexity = len(temporary.session_attached_files) * 500  # Rough char count estimate
+    adjusted_input_length = input_length + file_complexity
+    countdown_seconds = max(1, min(5, int(adjusted_input_length / 50)))
     progress_indicators = ["⋋", "⋙", "⋹", "⋸", "⋼", "⋴", "⋦", "⋧", "⋇", "⋗"]
 
     for i in range(countdown_seconds, -1, -1):
@@ -685,7 +727,9 @@ async def conversation_interface(
         except Exception as e:
             error_occurred = True
             error_msg = f"Error: {str(e)}"
-            print(error_msg)
+            print(f"[ERROR] Response generation failed: {error_msg}")
+            import traceback
+            traceback.print_exc()
             q.put(error_msg)
 
     thread = threading.Thread(target=run_generator, daemon=True)
@@ -787,8 +831,14 @@ async def conversation_interface(
         except Exception as e:
             print(f"Speech error: {e}")
 
-    # Save session
-    utility.save_session_history(session_log, temporary.session_attached_files)
+    # Save session with attached files info
+    try:
+        utility.save_session_history(session_log, temporary.session_attached_files)
+        print(f"[SESSION] Saved session with {len(temporary.session_attached_files)} attached files")
+    except Exception as e:
+        print(f"[SESSION] Error saving session: {e}")
+    
+    # Clear the attached files after processing
     temporary.session_attached_files.clear()
 
     interaction_phase = "waiting_for_input"
@@ -801,7 +851,7 @@ async def conversation_interface(
         "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
         update_action_button(interaction_phase),
         False,
-        cleared_files,  # ← Update Gradio state to empty list
+        cleared_files,  # Update Gradio state to empty list
         interaction_phase,
         gr.update(interactive=True, value=""),
         gr.update(value=web_search_enabled),
@@ -1361,13 +1411,9 @@ def launch_interface():
         )
 
         config_components["save_settings"].click(
-            fn=save_and_reload_if_needed,
-            inputs=[states["models_loaded"], states["llm"], config_components["ctx"]],
-            outputs=[shared_status_state, states["models_loaded"], states["llm"]]
-        ).then(
-            fn=lambda status: status,
-            inputs=[shared_status_state],
-            outputs=[shared_status_state]
+            fn=lambda: settings.save_config(),
+            inputs=[],
+            outputs=[shared_status_state] 
         )
 
         config_components["delete_all_history"].click(
