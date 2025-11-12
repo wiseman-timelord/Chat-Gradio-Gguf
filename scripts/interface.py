@@ -22,8 +22,7 @@ from scripts.temporary import (
     VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
     ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
     REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
-    ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR,
-    THINK_OPENING_TAGS, THINK_CLOSING_TAGS, THINK_CLOSING_PARTIAL_PATTERNS  # NEW
+    ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR
 )
 from scripts import utility
 from scripts.utility import (
@@ -144,88 +143,105 @@ def update_session_log_height(text):
 
 def format_response(output: str) -> str:
     """
-    Format response with thinking phase detection and code highlighting.
-    Handles both standard <think> tags and custom tags like gpt-oss.
+    Format response with comprehensive thinking phase cleanup.
+    Handles standard tags, gpt-oss Harmony, and HuiHui malformed output.
     """
     import re
     from pygments import highlight
     from pygments.lexers import get_lexer_by_name
     from pygments.formatters import HtmlFormatter
-    from scripts.temporary import (
-        THINK_COLOR, THINK_OPENING_TAGS, THINK_CLOSING_TAGS, 
-        THINK_CLOSING_PARTIAL_PATTERNS
-    )
+    from scripts.temporary import THINK_COLOR
     
     formatted = []
     
-    # Build comprehensive regex pattern for all thinking phase formats
-    # This handles standard <think>, gpt-oss format, and any custom tags
-    all_patterns = []
+    # Extract standard <think> blocks
+    standard_thinks = re.findall(r'<think>(.*?)</think>', output, re.DOTALL)
+    for thought in standard_thinks:
+        if thought.strip():
+            formatted.append(
+                f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>'
+            )
     
-    # Create patterns from the configurable tag lists
-    for open_tag in THINK_OPENING_TAGS:
-        for close_tag in THINK_CLOSING_TAGS:
-            # Escape special regex characters
-            escaped_open = re.escape(open_tag)
-            escaped_close = re.escape(close_tag)
-            pattern = f'{escaped_open}(.*?){escaped_close}'
-            all_patterns.append(pattern)
+    # Extract gpt-oss Harmony analysis blocks
+    harmony_thinks = re.findall(
+        r'<\|channel\|>analysis(.*?)(?:<\|end\|>|<\|channel\|>final)', 
+        output, 
+        re.DOTALL
+    )
+    for thought in harmony_thinks:
+        thought = re.sub(r'<\|[^>]+\|>', '', thought)
+        if thought.strip():
+            formatted.append(
+                f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>'
+            )
     
-    # Also handle partial closing patterns (e.g., <|end|> followed by >)
-    for open_tag in THINK_OPENING_TAGS:
-        for partial in THINK_CLOSING_PARTIAL_PATTERNS:
-            escaped_open = re.escape(open_tag)
-            escaped_partial = re.escape(partial)
-            # Match from open tag to partial pattern followed by any chars up to >
-            pattern = f'{escaped_open}(.*?){escaped_partial}[^>]*?>'
-            all_patterns.append(pattern)
+    # Extract HuiHui malformed thinking (<<USR>> ... >>)
+    huihui_thinks = re.findall(r'<<USR>>(.*?)>>', output, re.DOTALL)
+    for thought in huihui_thinks:
+        if thought.strip():
+            formatted.append(
+                f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>'
+            )
     
-    # Extract all thinking blocks using combined pattern
-    if all_patterns:
-        combined_pattern = '|'.join(all_patterns)
-        think_blocks = re.findall(combined_pattern, output, re.DOTALL)
-        
-        for thought in think_blocks:
-            if thought and thought.strip():
-                formatted.append(
-                    f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>'
-                )
-    
-    # Remove all thinking phase content from output
+    # Remove all thinking patterns from output
     clean_output = output
-    for pattern in all_patterns:
-        clean_output = re.sub(pattern, '', clean_output, flags=re.DOTALL)
     
-    # Also remove "Thinking..." lines (dots mode output)
+    # Remove standard tags
+    clean_output = re.sub(r'<think>.*?</think>', '', clean_output, flags=re.DOTALL)
+    
+    # Remove Harmony format
+    clean_output = re.sub(
+        r'<\|channel\|>analysis.*?(?:<\|end\|>.*?<\|channel\|>final|<\|end\|><\|start\|>assistant<\|end\|><\|start\|>assistant<\|message\|>)',
+        '',
+        clean_output,
+        flags=re.DOTALL
+    )
+    clean_output = re.sub(r'<\|[^>]+\|>', '', clean_output)
+    
+    # Remove HuiHui malformed thinking
+    clean_output = re.sub(r'<<USR>>.*?(?:>>|<\|start\|>assistant>>)', '', clean_output, flags=re.DOTALL)
+    
+    # Remove code fence blocks that are hallucinated (contain import/console.log)
+    code_blocks_with_imports = re.findall(
+        r'```js.*?(?:import|console\.log|openai\.chat).*?```',
+        clean_output,
+        re.DOTALL
+    )
+    for block in code_blocks_with_imports:
+        clean_output = clean_output.replace(block, '')
+    
+    # Remove "Thinking..." lines (dots mode output)
     lines = clean_output.split('\n')
     filtered_lines = []
     for line in lines:
         stripped = line.strip()
-        # Skip lines that are just "Thinking" followed by dots/spaces
+        # Skip "Thinking" with dots
         if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
             continue
         filtered_lines.append(line)
     clean_output = '\n'.join(filtered_lines)
     
-    # Process code blocks with syntax highlighting
+    # Process legitimate code blocks with syntax highlighting
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
     for lang, code in code_blocks:
+        # Skip if it looks like hallucinated code
+        if 'import' in code and 'OpenAI' in code:
+            continue
         if lang:
             try:
                 lexer = get_lexer_by_name(lang, stripall=True)
                 formatted_code = highlight(code, lexer, HtmlFormatter())
                 clean_output = clean_output.replace(f'```{lang}\n{code}```', formatted_code)
             except:
-                # If lexer not found, leave code as-is
                 pass
     
-    # Windows-safe newline handling
-    clean_output = clean_output.replace('\r\n', '\n')  # Normalize
-    clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)  # Collapse multiple newlines
+    # Clean whitespace
+    clean_output = clean_output.replace('\r\n', '\n')
+    clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)
     clean_output = clean_output.strip()
-    clean_output = clean_output.replace('\n', '<br>')  # Convert for HTML
+    clean_output = clean_output.replace('\n', '<br>')
     
-    # Combine thinking blocks (if any) with cleaned answer
+    # Combine thinking with answer
     if formatted:
         return '<br>'.join(formatted) + '<br><br>' + clean_output
     else:

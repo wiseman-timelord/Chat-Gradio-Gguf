@@ -11,7 +11,6 @@ from scripts.temporary import (
     CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, handling_keywords, llm,
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED, CHAT_FORMAT_MAP,
-    THINK_OPENING_TAGS, THINK_CLOSING_TAGS, THINK_CLOSING_PARTIAL_PATTERNS,  # NEW
     THINK_MIN_CHARS_BEFORE_CLOSE  # NEW
 )
 
@@ -60,6 +59,7 @@ def get_model_settings(model_name):
     is_nsfw = any(keyword in model_name_lower for keyword in handling_keywords["nsfw"])
     is_code = any(keyword in model_name_lower for keyword in handling_keywords["code"])
     is_roleplay = any(keyword in model_name_lower for keyword in handling_keywords["roleplay"])
+    is_harmony = any(keyword in model_name_lower for keyword in handling_keywords["harmony"])
     return {
         "category": "chat",
         "is_uncensored": is_uncensored,
@@ -67,6 +67,7 @@ def get_model_settings(model_name):
         "is_nsfw": is_nsfw,
         "is_code": is_code,
         "is_roleplay": is_roleplay,
+        "is_harmony": is_harmony,
         "detected_keywords": [kw for kw in handling_keywords if any(k in model_name_lower for k in handling_keywords[kw])]
     }
 
@@ -409,8 +410,56 @@ def unload_models(llm_state, models_loaded_state):
     temporary.set_status("Model off", console=True)
     return "Model off", llm_state, models_loaded_state
 
+def update_thinking_phase_constants():
+    """
+    Call this during initialization to set up thinking phase detection.
+    This demonstrates the pattern but you may not need all these tags.
+    """
+    import scripts.temporary as temporary
+    
+    # Standard thinking tags (like Qwen3)
+    standard_opening = ["<think>"]
+    standard_closing = ["</think>"]
+    
+    # gpt-oss Harmony format tags
+    # Opening: assistant starts analysis channel
+    gpt_oss_opening = [
+        "<|start|>assistant<|channel|>analysis<|message|>",
+        "<|channel|>analysis",  # Simpler pattern
+    ]
+    
+    # Closing: various patterns that end thinking
+    gpt_oss_closing = [
+        "<|end|><|start|>assistant<|channel|>final<|message|>",
+        "<|end|><|start|>assistant<|end|><|start|>assistant<|message|>",  # Your example
+    ]
+    
+    # Partial patterns to watch for (simplified detection)
+    gpt_oss_partial = [
+        "<|end|>",  # Generic end marker that starts close sequence
+        "<|channel|>final",  # Switch to final channel
+    ]
+    
+    # Update temporary module (if using the list-based approach)
+    # Note: The new implementation doesn't rely heavily on these lists,
+    # but keeping them for compatibility
+    temporary.THINK_OPENING_TAGS = standard_opening + gpt_oss_opening
+    temporary.THINK_CLOSING_TAGS = standard_closing + gpt_oss_closing
+    temporary.THINK_CLOSING_PARTIAL_PATTERNS = gpt_oss_partial
+    
+    print(f"[THINKING] Configured for {len(temporary.THINK_OPENING_TAGS)} opening patterns")
+    print(f"[THINKING] Configured for {len(temporary.THINK_CLOSING_TAGS)} closing patterns")
+
 def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None,
                         cancel_event=None, llm_state=None, models_loaded_state=False):
+    """
+    Enhanced streaming handler for both standard and gpt-oss models.
+    
+    Handles:
+    - Standard <think></think> tags (Qwen, DeepSeek)
+    - gpt-oss proper: <|channel|>analysis ... <|channel|>final
+    - gpt-oss malformed (HuiHui): <<USR>> ... >> OR ```js ... ```
+    """
     import re
     from scripts import temporary
     from scripts.utility import clean_content
@@ -419,6 +468,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         yield "Error: No model loaded. Please load a model first."
         return
 
+    # Build system message
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
         is_nsfw=settings.get("is_nsfw", False),
@@ -438,12 +488,16 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
     yield "AI-Chat:\n"
 
-    # State tracking for <think> phase
-    in_think_block = False
-    buffer = ""          # Accumulate tokens to detect tags
+    # State tracking
+    in_thinking_phase = False
+    output_buffer = ""
     seen_real_text = False
-    thinking_started = False
-    raw_output = "AI-Chat:\n"   # Track complete raw output for printing
+    char_count_since_think_start = 0
+    raw_output = "AI-Chat:\n"
+    
+    # Track if we've seen code fences (for HuiHui malformed detection)
+    code_fence_count = 0
+    found_final_answer = False
 
     for chunk in llm_state.create_chat_completion(
         messages=messages,
@@ -459,80 +513,262 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         token = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
         if not token:
             continue
+        
         raw_output += token
+        output_buffer += token
 
-        # Drop pure-whitespace tokens until real text arrives
+        # Skip initial whitespace
         if not seen_real_text:
             if token.strip() == "":
                 continue
             seen_real_text = True
 
-        # [INST] guard: stop if model tries to speak as user
-        if token.strip().startswith("[INST]"):
+        # === HALLUCINATION GUARDS ===
+        # HuiHui model sometimes outputs code examples with repeating patterns
+        # Stop if we detect infinite loops or user role markers
+        if "[INST]" in output_buffer or "<<USER>>" in output_buffer:
             if temporary.PRINT_RAW_OUTPUT:
                 print("\n***RAW_OUTPUT_FROM_MODEL_START***")
                 print(raw_output, flush=True)
                 print("***RAW_OUTPUT_FROM_MODEL_END***\n")
             return
-
-        buffer += token
-
-        # Detect <think> opening
-        if not in_think_block and "<think>" in buffer:
-            in_think_block = True
-            thinking_started = True
-            before, after = buffer.split("<think>", 1)
-            if before:
-                yield before
-            buffer = after
-
+        
+        # === THINKING PHASE DETECTION ===
+        
+        # Standard <think> opening
+        if not in_thinking_phase and "<think>" in output_buffer:
+            in_thinking_phase = True
+            char_count_since_think_start = 0
+            
+            before_think = output_buffer.split("<think>", 1)[0]
+            if before_think.strip():
+                yield before_think
+            
+            output_buffer = output_buffer.split("<think>", 1)[1]
+            
             if temporary.SHOW_THINK_PHASE:
-                yield "<think>"          # show opening tag
+                yield "<think>"
             else:
-                # Classic dots mode
-                spaces = buffer.count(" ")
-                yield "Thinking" + ("." * spaces)
+                yield "Thinking"
             continue
 
-        # Inside think block
-        if in_think_block:
-            if "</think>" in buffer:
-                # Found closing tag
-                after_close = buffer.split("</think>", 1)[1]
-                buffer = after_close
-                in_think_block = False
+        # gpt-oss proper format: <|channel|>analysis
+        if not in_thinking_phase and "<|channel|>analysis" in output_buffer:
+            in_thinking_phase = True
+            char_count_since_think_start = 0
+            
+            parts = output_buffer.split("<|channel|>analysis", 1)
+            before_analysis = parts[0]
+            
+            # Clean Harmony tags
+            before_analysis = re.sub(r'<\|start\|>assistant', '', before_analysis)
+            before_analysis = re.sub(r'<\|message\|>', '', before_analysis)
+            
+            if before_analysis.strip():
+                yield before_analysis
+            
+            output_buffer = parts[1] if len(parts) > 1 else ""
+            
+            if temporary.SHOW_THINK_PHASE:
+                yield "<|channel|>analysis"
+            else:
+                yield "Thinking"
+            continue
 
+        # HuiHui malformed format: <<USR>> marker
+        if not in_thinking_phase and "<<USR>>" in output_buffer:
+            in_thinking_phase = True
+            char_count_since_think_start = 0
+            code_fence_count = 0
+            
+            parts = output_buffer.split("<<USR>>", 1)
+            before_think = parts[0]
+            
+            if before_think.strip():
+                yield before_think
+            
+            output_buffer = parts[1] if len(parts) > 1 else ""
+            
+            if temporary.SHOW_THINK_PHASE:
+                yield "<<USR>>"
+            else:
+                yield "Thinking"
+            continue
+
+        # === INSIDE THINKING PHASE ===
+        if in_thinking_phase:
+            char_count_since_think_start += len(token)
+            
+            # Standard </think> closing
+            if "</think>" in output_buffer:
+                in_thinking_phase = False
+                
+                parts = output_buffer.split("</think>", 1)
+                think_content = parts[0]
+                after_think = parts[1] if len(parts) > 1 else ""
+                
                 if temporary.SHOW_THINK_PHASE:
+                    yield think_content
                     yield "</think>\n"
                 else:
-                    yield "\n"          # separator before answer
-
-                if after_close:
-                    yield after_close
-                    buffer = ""
-            else:
-                # Still thinking – choose display mode
-                if temporary.SHOW_THINK_PHASE:
-                    yield buffer
-                    buffer = ""
-                else:
-                    # Dots mode
-                    spaces = token.count(" ")
-                    if spaces:
-                        yield "." * spaces
-        else:
-            # Normal streaming
-            if not thinking_started or buffer == token:
+                    spaces = think_content.count(" ")
+                    if spaces > 0:
+                        yield "." * min(spaces, 50)
+                    yield "\n"
+                
+                output_buffer = after_think
+                if after_think.strip():
+                    yield after_think
+                    output_buffer = ""
+                continue
+            
+            # gpt-oss proper: <|channel|>final
+            if char_count_since_think_start >= temporary.THINK_MIN_CHARS_BEFORE_CLOSE:
+                end_pattern = r'<\|end\|>.*?<\|channel\|>final'
+                match = re.search(end_pattern, output_buffer, re.DOTALL)
+                
+                if not match:
+                    alt_pattern = r'<\|end\|><\|start\|>assistant<\|end\|><\|start\|>assistant<\|message\|>'
+                    match = re.search(alt_pattern, output_buffer, re.DOTALL)
+                
+                if match:
+                    in_thinking_phase = False
+                    
+                    think_end_pos = match.start()
+                    think_content = output_buffer[:think_end_pos]
+                    after_think = output_buffer[match.end():]
+                    
+                    if temporary.SHOW_THINK_PHASE:
+                        yield think_content
+                        yield match.group(0)
+                        yield "\n"
+                    else:
+                        spaces = think_content.count(" ")
+                        if spaces > 0:
+                            yield "." * min(spaces, 50)
+                        yield "\n"
+                    
+                    output_buffer = after_think
+                    if after_think.strip():
+                        yield after_think
+                        output_buffer = ""
+                    continue
+            
+            # HuiHui malformed: Look for >> OR first ```js after thinking
+            if char_count_since_think_start >= temporary.THINK_MIN_CHARS_BEFORE_CLOSE:
+                
+                # Pattern 1: <|end|><|start|>assistant>>
+                if "<|start|>assistant>>" in output_buffer:
+                    in_thinking_phase = False
+                    found_final_answer = True
+                    
+                    parts = output_buffer.split("<|start|>assistant>>", 1)
+                    think_content = parts[0]
+                    after_think = parts[1] if len(parts) > 1 else ""
+                    
+                    # Clean <<USR>> tag from thinking if present
+                    think_content = think_content.replace("<<USR>>", "")
+                    
+                    if temporary.SHOW_THINK_PHASE:
+                        yield think_content
+                        yield "\n"
+                    else:
+                        spaces = think_content.count(" ")
+                        if spaces > 0:
+                            yield "." * min(spaces, 50)
+                        yield "\n"
+                    
+                    output_buffer = after_think
+                    continue
+                
+                # Pattern 2: Track code fences (```js signals end of thinking in HuiHui)
+                if "```" in token:
+                    code_fence_count += 1
+                
+                # After seeing first code fence and 100+ chars, look for second fence
+                # OR look for import/console.log patterns that signal hallucination
+                if code_fence_count >= 1 and char_count_since_think_start >= 150:
+                    # Check if we're seeing hallucinated code (like import statements)
+                    if "import" in output_buffer or "console.log" in output_buffer or "openai.chat.completions" in output_buffer:
+                        # This is hallucinated code, extract actual answer before it
+                        
+                        # Find the first ``` after initial thinking
+                        first_fence = output_buffer.find("```")
+                        if first_fence != -1:
+                            in_thinking_phase = False
+                            found_final_answer = True
+                            
+                            think_content = output_buffer[:first_fence]
+                            
+                            # The actual answer might be BEFORE the thinking in HuiHui's case
+                            # Look for patterns like ">>" followed by actual content
+                            if ">>" in think_content:
+                                parts = think_content.split(">>", 1)
+                                actual_think = parts[0]
+                                actual_answer = parts[1]
+                                
+                                if temporary.SHOW_THINK_PHASE:
+                                    yield actual_think
+                                    yield "\n"
+                                else:
+                                    spaces = actual_think.count(" ")
+                                    if spaces > 0:
+                                        yield "." * min(spaces, 50)
+                                    yield "\n"
+                                
+                                # Yield answer and stop (don't continue with hallucinated code)
+                                if actual_answer.strip():
+                                    yield actual_answer.strip()
+                                
+                                # Stop generation here
+                                if temporary.PRINT_RAW_OUTPUT:
+                                    print("\n***RAW_OUTPUT_FROM_MODEL_START***")
+                                    print(raw_output, flush=True)
+                                    print("***RAW_OUTPUT_FROM_MODEL_END***\n")
+                                return
+            
+            # Still thinking - display according to mode
+            if temporary.SHOW_THINK_PHASE:
                 yield token
-                buffer = ""
+                output_buffer = ""
             else:
-                yield buffer
-                buffer = ""
+                spaces = token.count(" ")
+                if spaces > 0:
+                    yield "." * min(spaces, 10)
+                # Keep last 100 chars for pattern detection
+                if len(output_buffer) > 200:
+                    output_buffer = output_buffer[-100:]
+            continue
 
-    # Final buffer flush
-    if buffer and not in_think_block:
-        yield buffer
+        # === NORMAL OUTPUT (not thinking) ===
+        
+        # If we've found the final answer and see repeating patterns, stop
+        if found_final_answer:
+            # Check for infinite loops (same content repeating)
+            if len(output_buffer) > 500:
+                # Look for repeating patterns of 100+ characters
+                mid_point = len(output_buffer) // 2
+                first_half = output_buffer[:mid_point]
+                second_half = output_buffer[mid_point:mid_point*2]
+                
+                # If content is repeating, stop generation
+                if first_half == second_half:
+                    if temporary.PRINT_RAW_OUTPUT:
+                        print("\n***RAW_OUTPUT_FROM_MODEL_START***")
+                        print(raw_output, flush=True)
+                        print("***RAW_OUTPUT_FROM_MODEL_END***\n")
+                    return
+        
+        # Yield buffer periodically
+        if len(output_buffer) > 20:
+            yield output_buffer
+            output_buffer = ""
 
+    # Final flush
+    if output_buffer and not in_thinking_phase:
+        yield output_buffer
+
+    # Debug output
     if temporary.PRINT_RAW_OUTPUT:
         print("\n***RAW_OUTPUT_FROM_MODEL_START***")
         print(raw_output, flush=True)

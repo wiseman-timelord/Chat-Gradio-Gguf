@@ -55,6 +55,9 @@ llm = None
 SPEECH_ENABLED = False
 LLAMA_CLI_PATH = None  # will be set by launcher.py
 global_status = None 
+PRINT_RAW_OUTPUT = False
+SHOW_THINK_PHASE = False 
+THINK_MIN_CHARS_BEFORE_CLOSE = 100
 
 # CPU Configuration
 CPU_THREADS = None  # Will be auto-detected
@@ -75,31 +78,12 @@ MID_SEPARATOR = "-" * 30
 ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}
 MAX_POSSIBLE_HISTORY_SLOTS = 16
 MAX_POSSIBLE_ATTACH_SLOTS = 10
-PRINT_RAW_OUTPUT = False
-SHOW_THINK_PHASE = False 
 demo = None
 
 # RAG CONSTANTS
 RAG_CHUNK_SIZE_DIVIDER = 6
 RAG_CHUNK_OVERLAP_DIVIDER = 24
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-
-# Thinking Phase
-THINK_MIN_CHARS_BEFORE_CLOSE = 100
-THINK_OPENING_TAGS = [
-    "<think>",
-    "<|start|>assistant<|channel|>think<|message|>",
-    # Add more opening tags here as needed
-]
-THINK_CLOSING_TAGS = [
-    "</think>",
-    "<|end|><|start|>assistant<|end|><|start|>assistant<|message|>",
-    # Add more closing tags here as needed
-]
-THINK_CLOSING_PARTIAL_PATTERNS = [
-    "<|end|>",  # Will match any occurrence and continue to final '>'
-    # Add more partial patterns here as needed
-]
 
 # Status text entries  
 STATUS_MESSAGES = {
@@ -130,9 +114,10 @@ CHAT_FORMAT_MAP = {
 handling_keywords = {
     "code": ["code", "code", "program", "dev", "copilot", "Python", "Powershell"],
     "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
-    "reasoning": ["reason", "r1", "think", "gpt-oss"],
+    "reasoning": ["reason", "r1", "think"],
     "nsfw": ["nsfw", "adult", "mature", "explicit", "lewd"],
-    "roleplay": ["rp", "role", "adventure"]
+    "roleplay": ["rp", "role", "adventure"],
+    "harmony": ["gpt-oss"]
 }
 
 # prompt template table
