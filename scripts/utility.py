@@ -459,6 +459,36 @@ def read_file_content(file_path, max_chars=50000):
     except Exception as e:
         return "", "error", False, f"Unexpected error: {str(e)}"
 
+def prepare_user_input_for_model(user_input, context_size, threshold=0.5):
+    """
+    If user input exceeds threshold, chunk it and use RAG.
+    Otherwise, return as-is.
+    
+    Args:
+        user_input: Raw user text
+        context_size: Model's n_ctx
+        threshold: Fraction of context to trigger chunking (0.5 = 50%)
+    
+    Returns:
+        (processed_input, was_chunked)
+    """
+    max_chars = int(context_size * 3)  # ~4 chars per token
+    threshold_chars = int(max_chars * threshold)
+    
+    if len(user_input) < threshold_chars:
+        return user_input, False
+    
+    # Create temporary chunks for this input
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=context_size // 6,
+        chunk_overlap=context_size // 24
+    )
+    chunks = splitter.split_text(user_input)
+    
+    # Store in a temporary in-memory vector store
+    return chunks, True
+
 def get_attached_files_context(attached_files, query=None, max_total_chars=8000, context_size=None):
     """
     Generate context string from attached files with smart chunking for large content.

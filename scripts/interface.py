@@ -143,8 +143,8 @@ def update_session_log_height(text):
 
 def format_response(output: str) -> str:
     """
-    Format response with comprehensive thinking phase cleanup.
-    Handles standard tags, gpt-oss Harmony, and HuiHui malformed output.
+    Format response with thinking phase detection and code highlighting.
+    Works with both standard <think> tags and gpt-oss channel format.
     """
     import re
     from pygments import highlight
@@ -162,71 +162,47 @@ def format_response(output: str) -> str:
                 f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>'
             )
     
-    # Extract gpt-oss Harmony analysis blocks
-    harmony_thinks = re.findall(
+    # Extract gpt-oss analysis channel blocks
+    gpt_oss_thinks = re.findall(
         r'<\|channel\|>analysis(.*?)(?:<\|end\|>|<\|channel\|>final)', 
         output, 
         re.DOTALL
     )
-    for thought in harmony_thinks:
+    for thought in gpt_oss_thinks:
+        # Clean up any remaining channel tags
         thought = re.sub(r'<\|[^>]+\|>', '', thought)
         if thought.strip():
             formatted.append(
                 f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>'
             )
     
-    # Extract HuiHui malformed thinking (<<USR>> ... >>)
-    huihui_thinks = re.findall(r'<<USR>>(.*?)>>', output, re.DOTALL)
-    for thought in huihui_thinks:
-        if thought.strip():
-            formatted.append(
-                f'<span style="color: {THINK_COLOR}">[Thinking] {thought.strip()}</span>'
-            )
-    
-    # Remove all thinking patterns from output
+    # Remove all thinking content from output
     clean_output = output
-    
-    # Remove standard tags
     clean_output = re.sub(r'<think>.*?</think>', '', clean_output, flags=re.DOTALL)
-    
-    # Remove Harmony format
     clean_output = re.sub(
         r'<\|channel\|>analysis.*?(?:<\|end\|>.*?<\|channel\|>final|<\|end\|><\|start\|>assistant<\|end\|><\|start\|>assistant<\|message\|>)',
         '',
         clean_output,
         flags=re.DOTALL
     )
+    
+    # Remove channel tags from output
     clean_output = re.sub(r'<\|[^>]+\|>', '', clean_output)
     
-    # Remove HuiHui malformed thinking
-    clean_output = re.sub(r'<<USR>>.*?(?:>>|<\|start\|>assistant>>)', '', clean_output, flags=re.DOTALL)
-    
-    # Remove code fence blocks that are hallucinated (contain import/console.log)
-    code_blocks_with_imports = re.findall(
-        r'```js.*?(?:import|console\.log|openai\.chat).*?```',
-        clean_output,
-        re.DOTALL
-    )
-    for block in code_blocks_with_imports:
-        clean_output = clean_output.replace(block, '')
-    
-    # Remove "Thinking..." lines (dots mode output)
+    # Remove "Thinking...." lines (dots mode output)
     lines = clean_output.split('\n')
     filtered_lines = []
     for line in lines:
         stripped = line.strip()
-        # Skip "Thinking" with dots
+        # Skip lines that are just "Thinking" followed by dots/spaces
         if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
             continue
         filtered_lines.append(line)
     clean_output = '\n'.join(filtered_lines)
     
-    # Process legitimate code blocks with syntax highlighting
+    # Process code blocks with syntax highlighting
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
     for lang, code in code_blocks:
-        # Skip if it looks like hallucinated code
-        if 'import' in code and 'OpenAI' in code:
-            continue
         if lang:
             try:
                 lexer = get_lexer_by_name(lang, stripall=True)
@@ -235,13 +211,13 @@ def format_response(output: str) -> str:
             except:
                 pass
     
-    # Clean whitespace
+    # Clean up whitespace
     clean_output = clean_output.replace('\r\n', '\n')
     clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)
     clean_output = clean_output.strip()
     clean_output = clean_output.replace('\n', '<br>')
     
-    # Combine thinking with answer
+    # Combine thinking blocks with cleaned answer
     if formatted:
         return '<br>'.join(formatted) + '<br><br>' + clean_output
     else:
@@ -532,7 +508,8 @@ async def conversation_interface(
     speech_enabled
 ):
     """
-    UPDATED: Enhanced attachment handling with smart context management
+    UPDATED v2: Universal unlimited context support via RAG.
+    Handles both file attachments AND large pasted inputs seamlessly.
     """
     import gradio as gr
     from scripts import temporary, utility
@@ -576,27 +553,85 @@ async def conversation_interface(
         )
         return
 
-    # === ENHANCED: Build context with intelligent file handling ===
+    # === NEW: Detect if input is too large for direct processing ===
     original_input = user_input
     processed_input = user_input
     
-    # Add attached file context with dynamic context management
-    if temporary.session_attached_files:
+    # Calculate character limit (rough token estimation: 1 token ≈ 4 chars)
+    max_input_chars = int(temporary.CONTEXT_SIZE * temporary.LARGE_INPUT_THRESHOLD * 4)
+    input_is_large = len(user_input) > max_input_chars
+    
+    # Clear any previous temporary RAG data
+    context_injector.clear_temporary_input()
+    
+    # Handle large pasted input with RAG
+    if input_is_large and not temporary.session_attached_files:
+        print(f"[RAG-INPUT] Large input detected: {len(user_input)} chars (threshold: {max_input_chars})")
+        
+        try:
+            # Add to temporary RAG store
+            context_injector.add_temporary_input(user_input)
+            
+            # Create summary for session log display
+            preview_chars = min(1000, len(user_input) // 4)
+            input_preview = user_input[:preview_chars]
+            
+            # Find good break point
+            last_period = input_preview.rfind('.')
+            last_newline = input_preview.rfind('\n')
+            break_point = max(last_period, last_newline)
+            
+            if break_point > len(input_preview) * 0.7:
+                input_preview = input_preview[:break_point + 1]
+            
+            processed_input = (
+                f"[📝 Large Input: {len(user_input):,} characters]\n"
+                f"[Using RAG for full context retrieval]\n\n"
+                f"{input_preview}\n\n"
+                f"... [Content continues - {len(user_input) - len(input_preview):,} chars indexed for retrieval]"
+            )
+            
+            print(f"[RAG-INPUT] Created summary: {len(processed_input)} chars")
+            
+        except Exception as e:
+            print(f"[RAG-INPUT] Error processing large input: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback: truncate
+            processed_input = user_input[:max_input_chars] + "\n\n[Input truncated due to processing error]"
+    
+    # Handle file attachments with RAG (existing logic)
+    elif temporary.session_attached_files:
         try:
             # Use enhanced get_attached_files_context with proper context sizing
             file_context = utility.get_attached_files_context(
                 temporary.session_attached_files,
                 query=user_input,
-                max_total_chars=temporary.CONTEXT_SIZE // 2,  # More generous allocation
+                max_total_chars=temporary.CONTEXT_SIZE // 2,
                 context_size=temporary.CONTEXT_SIZE
             )
             if file_context:
-                # Use consistent format with direct paste
-                processed_input = f"User Query:\n{user_input}\n\n{'='*50}\n\n{file_context}"
-                print(f"[ATTACH] Added enhanced context from {len(temporary.session_attached_files)} files")
-                print(f"[ATTACH] Context length: {len(file_context)} chars")
+                # If input is ALSO large, add it to temp RAG
+                if input_is_large:
+                    print(f"[RAG-INPUT] Large input with attachments: {len(user_input)} chars")
+                    context_injector.add_temporary_input(user_input)
+                    
+                    # Summary for both
+                    processed_input = (
+                        f"[📝 Large Input: {len(user_input):,} characters]\n"
+                        f"[📎 Attached Files: {len(temporary.session_attached_files)}]\n"
+                        f"[Using RAG for comprehensive retrieval]\n\n"
+                        f"{'='*50}\n\n"
+                        f"{file_context}"
+                    )
+                else:
+                    # Normal attachment handling
+                    processed_input = f"User Query:\n{user_input}\n\n{'='*50}\n\n{file_context}"
+                
+                print(f"[ATTACH] Added context from {len(temporary.session_attached_files)} files")
+                print(f"[ATTACH] Total context length: {len(processed_input)} chars")
             else:
-                # Fallback to basic file list if context generation fails
+                # Fallback to basic file list
                 file_names = [Path(f).name for f in temporary.session_attached_files]
                 processed_input = f"Attached files: {', '.join(file_names)}\n\n{user_input}"
                 print(f"[ATTACH] Fallback to file list for {len(temporary.session_attached_files)} files")
@@ -609,8 +644,8 @@ async def conversation_interface(
             processed_input = f"Attached files: {', '.join(file_names)}\n\n{user_input}"
 
     # Append messages to session log with consistent formatting
-    if temporary.session_attached_files and 'file_context' in locals() and file_context:
-        # Use structured format for attachment context
+    if input_is_large or temporary.session_attached_files:
+        # Use structured format for RAG-enabled inputs
         session_log.append({'role': 'user', 'content': processed_input})
     else:
         # Standard format for regular input
@@ -621,7 +656,7 @@ async def conversation_interface(
 
     yield (
         session_log,
-        "Processing...",
+        "Processing..." + (" (RAG enabled for large input)" if input_is_large else ""),
         update_action_button(interaction_phase),
         cancel_flag,
         loaded_files,
@@ -633,9 +668,10 @@ async def conversation_interface(
 
     # Afterthought countdown with visual feedback
     input_length = len(original_input.strip())
-    # Adjust countdown based on attachment complexity
-    file_complexity = len(temporary.session_attached_files) * 500  # Rough char count estimate
-    adjusted_input_length = input_length + file_complexity
+    # Adjust countdown based on complexity
+    file_complexity = len(temporary.session_attached_files) * 500
+    rag_complexity = 1000 if input_is_large else 0
+    adjusted_input_length = input_length + file_complexity + rag_complexity
     countdown_seconds = max(1, min(5, int(adjusted_input_length / 50)))
     progress_indicators = ["⋋", "⋙", "⋹", "⋸", "⋼", "⋴", "⋦", "⋧", "⋇", "⋗"]
 
@@ -658,6 +694,7 @@ async def conversation_interface(
 
     if cancel_flag:
         session_log.pop()
+        context_injector.clear_temporary_input()  # Clean up RAG data
         interaction_phase = "waiting_for_input"
         yield (
             session_log,
@@ -720,7 +757,7 @@ async def conversation_interface(
     q = queue.Queue()
     cancel_event = threading.Event()
     visible_response = ""
-    raw_output_buffer = ""  # Track raw output for print_raw feature
+    raw_output_buffer = ""
     error_occurred = False
 
     def run_generator():
@@ -762,6 +799,7 @@ async def conversation_interface(
                 
             if chunk == "<CANCELLED>":
                 session_log[-1]['content'] = "AI-Chat:\nGeneration cancelled."
+                context_injector.clear_temporary_input()  # Clean up
                 yield (
                     session_log,
                     "Cancelled",
@@ -778,6 +816,7 @@ async def conversation_interface(
             if isinstance(chunk, str) and chunk.startswith("Error:"):
                 error_occurred = True
                 session_log[-1]['content'] = f"AI-Chat:\n{chunk}"
+                context_injector.clear_temporary_input()  # Clean up
                 yield (
                     session_log,
                     f"⚠️ {chunk}",
@@ -854,8 +893,9 @@ async def conversation_interface(
     except Exception as e:
         print(f"[SESSION] Error saving session: {e}")
     
-    # Clear the attached files after processing
+    # Clean up after response generation
     temporary.session_attached_files.clear()
+    context_injector.clear_temporary_input()  # NEW: Clear temporary RAG data
 
     interaction_phase = "waiting_for_input"
     
@@ -867,7 +907,7 @@ async def conversation_interface(
         "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
         update_action_button(interaction_phase),
         False,
-        cleared_files,  # Update Gradio state to empty list
+        cleared_files,
         interaction_phase,
         gr.update(interactive=True, value=""),
         gr.update(value=web_search_enabled),

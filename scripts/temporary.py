@@ -84,6 +84,13 @@ demo = None
 RAG_CHUNK_SIZE_DIVIDER = 6
 RAG_CHUNK_OVERLAP_DIVIDER = 24
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+LARGE_INPUT_THRESHOLD = 0.4  # 40% of context triggers RAG
+RAG_RETRIEVAL_CHUNKS = 8     # How many chunks to retrieve
+CONTEXT_ALLOCATION_RATIOS = {
+    "system": 0.1,
+    "history": 0.3,
+    "current": 0.6
+}
 
 # Status text entries  
 STATUS_MESSAGES = {
@@ -116,8 +123,7 @@ handling_keywords = {
     "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
     "reasoning": ["reason", "r1", "think"],
     "nsfw": ["nsfw", "adult", "mature", "explicit", "lewd"],
-    "roleplay": ["rp", "role", "adventure"],
-    "harmony": ["gpt-oss"]
+    "roleplay": ["rp", "role", "adventure"]
 }
 
 # prompt template table
@@ -126,14 +132,18 @@ current_model_settings = {
 }
 
 # RAG Context Injector
+# RAG Context Injector
 class ContextInjector:
     """
-    End-to-end RAG with improved chunking for large files
+    Universal RAG with support for both file attachments AND large pasted inputs.
+    Provides unlimited context through intelligent chunking and retrieval.
     """
     def __init__(self):
         self.embedding = None
-        self.index = None
-        self.chunks = []
+        self.file_index = None          # FAISS index for attached files
+        self.temp_index = None          # FAISS index for large pasted inputs
+        self.file_chunks = []           # Chunks from attached files
+        self.temp_chunks = []           # Chunks from large pasted inputs
         self._model_load_attempted = False
     
     def _ensure_embedding_model(self):
@@ -173,8 +183,8 @@ class ContextInjector:
     def set_session_vectorstore(self, file_paths):
         """Create/refresh vector store from list of file paths with improved chunking."""
         if not file_paths:
-            self.index = None
-            self.chunks = []
+            self.file_index = None
+            self.file_chunks = []
             return
         
         self._ensure_embedding_model()
@@ -222,8 +232,8 @@ class ContextInjector:
                 print(f"[RAG] Skip {fp}: {e}")
 
         if not all_docs:
-            self.index = None
-            self.chunks = []
+            self.file_index = None
+            self.file_chunks = []
             return
 
         texts = [d.page_content for d in all_docs]
@@ -239,46 +249,163 @@ class ContextInjector:
         
         embeddings = np.array(all_embeddings).astype('float32')
 
-        self.index = faiss.IndexFlatIP(embeddings.shape[1])
+        self.file_index = faiss.IndexFlatIP(embeddings.shape[1])
         faiss.normalize_L2(embeddings)
-        self.index.add(embeddings)
-        self.chunks = texts
+        self.file_index.add(embeddings)
+        self.file_chunks = texts
         print(f"[RAG] Ingested {len(texts)} chunks from {len(file_paths)} files")
 
-    def get_relevant_context(self, query, k=4):
-        """Return top-k most relevant chunks concatenated as string."""
-        if self.index is None or not query.strip():
+    def add_temporary_input(self, large_input_text):
+        """
+        NEW: Chunk and index large pasted user input for RAG retrieval.
+        This enables unlimited context for direct text input.
+        
+        Args:
+            large_input_text: The full text that exceeds context limits
+        """
+        if not large_input_text or not large_input_text.strip():
+            return
+        
+        self._ensure_embedding_model()
+        
+        if self.embedding is None:
+            print("[RAG] Cannot chunk temporary input - embedding model unavailable")
+            return
+        
+        # Dynamic chunk sizing
+        from scripts.temporary import CONTEXT_SIZE
+        chunk_size = CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER
+        chunk_overlap = CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
+        
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+        
+        # Split the large input into chunks
+        chunks = splitter.split_text(large_input_text)
+        
+        if not chunks:
+            print("[RAG-TEMP] No chunks created from input")
+            return
+        
+        print(f"[RAG-TEMP] Split large input into {len(chunks)} chunks ({len(large_input_text)} chars)")
+        
+        # Create embeddings in batches
+        batch_size = 32
+        all_embeddings = []
+        
+        for i in range(0, len(chunks), batch_size):
+            batch_texts = chunks[i:i+batch_size]
+            batch_embeddings = self.embedding.embed(batch_texts)
+            all_embeddings.extend(batch_embeddings)
+        
+        embeddings = np.array(all_embeddings).astype('float32')
+        
+        # Create new temporary index
+        self.temp_index = faiss.IndexFlatIP(embeddings.shape[1])
+        faiss.normalize_L2(embeddings)
+        self.temp_index.add(embeddings)
+        self.temp_chunks = chunks
+        
+        print(f"[RAG-TEMP] Indexed {len(chunks)} chunks for retrieval")
+
+    def clear_temporary_input(self):
+        """Clear temporary input chunks (called after response generation)."""
+        self.temp_index = None
+        self.temp_chunks = []
+        print("[RAG-TEMP] Cleared temporary input chunks")
+
+    def get_relevant_context(self, query, k=4, include_temp=True):
+        """
+        UPDATED: Return top-k most relevant chunks from BOTH file attachments AND temporary input.
+        
+        Args:
+            query: The search query (typically current user input)
+            k: Number of chunks to retrieve from each source
+            include_temp: Whether to include temporary large input chunks
+        
+        Returns:
+            Concatenated string of relevant chunks, or None if no data available
+        """
+        if not query.strip():
             return None
         
         self._ensure_embedding_model()
-            
+        
         if self.embedding is None:
             return None
-            
+        
+        # Check if we have any data
+        has_files = self.file_index is not None and len(self.file_chunks) > 0
+        has_temp = include_temp and self.temp_index is not None and len(self.temp_chunks) > 0
+        
+        if not has_files and not has_temp:
+            return None
+        
+        # Embed the query
         q_vec = self.embedding.embed([query])
         q_vec = np.array(q_vec).astype('float32')
         faiss.normalize_L2(q_vec)
         
-        # Search for more chunks than needed to allow for deduplication
-        scores, idxs = self.index.search(q_vec, k * 2)
+        all_results = []
         
-        # Deduplicate and select top k unique chunks
-        seen_chunks = set()
-        top_chunks = []
+        # Search file chunks
+        if has_files:
+            try:
+                scores, idxs = self.file_index.search(q_vec, min(k * 2, len(self.file_chunks)))
+                
+                # Deduplicate file chunks
+                seen_chunks = set()
+                for i in idxs[0]:
+                    if i < len(self.file_chunks) and len(all_results) < k:
+                        chunk = self.file_chunks[i]
+                        chunk_key = chunk[:50].strip()
+                        if chunk_key not in seen_chunks:
+                            seen_chunks.add(chunk_key)
+                            all_results.append(("FILE", chunk))
+                
+                print(f"[RAG] Retrieved {len([r for r in all_results if r[0] == 'FILE'])} file chunks")
+            except Exception as e:
+                print(f"[RAG] Error searching file chunks: {e}")
         
-        for i in idxs[0]:
-            if i < len(self.chunks) and len(top_chunks) < k:
-                chunk = self.chunks[i]
-                # Simple deduplication based on first 50 characters
-                chunk_key = chunk[:50].strip()
-                if chunk_key not in seen_chunks:
-                    seen_chunks.add(chunk_key)
-                    top_chunks.append(chunk)
+        # Search temporary input chunks
+        if has_temp:
+            try:
+                scores, idxs = self.temp_index.search(q_vec, min(k * 2, len(self.temp_chunks)))
+                
+                # Deduplicate temp chunks
+                seen_chunks = set()
+                temp_results = []
+                for i in idxs[0]:
+                    if i < len(self.temp_chunks) and len(temp_results) < k:
+                        chunk = self.temp_chunks[i]
+                        chunk_key = chunk[:50].strip()
+                        if chunk_key not in seen_chunks:
+                            seen_chunks.add(chunk_key)
+                            temp_results.append(("TEMP", chunk))
+                
+                all_results.extend(temp_results)
+                print(f"[RAG-TEMP] Retrieved {len(temp_results)} temporary input chunks")
+            except Exception as e:
+                print(f"[RAG-TEMP] Error searching temp chunks: {e}")
         
-        return "\n\n".join(top_chunks)
+        if not all_results:
+            return None
         
-context_injector = ContextInjector()
+        # Format results with source indicators
+        formatted_chunks = []
+        for source, chunk in all_results:
+            if source == "FILE":
+                formatted_chunks.append(f"[From Attached Files]\n{chunk}")
+            else:
+                formatted_chunks.append(f"[From Your Input]\n{chunk}")
+        
+        return "\n\n".join(formatted_chunks)
 
+context_injector = ContextInjector()
 
 # Status Updater
 def set_status(msg: str, console=False):
