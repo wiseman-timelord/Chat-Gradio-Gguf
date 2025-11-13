@@ -117,6 +117,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 ```
 
 ### Notation 
+- Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
 - The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know.
 - For Vulkan installations, you must install the Vulkan SDK, it may come with your graphics card, otherwise you must go here [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
 - VRAM dropdown, 1GB to 64GB in steps, this should be your FREE ram available on the selected card, if you are using the card at the time then this is why we have for example, 6GB for a 8GB GPU in use, safely allowing 2GB for the system, while in compute more one would use for example, the full 8GB on the 8GB GPU.
