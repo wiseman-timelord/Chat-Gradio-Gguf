@@ -204,22 +204,22 @@ def test_core_libs():
     # Package name to import name mapping
     import_names = {
         "gradio": "gradio",
-        "requests": "requests",
+        "requests==2.31.0": "requests",
         "pyperclip": "pyperclip",
-        "spacy": "spacy",
+        "spacy>=3.7.0": "spacy",
         "psutil": "psutil",
         "ddgs": "ddgs",
         "newspaper3k": "newspaper",
-        "llama-cpp-python": "llama_cpp",
-        "langchain-community": "langchain_community",
-        "faiss-cpu": "faiss",
-        "langchain": "langchain",
-        "pygments": "pygments",
+        "langchain-community>=0.3.18": "langchain_community",
+        "faiss-cpu>=1.8.0": "faiss",
+        "langchain>=0.3.18": "langchain",
+        "pygments==2.17.2": "pygments",
         "lxml[html_clean]": "lxml",
         "pyttsx3": "pyttsx3",
         "onnxruntime": "onnxruntime",
         "fastembed": "fastembed",
         "tokenizers": "tokenizers",
+        "llama-cpp-python": "llama_cpp",
         "pywin32": "win32api",
         "tk": "tkinter"
     }
@@ -275,10 +275,10 @@ def test_optional_libs():
     venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
     import_names = {
-        "PyPDF2": "PyPDF2",
-        "python-docx": "docx",
-        "openpyxl": "openpyxl",
-        "python-pptx": "pptx"
+        "PyPDF2>=3.0.0": "PyPDF2",
+        "python-docx>=0.8.11": "docx",
+        "openpyxl>=3.0.0": "openpyxl",
+        "python-pptx>=0.6.21": "pptx"
     }
     
     optional_ok = 0
@@ -407,10 +407,12 @@ def test_linux_system_packages():
     print("\n=== Linux System Package Validation ===")
     
     required_packages = [
+        "build-essential",
         "python3-venv",
         "python3-dev",
         "portaudio19-dev",
         "libasound2-dev",
+        "python3-tk",      # installer installs this meta-package
         "espeak",
         "libespeak-dev",
         "ffmpeg",
