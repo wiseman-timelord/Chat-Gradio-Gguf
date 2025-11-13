@@ -460,48 +460,43 @@ def update_thinking_phase_constants():
 
 def build_messages_with_context_management(session_log, system_message, context_size):
     """
-    Intelligently allocate context:
-    - System prompt: 10%
-    - Recent history: 30%
-    - Current input: 60%
+    Build the message list for the LLM.
+    The system message is injected **once**, at the very first turn,
+    and is never shown in the Gradio chat log.
     """
-    max_tokens = context_size
-    system_tokens = len(system_message) // 4  # rough estimate
-    
-    available_for_history = int((max_tokens - system_tokens) * 0.3)
-    available_for_input = int((max_tokens - system_tokens) * 0.6)
-    
-    # Build messages with smart truncation
-    messages = [{"role": "system", "content": system_message}]
-    
-    # Add history (newest first, stop when limit reached)
+    max_tokens   = context_size
+    system_tokens= len(system_message) // 4
+
+    available_for_history = int((max_tokens - system_tokens) * 0.30)
+    available_for_input   = int((max_tokens - system_tokens) * 0.60)
+
+    messages = []
+
+    # ---------------  ONE-TIME SYSTEM PROMPT  ---------------
+    # Only add system message on the first user turn (empty session_log)
+    if not session_log:
+        messages.append({"role": "system", "content": system_message})
+
+    # ---------------  HISTORY  ---------------
     history_chars = 0
-    for msg in reversed(session_log[:-2]):
-        msg_content = clean_content(msg["role"], msg["content"])
-        msg_chars = len(msg_content)
-        
-        if history_chars + msg_chars > available_for_history * 4:
+    for msg in reversed(session_log[:-2]):          # skip last two (current turn)
+        content = clean_content(msg["role"], msg["content"])
+        if history_chars + len(content) > available_for_history * 4:
             break
-        
-        messages.insert(1, {
+        messages.insert(1 if messages else 0, {     # insert after system if present
             "role": msg["role"],
-            "content": msg_content
+            "content": content
         })
-        history_chars += msg_chars
-    
-    # Handle current input
+        history_chars += len(content)
+
+    # ---------------  CURRENT INPUT  ---------------
     current_input = clean_content("user", session_log[-2]["content"])
-    
     if len(current_input) > available_for_input * 4:
-        # Use RAG to get relevant excerpts
-        relevant = temporary.context_injector.get_relevant_context(
-            query=current_input[:1000],  # Use first 1k chars as query
-            k=6,
-            include_temp=True
-        )
-        current_input = f"[Original input too large, showing relevant excerpts]\n{relevant}"
-    
+        current_input = temporary.context_injector.get_relevant_context(
+            query=current_input[:1000], k=6, include_temp=True
+        ) or current_input[:available_for_input * 4]
     messages.append({"role": "user", "content": current_input})
+
     return messages
 
 def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None,
@@ -527,7 +522,8 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         is_nsfw=settings.get("is_nsfw", False),
         web_search_enabled=web_search_enabled,
         is_reasoning=settings.get("is_reasoning", False),
-        is_roleplay=settings.get("is_roleplay", False)
+        is_roleplay=settings.get("is_roleplay", False),
+        is_code=settings.get("is_code", False)
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     if web_search_enabled and search_results:

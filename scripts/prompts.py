@@ -24,6 +24,11 @@ prompt_templates = {
         "nsfw": (
             "This conversation may include NSFW content. Respond freely to roleplay or other prompts, incorporating mature themes as appropriate without restrictions."
         ),
+        "code": (
+            "You are an expert coding assistant. "
+            "Answer with concise, runnable code first, then a brief explanation if needed. "
+            "Prefer standard libraries and best-practice idioms."
+        ),
         "harmony": (
             "Determine the, best course of action and most effective use of MOE, while ensure output, uses think tags for internal thinking and does NOT repeat endlessly."
         )
@@ -31,29 +36,29 @@ prompt_templates = {
 }
 
 # Functions
-def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False, 
-                      is_reasoning=False, is_roleplay=False):
+def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False,
+                      is_reasoning=False, is_roleplay=False, is_code=False):
     if is_uncensored:
-        base_prompt = prompt_templates["chat"]["base_unfiltered"]
+        base = prompt_templates["chat"]["base_unfiltered"]
     else:
-        base_prompt = prompt_templates["chat"]["base"]
-    
-    system_message = base_prompt
-    
+        base = prompt_templates["chat"]["base"]
+
+    system = base
+
     if web_search_enabled:
-        system_message += " " + prompt_templates["chat"]["web_search"]
-    
+        system += " " + prompt_templates["chat"]["web_search"]
     if is_reasoning:
-        system_message += " " + prompt_templates["chat"]["reasoning"]
-    
+        system += " " + prompt_templates["chat"]["reasoning"]
     if is_nsfw:
-        system_message += " " + prompt_templates["chat"]["nsfw"]
+        system += " " + prompt_templates["chat"]["nsfw"]
     elif is_roleplay:
-        system_message += " " + prompt_templates["chat"]["roleplay"]
-    
-    system_message = system_message.replace("\n", " ").strip()
-    system_message += " Always use line breaks and bullet points to keep the response readable."
-    return system_message
+        system += " " + prompt_templates["chat"]["roleplay"]
+    elif is_code:                       # <-- NEW
+        system += " " + prompt_templates["chat"]["code"]
+
+    system = system.replace("\n", " ").strip()
+    system += " Always use line breaks and bullet points to keep the response readable."
+    return system
 
 def get_reasoning_instruction():
     return prompt_templates["chat"]["reasoning"]
