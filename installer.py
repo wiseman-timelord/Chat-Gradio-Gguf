@@ -80,7 +80,7 @@ else:  # Linux
 
 # Python requirements (CPU-only, no torch)
 BASE_REQ = [
-    "gradio",
+    "gradio==5.49.1",
     "requests==2.31.0",
     "pyperclip",
     "spacy>=3.7.0",
