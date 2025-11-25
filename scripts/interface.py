@@ -336,12 +336,12 @@ def start_new_session(models_loaded):
             [],                                # session_log
             "Load model first on Configuration page...",
             gr.update(interactive=False),
-            gr.update(),
-            *update_action_buttons("waiting_for_input", has_history=False)  # ✅ always empty
+            gr.update()
         )
 
-    # Clear attached files
+    # --- NEW: wipe the real attached-files list ---
     temporary.session_attached_files.clear()
+    # ---------------------------------------------
 
     temporary.current_session_id = None
     temporary.session_label = ""
@@ -351,8 +351,7 @@ def start_new_session(models_loaded):
         [],                                # session_log
         "Type input and click Send to begin...",
         gr.update(interactive=True),
-        gr.update(),
-        *update_action_buttons("waiting_for_input", has_history=False)  # ✅ always empty
+        gr.update()
     )
 
 def load_session_by_index(index):
@@ -360,26 +359,12 @@ def load_session_by_index(index):
     sessions = utility.get_saved_sessions()
     if index < len(sessions):
         session_file = sessions[index]
-        session_path = Path(HISTORY_DIR) / session_file
-        session_id, label, history, attached_files = utility.load_session_history(session_path)
+        session_id, label, history, attached_files = utility.load_session_history(Path(HISTORY_DIR) / session_file)
         temporary.current_session_id = session_id
         temporary.session_label = label
         temporary.SESSION_ACTIVE = True
-
-        has_history = len(history) > 0  # ✅ NEW
-
-        return (
-            history,
-            attached_files,
-            f"Loaded session: {label}",
-            *update_action_buttons("waiting_for_input", has_history=has_history)  # ✅ use it
-        )
-
-    # No session to load - empty state
-    return (
-        [], [], "No session to load",
-        *update_action_buttons("waiting_for_input", has_history=False)  # ✅ empty
-    )
+        return history, attached_files, f"Loaded session: {label}"
+    return [], [], "No session to load"
 
 def copy_last_response(session_log):
     """Copy last AI response to clipboard, excluding thinking phase"""
@@ -479,111 +464,17 @@ def format_session_id(session_id):
     except ValueError:
         return session_id
 
-def update_action_buttons(phase, has_history=False):
-    """
-    Update all action buttons based on interaction phase and history state.
-    
-    Args:
-        phase: Current interaction phase
-        has_history: Whether session has any interactions
-    
-    Returns tuple of 5 button updates.
-    """
-    # Empty session - only show Send button
-    if not has_history and phase == "waiting_for_input":
-        return (
-            gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
-            gr.update(visible=False),  # edit_previous - HIDDEN
-            gr.update(visible=False),  # copy_response - HIDDEN
-            gr.update(visible=False),  # rethink_prompt
-            gr.update(visible=False)   # cancel_input
-        )
-    
-    # Normal waiting state with history
+def update_action_button(phase):
     if phase == "waiting_for_input":
-        return (
-            gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
-            gr.update(visible=True),   # edit_previous
-            gr.update(visible=True),   # copy_response
-            gr.update(visible=False),  # rethink_prompt
-            gr.update(visible=False)   # cancel_input
-        )
-    
-    # Countdown phase - show cancel options
+        return gr.update(value="Send Input..", variant="secondary", elem_classes=["send-button-green"], interactive=True)
     elif phase == "afterthought_countdown":
-        return (
-            gr.update(value="..Please Wait..", variant="secondary", elem_classes=["send-button-orange"], interactive=False),
-            gr.update(visible=False),  # edit_previous
-            gr.update(visible=False),  # copy_response
-            gr.update(visible=True),   # rethink_prompt - SHOW during countdown
-            gr.update(visible=True)    # cancel_input - SHOW during countdown
-        )
-    
-    # Generating response - show cancel options
+        return gr.update(value="..Input Submitted..", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
     elif phase == "generating_response":
-        return (
-            gr.update(value="..Wait For Response..", variant="secondary", elem_classes=["send-button-red"], interactive=False),
-            gr.update(visible=False),  # edit_previous
-            gr.update(visible=False),  # copy_response
-            gr.update(visible=True),   # rethink_prompt - SHOW during generation
-            gr.update(visible=True)    # cancel_input - SHOW during generation
-        )
-    
-    # Speaking phase
+        return gr.update(value="..Wait For Response..", variant="secondary", elem_classes=["send-button-red"], interactive=True)  # Interactive for cancellation
     elif phase == "speaking":
-        return (
-            gr.update(value="..Outputting Speech", variant="secondary", elem_classes=["send-button-orange"], interactive=False),
-            gr.update(visible=False),
-            gr.update(visible=False),
-            gr.update(visible=True),
-            gr.update(visible=True)
-        )
-    
-    # Fallback to waiting state
+        return gr.update(value="..Outputting Speak", variant="secondary", elem_classes=["send-button-orange"], interactive=False)
     else:
-        return (
-            gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
-            gr.update(visible=has_history),  # edit_previous - based on history
-            gr.update(visible=has_history),  # copy_response - based on history
-            gr.update(visible=False),
-            gr.update(visible=False)
-        )
-
-def handle_rethink_prompt(session_log, user_input, cancel_event):
-    """Cancel generation and preserve input for editing."""
-    if cancel_event:
-        cancel_event.set()
-
-    # Rollback session log
-    new_log = session_log[:-2] if len(session_log) >= 2 else session_log
-    has_history = len(new_log) > 0  # ✅ recalc
-
-    return (
-        new_log,
-        "Input cancelled - edit and resend",
-        user_input,  # preserve
-        False,       # reset cancel_flag
-        "waiting_for_input",
-        has_history  # ✅ pass fresh state
-    )
-
-def handle_cancel_input(session_log, cancel_event):
-    """Cancel generation and clear input completely."""
-    if cancel_event:
-        cancel_event.set()
-
-    # Rollback session log
-    new_log = session_log[:-2] if len(session_log) >= 2 else session_log
-    has_history = len(new_log) > 0  # ✅ recalc
-
-    return (
-        new_log,
-        "Input cancelled",
-        "",          # clear input
-        False,       # reset cancel_flag
-        "waiting_for_input",
-        has_history  # ✅ pass fresh state
-    )
+        return gr.update(value="..Unknown Phase..", variant="secondary", elem_classes=["send-button-green"], interactive=False)
 
 def update_cpu_threads_display():
     """Update the CPU threads slider display based on detected threads"""
@@ -617,7 +508,8 @@ async def conversation_interface(
     speech_enabled
 ):
     """
-    FIXED: Proper cancellation handling with backend cleanup.
+    UPDATED v2: Universal unlimited context support via RAG.
+    Handles both file attachments AND large pasted inputs seamlessly.
     """
     import gradio as gr
     from scripts import temporary, utility
@@ -631,74 +523,87 @@ async def conversation_interface(
     import re
     import time
 
-    # ------------------------------------------------------------------
-    # 1.  Early-exit guards
-    # ------------------------------------------------------------------
-    has_history = len(session_log) > 0  # ✅ baseline
-
+    # Check if model is loaded
     if not models_loaded_state or not llm_state:
         yield (
             session_log,
             "Please load a model first.",
-            *update_action_buttons("waiting_for_input", has_history=has_history),
+            update_action_button(interaction_phase),
             False,
             loaded_files,
-            "waiting_for_input",
+            interaction_phase,
             gr.update(),
             gr.update(),
             gr.update()
         )
         return
 
+    # Check for empty input
     if not user_input.strip():
         yield (
             session_log,
             "No input provided.",
-            *update_action_buttons("waiting_for_input", has_history=has_history),
+            update_action_button(interaction_phase),
             False,
             loaded_files,
-            "waiting_for_input",
+            interaction_phase,
             gr.update(),
             gr.update(),
             gr.update()
         )
         return
 
-    # ------------------------------------------------------------------
-    # 2.  Input processing (RAG, attachments, large input)
-    # ------------------------------------------------------------------
+    # === NEW: Detect if input is too large for direct processing ===
     original_input = user_input
     processed_input = user_input
-
+    
+    # Calculate character limit (rough token estimation: 1 token ≈ 4 chars)
     max_input_chars = int(temporary.CONTEXT_SIZE * temporary.LARGE_INPUT_THRESHOLD * 4)
     input_is_large = len(user_input) > max_input_chars
-
+    
+    # Clear any previous temporary RAG data
     context_injector.clear_temporary_input()
-
+    
+    # Handle large pasted input with RAG
     if input_is_large and not temporary.session_attached_files:
         print(f"[RAG-INPUT] Large input detected: {len(user_input)} chars (threshold: {max_input_chars})")
+        
         try:
+            # Add to temporary RAG store
             context_injector.add_temporary_input(user_input)
+            
+            # Create summary for session log display
             preview_chars = min(1000, len(user_input) // 4)
             input_preview = user_input[:preview_chars]
-            break_point = max(input_preview.rfind('.'), input_preview.rfind('\n'))
+            
+            # Find good break point
+            last_period = input_preview.rfind('.')
+            last_newline = input_preview.rfind('\n')
+            break_point = max(last_period, last_newline)
+            
             if break_point > len(input_preview) * 0.7:
                 input_preview = input_preview[:break_point + 1]
+            
             processed_input = (
-                f"[📄 Large Input: {len(user_input):,} characters]\n"
+                f"[📝 Large Input: {len(user_input):,} characters]\n"
                 f"[Using RAG for full context retrieval]\n\n"
                 f"{input_preview}\n\n"
                 f"... [Content continues - {len(user_input) - len(input_preview):,} chars indexed for retrieval]"
             )
+            
             print(f"[RAG-INPUT] Created summary: {len(processed_input)} chars")
+            
         except Exception as e:
             print(f"[RAG-INPUT] Error processing large input: {e}")
             import traceback
             traceback.print_exc()
+            # Fallback: truncate
             processed_input = user_input[:max_input_chars] + "\n\n[Input truncated due to processing error]"
-
+    
+    # Handle file attachments with RAG (existing logic)
     elif temporary.session_attached_files:
         try:
+            # Use enhanced get_attached_files_context with proper context sizing
             file_context = utility.get_attached_files_context(
                 temporary.session_attached_files,
                 query=user_input,
@@ -706,42 +611,53 @@ async def conversation_interface(
                 context_size=temporary.CONTEXT_SIZE
             )
             if file_context:
+                # If input is ALSO large, add it to temp RAG
                 if input_is_large:
                     print(f"[RAG-INPUT] Large input with attachments: {len(user_input)} chars")
                     context_injector.add_temporary_input(user_input)
+                    
+                    # Summary for both
                     processed_input = (
-                        f"[📄 Large Input: {len(user_input):,} characters]\n"
+                        f"[📝 Large Input: {len(user_input):,} characters]\n"
                         f"[📎 Attached Files: {len(temporary.session_attached_files)}]\n"
                         f"[Using RAG for comprehensive retrieval]\n\n"
                         f"{'='*50}\n\n"
                         f"{file_context}"
                     )
                 else:
+                    # Normal attachment handling
                     processed_input = f"User Query:\n{user_input}\n\n{'='*50}\n\n{file_context}"
+                
                 print(f"[ATTACH] Added context from {len(temporary.session_attached_files)} files")
+                print(f"[ATTACH] Total context length: {len(processed_input)} chars")
             else:
+                # Fallback to basic file list
                 file_names = [Path(f).name for f in temporary.session_attached_files]
                 processed_input = f"Attached files: {', '.join(file_names)}\n\n{user_input}"
+                print(f"[ATTACH] Fallback to file list for {len(temporary.session_attached_files)} files")
         except Exception as e:
             print(f"[ATTACH] Error processing files: {e}")
+            import traceback
+            traceback.print_exc()
+            # Minimal fallback
             file_names = [Path(f).name for f in temporary.session_attached_files]
             processed_input = f"Attached files: {', '.join(file_names)}\n\n{user_input}"
 
-    # ------------------------------------------------------------------
-    # 3.  Append messages to session log
-    # ------------------------------------------------------------------
+    # Append messages to session log with consistent formatting
     if input_is_large or temporary.session_attached_files:
+        # Use structured format for RAG-enabled inputs
         session_log.append({'role': 'user', 'content': processed_input})
     else:
+        # Standard format for regular input
         session_log.append({'role': 'user', 'content': f"User:\n{processed_input}"})
+    
     session_log.append({'role': 'assistant', 'content': "AI-Chat:\n"})
     interaction_phase = "afterthought_countdown"
-    has_history = True  # ✅ we now have history
 
     yield (
         session_log,
         "Processing..." + (" (RAG enabled for large input)" if input_is_large else ""),
-        *update_action_buttons(interaction_phase, has_history=has_history),
+        update_action_button(interaction_phase),
         cancel_flag,
         loaded_files,
         interaction_phase,
@@ -750,43 +666,23 @@ async def conversation_interface(
         gr.update()
     )
 
-    # ------------------------------------------------------------------
-    # 4.  Countdown phase (with cancel checking)
-    # ------------------------------------------------------------------
+    # Afterthought countdown with visual feedback
     input_length = len(original_input.strip())
+    # Adjust countdown based on complexity
     file_complexity = len(temporary.session_attached_files) * 500
     rag_complexity = 1000 if input_is_large else 0
     adjusted_input_length = input_length + file_complexity + rag_complexity
     countdown_seconds = max(1, min(5, int(adjusted_input_length / 50)))
     progress_indicators = ["⋋", "⋙", "⋹", "⋸", "⋼", "⋴", "⋦", "⋧", "⋇", "⋗"]
 
-    cancel_event = threading.Event()
-
     for i in range(countdown_seconds, -1, -1):
         if cancel_flag:
-            cancel_event.set()
-            session_log.pop()
-            session_log.pop()
-            context_injector.clear_temporary_input()
-            has_history = len(session_log) > 0
-            yield (
-                session_log,
-                "Input cancelled during countdown.",
-                *update_action_buttons("waiting_for_input", has_history=has_history),
-                False,
-                loaded_files,
-                "waiting_for_input",
-                gr.update(interactive=True, value=original_input if i == countdown_seconds else ""),
-                gr.update(),
-                gr.update()
-            )
-            return
-
+            break
         current_progress = random.choice(progress_indicators)
         yield (
             session_log,
             f"{current_progress} Processing input... {i}s",
-            *update_action_buttons(interaction_phase, has_history=has_history),
+            update_action_button(interaction_phase),
             cancel_flag,
             loaded_files,
             interaction_phase,
@@ -796,17 +692,34 @@ async def conversation_interface(
         )
         await asyncio.sleep(1)
 
-    # ------------------------------------------------------------------
-    # 5.  Response generation
-    # ------------------------------------------------------------------
+    if cancel_flag:
+        session_log.pop()
+        context_injector.clear_temporary_input()  # Clean up RAG data
+        interaction_phase = "waiting_for_input"
+        yield (
+            session_log,
+            "Input cancelled.",
+            update_action_button(interaction_phase),
+            False,
+            loaded_files,
+            interaction_phase,
+            gr.update(interactive=True, value=original_input),
+            gr.update(),
+            gr.update()
+        )
+        return
+
+    # Begin response generation
     interaction_phase = "generating_response"
     settings = get_model_settings(temporary.MODEL_NAME)
 
+    # Handle web search if enabled
+    search_results = None
     if web_search_enabled:
         yield (
             session_log,
             "🔍 Performing web search...",
-            *update_action_buttons(interaction_phase, has_history=has_history),
+            update_action_button(interaction_phase),
             cancel_flag,
             loaded_files,
             interaction_phase,
@@ -816,7 +729,7 @@ async def conversation_interface(
         )
         try:
             search_results = await asyncio.to_thread(
-                utility.web_search,
+                utility.web_search, 
                 original_input,
                 num_results=3
             )
@@ -831,7 +744,7 @@ async def conversation_interface(
         yield (
             session_log,
             status,
-            *update_action_buttons(interaction_phase, has_history=has_history),
+            update_action_button(interaction_phase),
             cancel_flag,
             loaded_files,
             interaction_phase,
@@ -839,12 +752,12 @@ async def conversation_interface(
             gr.update(),
             gr.update()
         )
-
-    # ------------------------------------------------------------------
-    # 6.  Streaming loop (with cancel checking)
-    # ------------------------------------------------------------------
+    
+    # Set up streaming
     q = queue.Queue()
+    cancel_event = threading.Event()
     visible_response = ""
+    raw_output_buffer = ""
     error_occurred = False
 
     def run_generator():
@@ -854,7 +767,7 @@ async def conversation_interface(
                 session_log,
                 settings=settings,
                 web_search_enabled=web_search_enabled,
-                search_results=search_results if web_search_enabled else None,
+                search_results=search_results,
                 cancel_event=cancel_event,
                 llm_state=llm_state,
                 models_loaded_state=models_loaded_state
@@ -875,45 +788,22 @@ async def conversation_interface(
     thread = threading.Thread(target=run_generator, daemon=True)
     thread.start()
 
+    # Process stream
     last_update_time = time.time()
     while True:
-        if cancel_flag or cancel_event.is_set():
-            cancel_event.set()
-            for _ in range(10):
-                if not thread.is_alive():
-                    break
-                await asyncio.sleep(0.1)
-
-            session_log[-1]['content'] = "AI-Chat:\nGeneration cancelled."
-            context_injector.clear_temporary_input()
-            if len(session_log) >= 2:
-                session_log = session_log[:-2]
-            has_history = len(session_log) > 0
-            yield (
-                session_log,
-                "Generation cancelled.",
-                *update_action_buttons("waiting_for_input", has_history=has_history),
-                False,
-                loaded_files,
-                "waiting_for_input",
-                gr.update(interactive=True),
-                gr.update(),
-                gr.update()
-            )
-            return
-
         try:
             chunk = q.get_nowait()
+            
             if chunk is None:
                 break
+                
             if chunk == "<CANCELLED>":
-                session_log = session_log[:-2] if len(session_log) >= 2 else session_log
-                context_injector.clear_temporary_input()
-                has_history = len(session_log) > 0
+                session_log[-1]['content'] = "AI-Chat:\nGeneration cancelled."
+                context_injector.clear_temporary_input()  # Clean up
                 yield (
                     session_log,
                     "Cancelled",
-                    *update_action_buttons("waiting_for_input", has_history=has_history),
+                    update_action_button("waiting_for_input"),
                     False,
                     loaded_files,
                     "waiting_for_input",
@@ -922,15 +812,15 @@ async def conversation_interface(
                     gr.update()
                 )
                 return
+
             if isinstance(chunk, str) and chunk.startswith("Error:"):
                 error_occurred = True
                 session_log[-1]['content'] = f"AI-Chat:\n{chunk}"
-                context_injector.clear_temporary_input()
-                has_history = len(session_log) > 0
+                context_injector.clear_temporary_input()  # Clean up
                 yield (
                     session_log,
                     f"⚠️ {chunk}",
-                    *update_action_buttons("waiting_for_input", has_history=has_history),
+                    update_action_button("waiting_for_input"),
                     False,
                     loaded_files,
                     "waiting_for_input",
@@ -942,13 +832,13 @@ async def conversation_interface(
 
             visible_response += chunk
             session_log[-1]['content'] = visible_response.strip()
-
+            
             current_time = time.time()
             if current_time - last_update_time >= 0.05:
                 yield (
                     session_log,
                     "Generating response...",
-                    *update_action_buttons(interaction_phase, has_history=has_history),
+                    update_action_button(interaction_phase),
                     cancel_flag,
                     loaded_files,
                     interaction_phase,
@@ -957,34 +847,35 @@ async def conversation_interface(
                     gr.update()
                 )
                 last_update_time = current_time
+
         except queue.Empty:
             if thread.is_alive():
                 await asyncio.sleep(0.01)
             else:
                 break
 
-    # ------------------------------------------------------------------
-    # 7.  Speech output (if enabled)
-    # ------------------------------------------------------------------
+    # Handle speech if enabled
     if speech_enabled and visible_response:
-        interaction_phase = "speaking"
-        yield (
-            session_log,
-            "Speaking response...",
-            *update_action_buttons(interaction_phase, has_history=has_history),
-            cancel_flag,
-            loaded_files,
-            interaction_phase,
-            gr.update(),
-            gr.update(),
-            gr.update()
-        )
         try:
+            # Extract speech content (remove thinking phase and AI-Chat prefix)
             speech_content = visible_response
+            
+            # Remove AI-Chat prefix
             speech_content = re.sub(r'^AI-Chat:\s*', '', speech_content, flags=re.IGNORECASE | re.MULTILINE)
+            
+            # Remove "Thinking...." lines completely
             lines = speech_content.split('\n')
-            filtered_lines = [line for line in lines if not (line.strip().startswith("Thinking") and all(c in '.… ' for c in line.strip()[8:]))]
+            filtered_lines = []
+            for line in lines:
+                stripped = line.strip()
+                # Skip lines that are just "Thinking" followed by dots/spaces
+                if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
+                    continue
+                filtered_lines.append(line)
+            
             speech_content = '\n'.join(filtered_lines).strip()
+            
+            # Only speak if there's actual content left
             if speech_content:
                 chunks = utility.chunk_text_for_speech(speech_content, 500)
                 for chunk in chunks:
@@ -995,26 +886,26 @@ async def conversation_interface(
         except Exception as e:
             print(f"Speech error: {e}")
 
-    # ------------------------------------------------------------------
-    # 8.  Final state – response complete
-    # ------------------------------------------------------------------
+    # Save session with attached files info
     try:
         utility.save_session_history(session_log, temporary.session_attached_files)
         print(f"[SESSION] Saved session with {len(temporary.session_attached_files)} attached files")
     except Exception as e:
         print(f"[SESSION] Error saving session: {e}")
-
+    
+    # Clean up after response generation
     temporary.session_attached_files.clear()
-    context_injector.clear_temporary_input()
+    context_injector.clear_temporary_input()  # NEW: Clear temporary RAG data
 
     interaction_phase = "waiting_for_input"
+    
+    # Clear the Gradio state for attached files
     cleared_files = []
-    has_history = len(session_log) > 0  # ✅ final check
-
+    
     yield (
         session_log,
         "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
-        *update_action_buttons(interaction_phase, has_history=has_history),
+        update_action_button(interaction_phase),
         False,
         cleared_files,
         interaction_phase,
@@ -1057,9 +948,6 @@ def launch_interface():
         .send-button-orange { background-color: orange !important; color: white !important }
         .send-button-red { background-color: red !important; color: white !important }
         .scrollable .message { white-space: pre-wrap; word-break: break-word; }
-        .send-button-green { background-color: green !important; color: white !important }
-        .send-button-orange { background-color: orange !important; color: white !important }
-        .send-button-red { background-color: red !important; color: white !important }
         """
     ) as demo:
         temporary.demo = demo
@@ -1120,12 +1008,8 @@ def launch_interface():
                         conversation_components["user_input"] = gr.Textbox(label="User Input", lines=3, max_lines=initial_max_lines, interactive=False, placeholder="Enter text here...")
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=10)
-                            # Normal mode buttons
-                            action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=False)
-                            action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1, visible=False)
-                            # Active mode buttons
-                            action_buttons["rethink_prompt"] = gr.Button("Rethink Prompt", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=False)
-                            action_buttons["cancel_input"] = gr.Button("Cancel Input", variant="stop", elem_classes=["send-button-red"], scale=1, visible=False)
+                            action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="huggingface", scale=1)
+                            action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1)
 
                 with gr.Row():
                     # INTERACTION TAB STATUS BAR - uses shared state
@@ -1417,10 +1301,6 @@ def launch_interface():
                 conversation_components["session_log"],
                 shared_status_state,
                 action_buttons["action"],
-                action_buttons["edit_previous"],
-                action_buttons["copy_response"],
-                action_buttons["rethink_prompt"],
-                action_buttons["cancel_input"],
                 states["cancel_flag"],
                 states["attached_files"],
                 states["interaction_phase"],
@@ -1437,52 +1317,6 @@ def launch_interface():
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
             outputs=attach_slots + [attach_files]
-        )
-
-        # Rethink prompt button
-        action_buttons["rethink_prompt"].click(
-            fn=handle_rethink_prompt,
-            inputs=[conversation_components["session_log"], conversation_components["user_input"], states["cancel_flag"]],
-            outputs=[
-                conversation_components["session_log"],
-                shared_status_state,
-                conversation_components["user_input"],
-                states["cancel_flag"],
-                states["interaction_phase"]
-            ]
-        ).then(
-            fn=update_action_buttons,
-            inputs=[states["interaction_phase"]],
-            outputs=[
-                action_buttons["action"],
-                action_buttons["edit_previous"],
-                action_buttons["copy_response"],
-                action_buttons["rethink_prompt"],
-                action_buttons["cancel_input"]
-            ]
-        )
-
-        # Cancel input button
-        action_buttons["cancel_input"].click(
-            fn=handle_cancel_input,
-            inputs=[conversation_components["session_log"], states["cancel_flag"]],
-            outputs=[
-                conversation_components["session_log"],
-                shared_status_state,
-                conversation_components["user_input"],
-                states["cancel_flag"],
-                states["interaction_phase"]
-            ]
-        ).then(
-            fn=update_action_buttons,
-            inputs=[states["interaction_phase"]],
-            outputs=[
-                action_buttons["action"],
-                action_buttons["edit_previous"],
-                action_buttons["copy_response"],
-                action_buttons["rethink_prompt"],
-                action_buttons["cancel_input"]
-            ]
         )
 
         action_buttons["copy_response"].click(
