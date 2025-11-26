@@ -752,8 +752,11 @@ def copy_linux_binaries(source_dir: Path, dest_dir: Path) -> None:
 
 def download_extract_backend(backend: str) -> bool:
     """Download Vulkan backend only if selected"""
-    if backend == "x64 CPU Only":
-        print_status("CPU-Only mode: No binary download needed")
+    if backend in ["x64 CPU Only", "Force Vulkan GPU"]:  # Updated condition
+        if backend == "x64 CPU Only":
+            print_status("CPU-Only mode: No binary download needed")
+        else:  # Force Vulkan GPU
+            print_status("Force Vulkan mode: Installing without detection")
         return True
         
     print_status(f"Downloading llama.cpp ({backend})...")
@@ -762,6 +765,9 @@ def download_extract_backend(backend: str) -> bool:
     temp_zip = TEMP_DIR / "llama.zip"
 
     try:
+        # ADD THIS: Import requests here to ensure it uses venv
+        import requests
+        
         import zipfile
         download_with_progress(info["url"], temp_zip, f"Downloading {backend}")
 
@@ -857,9 +863,10 @@ def install():
         print("Session labeling may not work properly")
         # Non-critical, can continue
 
-    if not download_extract_backend(backend):
-        print_status("Backend download failed", False)
-        sys.exit(1)
+    with activate_venv():
+        if not download_extract_backend(backend):
+            print_status("Backend download failed", False)
+            sys.exit(1)
 
     create_config(backend)
     
