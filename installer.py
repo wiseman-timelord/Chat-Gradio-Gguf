@@ -55,6 +55,14 @@ if PLATFORM == "windows":
             "needs_python_bindings": True,
             "vulkan_required": True,
             "build_flags": {}
+        },
+        "Force Vulkan GPU": {
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",  # or ubuntu variant for linux
+            "dest": "data/llama-vulkan-bin",
+            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",  # or llama-cli for linux
+            "needs_python_bindings": True,
+            "vulkan_required": False,  # override check
+            "build_flags": {}
         }
     }
 else:  # Linux
@@ -73,6 +81,14 @@ else:  # Linux
             "cli_path": "data/llama-vulkan-bin/llama-cli",
             "needs_python_bindings": True,
             "vulkan_required": True,
+            "build_flags": {}
+        },
+        "Force Vulkan GPU": {
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip",  # or ubuntu variant for linux
+            "dest": "data/llama-vulkan-bin",
+            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",  # or llama-cli for linux
+            "needs_python_bindings": True,
+            "vulkan_required": False,  # override check
             "build_flags": {}
         }
     }
@@ -118,7 +134,7 @@ def print_status(message: str, success: bool = True) -> None:
 def get_user_choice(prompt: str, options: list) -> str:
     """Display menu exactly as requested"""
     print_header("Gpu Options")
-    print("\n\n\n\n\n")
+    print("\n\n\n\n")
     for i, option in enumerate(options, 1):
         print(f"    {i}) {option}\n")
     print("\n\n\n\n\n")
@@ -586,6 +602,8 @@ def verify_backend_dependencies(backend: str) -> bool:
                 print("  Install with: sudo apt install vulkan-tools libvulkan-dev")
             print("!" * 80 + "\n")
             return False
+    if backend == "Force Vulkan GPU":
+        return True  # skip all checks
     return True
 
 def install_linux_system_dependencies(backend: str) -> bool:
@@ -782,13 +800,15 @@ def select_backend_type() -> str:
     """Show simplified 2-option menu"""
     opts = [
         "x64 CPU Only (No GPU Option)",
-        "Vulkan GPU with x64 CPU Backend"
+        "Vulkan GPU with x64 CPU Backend", 
+        "Force Vulkan GPU (Skip Detection)"
     ]
     choice = get_user_choice("Select backend:", opts)
     
     mapping = {
         "x64 CPU Only (No GPU Option)": "x64 CPU Only",
-        "Vulkan GPU with x64 CPU Backend": "Vulkan GPU"
+        "Vulkan GPU with x64 CPU Backend": "Vulkan GPU",
+        "Force Vulkan GPU (Skip Detection)": "Force Vulkan GPU"
     }
     return mapping[choice]
 
