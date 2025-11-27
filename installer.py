@@ -56,12 +56,12 @@ if PLATFORM == "windows":
             "vulkan_required": True,
             "build_flags": {}
         },
-        "Force Vulkan GPU": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",  # or ubuntu variant for linux
+        "Force Vulkan GPU": {  # ADD THIS
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
             "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",  # or llama-cli for linux
+            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
             "needs_python_bindings": True,
-            "vulkan_required": False,  # override check
+            "vulkan_required": False,  # Skip detection
             "build_flags": {}
         }
     }
@@ -78,17 +78,17 @@ else:  # Linux
         "Vulkan GPU": {
             "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip",
             "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli",
+            "cli_path": "data/llama-vulkan-bin/llama-cli",  # NO .exe on Linux
             "needs_python_bindings": True,
             "vulkan_required": True,
             "build_flags": {}
         },
         "Force Vulkan GPU": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip",  # or ubuntu variant for linux
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.zip",
             "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",  # or llama-cli for linux
+            "cli_path": "data/llama-vulkan-bin/llama-cli",  # NO .exe on Linux
             "needs_python_bindings": True,
-            "vulkan_required": False,  # override check
+            "vulkan_required": False,  # Skip detection
             "build_flags": {}
         }
     }
@@ -191,8 +191,8 @@ def build_config(backend: str) -> dict:
     """Build configuration with CPU-Only or Vulkan settings"""
     info = BACKEND_OPTIONS[backend]
     
-    # FIX: Determine backend type correctly
-    if backend == "Vulkan GPU":
+    # Determine backend type correctly for both Vulkan options
+    if backend in ["Vulkan GPU", "Force Vulkan GPU"]:
         backend_type = "Vulkan"
         vulkan_available = True
         vram_size = 8192
@@ -222,12 +222,12 @@ def build_config(backend: str) -> dict:
             "session_log_height": 500,
             "cpu_threads": 4,
             "vulkan_available": vulkan_available,
-            "backend_type": backend_type  # CRITICAL: This was missing proper assignment
+            "backend_type": backend_type
         }
     }
     
-    # FIX: Only add llama-cli paths for Vulkan backend
-    if backend == "Vulkan GPU" and info["cli_path"]:
+    # Only add llama-cli paths for Vulkan backends
+    if backend in ["Vulkan GPU", "Force Vulkan GPU"] and info["cli_path"]:
         config["model_settings"]["llama_cli_path"] = str(BASE_DIR / info["cli_path"])
         if info["dest"]:
             config["model_settings"]["llama_bin_path"] = info["dest"]
@@ -540,36 +540,81 @@ def download_spacy_model() -> bool:
         return False
 
 def download_with_progress(url: str, filepath: Path, description: str = "Downloading") -> None:
-    import requests
+    """Download file with progress bar using venv's requests library"""
     import time
+    
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                    ("python.exe" if PLATFORM == "windows" else "python"))
+    
+    # Create a download script that uses the venv's requests
+    download_script = f'''
+import requests
+import time
+from pathlib import Path
 
+def format_bytes(b):
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if b < 1024.0:
+            return f"{{b:.1f}}{{unit}}"
+        b /= 1024.0
+    return f"{{b:.1f}}TB"
+
+def simple_progress_bar(current, total, width=25):
+    if total == 0:
+        return "[" + "=" * width + "] 100%"
+    filled_width = int(width * current // total)
+    bar = "=" * filled_width + "-" * (width - filled_width)
+    percent = 100 * current // total
+    return f"[{{bar}}] {{percent}}% ({{format_bytes(current)}}/{{format_bytes(total)}})"
+
+try:
+    response = requests.get("{url}", stream=True, timeout=30)
+    response.raise_for_status()
+    
+    total_size = int(response.headers.get('content-length', 0))
+    downloaded = 0
+    chunk_size = 8192
+    last_update = time.time()
+    
+    with open(r"{str(filepath)}", 'wb') as f:
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            if chunk:
+                f.write(chunk)
+                downloaded += len(chunk)
+                current_time = time.time()
+                if current_time - last_update > 0.35 or downloaded >= total_size:
+                    if total_size > 0:
+                        progress = simple_progress_bar(downloaded, total_size)
+                        print(f"\\r{description}: {{progress}}", end='', flush=True)
+                    else:
+                        downloaded_mb = downloaded / 1024 / 1024
+                        print(f"\\r{description}: {{downloaded_mb:.1f}} MB downloaded", end='', flush=True)
+                    last_update = current_time
+    print()  # New line after progress
+except Exception as e:
+    Path(r"{str(filepath)}").unlink(missing_ok=True)
+    raise e
+'''
+    
+    download_script_path = TEMP_DIR / "download_file.py"
     try:
-        response = requests.get(url, stream=True, timeout=30)
-        response.raise_for_status()
-
-        total_size = int(response.headers.get('content-length', 0))
-        downloaded = 0
-        chunk_size = 8192
-        last_update = time.time()
-
-        with open(filepath, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    current_time = time.time()
-                    if current_time - last_update > 0.35 or downloaded >= total_size:
-                        if total_size > 0:
-                            progress = simple_progress_bar(downloaded, total_size)
-                            print(f"\r{description}: {progress}", end='', flush=True)
-                        else:
-                            downloaded_mb = downloaded / 1024 / 1024
-                            print(f"\r{description}: {downloaded_mb:.1f} MB downloaded", end='', flush=True)
-                        last_update = current_time
-        print()
-    except Exception as e:
+        with open(download_script_path, 'w') as f:
+            f.write(download_script)
+        
+        result = subprocess.run(
+            [python_exe, str(download_script_path)],
+            check=True,
+            timeout=600  # 10 minute timeout for large files
+        )
+        
+    except subprocess.CalledProcessError as e:
         filepath.unlink(missing_ok=True)
-        raise e
+        raise Exception(f"Download failed: {e}")
+    except subprocess.TimeoutExpired:
+        filepath.unlink(missing_ok=True)
+        raise Exception("Download timed out")
+    finally:
+        download_script_path.unlink(missing_ok=True)
 
 
 # Dependency checks
@@ -591,8 +636,8 @@ def is_vulkan_installed() -> bool:
             return False
 
 def verify_backend_dependencies(backend: str) -> bool:
-    """Only check dependencies for Vulkan backend"""
-    if backend == "Vulkan GPU":
+    """Only check dependencies for Vulkan backend (not Force Vulkan)"""
+    if backend == "Vulkan GPU":  # Only check regular Vulkan, not Force
         if not is_vulkan_installed():
             print("\n" + "!" * 80)
             print(f"⚠️  WARNING: Vulkan not detected!")
@@ -602,8 +647,8 @@ def verify_backend_dependencies(backend: str) -> bool:
                 print("  Install with: sudo apt install vulkan-tools libvulkan-dev")
             print("!" * 80 + "\n")
             return False
-    if backend == "Force Vulkan GPU":
-        return True  # skip all checks
+    elif backend == "Force Vulkan GPU":
+        return True  # Skip all checks for Force Vulkan
     return True
 
 def install_linux_system_dependencies(backend: str) -> bool:
@@ -751,54 +796,51 @@ def copy_linux_binaries(source_dir: Path, dest_dir: Path) -> None:
         raise FileNotFoundError("No llama binaries")
 
 def download_extract_backend(backend: str) -> bool:
-    """Download Vulkan backend only if selected"""
-    if backend in ["x64 CPU Only", "Force Vulkan GPU"]:  # Updated condition
-        if backend == "x64 CPU Only":
-            print_status("CPU-Only mode: No binary download needed")
-        else:  # Force Vulkan GPU
-            print_status("Force Vulkan mode: Installing without detection")
+    """Download Vulkan backend for Vulkan and Force Vulkan options"""
+    if backend == "x64 CPU Only":
+        print_status("CPU-Only mode: No binary download needed")
         return True
-        
-    print_status(f"Downloading llama.cpp ({backend})...")
-    info = BACKEND_OPTIONS[backend]
-    TEMP_DIR.mkdir(exist_ok=True)
-    temp_zip = TEMP_DIR / "llama.zip"
+    elif backend in ["Vulkan GPU", "Force Vulkan GPU"]:
+        print_status(f"Downloading llama.cpp ({backend})...")
+        info = BACKEND_OPTIONS[backend]
+        TEMP_DIR.mkdir(exist_ok=True)
+        temp_zip = TEMP_DIR / "llama.zip"
 
-    try:
-        # ADD THIS: Import requests here to ensure it uses venv
-        import requests
-        
-        import zipfile
-        download_with_progress(info["url"], temp_zip, f"Downloading {backend}")
+        try:
+            import zipfile
+            download_with_progress(info["url"], temp_zip, f"Downloading {backend}")
 
-        dest_path = BASE_DIR / info["dest"]
-        dest_path.mkdir(parents=True, exist_ok=True)
+            dest_path = BASE_DIR / info["dest"]
+            dest_path.mkdir(parents=True, exist_ok=True)
 
-        with zipfile.ZipFile(temp_zip, 'r') as zf:
-            members = zf.namelist()
-            total = len(members)
-            for i, m in enumerate(members):
-                zf.extract(m, dest_path)
-                if i % 25 == 0 or i == total - 1:
-                    print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
-            print()
+            with zipfile.ZipFile(temp_zip, 'r') as zf:
+                members = zf.namelist()
+                total = len(members)
+                for i, m in enumerate(members):
+                    zf.extract(m, dest_path)
+                    if i % 25 == 0 or i == total - 1:
+                        print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
+                print()
 
-        if PLATFORM == "linux":
-            copy_linux_binaries(dest_path, dest_path)
+            if PLATFORM == "linux":
+                copy_linux_binaries(dest_path, dest_path)
 
-        cli_path = BASE_DIR / info["cli_path"]
-        if not cli_path.exists():
-            raise FileNotFoundError(f"llama-cli not found: {cli_path}")
-        if PLATFORM == "linux":
-            os.chmod(cli_path, 0o755)
+            cli_path = BASE_DIR / info["cli_path"]
+            if not cli_path.exists():
+                raise FileNotFoundError(f"llama-cli not found: {cli_path}")
+            if PLATFORM == "linux":
+                os.chmod(cli_path, 0o755)
 
-        print_status("Backend ready")
-        return True
-    except Exception as e:
-        print_status(f"Backend install failed: {e}", False)
+            print_status("Backend ready")
+            return True
+        except Exception as e:
+            print_status(f"Backend install failed: {e}", False)
+            return False
+        finally:
+            temp_zip.unlink(missing_ok=True)
+    else:
+        print_status(f"Unknown backend: {backend}", False)
         return False
-    finally:
-        temp_zip.unlink(missing_ok=True)
 
 
 # Backend selection
@@ -841,6 +883,8 @@ def install():
         print_status("Virtual environment failed", False)
         sys.exit(1)
 
+    # All functions below already handle venv paths internally
+    # DO NOT wrap in activate_venv() context manager
     if not install_python_deps(backend):
         print_status("Python dependencies failed", False)
         sys.exit(1)
@@ -863,10 +907,9 @@ def install():
         print("Session labeling may not work properly")
         # Non-critical, can continue
 
-    with activate_venv():
-        if not download_extract_backend(backend):
-            print_status("Backend download failed", False)
-            sys.exit(1)
+    if not download_extract_backend(backend):
+        print_status("Backend download failed", False)
+        sys.exit(1)
 
     create_config(backend)
     
