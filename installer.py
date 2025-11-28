@@ -56,12 +56,12 @@ if PLATFORM == "windows":
             "vulkan_required": True,
             "build_flags": {}
         },
-        "Force Vulkan GPU": {  # ADD THIS
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
+        "Force Vulkan GPU": {
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",  # or ubuntu variant for linux
             "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
+            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",  # or llama-cli for linux
             "needs_python_bindings": True,
-            "vulkan_required": False,  # Skip detection
+            "vulkan_required": False,  # override check
             "build_flags": {}
         }
     }
@@ -191,8 +191,8 @@ def build_config(backend: str) -> dict:
     """Build configuration with CPU-Only or Vulkan settings"""
     info = BACKEND_OPTIONS[backend]
     
-    # Determine backend type correctly for both Vulkan options
-    if backend in ["Vulkan GPU", "Force Vulkan GPU"]:
+    # FIX: Determine backend type correctly
+    if backend == "Vulkan GPU":
         backend_type = "Vulkan"
         vulkan_available = True
         vram_size = 8192
@@ -222,12 +222,12 @@ def build_config(backend: str) -> dict:
             "session_log_height": 500,
             "cpu_threads": 4,
             "vulkan_available": vulkan_available,
-            "backend_type": backend_type
+            "backend_type": backend_type  # CRITICAL: This was missing proper assignment
         }
     }
     
-    # Only add llama-cli paths for Vulkan backends
-    if backend in ["Vulkan GPU", "Force Vulkan GPU"] and info["cli_path"]:
+    # FIX: Only add llama-cli paths for Vulkan backend
+    if backend == "Vulkan GPU" and info["cli_path"]:
         config["model_settings"]["llama_cli_path"] = str(BASE_DIR / info["cli_path"])
         if info["dest"]:
             config["model_settings"]["llama_bin_path"] = info["dest"]
@@ -616,7 +616,6 @@ except Exception as e:
     finally:
         download_script_path.unlink(missing_ok=True)
 
-
 # Dependency checks
 def is_vulkan_installed() -> bool:
     """Check if Vulkan is installed on the system"""
@@ -636,8 +635,8 @@ def is_vulkan_installed() -> bool:
             return False
 
 def verify_backend_dependencies(backend: str) -> bool:
-    """Only check dependencies for Vulkan backend (not Force Vulkan)"""
-    if backend == "Vulkan GPU":  # Only check regular Vulkan, not Force
+    """Only check dependencies for Vulkan backend"""
+    if backend == "Vulkan GPU":
         if not is_vulkan_installed():
             print("\n" + "!" * 80)
             print(f"⚠️  WARNING: Vulkan not detected!")
@@ -647,8 +646,8 @@ def verify_backend_dependencies(backend: str) -> bool:
                 print("  Install with: sudo apt install vulkan-tools libvulkan-dev")
             print("!" * 80 + "\n")
             return False
-    elif backend == "Force Vulkan GPU":
-        return True  # Skip all checks for Force Vulkan
+    if backend == "Force Vulkan GPU":
+        return True  # skip all checks
     return True
 
 def install_linux_system_dependencies(backend: str) -> bool:
@@ -796,51 +795,48 @@ def copy_linux_binaries(source_dir: Path, dest_dir: Path) -> None:
         raise FileNotFoundError("No llama binaries")
 
 def download_extract_backend(backend: str) -> bool:
-    """Download Vulkan backend for Vulkan and Force Vulkan options"""
+    """Download Vulkan backend only if selected"""
     if backend == "x64 CPU Only":
         print_status("CPU-Only mode: No binary download needed")
         return True
-    elif backend in ["Vulkan GPU", "Force Vulkan GPU"]:
-        print_status(f"Downloading llama.cpp ({backend})...")
-        info = BACKEND_OPTIONS[backend]
-        TEMP_DIR.mkdir(exist_ok=True)
-        temp_zip = TEMP_DIR / "llama.zip"
+        
+    print_status(f"Downloading llama.cpp ({backend})...")
+    info = BACKEND_OPTIONS[backend]
+    TEMP_DIR.mkdir(exist_ok=True)
+    temp_zip = TEMP_DIR / "llama.zip"
 
-        try:
-            import zipfile
-            download_with_progress(info["url"], temp_zip, f"Downloading {backend}")
+    try:
+        import zipfile
+        download_with_progress(info["url"], temp_zip, f"Downloading {backend}")
 
-            dest_path = BASE_DIR / info["dest"]
-            dest_path.mkdir(parents=True, exist_ok=True)
+        dest_path = BASE_DIR / info["dest"]
+        dest_path.mkdir(parents=True, exist_ok=True)
 
-            with zipfile.ZipFile(temp_zip, 'r') as zf:
-                members = zf.namelist()
-                total = len(members)
-                for i, m in enumerate(members):
-                    zf.extract(m, dest_path)
-                    if i % 25 == 0 or i == total - 1:
-                        print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
-                print()
+        with zipfile.ZipFile(temp_zip, 'r') as zf:
+            members = zf.namelist()
+            total = len(members)
+            for i, m in enumerate(members):
+                zf.extract(m, dest_path)
+                if i % 25 == 0 or i == total - 1:
+                    print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
+            print()
 
-            if PLATFORM == "linux":
-                copy_linux_binaries(dest_path, dest_path)
+        if PLATFORM == "linux":
+            copy_linux_binaries(dest_path, dest_path)
 
-            cli_path = BASE_DIR / info["cli_path"]
-            if not cli_path.exists():
-                raise FileNotFoundError(f"llama-cli not found: {cli_path}")
-            if PLATFORM == "linux":
-                os.chmod(cli_path, 0o755)
+        cli_path = BASE_DIR / info["cli_path"]
+        if not cli_path.exists():
+            raise FileNotFoundError(f"llama-cli not found: {cli_path}")
+        if PLATFORM == "linux":
+            os.chmod(cli_path, 0o755)
 
-            print_status("Backend ready")
-            return True
-        except Exception as e:
-            print_status(f"Backend install failed: {e}", False)
-            return False
-        finally:
-            temp_zip.unlink(missing_ok=True)
-    else:
-        print_status(f"Unknown backend: {backend}", False)
+        print_status("Backend ready")
+        return True
+    except Exception as e:
+        print_status(f"Backend install failed: {e}", False)
         return False
+    finally:
+        temp_zip.unlink(missing_ok=True)
 
 
 # Backend selection
