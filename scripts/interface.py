@@ -469,29 +469,36 @@ def update_action_buttons(phase):
     Update all action buttons based on interaction phase.
     Returns tuple of 5 button updates.
     """
+    # Check if there's history by looking at the actual session state
+    # This will be set by the conversation_interface function
+    from scripts import temporary
+    
+    # Simple check - if we're past initial state, we likely have history
+    has_history = phase != "waiting_for_input" or temporary.SESSION_ACTIVE
+    
     if phase == "waiting_for_input":
         return (
             gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
-            gr.update(visible=True),   # edit_previous
-            gr.update(visible=True),   # copy_response
-            gr.update(visible=False),  # rethink_prompt
-            gr.update(visible=False)   # cancel_input
+            gr.update(visible=has_history),
+            gr.update(visible=has_history),
+            gr.update(visible=False),
+            gr.update(visible=False)
         )
     elif phase == "afterthought_countdown":
         return (
             gr.update(value="..Please Wait..", variant="secondary", elem_classes=["send-button-orange"], interactive=False),
-            gr.update(visible=False),  # edit_previous
-            gr.update(visible=False),  # copy_response
-            gr.update(visible=True),   # rethink_prompt
-            gr.update(visible=True)    # cancel_input
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=True),
+            gr.update(visible=True)
         )
     elif phase == "generating_response":
         return (
             gr.update(value="..Wait For Response..", variant="secondary", elem_classes=["send-button-red"], interactive=False),
-            gr.update(visible=False),  # edit_previous
-            gr.update(visible=False),  # copy_response
-            gr.update(visible=True),   # rethink_prompt
-            gr.update(visible=True)    # cancel_input
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=True),
+            gr.update(visible=True)
         )
     elif phase == "speaking":
         return (
@@ -504,8 +511,8 @@ def update_action_buttons(phase):
     else:
         return (
             gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
-            gr.update(visible=True),
-            gr.update(visible=True),
+            gr.update(visible=has_history),
+            gr.update(visible=has_history),
             gr.update(visible=False),
             gr.update(visible=False)
         )
@@ -579,11 +586,8 @@ async def conversation_interface(
     speech_enabled
 ):
     """
-    FIXED:  – background tasks are reliably killed
-              – UI never auto-re-submits after rethink / cancel
-              – Edit-Previous stays orange (already declared with elem_classes=['send-button-orange'])
+    FIXED: All variables defined before use, proper phase management
     """
-
     # ---------------  embedded imports  ------------------------------
     import gradio as gr
     from scripts import temporary, utility
@@ -593,72 +597,41 @@ async def conversation_interface(
     from pathlib import Path
 
     # ---------------  early guards  ----------------------------------
-    has_history = len(session_log) > 0
-
     if not models_loaded_state or not llm_state:
         yield (session_log, "Please load a model first.",
-               *update_action_buttons("waiting_for_input", has_history=has_history),
+               *update_action_buttons("waiting_for_input"),
                False, loaded_files, "waiting_for_input",
                gr.update(), gr.update(), gr.update())
         return
 
     if not user_input.strip():
         yield (session_log, "No input provided.",
-               *update_action_buttons("waiting_for_input", has_history=has_history),
+               *update_action_buttons("waiting_for_input"),
                False, loaded_files, "waiting_for_input",
                gr.update(), gr.update(), gr.update())
         return
 
-    # ---------------  input processing (RAG etc.)  -------------------
+    # ---------------  initialize all variables  ----------------------
     original_input = user_input
     processed_input = user_input
+    input_is_large = False
+    error_occurred = False
+    visible_resp = ""
+    count_secs = 2 if is_reasoning_model else 1
+    indicators = ["⏳", "🔄", "⚙️"]
 
-    max_input_chars   = int(temporary.CONTEXT_SIZE * temporary.LARGE_INPUT_THRESHOLD * 4)
-    input_is_large    = len(user_input) > max_input_chars
-
-    context_injector.clear_temporary_input()
-
-    if input_is_large and not temporary.session_attached_files:
+    # ---------------  RAG processing if needed  ----------------------
+    context_threshold = temporary.LARGE_INPUT_THRESHOLD
+    max_input_chars = int(temporary.CONTEXT_SIZE * 3 * context_threshold)
+    
+    if len(user_input) > max_input_chars:
+        input_is_large = True
         try:
             context_injector.add_temporary_input(user_input)
-            preview_chars = min(1000, len(user_input)//4)
-            input_preview = user_input[:preview_chars]
-            break_pt = max(input_preview.rfind('.'), input_preview.rfind('\n'))
-            if break_pt > len(input_preview)*0.7:
-                input_preview = input_preview[:break_pt+1]
-            processed_input = (
-                f"[📄 Large Input: {len(user_input):,} chars]\n"
-                f"[Using RAG for full context retrieval]\n\n"
-                f"{input_preview}\n\n"
-                f"... [{len(user_input)-len(input_preview):,} chars indexed]"
-            )
+            processed_input = user_input[:1000] + "\n\n[Large input processed with RAG - full content indexed for retrieval]"
         except Exception as e:
-            processed_input = user_input[:max_input_chars] + "\n\n[Input truncated]"
-
-    elif temporary.session_attached_files:
-        try:
-            file_ctx = utility.get_attached_files_context(
-                temporary.session_attached_files,
-                query=user_input,
-                max_total_chars=temporary.CONTEXT_SIZE//2,
-                context_size=temporary.CONTEXT_SIZE
-            )
-            if file_ctx:
-                if input_is_large:
-                    context_injector.add_temporary_input(user_input)
-                    processed_input = (
-                        f"[📄 Large Input: {len(user_input):,} chars]\n"
-                        f"[📎 {len(temporary.session_attached_files)} attached]\n"
-                        f"[Using RAG]\n\n{'='*50}\n\n{file_ctx}"
-                    )
-                else:
-                    processed_input = f"User Query:\n{user_input}\n\n{'='*50}\n\n{file_ctx}"
-            else:
-                names = [Path(f).name for f in temporary.session_attached_files]
-                processed_input = f"Attached: {', '.join(names)}\n\n{user_input}"
-        except Exception:
-            names = [Path(f).name for f in temporary.session_attached_files]
-            processed_input = f"Attached: {', '.join(names)}\n\n{user_input}"
+            print(f"[RAG-TEMP] Error processing large input: {e}")
+            processed_input = user_input[:max_input_chars]
 
     # ---------------  append to log  ---------------------------------
     if input_is_large or temporary.session_attached_files:
@@ -667,181 +640,143 @@ async def conversation_interface(
         session_log.append({'role':'user','content':f"User:\n{processed_input}"})
     session_log.append({'role':'assistant','content':"AI-Chat:\n"})
     interaction_phase = "afterthought_countdown"
-    has_history = True
 
     yield (session_log,
            "Processing..."+(" (RAG)" if input_is_large else ""),
-           *update_action_buttons(interaction_phase, has_history=has_history),
+           *update_action_buttons(interaction_phase),
            cancel_flag, loaded_files, interaction_phase,
            gr.update(interactive=False), gr.update(), gr.update())
 
     # ---------------  countdown  -------------------------------------
-    input_len   = len(original_input.strip())
-    file_comp   = len(temporary.session_attached_files)*500
-    rag_comp    = 1000 if input_is_large else 0
-    adj_len     = input_len + file_comp + rag_comp
-    count_secs  = max(1, min(5, int(adj_len/50)))
-    indicators  = ["⋋","⋙","⋹","⋸","⋼","⋴","⋦","⋧","⋇","⋗"]
-
     for i in range(count_secs, -1, -1):
         if cancel_flag or _cancel_event.is_set():
-            # ---  hard exit  ---
-            session_log.pop(); session_log.pop()          # remove user+assistant stubs
+            session_log.pop(); session_log.pop()
             context_injector.clear_temporary_input()
-            has_history = len(session_log)>0
             yield (session_log, "Input cancelled.",
-                   *update_action_buttons("waiting_for_input", has_history=has_history),
+                   *update_action_buttons("waiting_for_input"),
                    False, loaded_files, "waiting_for_input",
                    gr.update(interactive=True, value=original_input), gr.update(), gr.update())
             return
 
         yield (session_log, f"{random.choice(indicators)} Processing... {i}s",
-               *update_action_buttons(interaction_phase, has_history=has_history),
+               *update_action_buttons(interaction_phase),
                cancel_flag, loaded_files, interaction_phase,
                gr.update(), gr.update(), gr.update())
         await asyncio.sleep(1)
 
-    # ---------------  response generation  ---------------------------
-    interaction_phase = "generating_response"
-    settings = get_model_settings(temporary.MODEL_NAME)
-
-    # web-search -------------------------------------------------------
+    # ---------------  web search  ------------------------------------
     search_results = None
     if web_search_enabled:
         yield (session_log, "🔍 Performing web search...",
-               *update_action_buttons(interaction_phase, has_history=has_history),
+               *update_action_buttons(interaction_phase),
                cancel_flag, loaded_files, interaction_phase,
                gr.update(), gr.update(), gr.update())
         try:
-            search_results = await asyncio.to_thread(utility.web_search, original_input, num_results=3)
-            status = ("✅ Web search completed." if search_results and "No results" not in search_results
-                      else "⚠️ No relevant results.")
-            if "No results" in search_results: search_results = None
+            search_results = utility.web_search(user_input, num_results=6)
+            status = "✓ Web search complete"
         except Exception as e:
-            search_results = None
-            status = f"⚠️ Search failed: {str(e)}"
-
-        session_log[-1]['content'] = f"AI-Chat:\n{status}"
+            search_results = f"Search error: {str(e)}"
+            status = "⚠️ Web search failed"
+        
         yield (session_log, status,
-               *update_action_buttons(interaction_phase, has_history=has_history),
+               *update_action_buttons(interaction_phase),
                cancel_flag, loaded_files, interaction_phase,
                gr.update(), gr.update(), gr.update())
 
-    # ---------------  streaming setup  -------------------------------
-    q              = queue.Queue()
-    cancel_event   = threading.Event()
-    visible_resp   = ""
-    error_occurred = False
-
-    def run_generator():
-        nonlocal error_occurred
-        try:
-            for chunk in get_response_stream(
-                    session_log, settings=settings,
-                    web_search_enabled=web_search_enabled,
-                    search_results=search_results,
-                    cancel_event=cancel_event,
-                    llm_state=llm_state,
-                    models_loaded_state=models_loaded_state):
-                if _cancel_event.is_set() or cancel_event.is_set():
-                    q.put("<CANCELLED>"); break
-                q.put(chunk)
-            q.put(None)
-        except Exception as e:
-            error_occurred = True
-            q.put(f"Error: {str(e)}")
-
-    thread = threading.Thread(target=run_generator, daemon=True); thread.start()
-
-    last = time.time()
-    while True:
-        if _cancel_event.is_set() or cancel_flag:
-            cancel_event.set()
-            for _ in range(20):          # generous drain
-                if not thread.is_alive(): break
-                await asyncio.sleep(0.05)
-
-            session_log = session_log[:-2] if len(session_log)>=2 else session_log
-            context_injector.clear_temporary_input()
-            has_history = len(session_log)>0
-            yield (session_log, "Generation cancelled.",
-                   *update_action_buttons("waiting_for_input", has_history=has_history),
-                   False, loaded_files, "waiting_for_input",
-                   gr.update(interactive=True), gr.update(), gr.update())
-            return
-
-        try:
-            chunk = q.get_nowait()
-            if chunk is None: break
+    # ---------------  get model settings  ----------------------------
+    model_settings = get_model_settings(temporary.MODEL_NAME)
+    
+    # ---------------  streaming  -------------------------------------
+    interaction_phase = "generating_response"
+    _cancel_event.clear()
+    
+    response_complete = False
+    accumulated_response = "AI-Chat:\n"
+    
+    try:
+        for chunk in get_response_stream(
+            session_log=session_log,
+            settings=model_settings,
+            web_search_enabled=web_search_enabled,
+            search_results=search_results,
+            cancel_event=_cancel_event,
+            llm_state=llm_state,
+            models_loaded_state=models_loaded_state
+        ):
+            if _cancel_event.is_set() or cancel_flag:
+                session_log[-1]['content'] = accumulated_response + "\n\n[Generation cancelled]"
+                context_injector.clear_temporary_input()
+                yield (session_log, "Generation cancelled.",
+                       *update_action_buttons("waiting_for_input"),
+                       False, loaded_files, "waiting_for_input",
+                       gr.update(interactive=True), gr.update(), gr.update())
+                return
+            
             if chunk == "<CANCELLED>":
-                session_log = session_log[:-2] if len(session_log)>=2 else session_log
-                context_injector.clear_temporary_input()
-                has_history = len(session_log)>0
-                yield (session_log, "Cancelled",
-                       *update_action_buttons("waiting_for_input", has_history=has_history),
-                       False, loaded_files, "waiting_for_input",
-                       gr.update(interactive=True), gr.update(), gr.update())
-                return
-            if isinstance(chunk, str) and chunk.startswith("Error:"):
-                error_occurred = True
-                session_log[-1]['content'] = f"AI-Chat:\n{chunk}"
-                context_injector.clear_temporary_input()
-                has_history = len(session_log)>0
-                yield (session_log, f"⚠️ {chunk}",
-                       *update_action_buttons("waiting_for_input", has_history=has_history),
-                       False, loaded_files, "waiting_for_input",
-                       gr.update(interactive=True), gr.update(), gr.update())
-                return
+                break
+                
+            accumulated_response += chunk
+            session_log[-1]['content'] = accumulated_response
+            
+            yield (session_log, "Generating response...",
+                   *update_action_buttons(interaction_phase),
+                   cancel_flag, loaded_files, interaction_phase,
+                   gr.update(), gr.update(), gr.update())
+        
+        response_complete = True
+        
+    except Exception as e:
+        error_occurred = True
+        error_msg = f"\n\n[Error: {str(e)}]"
+        session_log[-1]['content'] = accumulated_response + error_msg
+        print(f"[ERROR] Response generation failed: {e}")
 
-            visible_resp += chunk
-            session_log[-1]['content'] = visible_resp.strip()
-            if time.time()-last >= 0.05:
-                yield (session_log, "Generating response...",
-                       *update_action_buttons(interaction_phase, has_history=has_history),
-                       cancel_flag, loaded_files, interaction_phase,
-                       gr.update(), gr.update(), gr.update())
-                last = time.time()
-        except queue.Empty:
-            if thread.is_alive(): await asyncio.sleep(0.01)
-            else: break
+    # ---------------  extract visible response  ----------------------
+    visible_resp = accumulated_response.replace("AI-Chat:\n", "", 1).strip()
+    
+    # Remove thinking tags for speech
+    visible_resp = re.sub(r'<think>.*?</think>', '', visible_resp, flags=re.DOTALL)
+    visible_resp = re.sub(r'<\|channel\|>analysis.*?(?:<\|end\|>|<\|channel\|>final)', '', visible_resp, flags=re.DOTALL)
+    visible_resp = re.sub(r'<\|[^>]+\|>', '', visible_resp)
+    
+    # Remove "Thinking...." lines
+    lines = visible_resp.split('\n')
+    filtered_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
+            continue
+        filtered_lines.append(line)
+    visible_resp = '\n'.join(filtered_lines).strip()
 
     # ---------------  speech  ----------------------------------------
-    if speech_enabled and visible_resp:
+    if speech_enabled and visible_resp and response_complete:
         interaction_phase = "speaking"
         yield (session_log, "Speaking response...",
-               *update_action_buttons(interaction_phase, has_history=has_history),
+               *update_action_buttons(interaction_phase),
                cancel_flag, loaded_files, interaction_phase,
                gr.update(), gr.update(), gr.update())
+        
         try:
-            speech = re.sub(r'^AI-Chat:\s*', '', visible_resp, flags=re.I|re.M)
-            lines = speech.split('\n')
-            filt = [L for L in lines if not (L.strip().startswith("Thinking") and
-                                             all(c in '.… ' for c in L.strip()[8:]))]
-            speech = '\n'.join(filt).strip()
-            if speech:
-                chunks = utility.chunk_text_for_speech(speech, 500)
-                for ch in chunks:
-                    if _cancel_event.is_set() or cancel_flag: break
-                    utility.speak_text(ch); await asyncio.sleep(0.5)
+            chunks = utility.chunk_text_for_speech(visible_resp, max_chars=500)
+            for chunk in chunks:
+                if _cancel_event.is_set() or cancel_flag:
+                    break
+                utility.speak_text(chunk)
+                await asyncio.sleep(0.1)
         except Exception as e:
-            print(f"Speech error: {e}")
+            print(f"[TTS] Speech error: {e}")
 
-    # ---------------  wrap-up  ---------------------------------------
-    try:
-        utility.save_session_history(session_log, temporary.session_attached_files)
-    except Exception as e:
-        print(f"[SESSION] save error: {e}")
-
-    temporary.session_attached_files.clear()
+    # ---------------  cleanup  ---------------------------------------
     context_injector.clear_temporary_input()
-
+    
+    # ---------------  wrap-up  ---------------------------------------
     interaction_phase = "waiting_for_input"
     cleared_files = []
-    has_history = len(session_log)>0
 
     yield (session_log,
            "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
-           *update_action_buttons("waiting_for_input", has_history=has_history),
+           *update_action_buttons(interaction_phase),
            False, cleared_files, interaction_phase,
            gr.update(interactive=True, value=""),
            gr.update(value=web_search_enabled),
@@ -945,8 +880,8 @@ def launch_interface():
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=10)
                             # Normal mode buttons
-                            action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=True)
-                            action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1, visible=True)
+                            action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=False)
+                            action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1, visible=False)
                             # Active mode buttons
                             action_buttons["rethink_prompt"] = gr.Button("Rethink Prompt", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=False)
                             action_buttons["cancel_input"] = gr.Button("Cancel Input", variant="stop", elem_classes=["send-button-red"], scale=1, visible=False)
