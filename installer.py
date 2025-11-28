@@ -226,11 +226,16 @@ def build_config(backend: str) -> dict:
         }
     }
     
-    # FIX: Add llama-cli paths for both Vulkan options
+    # FIX: Add llama-cli paths for both Vulkan options with relative paths
     if backend in ["Vulkan GPU", "Force Vulkan GPU"] and info["cli_path"]:
-        config["model_settings"]["llama_cli_path"] = str(BASE_DIR / info["cli_path"])
+        # Use relative paths with platform-specific separators
+        if PLATFORM == "windows":
+            config["model_settings"]["llama_cli_path"] = ".\\data\\llama-vulkan-bin\\llama-cli.exe"
+        else:  # Linux
+            config["model_settings"]["llama_cli_path"] = "./data/llama-vulkan-bin/llama-cli"
+        
         if info["dest"]:
-            config["model_settings"]["llama_bin_path"] = info["dest"]
+            config["model_settings"]["llama_bin_path"] = "data/llama-vulkan-bin"
     
     return config
 
