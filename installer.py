@@ -191,8 +191,8 @@ def build_config(backend: str) -> dict:
     """Build configuration with CPU-Only or Vulkan settings"""
     info = BACKEND_OPTIONS[backend]
     
-    # FIX: Determine backend type correctly
-    if backend == "Vulkan GPU":
+    # FIX: Handle all three backend options correctly
+    if backend in ["Vulkan GPU", "Force Vulkan GPU"]:
         backend_type = "Vulkan"
         vulkan_available = True
         vram_size = 8192
@@ -222,12 +222,12 @@ def build_config(backend: str) -> dict:
             "session_log_height": 500,
             "cpu_threads": 4,
             "vulkan_available": vulkan_available,
-            "backend_type": backend_type  # CRITICAL: This was missing proper assignment
+            "backend_type": backend_type
         }
     }
     
-    # FIX: Only add llama-cli paths for Vulkan backend
-    if backend == "Vulkan GPU" and info["cli_path"]:
+    # FIX: Add llama-cli paths for both Vulkan options
+    if backend in ["Vulkan GPU", "Force Vulkan GPU"] and info["cli_path"]:
         config["model_settings"]["llama_cli_path"] = str(BASE_DIR / info["cli_path"])
         if info["dest"]:
             config["model_settings"]["llama_bin_path"] = info["dest"]
@@ -837,8 +837,7 @@ def download_extract_backend(backend: str) -> bool:
         return False
     finally:
         temp_zip.unlink(missing_ok=True)
-
-
+        
 # Backend selection
 def select_backend_type() -> str:
     """Show simplified 2-option menu"""
