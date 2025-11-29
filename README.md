@@ -148,7 +148,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 | Early GPT-4 (compare stats)                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
 | Early GPT-4o (compare stats)                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
 | [gpt-oss-20b](https://huggingface.co/unsloth/gpt-oss-20b-GGUF) (20B)      | 84.1%  | 58.1%   | 96.0-98.7%   | 71.5%    | ~42.5%    | 85.3%           | N/A   |
-| [Huihui-gpt-oss-20b-BF16-abliterated-v2-GGUF](https://huggingface.co/mradermacher/Huihui-gpt-oss-20b-BF16-abliterated-v2-GGUF) (20B)      | ~84.1%  | ~58.1%   | ~96.0-98.7%   | ~71.5%    | ~42.5%    | ~85.3%           | N/A   |
+| [Huihui-gpt-oss-20b-BF16-abliterated-v2-GGUF](https://huggingface.co/mradermacher/Huihui-gpt-oss-20b-BF16-abliterated-v2-GGUF) (15B)      | ~84.1%  | ~58.1%   | ~96.0-98.7%   | ~71.5%    | ~42.5%    | ~85.3%           | N/A   |
 | [Apriel-1.5-15b-Thinker-GGUF](https://huggingface.co/jobist/Apriel-1.5-15b-Thinker-Q5_K_M-GGUF) (20B)      | ???  | ???   | ???  | ???   | ???    | ???           | ???   |
 
 <details>
