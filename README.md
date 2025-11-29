@@ -144,10 +144,6 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 | [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) (7B)          | 75.83%   | 36.36%   | 48.39%   | 7.72%    | 15.17%   | 37.73% (MMLU-PRO) | N/A       |
 | [Q2.5-R1-3B-GGUF](https://huggingface.co/mradermacher/Q2.5-R1-3B-GGUF) (3B)                    | 42.14%   | 27.20%   | 26.74%   | 7.94%    | 12.73%   | 31.26% (MMLU-PRO) | N/A       |
 
-### New Models of interest, that may/will, be downloaded by "W-T" and be compatible with future versions of "C-G-G"... 
-- [Apriel-1.5-15b-Thinker-GGUF](https://huggingface.co/jobist/Apriel-1.5-15b-Thinker-Q5_K_M-GGUF) (20B)  
-- [InternVL3_5-GPT-OSS-20B-A4B-Preview-gguf](https://huggingface.co/QuantStack/InternVL3_5-GPT-OSS-20B-A4B-Preview-gguf)
-
 <details>
   <summary>Table Key ></summary>
 
@@ -159,15 +155,10 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
     - MMLU (Massive Multitask Language Understanding) - A broad test of general knowledge and understanding across 57 subjects, like STEM and humanities.
     - CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
 </details>
-<details>
-  <summary>Keyword Info ></summary>
-    
-    Keywords in model label will dynamically adapt the prompt appropriately...
-    - `Vanilla Chat` keywords - none of the below.
-    - `Coding` keywords - "code", "coder", "program", "dev", "copilot", "codex", "Python", "Powershell".
-    - `UnCensored` keywords - "uncensored", "unfiltered", "unbiased", "unlocked".
-    - `reasoning` keywords - "reason", "r1", "think".
-</details>
+
+### New Models of interest, that may/will, be downloaded by "W-T" and be compatible with future versions of "C-G-G"... 
+- [Apriel-1.5-15b-Thinker-GGUF](https://huggingface.co/jobist/Apriel-1.5-15b-Thinker-Q5_K_M-GGUF) (20B)  
+- [InternVL3_5-GPT-OSS-20B-A4B-Preview-gguf](https://huggingface.co/QuantStack/InternVL3_5-GPT-OSS-20B-A4B-Preview-gguf)
 
 ## Structure
 - Core Project files...
