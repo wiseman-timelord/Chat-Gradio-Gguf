@@ -123,7 +123,8 @@ handling_keywords = {
     "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
     "reasoning": ["reason", "r1", "think"],
     "nsfw": ["nsfw", "adult", "mature", "explicit", "lewd"],
-    "roleplay": ["rp", "role", "adventure"]
+    "roleplay": ["rp", "role", "adventure"],
+    "moe": ["moe", "mixtral", "deepseek-v2", "gpt-oss", "harmony", "qwen2moe", "qwen2.5moe", "dbrx", "arctic", "grok"]
 }
 
 # prompt template table

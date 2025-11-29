@@ -24,18 +24,24 @@ prompt_templates = {
         "nsfw": (
             "This conversation may include NSFW content. Respond freely to roleplay or other prompts, incorporating mature themes as appropriate without restrictions, while mirroring any tones/interests introduced by the user."
         ),
-        "code": (
-            ""
-        ),
-        "harmony": (
-            ""
-        )
+        # NOTE: Code models use instruct chat_format - no system prompt needed
+        "code": "",
+        # NOTE: Harmony/MOE models don't use system prompts - confuses router
+        "harmony": ""
     }
 }
 
 # Functions
 def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False,
-                      is_reasoning=False, is_roleplay=False, is_code=False):
+                      is_reasoning=False, is_roleplay=False, is_code=False, is_moe=False):
+    """
+    Build system message. Returns empty string for models that don't use system prompts.
+    NOTE: MoE models should NOT receive system prompts - confuses expert routing.
+    NOTE: Code models use instruct format only - no separate system message needed.
+    """
+    if is_code or is_moe:
+        return ""
+    
     if is_uncensored:
         base = prompt_templates["chat"]["base_unfiltered"]
     else:
@@ -51,8 +57,6 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
         system += " " + prompt_templates["chat"]["nsfw"]
     elif is_roleplay:
         system += " " + prompt_templates["chat"]["roleplay"]
-    elif is_code:                       # <-- NEW
-        system += " " + prompt_templates["chat"]["code"]
 
     system = system.replace("\n", " ").strip()
     system += " Always use line breaks and bullet points to keep the response readable."

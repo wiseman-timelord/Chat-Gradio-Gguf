@@ -59,6 +59,7 @@ def get_model_settings(model_name):
     is_nsfw = any(keyword in model_name_lower for keyword in handling_keywords["nsfw"])
     is_code = any(keyword in model_name_lower for keyword in handling_keywords["code"])
     is_roleplay = any(keyword in model_name_lower for keyword in handling_keywords["roleplay"])
+    is_moe = any(keyword in model_name_lower for keyword in handling_keywords["moe"])
     return {
         "category": "chat",
         "is_uncensored": is_uncensored,
@@ -66,6 +67,7 @@ def get_model_settings(model_name):
         "is_nsfw": is_nsfw,
         "is_code": is_code,
         "is_roleplay": is_roleplay,
+        "is_moe": is_moe,
         "detected_keywords": [kw for kw in handling_keywords if any(k in model_name_lower for k in handling_keywords[kw])]
     }
 
@@ -461,8 +463,10 @@ def update_thinking_phase_constants():
 def build_messages_with_context_management(session_log, system_message, context_size):
     """
     Build the message list for the LLM.
-    The system message is injected **once**, at the very first turn,
-    and is never shown in the Gradio chat log.
+    The system message is injected **once**, at the very first turn, UNLESS:
+    - Model is Harmony/MOE (is_harmony=True) - these models don't use system prompts
+    - Model is code-focused (is_code=True) - these use instruct format only
+    System message is never shown in the Gradio chat log.
     """
     max_tokens   = context_size
     system_tokens= len(system_message) // 4
@@ -472,9 +476,11 @@ def build_messages_with_context_management(session_log, system_message, context_
 
     messages = []
 
-    # ---------------  ONE-TIME SYSTEM PROMPT  ---------------
-    # Only add system message on the first user turn (empty session_log)
-    if not session_log:
+    # ---------------  CONDITIONAL SYSTEM PROMPT  ---------------
+    # Only add system message if:
+    # 1. First turn (empty session_log)
+    # 2. System message is not empty (Harmony/Code models return "")
+    if not session_log and system_message:
         messages.append({"role": "system", "content": system_message})
 
     # ---------------  HISTORY  ---------------
@@ -507,6 +513,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     - Standard <think></think> tags
     - gpt-oss Harmony format with channels
     - Hybrid models that may or may not use thinking
+    - Filters out repeating AI-Chat: name tags
     """
     import re
     from scripts import temporary
@@ -523,7 +530,8 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         web_search_enabled=web_search_enabled,
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False),
-        is_code=settings.get("is_code", False)
+        is_code=settings.get("is_code", False),
+        is_moe=settings.get("is_moe", False)
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     if web_search_enabled and search_results:
@@ -565,6 +573,16 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         
         raw_output += token
         output_buffer += token
+
+        # ===== NEW: Strip repeating AI-Chat: tags =====
+        # Remove standalone "AI-Chat:" lines at start of buffer or after newlines
+        # Pattern matches: start of string OR newline, followed by optional whitespace, 
+        # then "AI-Chat:", then optional whitespace, then newline OR end
+        output_buffer = re.sub(r'(^|\n)\s*AI-Chat:\s*(\n|$)', r'\1', output_buffer)
+        
+        # Also strip if it appears mid-line (catches inline repetitions)
+        output_buffer = re.sub(r'\bAI-Chat:\s*\n\s*', '', output_buffer)
+        # ==============================================
 
         # Skip initial whitespace until we see real content
         if not seen_real_text:
