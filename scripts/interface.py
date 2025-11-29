@@ -333,22 +333,22 @@ def start_new_session(models_loaded):
 
     if not models_loaded:
         return (
-            [],                                # session_log
+            [],
             "Load model first on Configuration page...",
             gr.update(interactive=False),
             gr.update()
         )
 
-    # --- NEW: wipe the real attached-files list ---
     temporary.session_attached_files.clear()
-    # ---------------------------------------------
-
     temporary.current_session_id = None
     temporary.session_label = ""
     temporary.SESSION_ACTIVE = True
 
+    # Use non-priority status
+    temporary.set_status("New session ready", console=False, priority=False)
+
     return (
-        [],                                # session_log
+        [],
         "Type input and click Send to begin...",
         gr.update(interactive=True),
         gr.update()
@@ -1070,7 +1070,7 @@ def launch_interface():
 
         # Store reference to shared status state for temporary module
         temporary.shared_status_state = shared_status_state
-        temporary.set_status = lambda msg, console=False: set_status_both(msg, console)
+        temporary.set_status = lambda msg, console=False, priority=False: set_status_both(msg, console)
 
         model_folder_state.change(
             fn=lambda f: setattr(temporary, "MODEL_FOLDER", f) or None,

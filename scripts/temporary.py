@@ -54,7 +54,9 @@ DATA_DIR = None  # Will be set by launcher.py
 llm = None
 SPEECH_ENABLED = False
 LLAMA_CLI_PATH = None  # will be set by launcher.py
-global_status = None 
+global_status = None
+_status_lock = None  # Tracks which operation has status priority
+_status_lock_message = ""  # Message to restore when lock releases 
 PRINT_RAW_OUTPUT = False
 SHOW_THINK_PHASE = False 
 THINK_MIN_CHARS_BEFORE_CLOSE = 100
@@ -409,9 +411,36 @@ class ContextInjector:
 context_injector = ContextInjector()
 
 # Status Updater
-def set_status(msg: str, console=False):
-    """Update both UI and/or terminal"""
+def set_status(msg: str, console=False, priority=False):
+    """
+    Update both UI and/or terminal with priority support.
+    
+    Args:
+        msg: Status message to display
+        console: Also print to terminal
+        priority: If True, locks status bar (e.g., for model loading)
+    """
+    global _status_lock, _status_lock_message
+    
+    # If status is locked and this is not a priority message, store for later
+    if _status_lock and not priority:
+        if console or len(msg.split()) > 3:
+            print(f"[Background] {msg}")
+        return
+    
+    # Priority message - acquire lock
+    if priority and "Load" in msg or "loading" in msg.lower():
+        _status_lock = "model_loading"
+        _status_lock_message = msg
+    
+    # Release lock on completion
+    if _status_lock == "model_loading" and ("ready" in msg.lower() or "error" in msg.lower()):
+        _status_lock = None
+        _status_lock_message = ""
+    
+    # Update UI
     if global_status is not None:
         global_status.value = msg
+    
     if console or len(msg.split()) > 3:
         print(msg)

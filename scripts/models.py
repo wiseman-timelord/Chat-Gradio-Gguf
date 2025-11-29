@@ -261,7 +261,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     from pathlib import Path
     import traceback
 
-    save_config()  # persist any pending config changes
+    save_config()
 
     if model in {"Select_a_model...", "No models found"}:
         return "Select a model to load.", False, llm_state, models_loaded_state
@@ -283,13 +283,12 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
     )
 
-    # ----------  CPU-thread logic  ----------
     use_cpu_threads = True
     if "vulkan" in BACKEND_TYPE.lower():
         use_cpu_threads = True
         if CPU_THREADS is None or CPU_THREADS < 2:
             CPU_THREADS = 2
-    elif gpu_layers >= num_layers:   # full GPU offload
+    elif gpu_layers >= num_layers:
         use_cpu_threads = False
     else:
         use_cpu_threads = True
@@ -302,17 +301,15 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     if models_loaded_state:
         unload_models(llm_state, models_loaded_state)
 
-    # >>>>>>>  NEW: clamp context to avoid impossible allocations  <<<<<<<
     if BACKEND_TYPE.lower() == "cpu-only":
         MAX_CTX = 32_768
     elif "vulkan" in BACKEND_TYPE.lower():
         MAX_CTX = 48_768 if vram_size >= 12_288 else 32_768
-    else:                       # CUDA / HIP full off-load
+    else:
         MAX_CTX = CONTEXT_SIZE
     effective_ctx = min(CONTEXT_SIZE, MAX_CTX)
-    # ---------------------------------------------------------------------
 
-    set_status(f"Load {gpu_layers}/{num_layers}", console=True)
+    set_status(f"Loading model {gpu_layers}/{num_layers} layers...", console=True, priority=True)
 
     kwargs = dict(
         model_path=str(model_path),
@@ -330,22 +327,19 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     try:
         new_llm = Llama(**kwargs)
-        # smoke test
         new_llm.create_chat_completion(
             messages=[{"role": "user", "content": "Hello"}],
             max_tokens=BATCH_SIZE,
             stream=False
         )
 
-        # commit state only on success
         import scripts.temporary as tmp
         tmp.GPU_LAYERS = gpu_layers
         tmp.MODEL_NAME = model
-        set_status("Model ready", console=True)
+        set_status("Model ready", console=True, priority=True)
         return "Model ready", True, new_llm, True
 
     except Exception as e:
-        # rollback on failure
         import scripts.temporary as tmp
         tmp.GPU_LAYERS = 0
         tb = traceback.format_exc()
@@ -354,6 +348,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
                f"CPU Threads: {CPU_THREADS if use_cpu_threads else 'none'}\n"
                f"{tb}")
         print(err)
+        set_status(f"Model load error", console=True, priority=True)
         return err, False, None, False
 
 def calculate_single_model_gpu_layers_with_layers(
