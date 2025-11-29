@@ -59,6 +59,7 @@ _status_lock = None  # Tracks which operation has status priority
 _status_lock_message = ""  # Message to restore when lock releases 
 PRINT_RAW_OUTPUT = False
 SHOW_THINK_PHASE = False 
+BLEEP_ON_EVENTS = False
 THINK_MIN_CHARS_BEFORE_CLOSE = 100
 
 # CPU Configuration

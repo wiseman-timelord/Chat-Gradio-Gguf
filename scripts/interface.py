@@ -773,7 +773,8 @@ async def conversation_interface(
     # ---------------  wrap-up  ---------------------------------------
     interaction_phase = "waiting_for_input"
     cleared_files = []
-
+    utility.beep()
+    
     yield (session_log,
            "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
            *update_action_buttons(interaction_phase),
@@ -1021,6 +1022,10 @@ def launch_interface():
                             )
                             config_components["print_raw"] = gr.Checkbox(
                                 label="Print Debug Model Output", value=temporary.PRINT_RAW_OUTPUT
+                            )
+
+                            config_components["bleep_events"] = gr.Checkbox(
+                                label="Bleep Upon Major Events", value=temporary.BLEEP_ON_EVENTS
                             )
 
                     with gr.Row(elem_classes=["clean-elements"]):

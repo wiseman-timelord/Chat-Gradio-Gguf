@@ -49,6 +49,20 @@ def filter_operational_content(text):
     text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
     return text.strip()
 
+def beep():
+    """PC speaker beep if enabled and possible."""
+    if not getattr(temporary, "BLEEP_ON_EVENTS", False):
+        return
+    try:
+        if temporary.PLATFORM == "windows":
+            import winsound
+            winsound.Beep(1000, 120)
+        else:
+            # Linux fallback: terminal bell
+            print("\a", end="", flush=True)
+    except Exception:
+        pass
+
 def detect_cpu_config():
     """Detect CPU configuration and set thread options"""
     try:

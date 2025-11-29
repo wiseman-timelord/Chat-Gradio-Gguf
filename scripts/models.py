@@ -337,6 +337,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         tmp.GPU_LAYERS = gpu_layers
         tmp.MODEL_NAME = model
         set_status("Model ready", console=True, priority=True)
+        utility.beep()   
         return "Model ready", True, new_llm, True
 
     except Exception as e:

@@ -89,7 +89,8 @@ def load_config():
         "session_log_height": "SESSION_LOG_HEIGHT",
         "print_raw_output": "PRINT_RAW_OUTPUT",
         "show_think_phase": "SHOW_THINK_PHASE",
-        "cpu_threads": "CPU_THREADS"
+        "cpu_threads": "CPU_THREADS",
+        "bleep_on_events": "BLEEP_ON_EVENTS"   # <-- NEW
     }.items():
         if key in model_settings:
             setattr(temporary, attr, model_settings[key])
@@ -108,9 +109,6 @@ def load_config():
     return "Configuration loaded."
 
 def save_config():
-    """
-    Save current settings from temporary.py to persistent.json.
-    """
     config = {
         "model_settings": {
             "model_dir": temporary.MODEL_FOLDER,
@@ -132,7 +130,8 @@ def save_config():
             "print_raw_output": temporary.PRINT_RAW_OUTPUT,
             "cpu_threads": temporary.CPU_THREADS,
             "vulkan_available": getattr(temporary, "VULKAN_AVAILABLE", False),
-            "backend_type": getattr(temporary, "BACKEND_TYPE", "CPU-Only")  # ADD THIS LINE
+            "backend_type": getattr(temporary, "BACKEND_TYPE", "CPU-Only"),
+            "bleep_on_events": getattr(temporary, "BLEEP_ON_EVENTS", False)   # <-- NEW
         }
     }
 
