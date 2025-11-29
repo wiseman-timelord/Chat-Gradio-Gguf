@@ -133,7 +133,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 | Early GPT-4 (compare stats)                            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
 | Early GPT-4o (compare stats)                           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
 | [gpt-oss-20b](https://huggingface.co/unsloth/gpt-oss-20b-GGUF) (20B)      | 84.1%  | 58.1%   | 96.0-98.7%   | 71.5%    | ~42.5%    | 85.3%           | N/A   |
-| [Huihui-gpt-oss-20b-BF16-abliterated-v2-GGUF](https://huggingface.co/mradermacher/Huihui-gpt-oss-20b-BF16-abliterated-v2-GGUF) (15B)      | ~84.1%  | ~58.1%   | ~96.0-98.7%   | ~71.5%    | ~42.5%    | ~85.3%           | N/A   |
+| [Huihui-gpt-oss-20b-BF16-abliterated-v2-GGUF](https://huggingface.co/mradermacher/Huihui-gpt-oss-20b-BF16-abliterated-v2-GGUF) (20B)      | ~84.1%  | ~58.1%   | ~96.0-98.7%   | ~71.5%    | ~42.5%    | ~85.3%           | N/A   |
 | [Qwen3-30B-A3B-GGUF](https://huggingface.co/mradermacher/Qwen3-30B-A3B-abliterated-GGUF) (30B)      | N/A  | N/A   | 80.4%   | 65.8%   | 72.2%   | N/A           | N/A   |
 | [Lamarckvergence-14B-GGUF](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) (14B)          | 76.56%   | 50.33%   | 54.00%   | 15.10%   | 16.34%   | 47.59% (MMLU-PRO) | N/A       |
 | qwen2.5-test-32b-it (32B)              | 78.89%   | 58.28%   | 59.74%   | 15.21%   | 19.13%   | 52.95%            | 29.54 kg  |
