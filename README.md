@@ -73,11 +73,11 @@ Launching Gradio Interface...
 
 
 
-
     1) x64 CPU Only (No GPU Option)
 
     2) Vulkan GPU with x64 CPU Backend
 
+    3) Forced Vulkan Install
 
 
 
