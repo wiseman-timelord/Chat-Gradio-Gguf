@@ -784,6 +784,7 @@ async def conversation_interface(
            gr.update(value=speech_enabled))
 
 # Core Gradio Interface    
+# Core Gradio Interface
 def launch_interface():
     """Launch the Gradio interface for the Chat-Gradio-Gguf conversationbot with unified status bars."""
     global demo
@@ -796,15 +797,14 @@ def launch_interface():
     from scripts import temporary, utility, models
     from scripts.temporary import (
         MODEL_NAME, SESSION_ACTIVE,
-        MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, 
+        MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT,
         MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
         VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
         ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
         REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
         ATTACH_SLOT_OPTIONS
     )
-    from launcher import shutdown_program
-       
+
     with gr.Blocks(
         title="Conversation-Gradio-Gguf",
         css="""
@@ -817,17 +817,14 @@ def launch_interface():
         .send-button-orange { background-color: orange !important; color: white !important }
         .send-button-red { background-color: red !important; color: white !important }
         .scrollable .message { white-space: pre-wrap; word-break: break-word; }
-        .send-button-green { background-color: green !important; color: white !important }
-        .send-button-orange { background-color: orange !important; color: white !important }
-        .send-button-red { background-color: red !important; color: white !important }
         """
     ) as demo:
         temporary.demo = demo
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
-        
+
         # SHARED STATUS STATE - ensures both tabs show same status
         shared_status_state = gr.State("Ready")
-        
+
         states = dict(
             attached_files=gr.State([]),
             models_loaded=gr.State(False),
@@ -836,7 +833,8 @@ def launch_interface():
             interaction_phase=gr.State("waiting_for_input"),
             is_reasoning_model=gr.State(False),
             selected_panel=gr.State("History"),
-            expanded_state=gr.State(True),
+            left_expanded_state=gr.State(True),
+            right_expanded_state=gr.State(True),
             model_settings=gr.State({}),
             web_search_enabled=gr.State(False),
             speech_enabled=gr.State(False)
@@ -854,8 +852,9 @@ def launch_interface():
         with gr.Tabs():
             with gr.Tab("Interaction"):
                 with gr.Row():
+                    # LEFT COLLAPSIBLE PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as left_column_expanded:
-                        toggle_button_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary")
+                        toggle_button_left_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary")
                         panel_toggle = gr.Radio(choices=["History", "Attach"], label="Panel Mode", value="History")
                         with gr.Group(visible=False) as attach_group:
                             attach_files = gr.UploadButton("Add Attach Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
@@ -863,32 +862,40 @@ def launch_interface():
                         with gr.Group(visible=True) as history_slots_group:
                             start_new_session_btn = gr.Button("Start New Session...", variant="secondary")
                             buttons = dict(session=[gr.Button(f"History Slot {i+1}", variant="huggingface", visible=False) for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS)])
-                    
+
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as left_column_collapsed:
-                        toggle_button_collapsed = gr.Button("CGG", variant="secondary", elem_classes=["clean-elements-normbot"])
+                        toggle_button_left_collapsed = gr.Button("CGG", variant="secondary", elem_classes=["clean-elements-normbot"])
                         new_session_btn_collapsed = gr.Button("New", variant="secondary", elem_classes=["clean-elements-normbot"])
                         add_attach_files_collapsed = gr.UploadButton("Add", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
-                    
+
+                    # CENTER COLUMN (Session Log & User Input)
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
                         conversation_components["session_log"] = gr.Chatbot(label="Session Log", height=temporary.SESSION_LOG_HEIGHT, elem_classes=["scrollable"], type="messages")
-                        with gr.Row(elem_classes=["clean_elements"]):
-                            action_buttons = {}
-                            action_buttons["web_search"] = gr.Button("🌐 Web-Search", variant="secondary", scale=1)
-                            action_buttons["speech"] = gr.Button("🔊 Speech", variant="secondary", scale=1)
                         initial_max_lines = max(3, int(((temporary.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
                         temporary.USER_INPUT_MAX_LINES = initial_max_lines
                         conversation_components["user_input"] = gr.Textbox(label="User Input", lines=3, max_lines=initial_max_lines, interactive=False, placeholder="Enter text here...")
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=10)
-                            # Normal mode buttons
                             action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=False)
                             action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1, visible=False)
-                            # Active mode buttons
                             action_buttons["rethink_prompt"] = gr.Button("Rethink Prompt", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=False)
                             action_buttons["cancel_input"] = gr.Button("Cancel Input", variant="stop", elem_classes=["send-button-red"], scale=1, visible=False)
 
+                    # RIGHT COLLAPSIBLE PANEL
+                    with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as right_column_expanded:
+                        with gr.Row(elem_classes=["clean-elements"]):
+                            toggle_button_right_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary", scale=10)
+                        gr.Markdown("**Tools / Options**")
+                        with gr.Row(elem_classes=["clean-elements"]):
+                            action_buttons["web_search"] = gr.Button("🌐 Web-Search", variant="secondary", scale=1)
+                            action_buttons["speech"] = gr.Button("🔊 Speech", variant="secondary", scale=1)
+
+                    with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as right_column_collapsed:
+                        toggle_button_right_collapsed = gr.Button("CGG", variant="secondary", elem_classes=["clean-elements-normbot"])
+                        action_buttons["web_search_collapsed"] = gr.Button("🌐", variant="secondary", elem_classes=["clean-elements-normbot"])
+                        action_buttons["speech_collapsed"] = gr.Button("🔊", variant="secondary", elem_classes=["clean-elements-normbot"])
+
                 with gr.Row():
-                    # INTERACTION TAB STATUS BAR - uses shared state
                     interaction_global_status = gr.Textbox(
                         value="Ready",
                         label="Status",
@@ -897,24 +904,20 @@ def launch_interface():
                         elem_classes=["clean-elements"],
                         scale=20
                     )
-
-                    exit_config = gr.Button(
+                    exit_interaction = gr.Button(
                          "Exit Program", variant="stop", elem_classes=["double-height"], scale=1
                     )
-                    exit_config.click(
+                    exit_interaction.click(
                         fn=shutdown_program,
                         inputs=[states["llm"], states["models_loaded"],
                                 conversation_components["session_log"], states["attached_files"]],
                         outputs=[]
                     ).then(lambda: gr.update(visible=False), outputs=[demo])
 
-
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("**Hardware**")
-
                     with gr.Row(elem_classes=["clean-elements"]) as cpu_row:
                         if temporary.VULKAN_AVAILABLE:
                             backend_radio = gr.Radio(
@@ -928,35 +931,31 @@ def launch_interface():
                                 value="CPU-Only",
                                 label="Execution Mode",
                             )
-
                         cpu_labs = [c["label"] for c in utility.get_cpu_info()] or ["Default CPU"]
                         cpu_opts = ["Select..."] + cpu_labs if len(cpu_labs) > 1 else cpu_labs
                         def_cpu = temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_opts else cpu_opts[0]
                         config_components["cpu"] = gr.Dropdown(
-                            choices=cpu_opts, 
-                            label="CPU Device", 
-                            value=def_cpu, 
+                            choices=cpu_opts,
+                            label="CPU Device",
+                            value=def_cpu,
                             scale=4
                         )
                         max_threads = max(temporary.CPU_THREAD_OPTIONS or [8])
                         config_components["cpu_threads"] = gr.Slider(
-                            minimum=1, 
+                            minimum=1,
                             maximum=max(temporary.CPU_THREAD_OPTIONS or [8]),
-                            value=temporary.CPU_THREADS or min(4, max(temporary.CPU_THREAD_OPTIONS or [8])), 
-                            step=1, 
-                            label="Threads", 
-                            scale=3, 
+                            value=temporary.CPU_THREADS or min(4, max(temporary.CPU_THREAD_OPTIONS or [8])),
+                            step=1,
+                            label="Threads",
+                            scale=3,
                             info=f"Available: {max(temporary.CPU_THREAD_OPTIONS or [8])} threads",
                             interactive=True
                         )
-
                     gpu_row_visible = temporary.VULKAN_AVAILABLE and temporary.BACKEND_TYPE == "Vulkan"
-
                     with gr.Row(elem_classes=["clean-elements"], visible=gpu_row_visible) as gpu_row:
                         gpus = utility.get_available_gpus()
                         gpu_choices = ["Auto-Select"] + gpus if gpus != ["CPU Only"] else ["CPU Only"]
                         def_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in gpu_choices else gpu_choices[0]
-
                         config_components["gpu"] = gr.Dropdown(
                             choices=gpu_choices, label="GPU", value=def_gpu, scale=10
                         )
@@ -966,15 +965,12 @@ def launch_interface():
                             value=temporary.VRAM_SIZE,
                             scale=5,
                         )
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("**Model**")
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         avail = temporary.AVAILABLE_MODELS or get_available_models()
                         mods = ["Select_a_model..."] + [m for m in avail if m != "Select_a_model..."]
                         def_m = temporary.MODEL_NAME if temporary.MODEL_NAME in mods else (mods[1] if len(mods) > 1 else mods[0])
-
                         config_components["model_path"] = gr.Textbox(
                             label="Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=10
                         )
@@ -982,7 +978,6 @@ def launch_interface():
                             choices=mods, label="File", value=def_m, scale=10, info=".gguf"
                         )
                         keywords_display = gr.Textbox(label="Features", interactive=False, scale=10)
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["ctx"] = gr.Dropdown(
                             temporary.CTX_OPTIONS, label="Context", value=temporary.CONTEXT_SIZE, scale=5
@@ -996,16 +991,13 @@ def launch_interface():
                         config_components["repeat"] = gr.Dropdown(
                             temporary.REPEAT_OPTIONS, label="Repeat", value=temporary.REPEAT_PENALTY, scale=5
                         )
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         browse = gr.Button("📁 Browse", variant="secondary")
                         config_components["load"] = gr.Button("💾 Load", variant="primary")
                         config_components["inspect"] = gr.Button("🔍 Inspect")
                         config_components["unload"] = gr.Button("🗑️ Unload", variant="stop")
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("**Program**")
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components["max_hist"] = gr.Dropdown(
                             temporary.HISTORY_SLOT_OPTIONS, label="Sessions", value=temporary.MAX_HISTORY_SLOTS, scale=5
@@ -1023,17 +1015,13 @@ def launch_interface():
                             config_components["print_raw"] = gr.Checkbox(
                                 label="Print Debug Model Output", value=temporary.PRINT_RAW_OUTPUT
                             )
-
                             config_components["bleep_events"] = gr.Checkbox(
                                 label="Bleep Upon Major Events", value=temporary.BLEEP_ON_EVENTS
                             )
-
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["save_settings"] = gr.Button("💾 Save Settings", variant="primary")
                         config_components["delete_all_history"] = gr.Button("🗑️ Clear All History", variant="stop")
-
                     with gr.Row(elem_classes=["clean-elements"]):
-                        # CONFIGURATION TAB STATUS BAR - uses shared state
                         config_global_status = gr.Textbox(
                             value="Ready",
                             label="Status",
@@ -1042,7 +1030,6 @@ def launch_interface():
                             elem_classes=["clean-elements"],
                             scale=20
                         )
-
                         exit_config = gr.Button(
                              "Exit Program", variant="stop", elem_classes=["double-height"], scale=1
                         )
@@ -1070,7 +1057,6 @@ def launch_interface():
         # Update temporary.set_status to use shared state
         def set_status_both(message, console=False):
             """Update both status bars via shared state"""
-            # Update the shared state which triggers the change event
             return message
 
         # Store reference to shared status state for temporary module
@@ -1197,13 +1183,11 @@ def launch_interface():
             inputs=[],
             outputs=buttons["session"]
         ).then(
-            # ← NEW: Clear attachment UI slots after response completes
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
             outputs=attach_slots + [attach_files]
         )
 
-        # Rethink prompt button
         action_buttons["rethink_prompt"].click(
             fn=handle_rethink_prompt,
             inputs=[conversation_components["session_log"], conversation_components["user_input"]],
@@ -1226,7 +1210,6 @@ def launch_interface():
             ]
         )
 
-        # Cancel input button
         action_buttons["cancel_input"].click(
             fn=handle_cancel_input,
             inputs=[conversation_components["session_log"]],
@@ -1255,24 +1238,38 @@ def launch_interface():
             outputs=[shared_status_state]
         )
 
+        def toggle_web_search(enabled):
+            new_state = not enabled
+            variant = "primary" if new_state else "secondary"
+            return new_state, gr.update(variant=variant), gr.update(variant=variant)
+
         action_buttons["web_search"].click(
-            fn=lambda enabled: not enabled,
+            fn=toggle_web_search,
             inputs=[states["web_search_enabled"]],
-            outputs=[states["web_search_enabled"]]
-        ).then(
-            lambda state: gr.update(variant="primary" if state else "secondary"),
-            inputs=[states["web_search_enabled"]], 
-            outputs=[action_buttons["web_search"]]
+            outputs=[states["web_search_enabled"], action_buttons["web_search"], action_buttons["web_search_collapsed"]]
         )
 
+        action_buttons["web_search_collapsed"].click(
+            fn=toggle_web_search,
+            inputs=[states["web_search_enabled"]],
+            outputs=[states["web_search_enabled"], action_buttons["web_search"], action_buttons["web_search_collapsed"]]
+        )
+
+        def toggle_speech(enabled):
+            new_state = not enabled
+            variant = "primary" if new_state else "secondary"
+            return new_state, gr.update(variant=variant), gr.update(variant=variant)
+
         action_buttons["speech"].click(
-            fn=lambda enabled: not enabled,
+            fn=toggle_speech,
             inputs=[states["speech_enabled"]],
-            outputs=[states["speech_enabled"]]
-        ).then(
-            lambda state: gr.update(variant="primary" if state else "secondary"),
-            inputs=[states["speech_enabled"]], 
-            outputs=[action_buttons["speech"]]
+            outputs=[states["speech_enabled"], action_buttons["speech"], action_buttons["speech_collapsed"]]
+        )
+
+        action_buttons["speech_collapsed"].click(
+            fn=toggle_speech,
+            inputs=[states["speech_enabled"]],
+            outputs=[states["speech_enabled"], action_buttons["speech"], action_buttons["speech_collapsed"]]
         )
 
         action_buttons["edit_previous"].click(
@@ -1399,7 +1396,7 @@ def launch_interface():
         config_components["save_settings"].click(
             fn=lambda: settings.save_config(),
             inputs=[],
-            outputs=[shared_status_state] 
+            outputs=[shared_status_state]
         )
 
         config_components["delete_all_history"].click(
@@ -1438,30 +1435,63 @@ def launch_interface():
             outputs=attach_slots + [attach_files]
         )
 
-        def toggle_expanded_state(current_state):
+        # ----------------------------------------------------------
+        #  LEFT PANEL TOGGLE
+        # ----------------------------------------------------------
+        def toggle_left_expanded_state(current_state):
             return not current_state
 
-        toggle_button_expanded.click(
-            fn=toggle_expanded_state,
-            inputs=[states["expanded_state"]],
-            outputs=[states["expanded_state"]]
+        toggle_button_left_expanded.click(
+            fn=toggle_left_expanded_state,
+            inputs=[states["left_expanded_state"]],
+            outputs=[states["left_expanded_state"]]
         )
 
-        toggle_button_collapsed.click(
-            fn=toggle_expanded_state,
-            inputs=[states["expanded_state"]],
-            outputs=[states["expanded_state"]]
+        toggle_button_left_collapsed.click(
+            fn=toggle_left_expanded_state,
+            inputs=[states["left_expanded_state"]],
+            outputs=[states["left_expanded_state"]]
         )
 
-        states["expanded_state"].change(
+        states["left_expanded_state"].change(
             fn=lambda state: [
                 gr.update(visible=state),
                 gr.update(visible=not state)
             ],
-            inputs=[states["expanded_state"]],
+            inputs=[states["left_expanded_state"]],
             outputs=[left_column_expanded, left_column_collapsed]
         )
 
+        # ----------------------------------------------------------
+        #  RIGHT PANEL TOGGLE
+        # ----------------------------------------------------------
+        def toggle_right_expanded_state(current_state):
+            return not current_state
+
+        toggle_button_right_expanded.click(
+            fn=toggle_right_expanded_state,
+            inputs=[states["right_expanded_state"]],
+            outputs=[states["right_expanded_state"]]
+        )
+
+        toggle_button_right_collapsed.click(
+            fn=toggle_right_expanded_state,
+            inputs=[states["right_expanded_state"]],
+            outputs=[states["right_expanded_state"]]
+        )
+
+        states["right_expanded_state"].change(
+            fn=lambda state: [
+                gr.update(visible=state),
+                gr.update(visible=not state)
+            ],
+            inputs=[states["right_expanded_state"]],
+            outputs=[right_column_expanded, right_column_collapsed]
+        )
+
+        # ----------------------------------------------------------
+        #  INITIAL LOAD
+        # ----------------------------------------------------------
         demo.load(
             fn=get_initial_model_value,
             inputs=[],
@@ -1493,7 +1523,7 @@ def launch_interface():
             fn=lambda: gr.update(value=temporary.PRINT_RAW_OUTPUT),
             inputs=[],
             outputs=[config_components["print_raw"]]
-        ).then(                                               #  <-- NEW
+        ).then(
             fn=lambda: gr.update(value=temporary.SHOW_THINK_PHASE),
             inputs=[],
             outputs=[config_components["show_think_phase"]]
@@ -1503,16 +1533,10 @@ def launch_interface():
             outputs=[keywords_display]
         )
 
-        shared_status_state.change(
-            fn=lambda status: status,
-            inputs=[shared_status_state],
-            outputs=[shared_status_state]
-        )
-    
     demo.launch(
-        server_name="127.0.0.1", 
-        server_port=7860, 
-        show_error=True, 
+        server_name="127.0.0.1",
+        server_port=7860,
+        show_error=True,
         show_api=False,
         share=False,
     )
