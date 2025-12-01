@@ -855,7 +855,7 @@ def launch_interface():
                 with gr.Row():
                     # LEFT COLLAPSIBLE PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as left_column_expanded:
-                        toggle_button_left_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary")
+                        toggle_button_left_expanded = gr.Button(">-------<", variant="secondary")
                         gr.Markdown("**Dynamic Panel**")
                         panel_toggle = gr.Radio(choices=["History", "Attachments"], label="", value="History")
                         with gr.Group(visible=False) as attach_group:
@@ -866,7 +866,7 @@ def launch_interface():
                             buttons = dict(session=[gr.Button(f"History Slot {i+1}", variant="huggingface", visible=False) for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS)])
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as left_column_collapsed:
-                        toggle_button_left_collapsed = gr.Button("CGG", variant="secondary", elem_classes=["clean-elements-normbot"])
+                        toggle_button_left_collapsed = gr.Button("<--->", variant="secondary", elem_classes=["clean-elements-normbot"])
                         new_session_btn_collapsed = gr.Button("New", variant="secondary", elem_classes=["clean-elements-normbot"])
                         add_attach_files_collapsed = gr.UploadButton("Add", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
 
@@ -886,14 +886,14 @@ def launch_interface():
                     # RIGHT COLLAPSIBLE PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as right_column_expanded:
                         with gr.Row(elem_classes=["clean-elements"]):
-                            toggle_button_right_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary", scale=10)
+                            toggle_button_right_expanded = gr.Button(">-------<", variant="secondary", scale=10)
                         gr.Markdown("**Tools / Options**")
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["web_search"] = gr.Button("🌐 Web-Search", variant="secondary", scale=1)
                             action_buttons["speech"] = gr.Button("🔊 Speech", variant="secondary", scale=1)
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as right_column_collapsed:
-                        toggle_button_right_collapsed = gr.Button("CGG", variant="secondary", elem_classes=["clean-elements-normbot"])
+                        toggle_button_right_collapsed = gr.Button("<--->", variant="secondary", elem_classes=["clean-elements-normbot"])
                         action_buttons["web_search_collapsed"] = gr.Button("🌐", variant="secondary", elem_classes=["clean-elements-normbot"])
                         action_buttons["speech_collapsed"] = gr.Button("🔊", variant="secondary", elem_classes=["clean-elements-normbot"])
 
