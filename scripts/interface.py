@@ -37,10 +37,10 @@ from scripts.models import (
 # Functions...
 def get_panel_choices(model_settings):
     """Determine available panel choices based on model settings."""
-    choices = ["History", "Attach"]
+    choices = ["History", "Attachments"]
     if model_settings.get("is_nsfw", False) or model_settings.get("is_roleplay", False):
-        if "Attach" in choices:
-            choices.remove("Attach")
+        if "Attachments" in choices:
+            choices.remove("Attachments")
     return choices
 
 def update_panel_choices(model_settings, current_panel):
@@ -60,9 +60,9 @@ def update_panel_on_mode_change(current_panel):
     Returns:
         tuple: Updates for panel toggle, attach group, history group, and selected panel state.
     """
-    choices = ["History", "Attach"]
+    choices = ["History", "Attachments"]
     new_panel = current_panel if current_panel in choices else choices[0]
-    attach_visible = new_panel == "Attach"
+    attach_visible = new_panel == "Attachments"
     history_visible = new_panel == "History"
     return (
         gr.update(choices=choices, value=new_panel),
@@ -817,6 +817,7 @@ def launch_interface():
         .send-button-orange { background-color: orange !important; color: white !important }
         .send-button-red { background-color: red !important; color: white !important }
         .scrollable .message { white-space: pre-wrap; word-break: break-word; }
+        .hide-label { display:none !important; }
         """
     ) as demo:
         temporary.demo = demo
@@ -855,12 +856,13 @@ def launch_interface():
                     # LEFT COLLAPSIBLE PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as left_column_expanded:
                         toggle_button_left_expanded = gr.Button("Chat-Gradio-Gguf", variant="secondary")
-                        panel_toggle = gr.Radio(choices=["History", "Attach"], label="Panel Mode", value="History")
+                        gr.Markdown("**Dynamic Panel**")
+                        panel_toggle = gr.Radio(choices=["History", "Attachments"], label="", value="History")
                         with gr.Group(visible=False) as attach_group:
-                            attach_files = gr.UploadButton("Add Attach Files", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
+                            attach_files = gr.UploadButton("Add Attach Files..", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
                             attach_slots = [gr.Button("Attach Slot Free", variant="huggingface", visible=False) for _ in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS)]
                         with gr.Group(visible=True) as history_slots_group:
-                            start_new_session_btn = gr.Button("Start New Session...", variant="secondary")
+                            start_new_session_btn = gr.Button("Start New Session..", variant="secondary")
                             buttons = dict(session=[gr.Button(f"History Slot {i+1}", variant="huggingface", visible=False) for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS)])
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as left_column_collapsed:
@@ -1346,7 +1348,7 @@ def launch_interface():
 
         states["selected_panel"].change(
             fn=lambda panel: (
-                gr.update(visible=panel == "Attach"),
+                gr.update(visible=panel == "Attachments"),
                 gr.update(visible=panel == "History")
             ),
             inputs=[states["selected_panel"]],
