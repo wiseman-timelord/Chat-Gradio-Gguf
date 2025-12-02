@@ -464,87 +464,120 @@ def format_session_id(session_id):
     except ValueError:
         return session_id
 
-def update_action_buttons(phase):
+def update_action_buttons(phase, has_ai_response=False):
     """
     Update all action buttons based on interaction phase.
-    Returns tuple of 5 button updates.
+    
+    Args:
+        phase: Current interaction phase
+        has_ai_response: Whether there's at least one AI response in session
+    
+    Returns:
+        tuple: Updates for 5 buttons (send, edit, copy, cancel_input, cancel_response)
     """
-    # Check if there's history by looking at the actual session state
-    # This will be set by the conversation_interface function
-    from scripts import temporary
-    
-    # Simple check - if we're past initial state, we likely have history
-    has_history = phase != "waiting_for_input" or temporary.SESSION_ACTIVE
-    
     if phase == "waiting_for_input":
+        # New session or after cancelled input - only Send shows
+        if not has_ai_response:
+            return (
+                gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False)
+            )
+        # Has history - show Send + Edit + Copy
+        else:
+            return (
+                gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
+                gr.update(visible=True),
+                gr.update(visible=True),
+                gr.update(visible=False),
+                gr.update(visible=False)
+            )
+    
+    elif phase == "input_submitted":
+        # After user submits, before model starts - only Cancel Input
         return (
-            gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
-            gr.update(visible=has_history),
-            gr.update(visible=has_history),
             gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(value="Cancel Input", variant="primary", interactive=True, visible=True),
             gr.update(visible=False)
         )
-    elif phase == "afterthought_countdown":
-        return (
-            gr.update(value="..Please Wait..", variant="secondary", elem_classes=["send-button-orange"], interactive=False),
-            gr.update(visible=False),
-            gr.update(visible=False),
-            gr.update(visible=True),
-            gr.update(visible=True)
-        )
+    
     elif phase == "generating_response":
+        # Model is generating - only Cancel Response (red)
         return (
-            gr.update(value="..Wait For Response..", variant="secondary", elem_classes=["send-button-red"], interactive=False),
             gr.update(visible=False),
             gr.update(visible=False),
-            gr.update(visible=True),
-            gr.update(visible=True)
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(value="Cancel Response", variant="stop", elem_classes=["send-button-red"], interactive=True, visible=True)
         )
+    
     elif phase == "speaking":
+        # TTS playing - only Cancel Response
         return (
-            gr.update(value="..Outputting Speech", variant="secondary", elem_classes=["send-button-orange"], interactive=False),
             gr.update(visible=False),
             gr.update(visible=False),
-            gr.update(visible=True),
-            gr.update(visible=True)
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(value="Cancel Response", variant="stop", elem_classes=["send-button-red"], interactive=True, visible=True)
         )
+    
     else:
+        # Fallback - safe default
         return (
             gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
-            gr.update(visible=has_history),
-            gr.update(visible=has_history),
+            gr.update(visible=has_ai_response),
+            gr.update(visible=has_ai_response),
             gr.update(visible=False),
             gr.update(visible=False)
         )
 
-def handle_rethink_prompt(session_log, user_input):
-    """Cancel and preserve input for editing."""
+
+def handle_cancel_input(session_log, user_input):
+    """
+    Cancel input submission - restore to pre-submission state.
+    User input is preserved for editing.
+    """
+    # Remove the user message and empty AI message we added
     if len(session_log) >= 2:
         new_log = session_log[:-2]
+        has_history = len(new_log) > 0 and any(msg['role'] == 'assistant' for msg in new_log)
     else:
         new_log = session_log
+        has_history = False
     
     return (
         new_log,
         "Input cancelled - edit and resend",
-        user_input,  # Preserve input
+        user_input,  # Preserve the input
         False,
-        "waiting_for_input"
+        "waiting_for_input",
+        has_history
     )
 
-def handle_cancel_input(session_log):
-    """Cancel and clear input completely."""
-    if len(session_log) >= 2:
-        new_log = session_log[:-2]
-    else:
-        new_log = session_log
+def handle_cancel_response(session_log):
+    """
+    Cancel response generation - keep partial response if any.
+    Clear input box and await user action.
+    """
+    has_history = len(session_log) > 0 and any(msg['role'] == 'assistant' for msg in session_log)
+    
+    # Mark the last response as cancelled if it exists
+    if session_log and session_log[-1]['role'] == 'assistant':
+        current_content = session_log[-1]['content']
+        if not current_content.endswith("[Cancelled]"):
+            session_log[-1]['content'] = current_content + "\n\n[Cancelled]"
     
     return (
-        new_log,
-        "Input cancelled",
+        session_log,
+        "Response cancelled",
         "",  # Clear input
         False,
-        "waiting_for_input"
+        "waiting_for_input",
+        has_history
     )
 
 def update_cpu_threads_display():
@@ -583,7 +616,7 @@ async def conversation_interface(
     user_input, session_log, loaded_files,
     is_reasoning_model, cancel_flag, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
-    speech_enabled
+    speech_enabled, has_ai_response_state
 ):
     """
     FIXED: All variables defined before use, proper phase management
@@ -639,13 +672,18 @@ async def conversation_interface(
     else:
         session_log.append({'role':'user','content':f"User:\n{processed_input}"})
     session_log.append({'role':'assistant','content':"AI-Chat:\n"})
-    interaction_phase = "afterthought_countdown"
+    
+    # Determine if we have AI history for button states
+    has_ai_response = len([m for m in session_log[:-1] if m['role'] == 'assistant']) > 0
+    
+    interaction_phase = "input_submitted"
 
     yield (session_log,
            "Processing..."+(" (RAG)" if input_is_large else ""),
-           *update_action_buttons(interaction_phase),
+           *update_action_buttons(interaction_phase, has_ai_response),
            cancel_flag, loaded_files, interaction_phase,
-           gr.update(interactive=False), gr.update(), gr.update())
+           gr.update(interactive=False), gr.update(), gr.update(),
+           has_ai_response)
 
     # ---------------  countdown  -------------------------------------
     for i in range(count_secs, -1, -1):
@@ -653,15 +691,17 @@ async def conversation_interface(
             session_log.pop(); session_log.pop()
             context_injector.clear_temporary_input()
             yield (session_log, "Input cancelled.",
-                   *update_action_buttons("waiting_for_input"),
+                   *update_action_buttons("waiting_for_input", has_ai_response),
                    False, loaded_files, "waiting_for_input",
-                   gr.update(interactive=True, value=original_input), gr.update(), gr.update())
+                   gr.update(interactive=True, value=original_input), gr.update(), gr.update(),
+                   has_ai_response)
             return
 
         yield (session_log, f"{random.choice(indicators)} Processing... {i}s",
-               *update_action_buttons(interaction_phase),
+               *update_action_buttons(interaction_phase, has_ai_response),
                cancel_flag, loaded_files, interaction_phase,
-               gr.update(), gr.update(), gr.update())
+               gr.update(), gr.update(), gr.update(),
+               has_ai_response)
         await asyncio.sleep(1)
 
     # ---------------  web search  ------------------------------------
@@ -876,12 +916,17 @@ def launch_interface():
                         initial_max_lines = max(3, int(((temporary.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
                         temporary.USER_INPUT_MAX_LINES = initial_max_lines
                         conversation_components["user_input"] = gr.Textbox(label="User Input", lines=3, max_lines=initial_max_lines, interactive=False, placeholder="Enter text here...")
+                        
+                        # Add has_ai_response state
+                        states["has_ai_response"] = gr.State(False)
+
+                        # --- re-designed dynamic button row ---
                         with gr.Row(elem_classes=["clean-elements"]):
-                            action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=10)
-                            action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=False)
-                            action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1, visible=False)
-                            action_buttons["rethink_prompt"] = gr.Button("Rethink Prompt", variant="secondary", elem_classes=["send-button-orange"], scale=1, visible=False)
-                            action_buttons["cancel_input"] = gr.Button("Cancel Input", variant="stop", elem_classes=["send-button-red"], scale=1, visible=False)
+                            action_buttons["action"]           = gr.Button("Send Input",     variant="secondary", elem_classes=["send-button-green"], scale=10)
+                            action_buttons["edit_previous"]    = gr.Button("Edit Previous",  variant="secondary", elem_classes=["send-button-orange"],  scale=1, visible=False)
+                            action_buttons["copy_response"]    = gr.Button("Copy Output",    variant="huggingface",                                scale=1, visible=False)
+                            action_buttons["cancel_input"]     = gr.Button("Cancel Input",   variant="primary",  elem_classes=["send-button-red"],  scale=1, visible=False)
+                            action_buttons["cancel_response"]  = gr.Button("Cancel Response",variant="stop",     elem_classes=["send-button-red"],  scale=1, visible=False)
 
                     # RIGHT COLLAPSIBLE PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as right_column_expanded:
@@ -1163,7 +1208,8 @@ def launch_interface():
                 states["interaction_phase"],
                 states["llm"],
                 states["models_loaded"],
-                states["speech_enabled"]
+                states["speech_enabled"],
+                states["has_ai_response"]        # ← add this line
             ],
             outputs=[
                 conversation_components["session_log"],
@@ -1171,7 +1217,6 @@ def launch_interface():
                 action_buttons["action"],
                 action_buttons["edit_previous"],
                 action_buttons["copy_response"],
-                action_buttons["rethink_prompt"],
                 action_buttons["cancel_input"],
                 states["cancel_flag"],
                 states["attached_files"],
@@ -1190,47 +1235,50 @@ def launch_interface():
             outputs=attach_slots + [attach_files]
         )
 
-        action_buttons["rethink_prompt"].click(
-            fn=handle_rethink_prompt,
+
+        action_buttons["cancel_input"].click(
+            fn=handle_cancel_input,
             inputs=[conversation_components["session_log"], conversation_components["user_input"]],
             outputs=[
                 conversation_components["session_log"],
                 shared_status_state,
                 conversation_components["user_input"],
                 states["cancel_flag"],
-                states["interaction_phase"]
+                states["interaction_phase"],
+                states["has_ai_response"]
             ]
         ).then(
             fn=update_action_buttons,
-            inputs=[states["interaction_phase"]],
+            inputs=[states["interaction_phase"], states["has_ai_response"]],
             outputs=[
                 action_buttons["action"],
                 action_buttons["edit_previous"],
                 action_buttons["copy_response"],
-                action_buttons["rethink_prompt"],
-                action_buttons["cancel_input"]
+                action_buttons["cancel_input"],
+                action_buttons["cancel_response"]
             ]
         )
 
-        action_buttons["cancel_input"].click(
-            fn=handle_cancel_input,
+        action_buttons["cancel_response"].click(
+            fn=handle_cancel_response,
             inputs=[conversation_components["session_log"]],
             outputs=[
                 conversation_components["session_log"],
                 shared_status_state,
                 conversation_components["user_input"],
                 states["cancel_flag"],
-                states["interaction_phase"]
+                states["interaction_phase"],
+                states["has_ai_response"]
             ]
         ).then(
             fn=update_action_buttons,
-            inputs=[states["interaction_phase"]],
+            inputs=[states["interaction_phase"], states["has_ai_response"]],
             outputs=[
                 action_buttons["action"],
                 action_buttons["edit_previous"],
                 action_buttons["copy_response"],
-                action_buttons["rethink_prompt"],
-                action_buttons["cancel_input"]
+                action_buttons["cancel_input"],
+                action_buttons["cancel_response"]
             ]
         )
 
