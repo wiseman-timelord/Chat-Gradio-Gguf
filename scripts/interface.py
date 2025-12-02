@@ -810,25 +810,20 @@ async def conversation_interface(
     # ---------------  cleanup  ---------------------------------------
     context_injector.clear_temporary_input()
     
-    # ---------------  save session if response completed  ------------
-    if (
-        response_complete
-        and not error_occurred
-        and temporary.SESSION_ACTIVE
-        and session_log
-        and isinstance(loaded_files, list)
-    ):
-        try:
-            save_session_history(session_log, loaded_files)
-            print(f"[SESSION] Auto-saved session: {temporary.session_label}")
-        except Exception as e:
-            print(f"[SESSION] Failed to auto-save session: {e}")
-
     # ---------------  wrap-up  ---------------------------------------
     interaction_phase = "waiting_for_input"
     cleared_files = []
     utility.beep()
-  
+    
+    yield (session_log,
+           "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
+           *update_action_buttons(interaction_phase),
+           False, cleared_files, interaction_phase,
+           gr.update(interactive=True, value=""),
+           gr.update(value=web_search_enabled),
+           gr.update(value=speech_enabled))
+
+# Core Gradio Interface    
 # Core Gradio Interface
 def launch_interface():
     """Launch the Gradio interface for the Chat-Gradio-Gguf conversationbot with unified status bars."""
@@ -1214,7 +1209,7 @@ def launch_interface():
                 states["llm"],
                 states["models_loaded"],
                 states["speech_enabled"],
-                states["has_ai_response"]        # ← add this line
+                states["has_ai_response"]        # ← 11th
             ],
             outputs=[
                 conversation_components["session_log"],
@@ -1229,6 +1224,7 @@ def launch_interface():
                 conversation_components["user_input"],
                 states["web_search_enabled"],
                 states["speech_enabled"]
+                # ← DO NOT add states["has_ai_response"] here
             ]
         ).then(
             fn=update_session_buttons,
