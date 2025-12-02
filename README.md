@@ -96,8 +96,8 @@ Selecton; Menu Options 1-3, Abandon Install = A:
 - Llama.Cpp - Options here for, Vulkan or X64. This has been limited to what I can test (though its possible to replace llama.cpp with for eg Cuda12).
 - Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [Qwen1.5-0.5B-Chat-GGUF](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GGUF), as this will be super-fast and confirm basic operation, otherwise see models section.
-- Suitable GPU - Gpu may be, Main or Compute, with VRam 2-64GB. It must have Vulkan capability/drivers (if the installer contains files referring to Vulkan).  
-- System Ram - Your system should cover the size of the model not able to be covered by the GPU (ie 2GB card with 4GB model, would require ~2.5GB additional system memory, or if no GPU then ~4.5GB spare System Ram).
+- Suitable GPU - Gpu may be, Main or Compute, with VRam selection 756MB-64GB. It must have Vulkan capability/drivers (if the installer contains files referring to Vulkan).  
+- System Ram - Your system should cover the size of the model not able to be covered by the GPU (ie, 4GB card for 4B model in Q6_K, 16GB card for 16b model in Q6_K).
 
 ### Instructions (W = Windows, U = Ubuntu)...
 - Pre-Installation...
