@@ -540,7 +540,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         messages.insert(1, {"role": msg["role"], "content": clean_content(msg["role"], msg["content"])})
     messages.append({"role": "user", "content": clean_content("user", session_log[-2]["content"])})
 
-    yield "AI-Chat:\n"
+    # DO NOT yield "AI-Chat:\n" here - already in session_log from conversation_interface()
 
     # State tracking
     in_thinking_phase = False
@@ -548,7 +548,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     output_buffer = ""
     seen_real_text = False
     char_count_since_think_start = 0
-    raw_output = "AI-Chat:\n"
+    raw_output = ""  # Don't include "AI-Chat:\n" prefix here either
 
     # Detect if this is a gpt-oss model
     is_gpt_oss = 'gpt-oss' in temporary.MODEL_NAME.lower() if temporary.MODEL_NAME else False
@@ -571,10 +571,8 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         raw_output += token
         output_buffer += token
 
-        # ===== NEW: Strip repeating AI-Chat: tags =====
+        # ===== Strip repeating AI-Chat: tags =====
         # Remove standalone "AI-Chat:" lines at start of buffer or after newlines
-        # Pattern matches: start of string OR newline, followed by optional whitespace, 
-        # then "AI-Chat:", then optional whitespace, then newline OR end
         output_buffer = re.sub(r'(^|\n)\s*AI-Chat:\s*(\n|$)', r'\1', output_buffer)
         
         # Also strip if it appears mid-line (catches inline repetitions)
@@ -676,7 +674,6 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 continue
             
             # gpt-oss: Check for channel switch to 'final'
-            # Pattern: <|end|><|start|>assistant<|channel|>final
             if char_count_since_think_start >= temporary.THINK_MIN_CHARS_BEFORE_CLOSE:
                 # Look for <|end|> followed by anything ending with <|channel|>final
                 end_pattern = r'<\|end\|>.*?<\|channel\|>final'
