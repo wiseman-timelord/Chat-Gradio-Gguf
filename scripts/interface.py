@@ -866,7 +866,7 @@ def launch_interface():
                             buttons = dict(session=[gr.Button(f"History Slot {i+1}", variant="huggingface", visible=False) for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS)])
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as left_column_collapsed:
-                        toggle_button_left_collapsed = gr.Button("<--->", variant="secondary", elem_classes=["clean-elements-normbot"])
+                        toggle_button_left_collapsed = gr.Button("<-->", variant="secondary", elem_classes=["clean-elements-normbot"])
                         new_session_btn_collapsed = gr.Button("New", variant="secondary", elem_classes=["clean-elements-normbot"])
                         add_attach_files_collapsed = gr.UploadButton("Add", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
 
@@ -893,7 +893,7 @@ def launch_interface():
                             action_buttons["speech"] = gr.Button("🔊 Speech", variant="secondary", scale=1)
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as right_column_collapsed:
-                        toggle_button_right_collapsed = gr.Button("<--->", variant="secondary", elem_classes=["clean-elements-normbot"])
+                        toggle_button_right_collapsed = gr.Button("<-->", variant="secondary", elem_classes=["clean-elements-normbot"])
                         action_buttons["web_search_collapsed"] = gr.Button("🌐", variant="secondary", elem_classes=["clean-elements-normbot"])
                         action_buttons["speech_collapsed"] = gr.Button("🔊", variant="secondary", elem_classes=["clean-elements-normbot"])
 
