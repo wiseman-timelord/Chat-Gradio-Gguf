@@ -351,11 +351,11 @@ def start_new_session(models_loaded):
         [],
         "Type input and click Send to begin...",
         gr.update(interactive=True),
-        gr.update()
+        gr.update(),
+        False  # ADD THIS: has_ai_response=False for new session
     )
 
 def load_session_by_index(index):
-    """Load a session by index from saved sessions."""
     sessions = utility.get_saved_sessions()
     if index < len(sessions):
         session_file = sessions[index]
@@ -363,8 +363,12 @@ def load_session_by_index(index):
         temporary.current_session_id = session_id
         temporary.session_label = label
         temporary.SESSION_ACTIVE = True
-        return history, attached_files, f"Loaded session: {label}"
-    return [], [], "No session to load"
+        
+        # Calculate has_ai_response
+        has_ai_response = len([m for m in history if m['role'] == 'assistant']) > 0
+        
+        return history, attached_files, f"Loaded session: {label}", has_ai_response
+    return [], [], "No session to load", False
 
 def copy_last_response(session_log):
     """Copy last AI response to clipboard, excluding thinking phase"""
@@ -616,7 +620,7 @@ async def conversation_interface(
     user_input, session_log, loaded_files,
     is_reasoning_model, cancel_flag, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
-    speech_enabled, has_ai_response_state
+    speech_enabled, has_ai_response_state  # ADD THIS 11th PARAMETER
 ):
     """
     FIXED: All variables defined before use, proper phase management
@@ -629,19 +633,24 @@ async def conversation_interface(
     import asyncio, queue, threading, random, re, time
     from pathlib import Path
 
+    # 
+    
+    
     # ---------------  early guards  ----------------------------------
     if not models_loaded_state or not llm_state:
         yield (session_log, "Please load a model first.",
-               *update_action_buttons("waiting_for_input"),
+               *update_action_buttons("waiting_for_input", False),  # ADD False
                False, loaded_files, "waiting_for_input",
-               gr.update(), gr.update(), gr.update())
+               gr.update(), gr.update(), gr.update(),
+               False)  # ADD THIS 14th value
         return
 
     if not user_input.strip():
         yield (session_log, "No input provided.",
-               *update_action_buttons("waiting_for_input"),
+               *update_action_buttons("waiting_for_input", has_ai_response_state),  # Use state
                False, loaded_files, "waiting_for_input",
-               gr.update(), gr.update(), gr.update())
+               gr.update(), gr.update(), gr.update(),
+               has_ai_response_state)
         return
 
     # ---------------  initialize all variables  ----------------------
@@ -708,9 +717,10 @@ async def conversation_interface(
     search_results = None
     if web_search_enabled:
         yield (session_log, "🔍 Performing web search...",
-               *update_action_buttons(interaction_phase),
+               *update_action_buttons(interaction_phase, has_ai_response),  # ADD has_ai_response
                cancel_flag, loaded_files, interaction_phase,
-               gr.update(), gr.update(), gr.update())
+               gr.update(), gr.update(), gr.update(),
+               has_ai_response) 
         try:
             search_results = utility.web_search(user_input, num_results=6)
             status = "✓ Web search complete"
@@ -719,9 +729,10 @@ async def conversation_interface(
             status = "⚠️ Web search failed"
         
         yield (session_log, status,
-               *update_action_buttons(interaction_phase),
+               *update_action_buttons(interaction_phase, has_ai_response),  # ADD has_ai_response
                cancel_flag, loaded_files, interaction_phase,
-               gr.update(), gr.update(), gr.update())
+               gr.update(), gr.update(), gr.update(),
+               has_ai_response) 
 
     # ---------------  get model settings  ----------------------------
     model_settings = get_model_settings(temporary.MODEL_NAME)
@@ -747,9 +758,10 @@ async def conversation_interface(
                 session_log[-1]['content'] = accumulated_response + "\n\n[Generation cancelled]"
                 context_injector.clear_temporary_input()
                 yield (session_log, "Generation cancelled.",
-                       *update_action_buttons("waiting_for_input"),
+                       *update_action_buttons("waiting_for_input", True),  # Will have response
                        False, loaded_files, "waiting_for_input",
-                       gr.update(interactive=True), gr.update(), gr.update())
+                       gr.update(interactive=True), gr.update(), gr.update(),
+                       True) 
                 return
             
             if chunk == "<CANCELLED>":
@@ -759,9 +771,10 @@ async def conversation_interface(
             session_log[-1]['content'] = accumulated_response
             
             yield (session_log, "Generating response...",
-                   *update_action_buttons(interaction_phase),
+                   *update_action_buttons(interaction_phase, has_ai_response),  # ADD has_ai_response
                    cancel_flag, loaded_files, interaction_phase,
-                   gr.update(), gr.update(), gr.update())
+                   gr.update(), gr.update(), gr.update(),
+                   has_ai_response)
         
         response_complete = True
         
@@ -793,9 +806,10 @@ async def conversation_interface(
     if speech_enabled and visible_resp and response_complete:
         interaction_phase = "speaking"
         yield (session_log, "Speaking response...",
-               *update_action_buttons(interaction_phase),
+               *update_action_buttons(interaction_phase, has_ai_response),  # ADD has_ai_response
                cancel_flag, loaded_files, interaction_phase,
-               gr.update(), gr.update(), gr.update())
+               gr.update(), gr.update(), gr.update(),
+               has_ai_response) 
         
         try:
             chunks = utility.chunk_text_for_speech(visible_resp, max_chars=500)
@@ -817,11 +831,12 @@ async def conversation_interface(
     
     yield (session_log,
            "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
-           *update_action_buttons(interaction_phase),
+           *update_action_buttons(interaction_phase, True),  # Now has response
            False, cleared_files, interaction_phase,
            gr.update(interactive=True, value=""),
            gr.update(value=web_search_enabled),
-           gr.update(value=speech_enabled))
+           gr.update(value=speech_enabled),
+           True) 
 
 # Core Gradio Interface    
 # Core Gradio Interface
@@ -1089,10 +1104,15 @@ def launch_interface():
 
         def handle_edit_previous(session_log):
             if len(session_log) < 2:
-                return session_log, gr.update(), "No previous input to edit."
+                return session_log, gr.update(), "No previous input to edit.", False
+            
             new_log = session_log[:-2]
             last_user_input = session_log[-2]['content'].replace("User:\n", "", 1)
-            return new_log, gr.update(value=last_user_input), "Previous input restored. Edit and resend."
+            
+            # Recalculate has_ai_response for remaining log
+            has_ai_response = len([m for m in new_log if m['role'] == 'assistant']) > 0
+            
+            return new_log, gr.update(value=last_user_input), "Previous input restored.", has_ai_response
 
         # Wire up shared status state to both status bars
         shared_status_state.change(
@@ -1127,7 +1147,9 @@ def launch_interface():
         start_new_session_btn.click(
             fn=start_new_session,
             inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], shared_status_state, conversation_components["user_input"], states["web_search_enabled"]]
+            outputs=[conversation_components["session_log"], shared_status_state, 
+                     conversation_components["user_input"], states["web_search_enabled"],
+                     states["has_ai_response"]]  # ADD THIS 5th output
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1141,7 +1163,9 @@ def launch_interface():
         new_session_btn_collapsed.click(
             fn=start_new_session,
             inputs=[states["models_loaded"]],
-            outputs=[conversation_components["session_log"], shared_status_state, conversation_components["user_input"], states["web_search_enabled"]]
+            outputs=[conversation_components["session_log"], shared_status_state, 
+                     conversation_components["user_input"], states["web_search_enabled"],
+                     states["has_ai_response"]]  # ADD THIS 5th output
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -1218,13 +1242,14 @@ def launch_interface():
                 action_buttons["edit_previous"],
                 action_buttons["copy_response"],
                 action_buttons["cancel_input"],
+                action_buttons["cancel_response"],  # This was missing in your list
                 states["cancel_flag"],
                 states["attached_files"],
                 states["interaction_phase"],
                 conversation_components["user_input"],
                 states["web_search_enabled"],
-                states["speech_enabled"]
-                # ← DO NOT add states["has_ai_response"] here
+                states["speech_enabled"],
+                states["has_ai_response"]  # ADD THIS
             ]
         ).then(
             fn=update_session_buttons,
@@ -1326,7 +1351,18 @@ def launch_interface():
         action_buttons["edit_previous"].click(
             fn=handle_edit_previous,
             inputs=[conversation_components["session_log"]],
-            outputs=[conversation_components["session_log"], conversation_components["user_input"], shared_status_state]
+            outputs=[conversation_components["session_log"], conversation_components["user_input"], 
+                     shared_status_state, states["has_ai_response"]]  # ADD THIS 4th output
+        ).then(
+            fn=update_action_buttons,
+            inputs=[gr.State("waiting_for_input"), states["has_ai_response"]],
+            outputs=[
+                action_buttons["action"],
+                action_buttons["edit_previous"],
+                action_buttons["copy_response"],
+                action_buttons["cancel_input"],
+                action_buttons["cancel_response"]
+            ]
         )
 
         attach_files.upload(
@@ -1341,9 +1377,10 @@ def launch_interface():
 
         for i, btn in enumerate(attach_slots):
             btn.click(
-                fn=lambda files, idx=i: eject_file(files, idx, True),
-                inputs=[states["attached_files"]],
-                outputs=[states["attached_files"], shared_status_state] + attach_slots + [attach_files]
+                fn=load_session_by_index,
+                inputs=[gr.State(value=i)],
+                outputs=[conversation_components["session_log"], states["attached_files"], 
+                         shared_status_state, states["has_ai_response"]]  # ADD THIS 4th output
             )
 
         for i, btn in enumerate(buttons["session"]):
