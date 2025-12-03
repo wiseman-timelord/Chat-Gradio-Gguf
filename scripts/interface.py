@@ -483,7 +483,7 @@ def update_action_buttons(phase, has_ai_response=False):
         # New session or after cancelled input - only Send shows
         if not has_ai_response:
             return (
-                gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
+                gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True, visible=True),
                 gr.update(visible=False),
                 gr.update(visible=False),
                 gr.update(visible=False),
@@ -492,7 +492,7 @@ def update_action_buttons(phase, has_ai_response=False):
         # Has history - show Send + Edit + Copy
         else:
             return (
-                gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
+                gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True, visible=True),
                 gr.update(visible=True),
                 gr.update(visible=True),
                 gr.update(visible=False),
@@ -532,7 +532,7 @@ def update_action_buttons(phase, has_ai_response=False):
     else:
         # Fallback - safe default
         return (
-            gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True),
+            gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True, visible=True),
             gr.update(visible=has_ai_response),
             gr.update(visible=has_ai_response),
             gr.update(visible=False),
