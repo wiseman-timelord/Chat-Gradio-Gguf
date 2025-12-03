@@ -336,7 +336,8 @@ def start_new_session(models_loaded):
             [],
             "Load model first on Configuration page...",
             gr.update(interactive=False),
-            gr.update()
+            gr.update(),
+            False  # has_ai_response=False for new session
         )
 
     temporary.session_attached_files.clear()
@@ -352,20 +353,21 @@ def start_new_session(models_loaded):
         "Type input and click Send to begin...",
         gr.update(interactive=True),
         gr.update(),
-        False  # ADD THIS: has_ai_response=False for new session
+        False  # has_ai_response=False for new session
     )
 
 def load_session_by_index(index):
     sessions = utility.get_saved_sessions()
     if index < len(sessions):
         session_file = sessions[index]
-        session_id, label, history, attached_files = utility.load_session_history(Path(HISTORY_DIR) / session_file)
+        session_path = Path(HISTORY_DIR) / session_file
+        session_id, label, history, attached_files = utility.load_session_history(session_path)
         temporary.current_session_id = session_id
         temporary.session_label = label
         temporary.SESSION_ACTIVE = True
         
-        # Calculate has_ai_response
-        has_ai_response = len([m for m in history if m['role'] == 'assistant']) > 0
+        # Calculate has_ai_response - check if there's any assistant message in history
+        has_ai_response = len([m for m in history if m.get('role') == 'assistant' and m.get('content', '').strip()]) > 0
         
         return history, attached_files, f"Loaded session: {label}", has_ai_response
     return [], [], "No session to load", False
@@ -1390,7 +1392,8 @@ def launch_interface():
             btn.click(
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
-                outputs=[conversation_components["session_log"], states["attached_files"], shared_status_state]
+                outputs=[conversation_components["session_log"], states["attached_files"], 
+                         shared_status_state, states["has_ai_response"]]  # Added has_ai_response state
             ).then(
                 fn=update_session_buttons,
                 inputs=[],
@@ -1399,6 +1402,16 @@ def launch_interface():
                 fn=lambda files: update_file_slot_ui(files, True),
                 inputs=[states["attached_files"]],
                 outputs=attach_slots + [attach_files]
+            ).then(
+                fn=lambda has_resp: update_action_buttons("waiting_for_input", has_resp),
+                inputs=[states["has_ai_response"]],
+                outputs=[
+                    action_buttons["action"],
+                    action_buttons["edit_previous"],
+                    action_buttons["copy_response"],
+                    action_buttons["cancel_input"],
+                    action_buttons["cancel_response"]
+                ]
             )
 
         panel_toggle.change(
