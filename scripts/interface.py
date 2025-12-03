@@ -1154,7 +1154,43 @@ def launch_interface():
             inputs=[states["models_loaded"]],
             outputs=[conversation_components["session_log"], shared_status_state, 
                      conversation_components["user_input"], states["web_search_enabled"],
-                     states["has_ai_response"]]  # ADD THIS 5th output
+                     states["has_ai_response"]]
+        ).then(
+            fn=update_action_buttons,
+            inputs=[gr.State("waiting_for_input"), states["has_ai_response"]],
+            outputs=[
+                action_buttons["action"],
+                action_buttons["edit_previous"],
+                action_buttons["copy_response"],
+                action_buttons["cancel_input"],
+                action_buttons["cancel_response"]
+            ]
+        ).then(
+            fn=update_session_buttons,
+            inputs=[],
+            outputs=buttons["session"]
+        ).then(
+            fn=lambda: [],
+            inputs=[],
+            outputs=[states["attached_files"]]
+        )
+
+        new_session_btn_collapsed.click(
+            fn=start_new_session,
+            inputs=[states["models_loaded"]],
+            outputs=[conversation_components["session_log"], shared_status_state, 
+                     conversation_components["user_input"], states["web_search_enabled"],
+                     states["has_ai_response"]]
+        ).then(
+            fn=update_action_buttons,
+            inputs=[gr.State("waiting_for_input"), states["has_ai_response"]],
+            outputs=[
+                action_buttons["action"],
+                action_buttons["edit_previous"],
+                action_buttons["copy_response"],
+                action_buttons["cancel_input"],
+                action_buttons["cancel_response"]
+            ]
         ).then(
             fn=update_session_buttons,
             inputs=[],
