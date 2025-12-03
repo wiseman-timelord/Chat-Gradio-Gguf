@@ -823,12 +823,16 @@ async def conversation_interface(
 
     # ---------------  cleanup  ---------------------------------------
     context_injector.clear_temporary_input()
-    
+
     # ---------------  wrap-up  ---------------------------------------
     interaction_phase = "waiting_for_input"
     cleared_files = []
     utility.beep()
-    
+
+    # >>> FIX: actually save the finished session <<<
+    from scripts.utility import save_session_history
+    save_session_history(session_log, loaded_files)
+
     yield (session_log,
            "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
            *update_action_buttons(interaction_phase, True),  # Now has response
@@ -836,9 +840,8 @@ async def conversation_interface(
            gr.update(interactive=True, value=""),
            gr.update(value=web_search_enabled),
            gr.update(value=speech_enabled),
-           True) 
-
-# Core Gradio Interface    
+           True)
+ 
 # Core Gradio Interface
 def launch_interface():
     """Launch the Gradio interface for the Chat-Gradio-Gguf conversationbot with unified status bars."""
