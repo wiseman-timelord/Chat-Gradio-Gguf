@@ -190,8 +190,7 @@ def create_directories() -> None:
 def build_config(backend: str) -> dict:
     """Build configuration with CPU-Only or Vulkan settings"""
     info = BACKEND_OPTIONS[backend]
-    
-    # FIX: Handle all three backend options correctly
+
     if backend in ["Vulkan GPU", "Force Vulkan GPU"]:
         backend_type = "Vulkan"
         vulkan_available = True
@@ -200,7 +199,7 @@ def build_config(backend: str) -> dict:
         backend_type = "CPU-Only"
         vulkan_available = False
         vram_size = 0
-    
+
     config = {
         "model_settings": {
             "model_dir": "models",
@@ -218,27 +217,24 @@ def build_config(backend: str) -> dict:
             "max_history_slots": 12,
             "max_attach_slots": 6,
             "print_raw_output": False,
-            "show_think_phase": False, 
-            "show_think_phase": False, 
-            "bleep_on_events": False, 
+            "show_think_phase": False,
+            "bleep_on_events": False,        # ← NEW
             "session_log_height": 500,
-            "cpu_threads": 4,
+            "cpu_threads": 4,                # ← NEW
             "vulkan_available": vulkan_available,
             "backend_type": backend_type
         }
     }
-    
-    # FIX: Add llama-cli paths for both Vulkan options with relative paths
+
     if backend in ["Vulkan GPU", "Force Vulkan GPU"] and info["cli_path"]:
-        # Use relative paths with platform-specific separators
         if PLATFORM == "windows":
             config["model_settings"]["llama_cli_path"] = ".\\data\\llama-vulkan-bin\\llama-cli.exe"
         else:  # Linux
             config["model_settings"]["llama_cli_path"] = "./data/llama-vulkan-bin/llama-cli"
-        
+
         if info["dest"]:
             config["model_settings"]["llama_bin_path"] = "data/llama-vulkan-bin"
-    
+
     return config
 
 def create_config(backend: str) -> None:
