@@ -157,7 +157,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 </details>
 
 ### New Models of interest, that may/will, be downloaded by "W-T" and be compatible with future versions of "C-G-G"... 
-- [Apriel-1.5-15b-Thinker-GGUF](https://huggingface.co/jobist/Apriel-1.5-15b-Thinker-Q5_K_M-GGUF) (20B) (Image Reading)
+- [Apriel-1.5-15b-Thinker-GGUF](https://huggingface.co/jobist/Apriel-1.5-15b-Thinker-Q5_K_M-GGUF) (15B) (Image Reading)
 - [InternVL3_5-GPT-OSS-20B-A4B-Preview-gguf](https://huggingface.co/QuantStack/InternVL3_5-GPT-OSS-20B-A4B-Preview-gguf) (20b-A4B)
 - [Qwen3-VL-8B-Thinking-GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Thinking-GGUF) (8B) (Image Reading)
 ## Structure
