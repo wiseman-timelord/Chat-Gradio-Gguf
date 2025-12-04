@@ -1,5 +1,9 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
-<br>Status: Beta - Working fine on v0.95.5 r6...
+
+### Status
+Beta - Working fine on v0.95.5 r6...
+
+### Current News
 - Working on Image Reading, llama.cpp will tomorrow complete upgrade to full supposrt for "Qwen3-VL", this is supposedly a next level model for the 7/8B range with visual and tools to boot...
 ```
 llama.cpp b7266 adds native Qwen3-VL architecture—full 256 K vision-language reasoning, spatial perception & GUI-agent powers now loadable in any GGUF frontend.
