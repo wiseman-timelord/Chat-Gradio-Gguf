@@ -75,39 +75,38 @@ Launching Gradio Interface...
 ![preview_image](media/configuration_page.jpg)
 
 - The refined Install Options menu...
-```
-===============================================================================
-    Chat-Gradio-Gguf - Gpu Options
-===============================================================================
-
-
-
-
-
-
-    1) x64 CPU Only (No GPU Option)
-
-    2) Vulkan GPU with x64 CPU Backend
-
-    3) Force Vulkan GPU (Skip Detection)
-
-
-
-
-
-
-
--------------------------------------------------------------------------------
-Selecton; Menu Options 1-3, Abandon Install = A:
-
-
+<details>
+    
+    ===============================================================================
+        Chat-Gradio-Gguf - Gpu Options
+    ===============================================================================
+    
+    
+    
+    
+    
+    
+        1) x64 CPU Only (No GPU Option)
+    
+        2) Vulkan GPU with x64 CPU Backend
+    
+        3) Force Vulkan GPU (Skip Detection)
+    
+    
+    
+    
+    
+    
+    
+    -------------------------------------------------------------------------------
+    Selecton; Menu Options 1-3, Abandon Install = A:
+    
+</details>
 ```
 
 - Validation of Installation (updating will be lazy on this)..
 <details>
     
-
-    ```
     ===============================================================================
         Chat-Gradio-Gguf: Library Validation
     ===============================================================================
@@ -173,7 +172,6 @@ Selecton; Menu Options 1-3, Abandon Install = A:
     Your installation is ready to use.
     DeActivated: `.venv`
     Press any key to continue . . .
-    ```
 </details>
 
 ## Requirements
