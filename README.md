@@ -30,41 +30,6 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 - **Correct Vulkan Installs**: If Vulkan selected, then, `Windows 7-8 = v1.1.126.0` and `Windows 8.1-11 = v1.4.3.04.1`, avoiding API issues.
 
 ### Preview
-- When Requires are installed, startup looks like this in the command console (outdated)...
-```
-================================================================================
-    Chat-Gradio-Gguf: Launcher
-================================================================================
-
-Starting Chat-Gradio-Gguf...
-Activated: .venv
-`main` Function Started.
-Config loaded
-Finding Models: ...2.5-Dyanka-7B-Preview-Uncensored-DeLMAT-GGUF
-Models Found: ['Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT.Q6_K.gguf']
-Script mode `linux` with backend `Vulkan`
-Working directory: ...s_250/Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069
-Data Directory: .../Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069/data
-Session History: ...adio-Gguf/Chat-Gradio-Gguf-A069/data/history
-Temp Directory: ...-Gradio-Gguf/Chat-Gradio-Gguf-A069/data/temp
-CPU Configuration: 12 physical cores, 24 logical cores
-
-Configuration:
-  Backend: Vulkan
-  Model: Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT.Q6_K.gguf
-  Context Size: 49152
-  VRAM Allocation: 8192 MB
-  CPU Threads: 20
-  GPU Layers: 0
-
-Launching Gradio Interface...
-* Running on local URL:  http://127.0.0.1:7860
-* To create a public link, set `share=True` in `launch()`.
-
-```
-
-
-
 - The "Interaction" page, where the conversation happens...
 ![preview_image](media/conversation_page.jpg)
 
@@ -73,6 +38,40 @@ Launching Gradio Interface...
 
 - The "Configuration" page - for configuration of, models and hardware, and relevant components, as well as ui customization...
 ![preview_image](media/configuration_page.jpg)
+
+- Startup looks like this in the terminal/console (outdated)...
+<details>
+    
+    ================================================================================
+        Chat-Gradio-Gguf: Launcher
+    ================================================================================
+    
+    Starting Chat-Gradio-Gguf...
+    Activated: .venv
+    `main` Function Started.
+    Config loaded
+    Finding Models: ...2.5-Dyanka-7B-Preview-Uncensored-DeLMAT-GGUF
+    Models Found: ['Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT.Q6_K.gguf']
+    Script mode `linux` with backend `Vulkan`
+    Working directory: ...s_250/Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069
+    Data Directory: .../Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069/data
+    Session History: ...adio-Gguf/Chat-Gradio-Gguf-A069/data/history
+    Temp Directory: ...-Gradio-Gguf/Chat-Gradio-Gguf-A069/data/temp
+    CPU Configuration: 12 physical cores, 24 logical cores
+    
+    Configuration:
+      Backend: Vulkan
+      Model: Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT.Q6_K.gguf
+      Context Size: 49152
+      VRAM Allocation: 8192 MB
+      CPU Threads: 20
+      GPU Layers: 0
+    
+    Launching Gradio Interface...
+    * Running on local URL:  http://127.0.0.1:7860
+    * To create a public link, set `share=True` in `launch()`.
+
+</details>
 
 - The refined Install Options menu...
 <details>
@@ -102,9 +101,10 @@ Launching Gradio Interface...
     Selecton; Menu Options 1-3, Abandon Install = A:
     
 </details>
-```
 
-- Validation of Installation (updating will be lazy on this)..
+
+
+- Validation of Installation (updating validation script only if big changes to installer)..
 <details>
     
     ===============================================================================
@@ -172,6 +172,7 @@ Launching Gradio Interface...
     Your installation is ready to use.
     DeActivated: `.venv`
     Press any key to continue . . .
+    
 </details>
 
 ## Requirements
