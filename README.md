@@ -104,7 +104,7 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 
 
 
-- Validation of Installation (updating validation script only if big changes to installer)..
+- Validation of Install (updated only if big changes to installer)..
 <details>
     
     ===============================================================================
