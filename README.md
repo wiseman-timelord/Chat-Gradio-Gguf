@@ -73,7 +73,7 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 
 </details>
 
-- The refined Install Options menu...
+- The refined Install Options menu (CPU, Vulkan, Forced Vulkan)...
 <details>
     
     ===============================================================================
