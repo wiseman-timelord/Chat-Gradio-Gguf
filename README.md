@@ -63,6 +63,8 @@ Launching Gradio Interface...
 
 ```
 
+
+
 - The "Interaction" page, where the conversation happens...
 ![preview_image](media/conversation_page.jpg)
 
@@ -98,6 +100,77 @@ Launching Gradio Interface...
 -------------------------------------------------------------------------------
 Selecton; Menu Options 1-3, Abandon Install = A:
 
+
+```
+
+- Validation of Installation (updating will be lazy on this)...
+<details>
+    ===============================================================================
+        Chat-Gradio-Gguf: Library Validation
+    ===============================================================================
+    
+    Running Library Validation...
+    Activated: `.venv`
+    === Chat-Gradio-Gguf Validator (WINDOWS) ===
+    
+    === Directory Validation ===
+      V data
+      V scripts
+      V models
+      V history
+      V temp
+      V vectors
+      V fastembed_cache
+    
+    === Configuration Validation ===
+      V Config valid (Backend: Vulkan)
+      V llama-cli configured: llama-cli.exe
+    
+    === Backend Binary Validation ===
+      V llama-cli found: llama-cli.exe
+    
+    === Core Library Validation ===
+      V gradio
+      V requests
+      V pyperclip
+      V spacy
+      V psutil
+      V ddgs
+      V newspaper3k
+      V langchain-community
+      V faiss-cpu
+      V langchain
+      V pygments
+      V lxml
+      V pyttsx3
+      V onnxruntime
+      V fastembed
+      V tokenizers
+      V xllamacpp
+      V pywin32
+      V tk
+    
+    === Optional Library Validation ===
+      V PyPDF2 (optional)
+      ? python-docx (not installed - optional)
+      V openpyxl (optional)
+      ? python-pptx (not installed - optional)
+    
+    Note: 2 optional packages missing (text-only fallback will be used)
+    
+    === spaCy Model Validation ===
+      V en_core_web_sm model available
+    
+    === FastEmbed Model Validation ===
+      V FastEmbed model verified
+    
+    === Validation Summary ===
+      V All validations passed successfully!
+    
+    Your installation is ready to use.
+    DeActivated: `.venv`
+    Press any key to continue . . .
+</details>
 
 ```
 
@@ -171,6 +244,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 - [InternVL3_5-GPT-OSS-20B-A4B-Preview-gguf](https://huggingface.co/QuantStack/InternVL3_5-GPT-OSS-20B-A4B-Preview-gguf) (20b-A4B)
 - [Qwen3-VL-8B-Thinking-GGUF](https://huggingface.co/NexaAI/Qwen3-VL-8B-Thinking-GGUF) (8B) (Image Reading) (256,000 context window)
 - [Qwen3-VL-4B-Thinking-GGUF](https://huggingface.co/NexaAI/Qwen3-VL-4B-Thinking-GGUF) (4B) (Image Reading) (256,000 context window)
+- 
 ## Structure
 - Core Project files...
 ```
