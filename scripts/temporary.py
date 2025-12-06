@@ -78,7 +78,9 @@ THINK_COLOR = "#c8a2c8"
 RESPONSE_COLOR = "#add8e6"
 SEPARATOR = "=" * 40
 MID_SEPARATOR = "-" * 30
-ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml"}
+ALLOWED_EXTENSIONS = {"bat", "py", "ps1", "txt", "json", "yaml", "psd1", "xaml", 
+                      "png", "jpg", "jpeg", "gif", "bmp", "webp"}
+MMPROJ_EXTENSIONS = ["-mmproj-", "mmproj"] 
 MAX_POSSIBLE_HISTORY_SLOTS = 16
 MAX_POSSIBLE_ATTACH_SLOTS = 10
 demo = None
@@ -124,10 +126,11 @@ CHAT_FORMAT_MAP = {
 handling_keywords = {
     "code": ["code", "code", "program", "dev", "copilot", "Python", "Powershell"],
     "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked"],
-    "reasoning": ["reason", "r1", "think"],
+    "reasoning": ["reason", "r1", "think", "thinking"],
     "nsfw": ["nsfw", "adult", "mature", "explicit", "lewd"],
-    "roleplay": ["rp", "role", "adventure"],
-    "moe": ["moe", "mixtral", "deepseek-v2", "gpt-oss", "harmony", "qwen2moe", "qwen2.5moe", "dbrx", "arctic", "grok"]
+    "roleplay": ["rpg", "role", "adventure"],
+    "moe": ["moe", "mixtral", "deepseek-v2", "gpt-oss", "harmony", "qwen2moe", "qwen2.5moe", "dbrx", "arctic", "grok"],
+    "vision": ["vision", "llava", "moondream", "minicpm", "qvq", "apriel", "qwen3-vl", "qwen3vl", "qwen2.5-vl"]
 }
 
 # prompt template table

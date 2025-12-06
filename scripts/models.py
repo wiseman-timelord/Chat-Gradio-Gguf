@@ -60,6 +60,8 @@ def get_model_settings(model_name):
     is_code = any(keyword in model_name_lower for keyword in handling_keywords["code"])
     is_roleplay = any(keyword in model_name_lower for keyword in handling_keywords["roleplay"])
     is_moe = any(keyword in model_name_lower for keyword in handling_keywords["moe"])
+    is_vision = any(keyword in model_name_lower for keyword in handling_keywords["vision"])  # NEW
+    
     return {
         "category": "chat",
         "is_uncensored": is_uncensored,
@@ -68,8 +70,40 @@ def get_model_settings(model_name):
         "is_code": is_code,
         "is_roleplay": is_roleplay,
         "is_moe": is_moe,
+        "is_vision": is_vision,  # NEW
         "detected_keywords": [kw for kw in handling_keywords if any(k in model_name_lower for k in handling_keywords[kw])]
     }
+
+def find_mmproj_file(model_path):
+    """
+    Find corresponding mmproj file for vision models using flexible search.
+    Searches for ANY .gguf file containing 'mmproj' in the model directory.
+    Returns: path to mmproj file or None
+    """
+    from pathlib import Path
+    import scripts.temporary
+    
+    model_dir = Path(model_path).parent
+    
+    # Find ANY file with mmproj in the name (case-insensitive)
+    mmproj_files = []
+    for file in model_dir.glob("*.gguf"):
+        if "mmproj" in file.name.lower():
+            mmproj_files.append(file)
+    
+    if not mmproj_files:
+        print("[VISION] No mmproj file found in directory")
+        return None
+    
+    # Prefer F16 version if multiple found
+    for mmproj in mmproj_files:
+        if "f16" in mmproj.name.lower():
+            print(f"[VISION] Found mmproj (F16): {mmproj.name}")
+            return str(mmproj)
+    
+    # Otherwise use first found
+    print(f"[VISION] Found mmproj: {mmproj_files[0].name}")
+    return str(mmproj_files[0])
 
 def calculate_gpu_layers(models, available_vram):
     from math import floor
@@ -248,9 +282,27 @@ def inspect_model(model_dir, model_name, vram_size):
     except Exception as e:
         return f"Error inspecting model: {str(e)}"
 
+
+def get_mmproj_context_llama(mmproj_path):
+    """Use llama_cpp to get mmproj context"""
+    try:
+        from llama_cpp import LlamaMetadata
+        metadata = LlamaMetadata(model_path=str(mmproj_path))
+        
+        # Try various context keys used in vision models
+        for key in ['clip.context_length', 'context_length', 'n_ctx']:
+            if key in metadata:
+                return int(metadata[key])
+        
+        # Fallback to common values
+        return 4096
+    except:
+        return 4096
+
 def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     """
-    Load a GGUF model with llama-cpp-python.
+    Load a GGUF model with llama-cpp-python, including vision models.
+    CRITICAL: Vision chat handlers must be created BEFORE Llama() initialization.
     Returns: (status: str, success: bool, llm_obj, models_loaded_flag)
     """
     from scripts.temporary import (
@@ -272,8 +324,22 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         if not model_path.exists():
             return f"Error: Model file '{model_path}' not found.", False, llm_state, models_loaded_state
 
+    # Validate model file is valid GGUF
+    try:
+        with open(model_path, 'rb') as f:
+            magic = f.read(4)
+            if magic != b'GGUF':
+                return f"Not a valid GGUF file: {model_path}", False, llm_state, models_loaded_state
+    except Exception as e:
+        return f"Cannot read model file: {e}", False, llm_state, models_loaded_state
+
     metadata = get_model_metadata(str(model_path))
     chat_format = get_chat_format(metadata)
+    
+    # Check if this is a vision model
+    model_settings = get_model_settings(model)
+    is_vision = model_settings.get("is_vision", False)
+    is_reasoning = model_settings.get("is_reasoning", False)
 
     num_layers = get_model_layers(str(model_path))
     if num_layers <= 0:
@@ -311,6 +377,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     set_status(f"Loading model {gpu_layers}/{num_layers} layers...", console=True, priority=True)
 
+    # Base kwargs - vision handler will be added if needed
     kwargs = dict(
         model_path=str(model_path),
         n_ctx=effective_ctx,
@@ -325,10 +392,81 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     if use_cpu_threads and CPU_THREADS is not None:
         kwargs["n_threads"] = CPU_THREADS
 
+    # CRITICAL: Vision handler setup BEFORE Llama() initialization
+    if is_vision:
+        model_dir = model_path.parent
+        mmproj_path_str = find_mmproj_file(str(model_path))
+        
+        if not mmproj_path_str:
+            return f"Vision model requires mmproj file in {model_dir}", False, llm_state, models_loaded_state
+        
+        mmproj_path = Path(mmproj_path_str)
+        
+        try:
+            model_lower = model.lower()
+            
+            # Qwen3-VL detection (NEW - highest priority)
+            if "qwen3-vl" in model_lower or "qwen3vl" in model_lower:
+                from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+                chat_handler = Qwen25VLChatHandler(clip_model_path=str(mmproj_path))
+                kwargs["chat_handler"] = chat_handler
+                kwargs["n_batch"] = 512  # Smaller batch for vision
+                set_status(f"Qwen3-VL mode with {mmproj_path.name}", console=True)
+                
+            # Qwen2.5-VL detection  
+            elif "qwen2.5-vl" in model_lower or "qwen2.5vl" in model_lower:
+                from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+                chat_handler = Qwen25VLChatHandler(clip_model_path=str(mmproj_path))
+                kwargs["chat_handler"] = chat_handler
+                kwargs["n_batch"] = 512
+                set_status(f"Qwen2.5-VL mode with {mmproj_path.name}", console=True)
+                
+            # Apriel detection (uses LLaVA architecture)
+            elif "apriel" in model_lower:
+                from llama_cpp.llama_chat_format import Llava15ChatHandler
+                chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
+                kwargs["chat_handler"] = chat_handler
+                set_status(f"Apriel (LLaVA) mode with {mmproj_path.name}", console=True)
+                
+            # MiniCPM detection
+            elif "minicpm" in model_lower:
+                from llama_cpp.llama_chat_format import MiniCPMv26ChatHandler
+                chat_handler = MiniCPMv26ChatHandler(clip_model_path=str(mmproj_path))
+                kwargs["chat_handler"] = chat_handler
+                set_status(f"MiniCPM mode with {mmproj_path.name}", console=True)
+                
+            # Moondream detection
+            elif "moondream" in model_lower:
+                from llama_cpp.llama_chat_format import MoondreamChatHandler
+                chat_handler = MoondreamChatHandler(clip_model_path=str(mmproj_path))
+                kwargs["chat_handler"] = chat_handler
+                set_status(f"Moondream mode with {mmproj_path.name}", console=True)
+                
+            # LLaVA and QVQ detection
+            elif "llava" in model_lower or "qvq" in model_lower:
+                from llama_cpp.llama_chat_format import Llava15ChatHandler
+                chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
+                kwargs["chat_handler"] = chat_handler
+                set_status(f"LLaVA mode with {mmproj_path.name}", console=True)
+                
+            else:
+                # Default to LLaVA handler for unknown vision models
+                from llama_cpp.llama_chat_format import Llava15ChatHandler
+                chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
+                kwargs["chat_handler"] = chat_handler
+                set_status(f"Default vision mode with {mmproj_path.name}", console=True)
+            
+        except Exception as e:
+            return f"Vision handler failed: {e}\nMake sure llama-cpp-python ≥0.3.2 is installed", False, llm_state, models_loaded_state
+
+    # Now create Llama object with vision handler already configured
     try:
         new_llm = Llama(**kwargs)
+        
+        # Test inference
+        test_msg = [{"role": "user", "content": "Hello"}]
         new_llm.create_chat_completion(
-            messages=[{"role": "user", "content": "Hello"}],
+            messages=test_msg,
             max_tokens=BATCH_SIZE,
             stream=False
         )
@@ -336,10 +474,19 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         import scripts.temporary as tmp
         tmp.GPU_LAYERS = gpu_layers
         tmp.MODEL_NAME = model
-        set_status("Model ready", console=True, priority=True)
+        
+        # Enhanced status for vision+thinking models
+        status_parts = ["Model ready"]
+        if is_vision:
+            status_parts.append("vision")
+        if is_reasoning:
+            status_parts.append("thinking")
+        status_msg = " + ".join(status_parts)
+        
+        set_status(status_msg, console=True, priority=True)
         from scripts.utility import beep
         beep()   
-        return "Model ready", True, new_llm, True
+        return status_msg, True, new_llm, True
 
     except Exception as e:
         import scripts.temporary as tmp
@@ -352,7 +499,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         print(err)
         set_status(f"Model load error", console=True, priority=True)
         return err, False, None, False
-
+        
 def calculate_single_model_gpu_layers_with_layers(
     model_path: str,
     available_vram: int,
@@ -511,10 +658,12 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     - gpt-oss Harmony format with channels
     - Hybrid models that may or may not use thinking
     - Filters out repeating AI-Chat: name tags
+    - Vision models with image content (NEW)
     """
     import re
     from scripts import temporary
-    from scripts.utility import clean_content
+    from scripts.utility import clean_content, read_file_content
+    from pathlib import Path
 
     if not models_loaded_state or llm_state is None:
         yield "Error: No model loaded. Please load a model first."
@@ -528,19 +677,62 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False),
         is_code=settings.get("is_code", False),
-        is_moe=settings.get("is_moe", False)
+        is_moe=settings.get("is_moe", False),
+        is_vision=settings.get("is_vision", False)  # NEW
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     if web_search_enabled and search_results:
         system_message += f"\n\nWeb search results:\n{search_results}"
 
     # Build message list
-    messages = [{"role": "system", "content": system_message}]
+    messages = []
+    if system_message:
+        messages.append({"role": "system", "content": system_message})
+    
     for msg in reversed(session_log[:-2]):
-        messages.insert(1, {"role": msg["role"], "content": clean_content(msg["role"], msg["content"])})
-    messages.append({"role": "user", "content": clean_content("user", session_log[-2]["content"])})
-
-    # DO NOT yield "AI-Chat:\n" here - already in session_log from conversation_interface()
+        messages.insert(1 if messages else 0, {
+            "role": msg["role"], 
+            "content": clean_content(msg["role"], msg["content"])
+        })
+    
+    # NEW: Format current user message with images if vision model
+    current_content = clean_content("user", session_log[-2]["content"])
+    
+    if settings.get("is_vision", False) and temporary.session_attached_files:
+        # Check for images in attached files
+        image_files = [f for f in temporary.session_attached_files 
+                      if Path(f).suffix.lower() in {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}]
+        
+        if image_files:
+            # Format multimodal message
+            from scripts.utility import read_file_content
+            
+            multimodal_content = []
+            
+            # Add images first
+            for img_path in image_files:
+                data_uri, file_type, success, error = read_file_content(img_path)
+                if success and file_type == "image":
+                    multimodal_content.append({
+                        "type": "image_url",
+                        "image_url": {"url": data_uri}
+                    })
+                    print(f"[VISION] Added image: {Path(img_path).name}")
+            
+            # Add text query
+            multimodal_content.append({
+                "type": "text",
+                "text": current_content
+            })
+            
+            messages.append({"role": "user", "content": multimodal_content})
+            print(f"[VISION] Multimodal message: {len(image_files)} images + text")
+        else:
+            # No images, standard text
+            messages.append({"role": "user", "content": current_content})
+    else:
+        # Non-vision model or no images
+        messages.append({"role": "user", "content": current_content})
 
     # State tracking
     in_thinking_phase = False
@@ -548,7 +740,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     output_buffer = ""
     seen_real_text = False
     char_count_since_think_start = 0
-    raw_output = ""  # Don't include "AI-Chat:\n" prefix here either
+    raw_output = ""
 
     # Detect if this is a gpt-oss model
     is_gpt_oss = 'gpt-oss' in temporary.MODEL_NAME.lower() if temporary.MODEL_NAME else False
@@ -572,10 +764,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         output_buffer += token
 
         # ===== Strip repeating AI-Chat: tags =====
-        # Remove standalone "AI-Chat:" lines at start of buffer or after newlines
         output_buffer = re.sub(r'(^|\n)\s*AI-Chat:\s*(\n|$)', r'\1', output_buffer)
-        
-        # Also strip if it appears mid-line (catches inline repetitions)
         output_buffer = re.sub(r'\bAI-Chat:\s*\n\s*', '', output_buffer)
         # ==============================================
 
@@ -600,16 +789,13 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             in_thinking_phase = True
             char_count_since_think_start = 0
             
-            # Output everything before <think>
             before_think = output_buffer.split("<think>", 1)[0]
             if before_think:
                 yield before_think
             
-            # Clear buffer, keep content after <think>
             output_buffer = output_buffer.split("<think>", 1)[1]
             thinking_content_buffer = ""
             
-            # Display mode
             if temporary.SHOW_THINK_PHASE:
                 yield "<think>"
             else:
@@ -621,20 +807,16 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             in_thinking_phase = True
             char_count_since_think_start = 0
             
-            # Extract and yield any content before analysis channel
             parts = output_buffer.split("<|channel|>analysis", 1)
             before_analysis = parts[0]
             
-            # Clean up common prefixes
             before_analysis = re.sub(r'<\|start\|>assistant', '', before_analysis)
             if before_analysis.strip():
                 yield before_analysis
             
-            # Keep remainder
             output_buffer = parts[1] if len(parts) > 1 else ""
             thinking_content_buffer = ""
             
-            # Display mode
             if temporary.SHOW_THINK_PHASE:
                 yield "<|channel|>analysis"
             else:
@@ -650,22 +832,18 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             if "</think>" in output_buffer:
                 in_thinking_phase = False
                 
-                # Split at closing tag
                 parts = output_buffer.split("</think>", 1)
                 think_content = parts[0]
                 after_think = parts[1] if len(parts) > 1 else ""
                 
-                # Display thinking content
                 if temporary.SHOW_THINK_PHASE:
                     yield think_content + "</think>\n"
                 else:
-                    # Dots mode: count spaces in thinking content
                     spaces = think_content.count(" ")
                     if spaces > 0:
-                        yield "." * min(spaces, 50)  # Cap at 50 dots
+                        yield "." * min(spaces, 50)
                     yield "\n"
                 
-                # Reset and yield remainder
                 output_buffer = after_think
                 thinking_content_buffer = ""
                 if after_think:
@@ -675,31 +853,26 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             
             # gpt-oss: Check for channel switch to 'final'
             if char_count_since_think_start >= temporary.THINK_MIN_CHARS_BEFORE_CLOSE:
-                # Look for <|end|> followed by anything ending with <|channel|>final
                 end_pattern = r'<\|end\|>.*?<\|channel\|>final'
                 match = re.search(end_pattern, output_buffer, re.DOTALL)
                 
                 if match:
                     in_thinking_phase = False
                     
-                    # Get thinking content before the switch
                     think_end_pos = match.start()
                     think_content = output_buffer[:think_end_pos]
                     after_think = output_buffer[match.end():]
                     
-                    # Display thinking
                     if temporary.SHOW_THINK_PHASE:
                         yield think_content
-                        yield match.group(0)  # Show the channel switch tags
+                        yield match.group(0)
                         yield "\n"
                     else:
-                        # Dots mode
                         spaces = think_content.count(" ")
                         if spaces > 0:
                             yield "." * min(spaces, 50)
                         yield "\n"
                     
-                    # Reset and continue with final response
                     output_buffer = after_think
                     thinking_content_buffer = ""
                     if after_think:
@@ -710,17 +883,15 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             # Still thinking - display according to mode
             if temporary.SHOW_THINK_PHASE:
                 yield token
-                output_buffer = ""  # Clear since we yielded it
+                output_buffer = ""
             else:
-                # Dots mode: show dots for spaces
                 spaces = token.count(" ")
                 if spaces > 0:
                     yield "." * min(spaces, 10)
-                output_buffer = ""  # Clear buffer in dots mode
+                output_buffer = ""
             continue
 
         # === NORMAL OUTPUT (not thinking) ===
-        # Yield accumulated buffer periodically for responsiveness
         if len(output_buffer) > 20:
             yield output_buffer
             output_buffer = ""

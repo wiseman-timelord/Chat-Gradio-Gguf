@@ -370,7 +370,7 @@ def get_nlp_model():
 
 def read_file_content(file_path, max_chars=50000):
     """
-    Read file content with support for multiple formats.
+    Read file content with support for multiple formats INCLUDING IMAGES.
     Returns tuple: (content: str, file_type: str, success: bool, error: str)
     
     Supported formats:
@@ -379,8 +379,10 @@ def read_file_content(file_path, max_chars=50000):
     - Word: .docx
     - Excel: .xlsx, .xls
     - PowerPoint: .pptx
+    - Images: .png, .jpg, .jpeg, .gif, .bmp, .webp (returns base64 data URI)
     """
     from pathlib import Path
+    import base64
     
     file_path = Path(file_path)
     if not file_path.exists():
@@ -389,6 +391,20 @@ def read_file_content(file_path, max_chars=50000):
     extension = file_path.suffix.lower()
     
     try:
+        # IMAGE FILES
+        image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+        
+        if extension in image_extensions:
+            try:
+                with open(file_path, 'rb') as f:
+                    image_data = base64.b64encode(f.read()).decode('utf-8')
+                    # Return data URI format for vision models
+                    mime_type = f"image/{extension[1:]}" if extension != '.jpg' else "image/jpeg"
+                    data_uri = f"data:{mime_type};base64,{image_data}"
+                    return data_uri, "image", True, ""
+            except Exception as e:
+                return "", "image", False, f"Image read error: {str(e)}"
+        
         # Text-based files
         text_extensions = {'.txt', '.py', '.json', '.yaml', '.yml', '.md', 
                           '.xml', '.html', '.css', '.js', '.sh', '.bat', 
@@ -406,7 +422,7 @@ def read_file_content(file_path, max_chars=50000):
                 content = []
                 with open(file_path, 'rb') as f:
                     reader = PyPDF2.PdfReader(f)
-                    max_pages = min(10, len(reader.pages))  # Limit to 10 pages
+                    max_pages = min(10, len(reader.pages))
                     for page_num in range(max_pages):
                         page = reader.pages[page_num]
                         content.append(page.extract_text())
@@ -435,10 +451,10 @@ def read_file_content(file_path, max_chars=50000):
                 from openpyxl import load_workbook
                 wb = load_workbook(file_path, read_only=True, data_only=True)
                 content = []
-                for sheet_name in wb.sheetnames[:3]:  # Limit to 3 sheets
+                for sheet_name in wb.sheetnames[:3]:
                     sheet = wb[sheet_name]
                     content.append(f"=== Sheet: {sheet_name} ===")
-                    for row in list(sheet.rows)[:50]:  # Limit to 50 rows per sheet
+                    for row in list(sheet.rows)[:50]:
                         row_data = [str(cell.value) if cell.value is not None else "" 
                                    for cell in row]
                         content.append(" | ".join(row_data))
@@ -455,7 +471,7 @@ def read_file_content(file_path, max_chars=50000):
                 from pptx import Presentation
                 prs = Presentation(file_path)
                 content = []
-                for i, slide in enumerate(prs.slides[:10], 1):  # Limit to 10 slides
+                for i, slide in enumerate(prs.slides[:10], 1):
                     content.append(f"=== Slide {i} ===")
                     for shape in slide.shapes:
                         if hasattr(shape, "text"):

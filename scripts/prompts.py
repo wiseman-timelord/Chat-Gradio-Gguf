@@ -33,16 +33,21 @@ prompt_templates = {
 
 # Functions
 def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False,
-                      is_reasoning=False, is_roleplay=False, is_code=False, is_moe=False):
+                      is_reasoning=False, is_roleplay=False, is_code=False, is_moe=False,
+                      is_vision=False):  # NEW PARAMETER
     """
     Build system message. Returns empty string for models that don't use system prompts.
     NOTE: MoE models should NOT receive system prompts - confuses expert routing.
     NOTE: Code models use instruct format only - no separate system message needed.
+    NOTE: Vision models need image-aware instructions.
     """
     if is_code or is_moe:
         return ""
     
-    if is_uncensored:
+    # NEW: Vision models get special instructions
+    if is_vision:
+        base = "You are a helpful AI assistant with vision capabilities. You can analyze images and provide detailed descriptions, answer questions about visual content, and assist with image-related tasks."
+    elif is_uncensored:
         base = prompt_templates["chat"]["base_unfiltered"]
     else:
         base = prompt_templates["chat"]["base"]
