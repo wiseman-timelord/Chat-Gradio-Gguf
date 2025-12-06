@@ -17,7 +17,7 @@ APP_NAME = "Chat-Gradio-Gguf"
 BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 TEMP_DIR = BASE_DIR / "data/temp"
-LLAMACPP_TARGET_VERSION = "b6586"
+LLAMACPP_TARGET_VERSION = "b7263"
 
 DIRECTORIES = [
     "data", "scripts", "models",
