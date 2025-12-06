@@ -105,6 +105,8 @@ Selecton; Menu Options 1-3, Abandon Install = A:
 
 - Validation of Installation (updating will be lazy on this)..
 <details>
+    
+
     ```
     ===============================================================================
         Chat-Gradio-Gguf: Library Validation
