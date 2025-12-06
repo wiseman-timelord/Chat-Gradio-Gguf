@@ -103,8 +103,9 @@ Selecton; Menu Options 1-3, Abandon Install = A:
 
 ```
 
-- Validation of Installation (updating will be lazy on this)...
+- Validation of Installation (updating will be lazy on this)..
 <details>
+    ```
     ===============================================================================
         Chat-Gradio-Gguf: Library Validation
     ===============================================================================
@@ -170,9 +171,8 @@ Selecton; Menu Options 1-3, Abandon Install = A:
     Your installation is ready to use.
     DeActivated: `.venv`
     Press any key to continue . . .
+    ```
 </details>
-
-```
 
 ## Requirements
 - Windows 7-11 and/or ~Ubuntu 22-25, Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
