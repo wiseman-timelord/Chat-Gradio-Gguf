@@ -4,11 +4,8 @@
 Beta - Working fine on v0.95.5 r6...
 
 ### Current News
-- Working on Image Reading, llama.cpp are delaying full supposrt for "Qwen3-VL" in pre-built wheel, this is supposedly a next level model for the 7/8B range with visual and tools to boot...
-```
-llama.cpp b7266 adds native Qwen3-VL architecture—full 256 K vision-language reasoning, spatial perception & GUI-agent powers now loadable in any GGUF frontend.
-```
-- Working on installer to be download/install binaries (as it does), then if installing with vulkan, then build the wheel for vulkan, while still offering options for VulkanBin+CpuWheel. 
+- Working on Image Reading, llama.cpp are delaying full supposrt for "Qwen3-VL" in pre-built wheel, will have to test/bugfix with other models
+- Working on installer to be download/install binaries (as it does), then if installing with vulkan, then build the wheel for vulkan, while still offering options for VulkanBin+CpuWheel. Note somewhere that installing with Vulkan Wheel on Windows requires `CMake` on SYSTEM PATH.
 
 ## Description
 Intended as a high-quality chat interface programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is intended to be intelligent, while without options reported in forums to make no difference on most models, using offline libraries where possible instead of services requiring registration, and everything is privatly run on your own hardware with your own models. 
