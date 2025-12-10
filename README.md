@@ -98,7 +98,102 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
     
 </details>
 
+- Installation processes (after building in limited terminal/console buffer)..
+<details>
 
+      ...shortened...
+      *** Making wheel...
+      *** Created llama_cpp_python-0.3.16-cp311-cp311-win_amd64.whl
+      Building wheel for llama-cpp-python (pyproject.toml) ... done
+      Created wheel for llama-cpp-python: filename=llama_cpp_python-0.3.16-cp311-cp3
+    11-win_amd64.whl size=20197109 sha256=cd441ab95046bb69e924675b4dd75cd9646ea790ed
+    f7bd2e68ec22d011eb389e
+      Stored in directory: D:\Temporary\TEMP\pip-ephem-wheel-cache-9a5khgos\wheels\d
+    8\5b\e5\a7d4b5765da347d314e8155197440c9995a962f8e4a5f52b23
+    Successfully built llama-cpp-python
+    Installing collected packages: typing-extensions, numpy, MarkupSafe, diskcache,
+    jinja2, llama-cpp-python
+      Attempting uninstall: typing-extensions
+        Found existing installation: typing_extensions 4.15.0
+        Uninstalling typing_extensions-4.15.0:
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\__pycache__\typing_extensions.cpython-311.pyc
+    
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\typing_extensions-4.15.0.dist-info\
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\typing_extensions.py
+          Successfully uninstalled typing_extensions-4.15.0
+      Attempting uninstall: numpy
+        Found existing installation: numpy 2.3.5
+        Uninstalling numpy-2.3.5:
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\numpy-2.3.5.dist-info\
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\numpy.libs\
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\numpy\
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\scripts\f2py.exe
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\scripts\numpy-config.exe
+          Successfully uninstalled numpy-2.3.5
+      Attempting uninstall: MarkupSafe
+        Found existing installation: MarkupSafe 3.0.3
+        Uninstalling MarkupSafe-3.0.3:
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\markupsafe-3.0.3.dist-info\
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\markupsafe\
+          Successfully uninstalled MarkupSafe-3.0.3
+      Attempting uninstall: jinja2
+        Found existing installation: Jinja2 3.1.6
+        Uninstalling Jinja2-3.1.6:
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\jinja2-3.1.6.dist-info\
+          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
+    guf-0.95.6\.venv\lib\site-packages\jinja2\
+          Successfully uninstalled Jinja2-3.1.6
+    Successfully installed MarkupSafe-3.0.3 diskcache-5.6.3 jinja2-3.1.6 llama-cpp-p
+    ython-0.3.16 numpy-2.3.5 typing-extensions-4.15.0
+    
+    ================================================================================
+    
+    [V] llama-cpp-python built successfully
+    [V] Python dependencies installed
+    [V] Installing optional file format support...
+    [V] Installed PyPDF2
+    [V] Installed python-docx
+    [V] Installed openpyxl
+    [V] Installed python-pptx
+    [V] All file format support installed
+    [V] Downloading embedding model (this may take 1-2 minutes)...
+      Progress tracking not available for this download
+    [V] Embedding model downloaded
+    [V] Downloading spaCy language model...
+    Downloading spaCy model: [=========================] 100% (12.2MB/12.2MB)
+    [V] Installing spaCy model...
+    [V] spaCy model installed
+    [V] Downloading llama.cpp binaries...
+    Downloading win-vulkan-x64: [=========================] 100% (30.4MB/30.4MB)
+    Extracting: [=========================] 100% (37.0B/37.0B)
+    [V] Backend ready
+    [V] Configuration file created
+    
+    Generated configuration:
+      Backend: VULKAN_VULKAN
+      Vulkan Available: True
+      VRAM: 8192 MB
+      Context: 32768
+      llama-cli: .\data\llama-vulkan-bin\llama-cli.exe
+    [V] Installation complete!
+    
+    Run the launcher to start Chat-Gradio-Gguf
+    
+    DeActivated: `.venv`
+    Press any key to continue . . .
+
+</details>
 
 - Validation of Install (updated only if big changes to installer)..
 <details>
