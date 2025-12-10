@@ -98,7 +98,7 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
     
 </details>
 
-- Installation processes (after building in limited terminal/console buffer)..
+- Installation processes (after building Vulkan Wheel in limited terminal/console buffer)..
 <details>
 
       ...shortened...
