@@ -78,33 +78,33 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 
 </details>
 
-- The refined Install Options menu (CPU, Vulkan, Forced Vulkan)...
+- The updoming Install Options menu, regular download and/or compile if having pre-installed tools...
 <details>
     
-    ===============================================================================
-        Chat-Gradio-Gguf - Gpu Options
-    ===============================================================================
-    
-    
-    
-    
-    
-    
-        1) x64 CPU Only (No GPU Option)
-    
-        2) Vulkan GPU with x64 CPU Backend
-    
-        3) Force Vulkan GPU (Skip Detection)
-    
-    
-    
-    
-    
-    
-    
-    -------------------------------------------------------------------------------
-    Selecton; Menu Options 1-3, Abandon Install = A:
-    
+===============================================================================
+    Chat-Gradio-Gguf - Gpu Options
+===============================================================================
+
+
+
+    1) Download CPU Binaries / Download CPU Wheel
+
+    2) Compile CPU Binaries / Compile CPU Wheel
+
+    3) Download Vulkan Bin / Download CPU Wheel
+
+    4) Download Vulkan Bin / Download CPU Wheel (Forced)
+
+    5) Download Vulkan Bin / Compile Vulkan Wheel
+
+    6) Compile Vulkan Binaries / Compile Vulkan Wheel
+
+
+
+
+-------------------------------------------------------------------------------
+Selecton; Menu Options 1-6, Abandon Install = A:
+
 </details>
 
 - Installation processes (after building Vulkan Wheel in limited terminal/console buffer)..
