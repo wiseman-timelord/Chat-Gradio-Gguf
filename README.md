@@ -47,11 +47,10 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 - Startup looks like this in the terminal/console (outdated)...
 <details>
     
-    ================================================================================
         Chat-Gradio-Gguf: Launcher
-    ================================================================================
+
     
-    Starting Chat-Gradio-Gguf...
+    Starting Chat-Gradio-Gguf..
     Activated: .venv
     `main` Function Started.
     Config loaded
