@@ -36,76 +36,98 @@ DEFAULTS = {
     "SESSION_LOG_HEIGHT_OPTIONS": [450, 475, 500, 550, 650, 800, 1050, 1300],
 }
 
-# scripts/settings.py
+# Functions...
 def load_config():
     """
     Load configuration from persistent.json and set in temporary.py.
-    Always scan for available models and cache the result.
+    If the file is missing or unreadable we abort instead of falling back.
     """
-    config = {}  # Initialize config variable
-    
-    if CONFIG_PATH.exists():
-        try:
-            with open(CONFIG_PATH, 'r') as f:
-                config = json.load(f)
-            temporary.set_status("Config loaded", console=True)
-        except json.JSONDecodeError:
-            print(f"⚠️  Config file corrupted, using defaults.")
-            config = {}
-    else:
-        print(f"⚠️  Config missing/corrupted, re-run installer.")
-        # Set defaults when no config exists
-        temporary.BACKEND_TYPE = "CPU-Only"
-        temporary.VULKAN_AVAILABLE = False
+    if not CONFIG_PATH.exists():
+        raise RuntimeError(
+            f"Configuration file not found: {CONFIG_PATH}\n"
+            "Re-run the installer or restore the file from backup."
+        )
 
-    # Load model_settings with safe fallback
-    model_settings = config.get("model_settings", {})
-    
-    if "model_dir" in model_settings:
-        temporary.MODEL_FOLDER = model_settings["model_dir"]
-    else:
-        temporary.MODEL_FOLDER = DEFAULTS["MODEL_FOLDER"]
+    try:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except Exception as e:
+        raise RuntimeError(
+            f"Cannot read or decode configuration file {CONFIG_PATH}: {e}"
+        ) from e
 
-    # CRITICAL: Load backend_type FIRST
-    temporary.BACKEND_TYPE = model_settings.get("backend_type", "CPU-Only")
-    temporary.VULKAN_AVAILABLE = model_settings.get("vulkan_available", False)
-    temporary.SHOW_THINK_PHASE = model_settings.get("show_think_phase", False)
-    temporary.PRINT_RAW_OUTPUT = model_settings.get("print_raw_output", False)
+    model_settings = config.get("model_settings")
+    if not isinstance(model_settings, dict):
+        raise RuntimeError(
+            "Invalid configuration: 'model_settings' object is missing or corrupted."
+        )
 
-    # Load other settings
-    for key, attr in {
-        "context_size": "CONTEXT_SIZE",
-        "temperature": "TEMPERATURE",
-        "repeat_penalty": "REPEAT_PENALTY",
+    # --- mandatory keys -------------------------------------------------
+    required = {
+        "backend_type",
+        "vulkan_available",
+        "model_dir",
+        "context_size",
+        "vram_size",
+        "temperature",
+        "repeat_penalty",
+        "max_history_slots",
+        "max_attach_slots",
+        "session_log_height",
+        "show_think_phase",
+        "print_raw_output",
+        "cpu_threads",
+        "bleep_on_events",
+        "use_python_bindings",
+    }
+    missing = required - model_settings.keys()
+    if missing:
+        raise RuntimeError(
+            f"Configuration corrupted: missing key(s) {', '.join(missing)}"
+        )
+
+    # --- load without any fallback --------------------------------------
+    temporary.BACKEND_TYPE      = model_settings["backend_type"]
+    temporary.VULKAN_AVAILABLE  = model_settings["vulkan_available"]
+    temporary.LAYER_ALLOCATION_MODE = model_settings.get("layer_allocation_mode")
+    temporary.MODEL_FOLDER      = model_settings["model_dir"]
+    temporary.CONTEXT_SIZE      = model_settings["context_size"]
+    temporary.VRAM_SIZE         = model_settings["vram_size"]
+    temporary.TEMPERATURE       = model_settings["temperature"]
+    temporary.REPEAT_PENALTY    = model_settings["repeat_penalty"]
+    temporary.MAX_HISTORY_SLOTS = model_settings["max_history_slots"]
+    temporary.MAX_ATTACH_SLOTS  = model_settings["max_attach_slots"]
+    temporary.SESSION_LOG_HEIGHT= model_settings["session_log_height"]
+    temporary.SHOW_THINK_PHASE  = model_settings["show_think_phase"]
+    temporary.PRINT_RAW_OUTPUT  = model_settings["print_raw_output"]
+    temporary.CPU_THREADS       = model_settings["cpu_threads"]
+    temporary.BLEEP_ON_EVENTS   = model_settings["bleep_on_events"]
+    temporary.USE_PYTHON_BINDINGS=model_settings["use_python_bindings"]
+
+    # --- optional keys ---------------------------------------------------
+    optional_map = {
         "llama_cli_path": "LLAMA_CLI_PATH",
-        "vram_size": "VRAM_SIZE",
+        "llama_bin_path": "LLAMA_BIN_PATH", 
         "selected_gpu": "SELECTED_GPU",
+        "selected_cpu": "SELECTED_CPU",  # ADD THIS
         "mmap": "MMAP",
         "mlock": "MLOCK",
         "n_batch": "BATCH_SIZE",
         "dynamic_gpu_layers": "DYNAMIC_GPU_LAYERS",
-        "max_history_slots": "MAX_HISTORY_SLOTS",
-        "max_attach_slots": "MAX_ATTACH_SLOTS",
-        "session_log_height": "SESSION_LOG_HEIGHT",
-        "print_raw_output": "PRINT_RAW_OUTPUT",
-        "show_think_phase": "SHOW_THINK_PHASE",
-        "cpu_threads": "CPU_THREADS",
-        "bleep_on_events": "BLEEP_ON_EVENTS"   # <-- NEW
-    }.items():
-        if key in model_settings:
-            setattr(temporary, attr, model_settings[key])
-           
-    # Scan for available models and cache the result
-    available_models = get_available_models()
-    temporary.AVAILABLE_MODELS = available_models
+    }
+    for json_key, tmp_attr in optional_map.items():
+        if json_key in model_settings:
+            setattr(temporary, tmp_attr, model_settings[json_key])
 
-    # Validate model_name against available models
+    # --- model list ------------------------------------------------------
+    temporary.AVAILABLE_MODELS = get_available_models()
     temporary.MODEL_NAME = (
         model_settings.get("model_name")
-        if model_settings.get("model_name") in available_models
-        else (available_models[0] if available_models else "Select_a_model...")
+        if model_settings.get("model_name") in temporary.AVAILABLE_MODELS
+        else (temporary.AVAILABLE_MODELS[0] if temporary.AVAILABLE_MODELS else "Select_a_model...")
     )
 
+    temporary.set_status("Configuration loaded", console=True)
     return "Configuration loaded."
 
 def save_config():
@@ -116,9 +138,11 @@ def save_config():
             "context_size": temporary.CONTEXT_SIZE,
             "temperature": temporary.TEMPERATURE,
             "repeat_penalty": temporary.REPEAT_PENALTY,
-            "llama_cli_path": getattr(temporary, "LLAMA_CLI_PATH", None),
+            "llama_cli_path": temporary.LLAMA_CLI_PATH,
+            "llama_bin_path": temporary.LLAMA_BIN_PATH,
             "vram_size": temporary.VRAM_SIZE,
             "selected_gpu": temporary.SELECTED_GPU,
+            "selected_cpu": temporary.SELECTED_CPU,
             "mmap": temporary.MMAP,
             "mlock": temporary.MLOCK,
             "n_batch": temporary.BATCH_SIZE,
@@ -129,9 +153,11 @@ def save_config():
             "show_think_phase": temporary.SHOW_THINK_PHASE,
             "print_raw_output": temporary.PRINT_RAW_OUTPUT,
             "cpu_threads": temporary.CPU_THREADS,
-            "vulkan_available": getattr(temporary, "VULKAN_AVAILABLE", False),
-            "backend_type": getattr(temporary, "BACKEND_TYPE", "CPU-Only"),
-            "bleep_on_events": getattr(temporary, "BLEEP_ON_EVENTS", False)   # <-- NEW
+            "vulkan_available": temporary.VULKAN_AVAILABLE,
+            "backend_type": temporary.BACKEND_TYPE,
+            "bleep_on_events": temporary.BLEEP_ON_EVENTS,
+            "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
+            "layer_allocation_mode": temporary.LAYER_ALLOCATION_MODE,
         }
     }
 

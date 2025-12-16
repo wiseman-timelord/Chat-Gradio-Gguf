@@ -11,9 +11,10 @@ from langchain_community.document_loaders import TextLoader
 from pathlib import Path
 
 # Configuration variables with defaults
-PLATFORM = None          # will be set by launcher.py
-VULKAN_AVAILABLE = False   # set by settings.load_config() - whether Vulkan binary exists
-BACKEND_TYPE = "CPU-Only"  # current runtime mode: "CPU-Only" or "Vulkan"
+PLATFORM = None          # set by launcher.py
+BACKEND_TYPE = "CPU_CPU"  # Fixed: Use correct format
+VULKAN_AVAILABLE = False
+LAYER_ALLOCATION_MODE = "SRAM_ONLY" 
 MODEL_FOLDER = "path/to/your/models"
 CONTEXT_SIZE = 32768
 VRAM_SIZE = 8192
@@ -138,8 +139,8 @@ current_model_settings = {
     "category": "chat"
 }
 
-# RAG Context Injector
-# RAG Context Injector
+# Classes...
+# Classes are NOT allowed in temporary script, unless critical to be here.
 class ContextInjector:
     """
     Universal RAG with support for both file attachments AND large pasted inputs.
@@ -414,7 +415,15 @@ class ContextInjector:
 
 context_injector = ContextInjector()
 
-# Status Updater
+# Functions...
+# Functions are NOT allowed in temporary script, unless critical to be here.
+def validate_backend_type(backend):
+    """Validate and normalize backend type."""
+    if backend not in ["CPU_CPU", "VULKAN_CPU", "VULKAN_VULKAN"]:
+        print(f"[BACKEND] Invalid backend '{backend}', defaulting to CPU_CPU")
+        return "CPU_CPU"
+    return backend
+
 def set_status(msg: str, console=False, priority=False):
     """
     Update both UI and/or terminal with priority support.

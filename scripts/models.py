@@ -303,6 +303,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     """
     Load a GGUF model with llama-cpp-python, including vision models.
     CRITICAL: Vision chat handlers must be created BEFORE Llama() initialization.
+    FIXED: GPU selection now properly passed to Vulkan backend.
     Returns: (status: str, success: bool, llm_obj, models_loaded_flag)
     """
     from scripts.temporary import (
@@ -312,6 +313,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     from scripts.settings import save_config
     from pathlib import Path
     import traceback
+    import os
 
     save_config()
 
@@ -377,18 +379,76 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     set_status(f"Loading model {gpu_layers}/{num_layers} layers...", console=True, priority=True)
 
-    # Base kwargs - vision handler will be added if needed
+    # CRITICAL FIX: Set Vulkan device selection BEFORE creating Llama object
+    if temporary.BACKEND_TYPE in ["VULKAN_VULKAN", "VULKAN_CPU"]:
+        if temporary.SELECTED_GPU and temporary.SELECTED_GPU != "Auto-Select":
+            from scripts.utility import get_available_gpus
+            gpu_list = get_available_gpus()
+            
+            print("\n[VULKAN] GPU Selection:")
+            print(f"  User selected: {temporary.SELECTED_GPU}")
+            print(f"  Available GPUs:")
+            for idx, gpu_name in enumerate(gpu_list):
+                marker = " <- SELECTED" if gpu_name == temporary.SELECTED_GPU else ""
+                print(f"    Vulkan{idx}: {gpu_name}{marker}")
+            
+            try:
+                gpu_index = gpu_list.index(temporary.SELECTED_GPU)
+                # Set environment variable for Vulkan device selection
+                os.environ["GGML_VULKAN_DEVICE"] = str(gpu_index)
+                print(f"[VULKAN] Set GGML_VULKAN_DEVICE={gpu_index}")
+                print(f"[VULKAN] Model will use: {temporary.SELECTED_GPU}\n")
+            except (ValueError, IndexError):
+                print(f"[VULKAN] Warning: '{temporary.SELECTED_GPU}' not found in GPU list")
+                print(f"[VULKAN] Defaulting to Vulkan0 (first device)\n")
+        else:
+            print(f"[VULKAN] Auto-select mode - will use Vulkan0 (first device)\n")
+
+    # Base kwargs
     kwargs = dict(
         model_path=str(model_path),
         n_ctx=effective_ctx,
         n_ctx_per_seq=effective_ctx,
-        n_gpu_layers=gpu_layers,
         n_batch=BATCH_SIZE,
         mmap=MMAP,
         mlock=MLOCK,
         verbose=True,
         chat_format=chat_format
     )
+
+    # ---------- GPU-layer decision based on backend type ----------
+    if temporary.BACKEND_TYPE == "VULKAN_VULKAN":
+        # Full Vulkan support - wheel compiled with Vulkan
+        kwargs["n_gpu_layers"] = gpu_layers
+        
+        # Add main_gpu parameter for multi-GPU systems
+        if temporary.SELECTED_GPU and temporary.SELECTED_GPU != "Auto-Select":
+            from scripts.utility import get_available_gpus
+            gpu_list = get_available_gpus()
+            try:
+                gpu_index = gpu_list.index(temporary.SELECTED_GPU)
+                kwargs["main_gpu"] = gpu_index
+                print(f"[LOAD] Vulkan wheel main_gpu={gpu_index}")
+            except (ValueError, IndexError):
+                pass  # Already warned above, will use default
+        
+        print(f"[LOAD] Vulkan wheel – off-loading {gpu_layers} layers")
+        
+    elif temporary.BACKEND_TYPE == "VULKAN_CPU":
+        # Vulkan binary available, but CPU wheel
+        # GPU offloading handled by Vulkan binary via environment variable
+        kwargs["n_gpu_layers"] = 0  # CPU wheel doesn't handle GPU
+        print(f"[LOAD] Vulkan binary will handle {gpu_layers} layers (CPU wheel)")
+        
+    elif temporary.BACKEND_TYPE == "CPU_CPU":
+        # Pure CPU mode
+        kwargs["n_gpu_layers"] = 0
+        print("[LOAD] CPU_CPU mode - no GPU offloading")
+        
+    else:
+        print(f"[LOAD] Unknown backend {temporary.BACKEND_TYPE} - defaulting to CPU")
+        kwargs["n_gpu_layers"] = 0
+
     if use_cpu_threads and CPU_THREADS is not None:
         kwargs["n_threads"] = CPU_THREADS
 
@@ -461,6 +521,34 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     # Now create Llama object with vision handler already configured
     try:
+        # --- enforce hard limits to keep Vulkan graph allocatable ---
+        n_ctx_train = metadata.get("llama.context_length", 32768)
+        n_vocab     = metadata.get("tokenizer.ggml.model_count", 32000)
+        n_embd      = metadata.get("llama.embedding_length", 4096)
+
+        # 1. cap context to what the model was trained on
+        effective_ctx = min(CONTEXT_SIZE, n_ctx_train)
+
+        # 2. start from the user-selected u-batch (or default)
+        n_ubatch = kwargs.get("n_ubatch", BATCH_SIZE)
+
+        # 3. compute worst-case graph memory with *that* u-batch
+        worst_mb = 3 * (n_ubatch * n_vocab * n_embd * 4) / 1024 / 1024
+        if worst_mb > vram_size * 0.75:                # keep 25 % head-room
+            n_ubatch = int((vram_size * 0.75 * 1024 * 1024 /
+                            (3 * n_vocab * n_embd * 4)))
+            n_ubatch = max(64, (n_ubatch // 64) * 64)
+            print(f"[VULKAN] Vocab {n_vocab} huge – graph {worst_mb:.0f} MB – "
+                  f"u-batch capped to {n_ubatch}")
+
+        kwargs.update({
+            "n_ctx": effective_ctx,
+            "n_ctx_per_seq": effective_ctx,
+            "n_batch": n_ubatch,
+            "n_ubatch": n_ubatch,
+        })
+        # ---------------------------------------------------------
+
         new_llm = Llama(**kwargs)
         
         # Test inference
@@ -472,8 +560,8 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         )
 
         import scripts.temporary as tmp
-        tmp.GPU_LAYERS = gpu_layers
-        tmp.MODEL_NAME = model
+        temporary.GPU_LAYERS = gpu_layers
+        temporary.MODEL_NAME = model
         
         # Enhanced status for vision+thinking models
         status_parts = ["Model ready"]
@@ -490,7 +578,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     except Exception as e:
         import scripts.temporary as tmp
-        tmp.GPU_LAYERS = 0
+        temporary.GPU_LAYERS = 0
         tb = traceback.format_exc()
         err = (f"Error loading model: {e}\n"
                f"GPU Layers: {gpu_layers}/{num_layers}\n"
@@ -506,52 +594,41 @@ def calculate_single_model_gpu_layers_with_layers(
     num_layers: int,
     dynamic_gpu_layers: bool = True
 ) -> int:
-    """Compute how many layers fit on GPU with safety checks."""
+    """
+    Fit as many whole layers as possible into the configured VRAM
+    while keeping memory free for Vulkan graph buffers that scale with context.
+    """
     from math import floor
     import scripts.temporary as tmp
 
-    # ===== CPU-Only fast-path =====
-    if tmp.BACKEND_TYPE == "CPU-Only":
-        print("[GPU-LAYERS] CPU-Only mode – forcing 0 GPU layers")
+    if tmp.BACKEND_TYPE == "CPU_CPU":
         return 0
-    # ==============================
+    if tmp.BACKEND_TYPE not in ("VULKAN_VULKAN", "VULKAN_CPU"):
+        return 0
+    if available_vram <= 0 or num_layers <= 0:
+        return 0
 
-    # Safety check for invalid layer count
-    if num_layers <= 0:
-        print(f"[GPU-LAYERS] Invalid layer count {num_layers}, using fallback 32")
-        num_layers = 32  # Use reasonable default instead of failing
-    
-    if available_vram <= 0:
-        print(f"[GPU-LAYERS] Invalid VRAM {available_vram} MB")
-        return 0
-    
     model_mb = get_model_size(model_path)
     meta = get_model_metadata(model_path)
-    
-    # Adjust factor based on architecture
     arch = meta.get("general.architecture", "unknown")
-    if arch in ["qwen2", "qwen2.5", "qwen"]:
-        factor = 1.15  # Qwen models typically need less overhead
-    elif arch == "llama":
-        factor = 1.2
-    else:
-        factor = 1.25  # Conservative for unknown architectures
-    
+
+    # model-specific overhead factor
+    factor = 1.15 if arch in ("qwen2", "qwen2.5", "qwen") else 1.20 if arch == "llama" else 1.25
     adjusted_mb = model_mb * factor
     layer_mb = adjusted_mb / num_layers
-    max_layers = floor(available_vram / layer_mb)
-    
-    if not dynamic_gpu_layers:
-        gpu_layers = num_layers
-        print(f"[GPU-LAYERS] Dynamic off-load disabled → {gpu_layers} layers")
-    else:
-        gpu_layers = min(max_layers, num_layers)
-        if "vulkan" in str(tmp.BACKEND_TYPE).lower():
-            gpu_layers = max(1, gpu_layers - 2)
-        cpu_fallback = num_layers - gpu_layers
-        print(f"[GPU-LAYERS] Model {adjusted_mb:.0f} MB, layer {layer_mb:.1f} MB")
-        print(f"[GPU-LAYERS] VRAM {available_vram} MB → GPU {gpu_layers}/{num_layers} (CPU {cpu_fallback})")
-    
+
+    # context-dependent graph buffer reserve
+    embedding_dim = {"llama": 4096, "qwen2": 5120, "qwen": 5120}.get(arch, 4096)
+    graph_mb = 3 * (tmp.CONTEXT_SIZE / 1024) ** 2 * embedding_dim * 4 / 1024 / 1024
+    reserve_mb = max(64, int(graph_mb))          # at least 64 MB
+    usable_vram = max(0, available_vram - reserve_mb)
+
+    max_layers = floor(usable_vram / layer_mb)
+    gpu_layers = min(max_layers, num_layers) if dynamic_gpu_layers else num_layers
+    gpu_layers = max(0, gpu_layers)
+
+    print(f"[GPU-LAYERS] Model {adjusted_mb:.0f} MB  layer {layer_mb:.1f} MB  "
+          f"VRAM {available_vram} MB  reserve {reserve_mb} MB  usable {usable_vram} MB → GPU {gpu_layers}/{num_layers}")
     return gpu_layers
 
 def unload_models(llm_state, models_loaded_state):

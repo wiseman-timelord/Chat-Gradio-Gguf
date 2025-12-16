@@ -21,18 +21,17 @@ PLATFORM = sys.argv[1].lower()
 
 # Core requirements (matching installer BASE_REQ)
 CORE_REQS = [
-    "gradio",
-    "requests",
+    "gradio==5.49.1",
+    "requests==2.31.0",
     "pyperclip",
-    "spacy",
+    "spacy>=3.7.0",
     "psutil",
     "ddgs",
     "newspaper3k",
-    "llama-cpp-python",
-    "langchain-community",
-    "faiss-cpu",
-    "langchain",
-    "pygments",
+    "langchain-community>=0.3.18",
+    "faiss-cpu>=1.8.0",
+    "langchain>=0.3.18",
+    "pygments==2.17.2",
     "lxml[html_clean]",
     "pyttsx3",
     "onnxruntime",
@@ -93,7 +92,7 @@ def test_config():
         with open(CONFIG_PATH, 'r') as f:
             config = json.load(f)
             
-        # Validate model_settings structure (not backend_config)
+        # Validate model_settings structure
         model_settings = config.get("model_settings", {})
         if not model_settings:
             print_status("model_settings section missing", False)
@@ -101,27 +100,33 @@ def test_config():
             
         # Check critical fields
         backend_type = model_settings.get("backend_type")
-        vulkan_available = model_settings.get("vulkan_available")
         
-        # FIX: Accept both "CPU-Only" and "Vulkan" as valid backend types
-        if backend_type not in ["CPU-Only", "Vulkan"]:
+        # FIX: Added "Vulkan-Binary" to valid types to match installer.py
+        valid_backends = ["CPU-Only", "Vulkan", "Vulkan-Binary"]
+        if backend_type not in valid_backends:
             print_status(f"Invalid backend_type: {backend_type}", False)
+            print(f"  Expected one of: {valid_backends}")
             return False
             
         print_status(f"Config valid (Backend: {backend_type})")
         
-        # Check llama-cli path only if Vulkan backend
-        if backend_type == "Vulkan":
+        # Check llama-cli path only if NOT CPU-Only
+        if backend_type != "CPU-Only":
             llama_cli_path = model_settings.get("llama_cli_path")
             if llama_cli_path:
-                cli_path = Path(llama_cli_path)
+                # Handle relative paths from config
+                if os.path.isabs(llama_cli_path):
+                    cli_path = Path(llama_cli_path)
+                else:
+                    cli_path = BASE_DIR / llama_cli_path
+
                 if cli_path.exists():
                     print_status(f"llama-cli configured: {cli_path.name}")
                 else:
-                    print_status(f"llama-cli not found at: {llama_cli_path}", False)
+                    print_status(f"llama-cli not found at: {cli_path}", False)
                     return False
             else:
-                print_status("Vulkan backend but no llama_cli_path", False)
+                print_status(f"{backend_type} backend requires llama_cli_path", False)
                 return False
         else:
             print_status("CPU-Only mode (no llama-cli needed)")
@@ -133,26 +138,32 @@ def test_config():
         return False
 
 def test_llama_cli():
-    """Verify llama-cli exists and is executable (Vulkan backend only)"""
+    """Verify llama-cli exists and is executable (Vulkan/Vulkan-Binary backends)"""
     print("\n=== Backend Binary Validation ===")
     
     # Load config to check backend type
     try:
         with open(CONFIG_PATH, 'r') as f:
             config = json.load(f)
-        backend_type = config.get("model_settings", {}).get("backend_type")
+        
+        model_settings = config.get("model_settings", {})
+        backend_type = model_settings.get("backend_type")
         
         if backend_type == "CPU-Only":
             print_status("CPU-Only mode: Binary validation skipped")
             return True
             
-        llama_cli_path = config.get("model_settings", {}).get("llama_cli_path")
+        llama_cli_path = model_settings.get("llama_cli_path")
         
         if not llama_cli_path:
             print_status("llama_cli_path not in config", False)
             return False
             
-        cli_path = Path(llama_cli_path)
+        # Handle potential relative paths in config
+        if os.path.isabs(llama_cli_path):
+            cli_path = Path(llama_cli_path)
+        else:
+            cli_path = BASE_DIR / llama_cli_path
         
         if not cli_path.exists():
             print_status(f"llama-cli not found at: {cli_path}", False)
@@ -174,7 +185,7 @@ def test_llama_cli():
                     stderr=subprocess.DEVNULL,
                     timeout=5
                 )
-                if result.returncode == 0:
+                if result.returncode == 0 or result.returncode == 1: # 1 is often help return code
                     print_status(f"llama-cli verified: {cli_path.name}")
                     return True
             except Exception:
@@ -359,22 +370,29 @@ def test_fastembed_model():
     venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
     try:
-        # FIX: Use absolute path that matches installer
         cache_dir_abs = FASTEMBED_CACHE.absolute()
+        # Match the model name used in installer.py
+        target_model = "BAAI/bge-small-en-v1.5"
         
         test_code = f'''
 import os
+import sys
 from pathlib import Path
-cache_dir = Path(r"{str(cache_dir_abs)}")
-os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
+try:
+    cache_dir = Path(r"{str(cache_dir_abs)}")
+    os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
 
-from fastembed import TextEmbedding
-model = TextEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2", 
-    cache_dir=str(cache_dir),
-    providers=["CPUExecutionProvider"]
-)
-print('OK')
+    from fastembed import TextEmbedding
+    # Use exact model from installer
+    model = TextEmbedding(
+        model_name="{target_model}", 
+        cache_dir=str(cache_dir),
+        providers=["CPUExecutionProvider"]
+    )
+    print('OK')
+except Exception as e:
+    print(f"Error: {{e}}")
+    sys.exit(1)
 '''
         
         result = subprocess.run(
@@ -385,11 +403,12 @@ print('OK')
         )
         
         if result.returncode == 0 and "OK" in result.stdout:
-            print_status("FastEmbed model verified")
+            print_status(f"FastEmbed model verified ({target_model})")
             return True
         else:
             print_status("FastEmbed model failed to load", False)
-            print(f"  Error: {result.stderr[:200]}")  # Show first 200 chars of error
+            if result.stderr:
+                print(f"  Error: {result.stderr.strip()[:200]}")
             return False
             
     except subprocess.TimeoutExpired:

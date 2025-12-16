@@ -18,36 +18,34 @@ def parse_args():
 args = parse_args()
 import scripts.temporary as temporary
 temporary.PLATFORM = args.platform
-temporary.BACKEND_TYPE = "Vulkan"
 from scripts.settings import load_config
 from scripts.interface import launch_interface
 from scripts.utility import detect_cpu_config
 
 # Functions
 def initialize_platform_settings():
-    """Set platform-specific paths and configurations"""
-    from scripts.settings import load_config
-    
-    # CRITICAL: Load config FIRST to get backend_type
-    load_config()  
-        
+    # Validate backend_type format
+    valid_backends = ["CPU_CPU", "VULKAN_CPU", "VULKAN_VULKAN"]
+    if temporary.BACKEND_TYPE not in valid_backends:
+        print(f"Warning: Invalid backend_type '{temporary.BACKEND_TYPE}', defaulting to CPU_CPU")
+        temporary.BACKEND_TYPE = "CPU_CPU"
+        temporary.VULKAN_AVAILABLE = False
+
+    # Force SRAM_ONLY for CPU_CPU mode
+    if temporary.BACKEND_TYPE == "CPU_CPU":
+        temporary.LAYER_ALLOCATION_MODE = "SRAM_ONLY"
+        print(f"[BACKEND] CPU_CPU mode forced to SRAM_ONLY")
+
+    # Set platform-specific paths based on backend
     if temporary.PLATFORM == "windows":
-        if "vulkan" in temporary.BACKEND_TYPE.lower():
+        if "VULKAN" in temporary.BACKEND_TYPE:
             temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
-        elif "cuda" in temporary.BACKEND_TYPE.lower():
-            temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli.exe"
-        elif "hip" in temporary.BACKEND_TYPE.lower():
-            temporary.LLAMA_CLI_PATH = "data/llama-hip-radeon-bin/llama-cli.exe"
-        # CPU-Only needs no llama-cli path
     elif temporary.PLATFORM == "linux":
-        if "vulkan" in temporary.BACKEND_TYPE.lower():
+        if "VULKAN" in temporary.BACKEND_TYPE:
             temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
-        elif "cuda" in temporary.BACKEND_TYPE.lower():
-            temporary.LLAMA_CLI_PATH = "data/llama-cuda-bin/llama-cli"
-        # CPU-Only needs no llama-cli path
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
-    
+
     print(f"Script mode `{temporary.PLATFORM}` with backend `{temporary.BACKEND_TYPE}`")
 
 def shutdown_program(llm_state, models_loaded_state, session_log, attached_files):
@@ -120,6 +118,9 @@ def main():
         
         # Initialize platform
         temporary.PLATFORM = args.platform
+        # Load config to get backend type
+        from scripts.settings import load_config
+        load_config()  # This will set BACKEND_TYPE from persistent.json
         
         # Load config and initialize (this sets BACKEND_TYPE correctly)
         initialize_platform_settings()

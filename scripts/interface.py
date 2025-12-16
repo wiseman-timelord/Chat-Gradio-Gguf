@@ -154,7 +154,7 @@ def format_response(output: str) -> str:
     
     formatted = []
     
-    # Extract standard <think> blocks
+    # Extract standard think blocks
     standard_thinks = re.findall(r'<think>(.*?)</think>', output, re.DOTALL)
     for thought in standard_thinks:
         if thought.strip():
@@ -189,7 +189,7 @@ def format_response(output: str) -> str:
     # Remove channel tags from output
     clean_output = re.sub(r'<\|[^>]+\|>', '', clean_output)
     
-    # Remove "Thinking...." lines (dots mode output)
+    # Remove "Thinking...." lines dots mode output
     lines = clean_output.split('\n')
     filtered_lines = []
     for line in lines:
@@ -302,7 +302,7 @@ def process_uploaded_files(files, loaded_files, models_loaded):
     new_files = [f for f in files if os.path.isfile(f) and f not in loaded_files]
     print("New files to add:", new_files)
     available_slots = max_files - len(loaded_files)
-    # Insert new files at the beginning (top of the list)
+    # Insert new files at the beginning top of the list
     for file in reversed(new_files[:available_slots]):  # Reverse to maintain upload order
         loaded_files.insert(0, file)
     
@@ -337,7 +337,7 @@ def start_new_session(models_loaded):
             "Load model first on Configuration page...",
             gr.update(interactive=False),
             gr.update(),
-            False  # has_ai_response=False for new session
+            False  # has_ai_response False for new session
         )
 
     temporary.session_attached_files.clear()
@@ -345,7 +345,7 @@ def start_new_session(models_loaded):
     temporary.session_label = ""
     temporary.SESSION_ACTIVE = True
 
-    # Use non-priority status
+    # Use non priority status
     temporary.set_status("New session ready", console=False, priority=False)
 
     return (
@@ -353,7 +353,7 @@ def start_new_session(models_loaded):
         "Type input and click Send to begin...",
         gr.update(interactive=True),
         gr.update(),
-        False  # has_ai_response=False for new session
+        False  # has_ai_response False for new session
     )
 
 def load_session_by_index(index):
@@ -366,7 +366,7 @@ def load_session_by_index(index):
         temporary.session_label = label
         temporary.SESSION_ACTIVE = True
         
-        # Calculate has_ai_response - check if there's any assistant message in history
+        # Calculate has_ai_response  check if theres any assistant message in history
         has_ai_response = len([m for m in history if m.get('role') == 'assistant' and m.get('content', '').strip()]) > 0
         
         return history, attached_files, f"Loaded session: {label}", has_ai_response
@@ -380,12 +380,12 @@ def copy_last_response(session_log):
         # Remove HTML tags
         clean_response = re.sub(r'<[^>]+>', '', response)
         
-        # Remove "Thinking..." lines
+        # Remove Thinking... lines
         lines = clean_response.split('\n')
         filtered_lines = []
         for line in lines:
             stripped = line.strip()
-            # Skip lines that are just "Thinking" followed by dots/spaces
+            # Skip lines that are just Thinking followed by dots spaces
             if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
                 continue
             filtered_lines.append(line)
@@ -482,7 +482,7 @@ def update_action_buttons(phase, has_ai_response=False):
         tuple: Updates for 5 buttons (send, edit, copy, cancel_input, cancel_response)
     """
     if phase == "waiting_for_input":
-        # New session or after cancelled input - only Send shows
+        # New session or after cancelled input only Send shows
         if not has_ai_response:
             return (
                 gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True, visible=True),
@@ -491,7 +491,7 @@ def update_action_buttons(phase, has_ai_response=False):
                 gr.update(visible=False),
                 gr.update(visible=False)
             )
-        # Has history - show Send + Edit + Copy
+        # Has history show Send Edit Copy
         else:
             return (
                 gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True, visible=True),
@@ -502,7 +502,7 @@ def update_action_buttons(phase, has_ai_response=False):
             )
     
     elif phase == "input_submitted":
-        # After user submits, before model starts - only Cancel Input
+        # After user submits before model starts only Cancel Input
         return (
             gr.update(visible=False),
             gr.update(visible=False),
@@ -512,7 +512,7 @@ def update_action_buttons(phase, has_ai_response=False):
         )
     
     elif phase == "generating_response":
-        # Model is generating - only Cancel Response (red)
+        # Model is generating  only Cancel Response red
         return (
             gr.update(visible=False),
             gr.update(visible=False),
@@ -522,7 +522,7 @@ def update_action_buttons(phase, has_ai_response=False):
         )
     
     elif phase == "speaking":
-        # TTS playing - only Cancel Response
+        # TTS playing only Cancel Response
         return (
             gr.update(visible=False),
             gr.update(visible=False),
@@ -532,7 +532,7 @@ def update_action_buttons(phase, has_ai_response=False):
         )
     
     else:
-        # Fallback - safe default
+        # Fallback safe default
         return (
             gr.update(value="Send Input", variant="secondary", elem_classes=["send-button-green"], interactive=True, visible=True),
             gr.update(visible=has_ai_response),
@@ -591,6 +591,48 @@ def update_cpu_threads_display():
     max_threads = max(1, temporary.CPU_LOGICAL_CORES - 1)
     current_threads = min(temporary.CPU_THREADS, max_threads) if temporary.CPU_THREADS else min(4, max_threads)
     return gr.update(maximum=max_threads, value=current_threads)
+    
+def refresh_layer_allocation_ui():
+    """Refresh UI components when layer allocation changes"""
+    backend_type = temporary.BACKEND_TYPE
+    layer_mode = temporary.LAYER_ALLOCATION_MODE
+    
+    # GPU visibility doesn't change with layer allocation
+    gpu_visible = backend_type in ["VULKAN_VULKAN", "VULKAN_CPU"]
+    
+    # VRAM visibility depends on layer mode
+    vram_visible = backend_type in ["VULKAN_VULKAN", "VULKAN_CPU"] and layer_mode == "VRAM_SRAM"
+    
+    return [
+        gr.update(visible=gpu_visible),   # GPU dropdown - always visible for Vulkan
+        gr.update(visible=vram_visible),  # VRAM dropdown - only visible for VRAM_SRAM
+    ]
+
+def handle_layer_allocation_change(mode, model_name, vram_size, context_size):
+    """Handle layer allocation mode changes and calculate GPU layers"""
+    temporary.LAYER_ALLOCATION_MODE = mode
+    
+    if mode == "SRAM_ONLY":
+        # Force 0 GPU layers
+        temporary.GPU_LAYERS = 0
+        status = "Layer allocation: System memory only (0 GPU layers)"
+    else:  # VRAM_SRAM
+        # Calculate optimal GPU layers
+        if model_name and model_name != "Select_a_model...":
+            model_path = Path(temporary.MODEL_FOLDER) / model_name
+            optimal_layers = utility.calculate_optimal_gpu_layers(
+                str(model_path), vram_size, context_size
+            )
+            temporary.GPU_LAYERS = optimal_layers
+            status = f"Layer allocation: VRAM+SRAM ({optimal_layers} GPU layers calculated)"
+        else:
+            status = "Layer allocation: VRAM+SRAM (load model to calculate)"
+    
+    # Save the configuration
+    settings.save_config()
+    
+    # GPU visibility doesn't change - only show status update
+    return status
 
 def save_configuration_settings():
     """Save all configuration settings including CPU threads"""
@@ -605,6 +647,51 @@ def save_configuration_settings():
         return "Settings saved successfully."
     except Exception as e:
         return f"Error saving settings: {str(e)}"
+
+def update_backend_ui():
+    """Update UI components based on backend type"""
+    backend_type = temporary.BACKEND_TYPE
+    vulkan_available = temporary.VULKAN_AVAILABLE
+    layer_mode = temporary.LAYER_ALLOCATION_MODE
+    
+    # Backend type display (always visible)
+    backend_update = gr.update(value=backend_type)
+    
+    # Layer allocation radio (only visible for Vulkan)
+    allocation_visible = vulkan_available
+    allocation_update = gr.update(
+        visible=allocation_visible,
+        value=layer_mode if allocation_visible else "SRAM_ONLY"
+    )
+    
+    # GPU selection - show for Vulkan modes regardless of layer mode
+    gpu_visible = backend_type in ["VULKAN_VULKAN", "VULKAN_CPU"]
+    gpu_dropdown_update = gr.update(visible=gpu_visible)
+    
+    # VRAM selection - only show for Vulkan modes when VRAM_SRAM mode
+    vram_visible = backend_type in ["VULKAN_VULKAN", "VULKAN_CPU"] and layer_mode == "VRAM_SRAM"
+    vram_dropdown_update = gr.update(visible=vram_visible)
+    
+    # GPU row container - show if either GPU or VRAM is visible
+    gpu_row_visible = gpu_visible or vram_visible
+    gpu_row_update = gr.update(visible=gpu_row_visible)
+    
+    # CPU device - ALWAYS visible for all backend types
+    cpu_visible = True
+    cpu_dropdown_update = gr.update(visible=cpu_visible)
+    
+    # Threads always visible
+    threads_update = gr.update()
+    
+    return [
+        backend_update,
+        allocation_update,
+        gpu_row_update,
+        gpu_dropdown_update,
+        vram_dropdown_update,
+        cpu_dropdown_update,
+        threads_update
+    ]
 
 def handle_cpu_threads_change(new_threads):
     """Handle CPU threads slider changes"""
@@ -794,7 +881,7 @@ async def conversation_interface(
     visible_resp = re.sub(r'<\|channel\|>analysis.*?(?:<\|end\|>|<\|channel\|>final)', '', visible_resp, flags=re.DOTALL)
     visible_resp = re.sub(r'<\|[^>]+\|>', '', visible_resp)
     
-    # Remove "Thinking...." lines
+    # Remove Thinking.... lines
     lines = visible_resp.split('\n')
     filtered_lines = []
     for line in lines:
@@ -883,7 +970,7 @@ def launch_interface():
         temporary.demo = demo
         model_folder_state = gr.State(temporary.MODEL_FOLDER)
 
-        # SHARED STATUS STATE - ensures both tabs show same status
+        # SHARED STATUS STATE ensures both tabs show same status
         shared_status_state = gr.State("Ready")
 
         states = dict(
@@ -910,6 +997,15 @@ def launch_interface():
         def update_shared_status(message):
             return message, message, message
 
+        def handle_backend_mode_change(mode):
+            """Handle backend mode changes and update VRAM visibility"""
+            if mode == "SRAM_ONLY":
+                # Hide VRAM dropdown for system memory mode
+                return gr.update(visible=False)
+            else:
+                # Show VRAM dropdown for GPU mode
+                return gr.update(visible=True)
+
         with gr.Tabs():
             with gr.Tab("Interaction"):
                 with gr.Row():
@@ -930,7 +1026,7 @@ def launch_interface():
                         new_session_btn_collapsed = gr.Button("New", variant="secondary", elem_classes=["clean-elements-normbot"])
                         add_attach_files_collapsed = gr.UploadButton("Add", file_types=[f".{ext}" for ext in temporary.ALLOWED_EXTENSIONS], file_count="multiple", variant="secondary", elem_classes=["clean-elements"])
 
-                    # CENTER COLUMN (Session Log & User Input)
+                    # CENTER COLUMN Session Log  User Input
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
                         conversation_components["session_log"] = gr.Chatbot(label="Session Log", height=temporary.SESSION_LOG_HEIGHT, elem_classes=["scrollable"], type="messages")
                         initial_max_lines = max(3, int(((temporary.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
@@ -984,54 +1080,82 @@ def launch_interface():
             with gr.Tab("Configuration"):
                 with gr.Column(scale=1, elem_classes=["clean-elements"]):
                     with gr.Row(elem_classes=["clean-elements"]):
-                        gr.Markdown("**Hardware**")
+                        gr.Markdown(f"**Hardware**")
+                    
+                    # Backend selection NON INTERACTIVE shows what installer set
                     with gr.Row(elem_classes=["clean-elements"]) as cpu_row:
-                        if temporary.VULKAN_AVAILABLE:
-                            backend_radio = gr.Radio(
-                                choices=["CPU-Only", "Vulkan"],
-                                value=temporary.BACKEND_TYPE,
-                                label="Execution Mode",
-                                interactive=True,
-                            )
-                        else:
-                            backend_radio = gr.Label(
-                                value="CPU-Only",
-                                label="Execution Mode",
-                            )
-                        cpu_labs = [c["label"] for c in utility.get_cpu_info()] or ["Default CPU"]
-                        cpu_opts = ["Select..."] + cpu_labs if len(cpu_labs) > 1 else cpu_labs
-                        def_cpu = temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_opts else cpu_opts[0]
+                        backend_type_display = gr.Textbox(
+                            value=temporary.BACKEND_TYPE,
+                            label="Backend Type", 
+                            interactive=False   
+                        )
+                        
+                        # Layer Allocation - only show for Vulkan installations
+                        layer_allocation_visible = temporary.VULKAN_AVAILABLE
+                        layer_allocation_radio = gr.Radio(
+                            choices=["SRAM_ONLY", "VRAM_SRAM"],
+                            value=temporary.LAYER_ALLOCATION_MODE,
+                            label="Layer Storage",
+                            interactive=True,
+                            visible=layer_allocation_visible,
+                            info="SRAM_ONLY: CPU only | VRAM_SRAM: Auto GPU layers"
+                        )
+                       
+                    # GPU row - show for Vulkan backends
+                    gpu_row_visible = temporary.BACKEND_TYPE in ["VULKAN_VULKAN", "VULKAN_CPU"]
+                    with gr.Row(elem_classes=["clean-elements"], visible=gpu_row_visible) as gpu_row:
+                        gpus = utility.get_available_gpus()
+                        gpu_choices = ["Auto-Select"] + gpus if len(gpus) > 1 else gpus
+                        def_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in gpu_choices else (
+                            gpu_choices[0] if len(gpu_choices) == 1 else "Auto-Select"
+                        )
+                        config_components["gpu"] = gr.Dropdown(
+                            choices=gpu_choices, 
+                            label="GPU Selected", 
+                            value=def_gpu,
+                            interactive=len(gpu_choices) > 1  # Only interactive if multiple GPUs
+                        )
+                        # VRAM only visible when VRAM_SRAM mode
+                        vram_visible = temporary.BACKEND_TYPE in ["VULKAN_VULKAN", "VULKAN_CPU"] and temporary.LAYER_ALLOCATION_MODE == "VRAM_SRAM"
+                        config_components["vram"] = gr.Dropdown(
+                            choices=temporary.VRAM_OPTIONS,
+                            label="VRAM MB",
+                            value=temporary.VRAM_SIZE,
+                            visible=vram_visible
+                        )
+
+                    # CPU row - combine CPU selection and threads
+                    with gr.Row(elem_classes=["clean-elements"]) as cpu_row:
+                        # CPU device selection - ALWAYS visible for all backends
+                        cpu_device_visible = True
+                        cpu_info = utility.get_cpu_info()
+                        cpu_labs = [c["label"] for c in cpu_info] or ["Default CPU"]
+                        cpu_opts = ["Auto-Select"] + cpu_labs if len(cpu_labs) > 1 else cpu_labs
+                        def_cpu = temporary.SELECTED_CPU if temporary.SELECTED_CPU in cpu_opts else (
+                            cpu_opts[0] if len(cpu_opts) == 1 else "Auto-Select"
+                        )
                         config_components["cpu"] = gr.Dropdown(
                             choices=cpu_opts,
-                            label="CPU Device",
+                            label="CPU Selected",
                             value=def_cpu,
-                            scale=4
+                            visible=cpu_device_visible,
+                            interactive=len(cpu_opts) > 1,  # Only interactive if multiple CPUs
+                            scale=5
                         )
+                        
+                        # CPU threads - always visible and interactive
                         max_threads = max(temporary.CPU_THREAD_OPTIONS or [8])
                         config_components["cpu_threads"] = gr.Slider(
                             minimum=1,
                             maximum=max(temporary.CPU_THREAD_OPTIONS or [8]),
                             value=temporary.CPU_THREADS or min(4, max(temporary.CPU_THREAD_OPTIONS or [8])),
                             step=1,
-                            label="Threads",
-                            scale=3,
+                            label="CPU Threads",
                             info=f"Available: {max(temporary.CPU_THREAD_OPTIONS or [8])} threads",
-                            interactive=True
+                            interactive=True,
+                            scale=5
                         )
-                    gpu_row_visible = temporary.VULKAN_AVAILABLE and temporary.BACKEND_TYPE == "Vulkan"
-                    with gr.Row(elem_classes=["clean-elements"], visible=gpu_row_visible) as gpu_row:
-                        gpus = utility.get_available_gpus()
-                        gpu_choices = ["Auto-Select"] + gpus if gpus != ["CPU Only"] else ["CPU Only"]
-                        def_gpu = temporary.SELECTED_GPU if temporary.SELECTED_GPU in gpu_choices else gpu_choices[0]
-                        config_components["gpu"] = gr.Dropdown(
-                            choices=gpu_choices, label="GPU", value=def_gpu, scale=10
-                        )
-                        config_components["vram"] = gr.Dropdown(
-                            choices=temporary.VRAM_OPTIONS,
-                            label="VRAM MB",
-                            value=temporary.VRAM_SIZE,
-                            scale=5,
-                        )
+                        
                     with gr.Row(elem_classes=["clean-elements"]):
                         gr.Markdown("**Model**")
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -1039,24 +1163,24 @@ def launch_interface():
                         mods = ["Select_a_model..."] + [m for m in avail if m != "Select_a_model..."]
                         def_m = temporary.MODEL_NAME if temporary.MODEL_NAME in mods else (mods[1] if len(mods) > 1 else mods[0])
                         config_components["model_path"] = gr.Textbox(
-                            label="Folder", value=temporary.MODEL_FOLDER, interactive=False, scale=10
+                            label="Folder", value=temporary.MODEL_FOLDER, interactive=False
                         )
                         config_components["model"] = gr.Dropdown(
-                            choices=mods, label="File", value=def_m, scale=10, info=".gguf"
+                            choices=mods, label=".gguf File", value=def_m
                         )
-                        keywords_display = gr.Textbox(label="Features", interactive=False, scale=10)
+                        keywords_display = gr.Textbox(label="Model Features", interactive=False)
                     with gr.Row(elem_classes=["clean-elements"]):
                         config_components["ctx"] = gr.Dropdown(
-                            temporary.CTX_OPTIONS, label="Context", value=temporary.CONTEXT_SIZE, scale=5
+                            temporary.CTX_OPTIONS, label="Context Length", value=temporary.CONTEXT_SIZE, scale=5
                         )
                         config_components["batch"] = gr.Dropdown(
-                            temporary.BATCH_OPTIONS, label="Batch", value=temporary.BATCH_SIZE, scale=5
+                            temporary.BATCH_OPTIONS, label="Batch Size", value=temporary.BATCH_SIZE, scale=5
                         )
                         config_components["temp"] = gr.Dropdown(
-                            temporary.TEMP_OPTIONS, label="Temp", value=temporary.TEMPERATURE, scale=5
+                            temporary.TEMP_OPTIONS, label="Temperature", value=temporary.TEMPERATURE, scale=5
                         )
                         config_components["repeat"] = gr.Dropdown(
-                            temporary.REPEAT_OPTIONS, label="Repeat", value=temporary.REPEAT_PENALTY, scale=5
+                            temporary.REPEAT_OPTIONS, label="Repeat Penalty", value=temporary.REPEAT_PENALTY, scale=5
                         )
                     with gr.Row(elem_classes=["clean-elements"]):
                         browse = gr.Button("📁 Browse", variant="secondary")
@@ -1067,13 +1191,13 @@ def launch_interface():
                         gr.Markdown("**Program**")
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components["max_hist"] = gr.Dropdown(
-                            temporary.HISTORY_SLOT_OPTIONS, label="Sessions", value=temporary.MAX_HISTORY_SLOTS, scale=5
+                            temporary.HISTORY_SLOT_OPTIONS, label="Sessions History", value=temporary.MAX_HISTORY_SLOTS, scale=5
                         )
                         custom_components["height"] = gr.Dropdown(
-                            temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Height", value=temporary.SESSION_LOG_HEIGHT, scale=5
+                            temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Main Height", value=temporary.SESSION_LOG_HEIGHT, scale=5
                         )
                         custom_components["max_att"] = gr.Dropdown(
-                            temporary.ATTACH_SLOT_OPTIONS, label="Attach", value=temporary.MAX_ATTACH_SLOTS, scale=5
+                            temporary.ATTACH_SLOT_OPTIONS, label="Attachments", value=temporary.MAX_ATTACH_SLOTS, scale=5
                         )
                         with gr.Column(scale=5):
                             config_components["show_think_phase"] = gr.Checkbox(
@@ -1274,7 +1398,7 @@ def launch_interface():
                 states["llm"],
                 states["models_loaded"],
                 states["speech_enabled"],
-                states["has_ai_response"]        # ← 11th
+                states["has_ai_response"]
             ],
             outputs=[
                 conversation_components["session_log"],
@@ -1283,14 +1407,14 @@ def launch_interface():
                 action_buttons["edit_previous"],
                 action_buttons["copy_response"],
                 action_buttons["cancel_input"],
-                action_buttons["cancel_response"],  # This was missing in your list
+                action_buttons["cancel_response"],
                 states["cancel_flag"],
                 states["attached_files"],
                 states["interaction_phase"],
                 conversation_components["user_input"],
                 states["web_search_enabled"],
                 states["speech_enabled"],
-                states["has_ai_response"]  # ADD THIS
+                states["has_ai_response"]
             ]
         ).then(
             fn=update_session_buttons,
@@ -1393,7 +1517,7 @@ def launch_interface():
             fn=handle_edit_previous,
             inputs=[conversation_components["session_log"]],
             outputs=[conversation_components["session_log"], conversation_components["user_input"], 
-                     shared_status_state, states["has_ai_response"]]  # ADD THIS 4th output
+                     shared_status_state, states["has_ai_response"]]
         ).then(
             fn=update_action_buttons,
             inputs=[gr.State("waiting_for_input"), states["has_ai_response"]],
@@ -1421,7 +1545,7 @@ def launch_interface():
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
                 outputs=[conversation_components["session_log"], states["attached_files"], 
-                         shared_status_state, states["has_ai_response"]]  # ADD THIS 4th output
+                         shared_status_state, states["has_ai_response"]]
             )
 
         for i, btn in enumerate(buttons["session"]):
@@ -1429,7 +1553,7 @@ def launch_interface():
                 fn=load_session_by_index,
                 inputs=[gr.State(value=i)],
                 outputs=[conversation_components["session_log"], states["attached_files"], 
-                         shared_status_state, states["has_ai_response"]]  # Added has_ai_response state
+                         shared_status_state, states["has_ai_response"]]
             ).then(
                 fn=update_session_buttons,
                 inputs=[],
@@ -1484,6 +1608,18 @@ def launch_interface():
             outputs=[shared_status_state]
         )
 
+        config_components["gpu"].change(
+            fn=lambda gpu: setattr(temporary, "SELECTED_GPU", gpu),
+            inputs=[config_components["gpu"]],
+            outputs=[]
+        )
+
+        config_components["cpu"].change(
+            fn=lambda cpu: setattr(temporary, "SELECTED_CPU", cpu),
+            inputs=[config_components["cpu"]],
+            outputs=[]
+        )
+
         states["selected_panel"].change(
             fn=lambda panel: (
                 gr.update(visible=panel == "Attachments"),
@@ -1501,15 +1637,24 @@ def launch_interface():
             )
 
         if temporary.VULKAN_AVAILABLE:
-            backend_radio.change(
-                fn=lambda mode: [mode, gr.update(visible=(mode == "Vulkan"))],
-                inputs=[backend_radio],
-                outputs=[backend_radio, gpu_row]
+            layer_allocation_radio.change(
+                fn=handle_layer_allocation_change,
+                inputs=[
+                    layer_allocation_radio, 
+                    config_components["model"],
+                    config_components["vram"],
+                    config_components["ctx"]
+                ],
+                outputs=[shared_status_state]
             ).then(
-                fn=lambda mode: setattr(temporary, "BACKEND_TYPE", mode) or None,
-                inputs=[backend_radio],
-                outputs=[]
+                fn=refresh_layer_allocation_ui,
+                inputs=[],
+                outputs=[
+                    config_components["gpu"],
+                    config_components["vram"]
+                ]
             )
+
 
         config_components["unload"].click(
             fn=unload_models,
@@ -1525,8 +1670,19 @@ def launch_interface():
             outputs=[shared_status_state]
         ).then(
             fn=load_models,
-            inputs=[model_folder_state, config_components["model"], config_components["vram"], states["llm"], states["models_loaded"]],
-            outputs=[shared_status_state, states["models_loaded"], states["llm"], states["models_loaded"]]
+            inputs=[              # ← these five must match the function signature
+                model_folder_state,
+                config_components["model"],
+                config_components["vram"],
+                states["llm"],
+                states["models_loaded"]
+            ],
+            outputs=[
+                shared_status_state,
+                states["models_loaded"],
+                states["llm"],
+                states["models_loaded"]
+            ]
         ).then(
             fn=lambda status, ml: (status, gr.update(interactive=ml)),
             inputs=[shared_status_state, states["models_loaded"]],
@@ -1633,9 +1789,17 @@ def launch_interface():
         #  INITIAL LOAD
         # ----------------------------------------------------------
         demo.load(
-            fn=get_initial_model_value,
+            fn=update_backend_ui,
             inputs=[],
-            outputs=[config_components["model"], states["is_reasoning_model"]]
+            outputs=[
+                backend_type_display,
+                layer_allocation_radio,  # Changed from layer_allocation_radio
+                gpu_row,
+                config_components["gpu"],
+                config_components["vram"], 
+                config_components["cpu"],
+                config_components["cpu_threads"]
+            ]
         ).then(
             fn=lambda model_name: models.get_model_settings(model_name),
             inputs=[config_components["model"]],

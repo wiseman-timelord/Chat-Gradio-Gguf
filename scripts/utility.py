@@ -35,6 +35,18 @@ elif temporary.PLATFORM == "linux":
         print("Warning: pyttsx3 not installed. Text-to-speech will be unavailable on Linux.")
 
 # Functions...
+def has_vulkan_binary():
+    """Check if Vulkan binary is available (VULKAN_CPU or VULKAN_VULKAN modes)"""
+    return temporary.BACKEND_TYPE in ["VULKAN_CPU", "VULKAN_VULKAN"]
+
+def has_vulkan_wheel():
+    """Check if Python wheel has Vulkan support (VULKAN_VULKAN mode only)"""
+    return temporary.BACKEND_TYPE == "VULKAN_VULKAN"
+
+def is_cpu_only():
+    """Check if running in pure CPU mode (CPU_CPU mode)"""
+    return temporary.BACKEND_TYPE == "CPU_CPU"
+
 def short_path(path_str, max_len=44):
     """Truncate path to last max_len chars with ... prefix"""
     path = str(path_str)
@@ -123,8 +135,53 @@ def get_available_gpus_windows():
         except Exception:
             return ["CPU Only"]
 
+def calculate_optimal_gpu_layers(model_path, vram_mb, context_size):
+    """
+    Calculate optimal number of GPU layers based on VRAM and model size.
+    Returns 0 for SRAM_ONLY mode, or calculated layers for VRAM_SRAM.
+    """
+    try:
+        from pathlib import Path
+        import struct
+        
+        if not Path(model_path).exists():
+            print(f"[GPU-CALC] Model not found: {model_path}")
+            return 0
+        
+        # Estimate model memory usage
+        model_size_bytes = Path(model_path).stat().st_size
+        model_size_mb = model_size_bytes / (1024 * 1024)
+        
+        # Context cache estimation (rough: 1MB per 1K context)
+        context_mb = context_size / 1024
+        
+        # Reserve 20% VRAM for overhead
+        usable_vram = vram_mb * 0.8
+        
+        # Estimate layers (typical model: ~40-80 layers, ~50-200MB each)
+        # This is a rough heuristic - adjust based on testing
+        estimated_layer_size = model_size_mb / 40  # Assume ~40 layers
+        available_for_layers = usable_vram - context_mb
+        
+        if available_for_layers <= 0:
+            return 0
+        
+        optimal_layers = int(available_for_layers / estimated_layer_size)
+        
+        # Cap at reasonable maximum (most models have 32-80 layers)
+        optimal_layers = min(optimal_layers, 128)
+        
+        print(f"[GPU-CALC] Model: {model_size_mb:.0f}MB, Context: {context_mb:.0f}MB, "
+              f"VRAM: {vram_mb}MB → {optimal_layers} layers")
+        
+        return max(0, optimal_layers)
+        
+    except Exception as e:
+        print(f"[GPU-CALC] Error: {e}")
+        return 0
+
 def get_available_gpus_linux():
-    """Get available GPUs on Linux systems with improved detection"""
+    """Get available GPUs on Linux systems - returns clean names without prefixes"""
     gpus = []
 
     try:
@@ -135,7 +192,8 @@ def get_available_gpus_linux():
                 stderr=subprocess.DEVNULL,
                 text=True
             )
-            gpus.extend(f"NVIDIA {line.strip()}" for line in output.splitlines() if line.strip())
+            # Don't add "NVIDIA" prefix - use raw name
+            gpus.extend(line.strip() for line in output.splitlines() if line.strip())
         except Exception:
             pass
 
@@ -150,7 +208,8 @@ def get_available_gpus_linux():
                 if "Marketing Name" in line:
                     name = line.split(":", 1)[-1].strip()
                     if name:
-                        gpus.append(f"AMD {name}")
+                        # Don't add "AMD" prefix - use raw name
+                        gpus.append(name)
         except Exception:
             pass
 
@@ -164,14 +223,14 @@ def get_available_gpus_linux():
             for line in output.splitlines():
                 lower = line.lower()
                 if "vga" in lower or "display" in lower or "3d" in lower:
+                    # Extract clean name after the colon
                     name = line.split(":", 2)[-1].strip()
-                    if "nvidia" in lower:
-                        gpus.append(f"NVIDIA {name}")
-                    elif "amd" in lower or "ati" in lower:
-                        gpus.append(f"AMD {name}")
-                    elif "intel" in lower:
-                        gpus.append(f"Intel {name}")
-                    else:
+                    
+                    # Clean up the name - remove PCI IDs in brackets
+                    name = re.sub(r'\[[\da-f:]+\]', '', name).strip()
+                    
+                    # Only add if not already in list (from nvidia-smi/rocminfo)
+                    if name and name not in gpus:
                         gpus.append(name)
         except Exception:
             pass
@@ -185,7 +244,7 @@ def get_available_gpus_linux():
 
     if not unique_gpus:
         temporary.set_status("No GPU", console=True)
-        sys.exit(1)          # critical exit → back to launcher caller
+        sys.exit(1)
 
     return unique_gpus
 
@@ -849,13 +908,13 @@ def web_search(query: str, num_results, max_hits: int = 6) -> str:
         hits = DDGS().text(query, max_results=max_hits)
     except DDGSException as e:
         raw = f"DuckDuckGo error: {e}"
-        if tmp.PRINT_RAW_OUTPUT:
+        if temporary.PRINT_RAW_OUTPUT:
             print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
         return raw
 
     if not hits:
         raw = "DuckDuckGo returned zero results."
-        if tmp.PRINT_RAW_OUTPUT:
+        if temporary.PRINT_RAW_OUTPUT:
             print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
         return raw
 
@@ -864,7 +923,7 @@ def web_search(query: str, num_results, max_hits: int = 6) -> str:
         for i, h in enumerate(hits, 1)
     )
 
-    if tmp.PRINT_RAW_OUTPUT:
+    if temporary.PRINT_RAW_OUTPUT:
         print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
 
     return raw
