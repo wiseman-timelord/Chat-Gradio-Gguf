@@ -80,112 +80,47 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 - The updoming Install Options menu, regular download and/or compile if having pre-installed tools...
 <details>
     
-===============================================================================
-    Chat-Gradio-Gguf - Gpu Options
-===============================================================================
-
-
-
-    1) Download CPU Binaries / Download CPU Wheel
-
-    2) Compile CPU Binaries / Compile CPU Wheel
-
-    3) Download Vulkan Bin / Download CPU Wheel
-
-    4) Download Vulkan Bin / Download CPU Wheel (Forced)
-
-    5) Download Vulkan Bin / Compile Vulkan Wheel
-
-    6) Compile Vulkan Binaries / Compile Vulkan Wheel
-
-
-
-
--------------------------------------------------------------------------------
-Selecton; Menu Options 1-6, Abandon Install = A:
+    ===============================================================================
+        Chat-Gradio-Gguf - Gpu Options
+    ===============================================================================
+    
+    
+    
+        1) Download CPU Binaries / Download CPU Wheel
+    
+        2) Compile CPU Binaries / Compile CPU Wheel
+    
+        3) Download Vulkan Bin / Download CPU Wheel
+    
+        4) Download Vulkan Bin / Download CPU Wheel (Forced)
+    
+        5) Download Vulkan Bin / Compile Vulkan Wheel
+    
+        6) Compile Vulkan Binaries / Compile Vulkan Wheel
+    
+    
+    
+    
+    -------------------------------------------------------------------------------
+    Selecton; Menu Options 1-6, Abandon Install = A:
 
 </details>
 
-- Installation processes (after building Vulkan Wheel in limited terminal/console buffer)..
+- Installation processes (after building Vulkan binaries/Wheel in limited terminal/console buffer)..
 <details>
-
-      ...shortened...
-      *** Making wheel...
-      *** Created llama_cpp_python-0.3.16-cp311-cp311-win_amd64.whl
-      Building wheel for llama-cpp-python (pyproject.toml) ... done
-      Created wheel for llama-cpp-python: filename=llama_cpp_python-0.3.16-cp311-cp3
-    11-win_amd64.whl size=20197109 sha256=cd441ab95046bb69e924675b4dd75cd9646ea790ed
-    f7bd2e68ec22d011eb389e
-      Stored in directory: D:\Temporary\TEMP\pip-ephem-wheel-cache-9a5khgos\wheels\d
-    8\5b\e5\a7d4b5765da347d314e8155197440c9995a962f8e4a5f52b23
-    Successfully built llama-cpp-python
-    Installing collected packages: typing-extensions, numpy, MarkupSafe, diskcache,
-    jinja2, llama-cpp-python
-      Attempting uninstall: typing-extensions
-        Found existing installation: typing_extensions 4.15.0
-        Uninstalling typing_extensions-4.15.0:
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\__pycache__\typing_extensions.cpython-311.pyc
     
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\typing_extensions-4.15.0.dist-info\
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\typing_extensions.py
-          Successfully uninstalled typing_extensions-4.15.0
-      Attempting uninstall: numpy
-        Found existing installation: numpy 2.3.5
-        Uninstalling numpy-2.3.5:
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\numpy-2.3.5.dist-info\
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\numpy.libs\
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\numpy\
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\scripts\f2py.exe
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\scripts\numpy-config.exe
-          Successfully uninstalled numpy-2.3.5
-      Attempting uninstall: MarkupSafe
-        Found existing installation: MarkupSafe 3.0.3
-        Uninstalling MarkupSafe-3.0.3:
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\markupsafe-3.0.3.dist-info\
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\markupsafe\
-          Successfully uninstalled MarkupSafe-3.0.3
-      Attempting uninstall: jinja2
-        Found existing installation: Jinja2 3.1.6
-        Uninstalling Jinja2-3.1.6:
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\jinja2-3.1.6.dist-info\
-          Removing file or directory c:\program_files\chat-gradio-gguf\chat-gradio-g
-    guf-0.95.6\.venv\lib\site-packages\jinja2\
-          Successfully uninstalled Jinja2-3.1.6
-    Successfully installed MarkupSafe-3.0.3 diskcache-5.6.3 jinja2-3.1.6 llama-cpp-p
-    ython-0.3.16 numpy-2.3.5 typing-extensions-4.15.0
-    
-    ================================================================================
-    
-    [V] llama-cpp-python built successfully
-    [V] Python dependencies installed
-    [V] Installing optional file format support...
-    [V] Installed PyPDF2
-    [V] Installed python-docx
-    [V] Installed openpyxl
-    [V] Installed python-pptx
-    [V] All file format support installed
-    [V] Downloading embedding model (this may take 1-2 minutes)...
-      Progress tracking not available for this download
-    [V] Embedding model downloaded
-    [V] Downloading spaCy language model...
-    Downloading spaCy model: [=========================] 100% (12.2MB/12.2MB)
-    [V] Installing spaCy model...
-    [V] spaCy model installed
-    [V] Downloading llama.cpp binaries...
-    Downloading win-vulkan-x64: [=========================] 100% (30.4MB/30.4MB)
-    Extracting: [=========================] 100% (37.0B/37.0B)
-    [V] Backend ready
+          ...shortened...
+      Installed llama-save-load-state.exe
+      Installed llama-server.exe
+      Installed llama-simple-chat.exe
+      Installed llama-simple.exe
+      Installed llama-speculative-simple.exe
+      Installed llama-speculative.exe
+      Installed llama-tokenize.exe
+      Installed llama-tts.exe
+      Installed llama-vdot.exe
+    [V] Binary compilation complete
+    Optimizations enabled: AVX2, FMA, F16C (50% less RAM)
     [V] Configuration file created
     
     Generated configuration:
@@ -203,7 +138,7 @@ Selecton; Menu Options 1-6, Abandon Install = A:
 
 </details>
 
-- Validation of Install (updated only if big changes to installer)..
+- Validation of Install (script needs checking/updating since compiling update)..
 <details>
     
     ===============================================================================
@@ -281,6 +216,12 @@ Selecton; Menu Options 1-6, Abandon Install = A:
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [Qwen1.5-0.5B-Chat-GGUF](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GGUF), as this will be super-fast and confirm basic operation, otherwise see models section.
 - Suitable GPU - Gpu may be, Main or Compute, with VRam selection 756MB-64GB. It must have Vulkan capability/drivers (if the installer contains files referring to Vulkan).  
 - System Ram - Your system should cover the size of the model not able to be covered by the GPU (ie, 4GB card for 4B model in Q6_K, 16GB card for 16b model in Q6_K).
+
+## Additional Requirements 
+For compile options; If on PATH, ask AI how to check its on path, and as applicable fix...
+- MSVC 2017-2019 - MSVC with option Desktop Development enabled during install.
+- MS Build Tools - Also for building, ensure its on PATH.
+- Git - Github Program for cloning the sources from github, ensure its on PATH. 
 
 ### Instructions (W = Windows, U = Ubuntu)...
 - Pre-Installation...
