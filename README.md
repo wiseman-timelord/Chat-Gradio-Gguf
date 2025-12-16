@@ -32,6 +32,7 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 - **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, ie, uncensored, nsfw, chat, code.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
 - **Correct Vulkan Installs**: If Vulkan selected, then, `Windows 7-8 = v1.1.126.0` and `Windows 8.1-11 = v1.4.3.04.1`, avoiding API issues.
+- **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, do other chatbots you treid do that?!.
 
 ### Preview
 - The "Interaction" page, where the conversation happens...
