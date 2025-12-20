@@ -346,6 +346,18 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
     build_threads = get_optimal_build_threads()
     print(f"  Using {build_threads} parallel build threads")
     
+    # Set up environment for parallel compilation
+    env = os.environ.copy()
+    env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(build_threads)
+    env["GIT_PROGRESS"] = "1"
+    
+    if PLATFORM == "windows":
+        env["FORCE_CMAKE"] = "1"
+        env["CL"] = f"/MP{build_threads}"
+    else:
+        env["MAKEFLAGS"] = f"-j{build_threads}"
+        env["NINJAFLAGS"] = f"-j{build_threads}"
+    
     # Detect CPU features for optimization
     print_status("Detecting CPU features...")
     cpu_features = detect_cpu_features()
@@ -370,7 +382,7 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
     cmake_args.append(f"-DGGML_F16C={'ON' if cpu_features['F16C'] else 'OFF'}")
     cmake_args.append("-DGGML_OPENMP=ON")
     
-    # Parallel compilation flags
+    # Parallel compilation flags - NOW APPLIED TO LINUX TOO
     if PLATFORM == "windows":
         cmake_args.extend([
             "-DCMAKE_CXX_FLAGS=/MP",
@@ -382,7 +394,6 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
             "-DCMAKE_CXX_FLAGS=-pthread"
         ])
     
-    env = os.environ.copy()
     if cmake_args:
         env["CMAKE_ARGS"] = " ".join(cmake_args)
         if PLATFORM == "windows":
@@ -391,15 +402,6 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
         for arg in cmake_args:
             if arg.startswith("-DGGML_"):
                 print(f"  {arg}")
-    
-    env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(build_threads)
-    env["GIT_PROGRESS"] = "1"  # Add to existing env
-    
-    if PLATFORM == "windows":
-        env["CL"] = f"/MP{build_threads}"
-    else:
-        env["MAKEFLAGS"] = f"-j{build_threads}"
-        env["NINJAFLAGS"] = f"-j{build_threads}"
     
     # Configure git globally for unreliable connections
     subprocess.run(["git", "config", "--global", "http.lowSpeedLimit", "50"], 
@@ -863,21 +865,29 @@ def install_vulkan_sdk_windows() -> bool:
         return False
 
 def install_vulkan_sdk_linux() -> bool:
-    """Install Vulkan SDK on Linux"""
+    """Install Vulkan SDK on Linux with shader compiler support"""
     print_status("Installing Vulkan SDK for building llama-cpp-python...")
-    
     packages = [
         "vulkan-tools",
         "libvulkan-dev", 
+        "vulkan-headers",
         "vulkan-validationlayers-dev",
-        "mesa-utils"
+        "mesa-utils",
+        "shaderc",  # Provides glslc shader compiler
+        "glslang-tools"  # Alternative shader compiler tools
     ]
-    
     try:
         subprocess.run(["sudo", "apt-get", "update"], check=True)
         subprocess.run(["sudo", "apt-get", "install", "-y"] + packages, check=True)
-        print_status("Vulkan SDK installed")
-        return True
+        # Verify glslc is available
+        result = subprocess.run(["which", "glslc"], capture_output=True, text=True)
+        if result.returncode == 0:
+            print_status("Vulkan SDK with shader compiler installed")
+            return True
+        else:
+            print_status("Vulkan SDK installed but glslc not found", False)
+            print("  Please ensure shaderc package was installed correctly")
+            return False
     except subprocess.CalledProcessError as e:
         print_status(f"Vulkan SDK installation failed: {e}", False)
         return False
@@ -1263,11 +1273,10 @@ def verify_backend_dependencies(backend: str) -> bool:
 def install_linux_system_dependencies(backend: str) -> bool:
     if PLATFORM != "linux":
         return True
-
     print_status("Installing Linux system dependencies...")
-
-    packages = [
+    base_packages = [
         "build-essential",
+        "cmake",
         "python3-venv",
         "python3-dev",
         "portaudio19-dev",
@@ -1278,18 +1287,82 @@ def install_linux_system_dependencies(backend: str) -> bool:
         "ffmpeg",
         "xclip"
     ]
-
-    # Add Vulkan SDK packages if Vulkan wheel is requested
     info = BACKEND_OPTIONS[backend]
+    vulkan_packages = []
     if info.get("build_flags", {}).get("GGML_VULKAN"):
-        packages.extend(["vulkan-tools", "libvulkan-dev", "mesa-utils", "vulkan-validationlayers-dev"])
+        # Try minimal Vulkan packages first
+        vulkan_packages = [
+            "vulkan-tools",
+            "libvulkan-dev",
+            "mesa-utils",
+            "glslang-tools",  # Provides glslc
+            "spirv-tools"     # SPIR-V tools
+        ]
     elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
-        # For Vulkan binaries (without wheel), only need runtime
-        packages.extend(["vulkan-tools", "libvulkan1"])
-
+        vulkan_packages = ["vulkan-tools", "libvulkan1"]
+    
     try:
+        # Update package lists
         subprocess.run(["sudo", "apt-get", "update"], check=True)
-        subprocess.run(["sudo", "apt-get", "install", "-y"] + list(set(packages)), check=True)
+        
+        # Install base packages
+        subprocess.run(["sudo", "apt-get", "install", "-y"] + list(set(base_packages)), check=True)
+        print_status("Base dependencies installed")
+        
+        # Install Vulkan packages if needed, one by one with fallbacks
+        if vulkan_packages:
+            print_status("Installing Vulkan development packages...")
+            successful_vulkan_packages = []
+            
+            # Try modern package names first
+            for package in vulkan_packages:
+                try:
+                    subprocess.run(["sudo", "apt-get", "install", "-y", package], check=True)
+                    successful_vulkan_packages.append(package)
+                    print_status(f"  ✓ {package}")
+                except subprocess.CalledProcessError as e:
+                    print_status(f"  ✗ {package} not available, trying alternatives...", False)
+                    
+                    # Fallback package mappings for Ubuntu 25.04
+                    fallbacks = {
+                        "glslang-tools": ["glslc"],
+                        "spirv-tools": ["spirv-tools"],
+                        "vulkan-tools": ["vulkan-utils"],
+                        "libvulkan-dev": ["vulkan-headers", "libvulkan1-dev"],
+                        "mesa-utils": ["mesa-utils"]
+                    }
+                    
+                    if package in fallbacks:
+                        for fallback in fallbacks[package]:
+                            try:
+                                subprocess.run(["sudo", "apt-get", "install", "-y", fallback], check=True)
+                                successful_vulkan_packages.append(fallback)
+                                print_status(f"    ✓ Fallback: {fallback}")
+                                break
+                            except subprocess.CalledProcessError:
+                                continue
+            
+            # Verify glslc is available
+            if info.get("build_flags", {}).get("GGML_VULKAN"):
+                result = subprocess.run(["which", "glslc"], capture_output=True, text=True)
+                if result.returncode == 0:
+                    print_status("glslc shader compiler found")
+                else:
+                    print_status("glslc not found, trying manual installation steps...", False)
+                    # Try direct installation of shader tools
+                    try:
+                        subprocess.run(["sudo", "apt-get", "install", "-y", "glslc"], check=True)
+                        print_status("glslc installed directly")
+                    except subprocess.CalledProcessError:
+                        print_status("glslc still not found", False)
+                        print("Please install Vulkan shader compiler manually:")
+                        print("  sudo apt update")
+                        print("  sudo apt install -y glslang-tools spirv-tools")
+                        print("  sudo apt install -y shaderc")  # Alternative shader compiler
+                        print("If still failing, try:")
+                        print("  sudo apt install -y vulkan-sdk")
+                        return False
+        
         print_status("Linux dependencies installed")
         return True
     except subprocess.CalledProcessError as e:
@@ -1615,15 +1688,26 @@ def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
     build_threads = max(1, int(total_threads * 0.85))
     print(f"  Building with {build_threads} of {total_threads} threads (85%)")
     
-    # Set up environment for parallel compilation
+    # Set up environment for parallel compilation - FORCE 85% usage
     env = os.environ.copy()
     env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(build_threads)
     
     if PLATFORM == "windows":
         env["FORCE_CMAKE"] = "1"
+        # Override any existing CL flags to ensure /MP is used
+        existing_cl = env.get("CL", "")
+        if f"/MP" not in existing_cl:
+            env["CL"] = f"/MP{build_threads}"
+        else:
+            # Replace existing /MP setting
+            import re
+            env["CL"] = re.sub(r'/MP\d*', f"/MP{build_threads}", existing_cl)
     else:
+        # Force override any existing MAKEFLAGS/NINJAFLAGS
         env["MAKEFLAGS"] = f"-j{build_threads}"
         env["NINJAFLAGS"] = f"-j{build_threads}"
+        # Also set for make-based builds
+        env["CMAKE_MAKE_PROGRAM"] = f"make -j{build_threads}"
     
     try:
         # Configure git for unreliable connections before cloning
@@ -1761,7 +1845,6 @@ def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
                     f"-DCMAKE_CXX_FLAGS=/MP{build_threads}",
                     f"-DCMAKE_C_FLAGS=/MP{build_threads}",
                 ])
-                env["CL"] = f"/MP{build_threads}"
             elif has_mingw:
                 # MinGW uses Unix-style parallel flags
                 env["MAKEFLAGS"] = f"-j{build_threads}"
@@ -1964,32 +2047,28 @@ def install():
     backend = select_backend_type()
     print_header("Installation")
     print(f"Installing {APP_NAME} on {PLATFORM} using {backend}")
-
     if sys.version_info < (3, 8):
         print_status("Python ≥3.8 required", False)
         sys.exit(1)
-
-    # ----  NEW ORDER  -------------------------------------------------
+    # Clean compile temp (Windows only)
     if PLATFORM == "windows":
-        clean_compile_temp()      # 1. wipe
-        # 2. NOW we are sure the folder is gone and will be recreated
-        #    only when something actually writes into it later
-    # ------------------------------------------------------------------
-
+        clean_compile_temp()
+    # Create directories first (needed for temp files)
+    create_directories()
+    # Install system dependencies BEFORE checking build tools
+    if PLATFORM == "linux":
+        if not install_linux_system_dependencies(backend):
+            print_status("System dependencies installation failed", False)
+            sys.exit(1)
     info = BACKEND_OPTIONS[backend]
+    # Now check build tools (dependencies should be installed)
     if info.get("compile_binary") or info.get("compile_wheel"):
         if not check_build_tools():
             print_status("Missing required build tools", False)
             sys.exit(1)
-
     if not verify_backend_dependencies(backend):
         print_status("Missing system dependencies", False)
         sys.exit(1)
-
-    create_directories()
-    if PLATFORM == "linux":
-        install_linux_system_dependencies(backend)
-
     if not create_venv():
         print_status("Virtual environment failed", False)
         sys.exit(1)
