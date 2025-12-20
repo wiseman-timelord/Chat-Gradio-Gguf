@@ -4,16 +4,7 @@
 Beta - Working fine on v0.95.5 r6...
 
 ### Current News
-- There are now 6 install options for download/compile...
-```
-1) Download CPU Binaries + Download  CPU Wheel (CPU_CPU)
-2) Compile CPU Binaries + Compile CPU Wheel (CPU_CPU)
-3) Download Vulkan Binaries + Download Cpu Wheel (VULKAN_CPU)
-4) Download Vulkan Binaries + Download Cpu Wheel  (Forced) (VULKAN_CPU) 
-5) Download Vulkan Binaries + Compile Vulkan Wheel (VULKAN_VULKAN)
-6) Compile Vulkan Binaries + Compile Vulkan Wheel   (VULKAN_VULKAN)
-```
-<br>...through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files. Amazing eh. and now I bugfixed the linux install route, so it works correctly for linux too now.
+- Vulkan Optimizations, two environment variables, that, "switch the Vulkan back-end from safe-but-slow to polar-bear-on-a-tightrope mode" -kimi and "you reclaim the ~300 MB that the pinned allocator would steal" -kimi. 
 
 ## Description
 Intended as a high-quality chat interface programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is intended to be intelligent, while without options reported in forums to make no difference on most models, using offline libraries where possible instead of services requiring registration, and everything is privatly run on your own hardware with your own models. 
@@ -31,8 +22,8 @@ Intended as a high-quality chat interface programmed towards, windows 7-11 (non-
 - **ASynchronous Response Stream**: Separate thread with its own event loop, allowing chunks of response queued/processed without blocking Gradio UI event loop.
 - **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, ie, uncensored, nsfw, chat, code.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
-- **Correct Vulkan Installs**: If Vulkan selected, then, `Windows 7-8 = v1.1.126.0` and `Windows 8.1-11 = v1.4.3.04.1`, avoiding API issues.
-- **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, do other chatbots you treid do that?!.
+- **Correct Vulkan Installs**: If Vulkan selected, then, `Windows 7-8 = v1.1.126.0` and `Windows 8.1-11 = v1.4.3.04.1`, avoiding API issues. This needs checking.
+- **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
 
 ### Preview
 - The "Interaction" page, where the conversation happens...
@@ -235,6 +226,13 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 1.U. Download a "Release" version, when its available, and unpack to a sensible directory, such as, `/media/**UserName**/Programs_250/Chat-Gradio-Gguf`, (try not to use spaces).
 2.W. Right click the file `Chat-Windows-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
 2.U. open a terminal in the created folder location, then make "Chat-Gradio-Gguf.sh" executable via `Right Mouse>Properties>Make Executable`. Then run `sudo bash ./Chat-Linux-Gguf.sh`, then select option `2. Run Installation` from the menu, this may take some time (hopefully work for you, or try it again best advice for now.).
+- There are now 6 install options for download/compile...
+1) Download CPU Binaries + Download  CPU Wheel (CPU_CPU)
+2) Compile CPU Binaries + Compile CPU Wheel (CPU_CPU)
+3) Download Vulkan Binaries + Download Cpu Wheel (VULKAN_CPU)
+4) Download Vulkan Binaries + Download Cpu Wheel  (Forced) (VULKAN_CPU) 
+5) Download Vulkan Binaries + Compile Vulkan Wheel (VULKAN_VULKAN)
+6) Compile Vulkan Binaries + Compile Vulkan Wheel   (VULKAN_VULKAN)
 3.W. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Windows-Gguf`. 
 3.U. Having returned to the bash menu after successful install, one would use option `1. Run Main Program`, to load the gradio interface in the popup browser window.
 4. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
@@ -251,6 +249,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 - We use a `1.125` additional to model size for layers to fit on VRAM,  the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 - "Chat-Windows-Gguf" and "Chat-Linux-Gguf", is now "Chat-Gradio-Gguf", as yes, these dual-mode scripts used to be 2 different/same programs.
+- Through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files.
 
 ### Models working (with gpt for comparrisson). 
 | Model                                  | IFEval   | BBH  /\  | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
