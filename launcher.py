@@ -7,36 +7,48 @@ logging.config.fileConfig = lambda *_, **__: None
 logging.basicConfig = lambda *_, **__: None
 
 # Imports
-import sys, argparse
+import sys, argparse, time
 from pathlib import Path
-import os
 from scripts.utility import short_path
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('platform', choices=['windows', 'linux'], help='Target platform')
-    return parser.parse_args()
-args = parse_args()
 import scripts.temporary as temporary
-temporary.PLATFORM = args.platform
 from scripts.settings import load_config
 from scripts.interface import launch_interface
 from scripts.utility import detect_cpu_config
 
-# Functions
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('platform', choices=['windows', 'linux'], help='Target platform')
+    return parser.parse_args()
+
 def initialize_platform_settings():
-    # Validate backend_type format
+    """Initialize platform-specific settings with validation."""
     valid_backends = ["CPU_CPU", "VULKAN_CPU", "VULKAN_VULKAN"]
     if temporary.BACKEND_TYPE not in valid_backends:
         print(f"Warning: Invalid backend_type '{temporary.BACKEND_TYPE}', defaulting to CPU_CPU")
         temporary.BACKEND_TYPE = "CPU_CPU"
         temporary.VULKAN_AVAILABLE = False
 
-    # Force SRAM_ONLY for CPU_CPU mode
-    if temporary.BACKEND_TYPE == "CPU_CPU":
-        temporary.LAYER_ALLOCATION_MODE = "SRAM_ONLY"
-        print(f"[BACKEND] CPU_CPU mode forced to SRAM_ONLY")
+    # REMOVED: Don't force SRAM_ONLY here - let config.json control it
+    # The layer allocation mode should be set by load_config() from persistent.json
 
-    # Set platform-specific paths based on backend
+    # ------------------------------------------------------------------
+    # Vulkan VRAM optimisation – Polaris / AMD+NVIDIA universal
+    # ------------------------------------------------------------------
+    if temporary.BACKEND_TYPE in ("VULKAN_CPU", "VULKAN_VULKAN"):
+        if temporary.PLATFORM == "windows":
+            # Windows: persistent for the whole console session
+            os.environ["GGML_CUDA_NO_PINNED"]   = "1"
+            os.environ["GGML_VK_NO_PIPELINE_CACHE"] = "0"
+            print("[Vulkan] GGML_CUDA_NO_PINNED=1   (frees ~300 MB VRAM)")
+            print("[Vulkan] GGML_VK_NO_PIPELINE_CACHE=0  (cached SPIR-V pipelines)")
+        else:
+            # Linux: export for child processes
+            os.environ["GGML_CUDA_NO_PINNED"]   = "1"
+            os.environ["GGML_VK_NO_PIPELINE_CACHE"] = "0"
+            print("[Vulkan] Exported GGML_CUDA_NO_PINNED=1")
+            print("[Vulkan] Exported GGML_VK_NO_PIPELINE_CACHE=0")
+
+    # Set platform-specific paths
     if temporary.PLATFORM == "windows":
         if "VULKAN" in temporary.BACKEND_TYPE:
             temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
@@ -52,14 +64,11 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
     """Gracefully shutdown the program, saving current session if active."""
     from scripts.utility import save_session_history
     from scripts.models import unload_models
-    import time
     
-    from scripts.temporary import set_status
-    set_status("Shutting down...")
+    temporary.set_status("Shutting down...")
     
     # Save current session if active and has content
     if temporary.SESSION_ACTIVE and session_log:
-        print("Saving current session before exit...")
         try:
             save_session_history(session_log, attached_files)
             print(f"Session saved to history: {temporary.session_label}")
@@ -68,7 +77,6 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
     
     # Unload models if loaded
     if models_loaded_state and llm_state:
-        print("Unloading model...")
         try:
             status, _, _ = unload_models(llm_state, models_loaded_state)
             print(status)
@@ -76,28 +84,26 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
             print(f"Error unloading model: {str(e)}")
     
     # Graceful shutdown sequence
-    for i in range(3, -1, -1):        # include 0
+    for i in range(3, -1, -1):
         print(f"Closing in...{i}", end="\r")
         time.sleep(1)
-    print()                           # newline after countdown
-
+    print()
+    
     print("Shutdown complete. Goodbye!")
     shutdown_platform()
     if temporary.demo is not None:
-        temporary.demo.close()        # stops the Gradio server
-    os._exit(0)  
+        temporary.demo.close()
+    os._exit(0)
 
 def shutdown_platform():
-    """Platform-specific shutdown procedures"""
+    """Platform-specific cleanup procedures."""
     if temporary.PLATFORM == "windows":
-        # Windows-specific cleanup
         try:
             import pythoncom
             pythoncom.CoUninitialize()
         except:
             pass
     elif temporary.PLATFORM == "linux":
-        # Linux-specific cleanup
         try:
             from scripts import utility
             if hasattr(utility, 'tts_engine'):
@@ -107,66 +113,65 @@ def shutdown_platform():
             pass
     print(f"Cleaned up {temporary.PLATFORM} resources")
 
-# Main Function
+def setup_directories():
+    """Setup and create required directories."""
+    script_dir = Path(__file__).parent.resolve()
+    os.chdir(script_dir)
+    
+    temporary.DATA_DIR = str(script_dir / "data")
+    temporary.HISTORY_DIR = str(script_dir / "data/history")
+    temporary.TEMP_DIR = str(script_dir / "data/temp")
+    
+    # Create required directories
+    for dir_path in [temporary.DATA_DIR, temporary.HISTORY_DIR, temporary.TEMP_DIR]:
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
+    
+    return script_dir
+
+def print_configuration():
+    """Print current configuration settings."""
+    print("\nConfiguration:")
+    print(f"  Backend: {temporary.BACKEND_TYPE}")
+    print(f"  Model: {temporary.MODEL_NAME or 'None'}")
+    print(f"  Context Size: {temporary.CONTEXT_SIZE}")
+    print(f"  VRAM Allocation: {temporary.VRAM_SIZE} MB")
+    print(f"  CPU Threads: {temporary.CPU_THREADS}")
+    print(f"  GPU Layers: {getattr(temporary, 'GPU_LAYERS', 'Auto')}")
+
 def main():
     """Main entry point for the application."""
     try:
         print("`main` Function Started.")
-
-        # Parse command-line arguments
+        
+        # Parse command-line arguments and initialize platform
         args = parse_args()
-        
-        # Initialize platform
         temporary.PLATFORM = args.platform
-        # Load config to get backend type
-        from scripts.settings import load_config
-        load_config()  # This will set BACKEND_TYPE from persistent.json
         
-        # Load config and initialize (this sets BACKEND_TYPE correctly)
+        # Load config FIRST to get all saved settings including layer allocation
+        load_config()
+        
+        # Then initialize platform settings (paths, validation)
         initialize_platform_settings()
         
-        # Set up directories and paths
-        script_dir = Path(__file__).parent.resolve()
-        os.chdir(script_dir)
+        # Setup directories and paths
+        script_dir = setup_directories()
         print(f"Working directory: {short_path(script_dir)}")
-        
-        temporary.DATA_DIR = str(script_dir / "data")
-        temporary.HISTORY_DIR = str(script_dir / "data/history")
-        temporary.TEMP_DIR = str(script_dir / "data/temp")
-        
-        # Create required directories
-        Path(temporary.DATA_DIR).mkdir(parents=True, exist_ok=True)
-        Path(temporary.HISTORY_DIR).mkdir(parents=True, exist_ok=True)
-        Path(temporary.TEMP_DIR).mkdir(parents=True, exist_ok=True)
-        
         print(f"Data Directory: {short_path(temporary.DATA_DIR)}")
         print(f"Session History: {short_path(temporary.HISTORY_DIR)}")
         print(f"Temp Directory: {short_path(temporary.TEMP_DIR)}")
         
         # Initialize CPU configuration
-        from scripts.utility import detect_cpu_config
         detect_cpu_config()
         print(f"CPU Configuration: {temporary.CPU_PHYSICAL_CORES} physical cores, "
               f"{temporary.CPU_LOGICAL_CORES} logical cores")
         
-        # Print final configuration (BACKEND_TYPE already set by load_config)
-        from scripts.temporary import set_status
-        set_status("Config loaded")
-        print("\nConfiguration:")
-        print(f"  Backend: {temporary.BACKEND_TYPE}")
-        print(f"  Model: {temporary.MODEL_NAME or 'None'}")
-        print(f"  Context Size: {temporary.CONTEXT_SIZE}")
-        print(f"  VRAM Allocation: {temporary.VRAM_SIZE} MB")
-        print(f"  CPU Threads: {temporary.CPU_THREADS}")
-        print(f"  GPU Layers: {temporary.GPU_LAYERS if hasattr(temporary, 'GPU_LAYERS') else 'Auto'}")
+        # Print final configuration
+        temporary.set_status("Config loaded")
+        print_configuration()
         
         # Launch interface
         print("\nLaunching Gradio Interface...")
-        try:
-            launch_interface()
-        except Exception as e:
-            print(f"Error launching interface: {str(e)}")
-            raise
+        launch_interface()
         
     except Exception as e:
         print(f"Fatal error in launcher: {str(e)}")
