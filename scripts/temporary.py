@@ -2,7 +2,6 @@
 
 # Imports
 import time
-from scripts.prompts import prompt_templates
 from fastembed import TextEmbedding
 import faiss
 import numpy as np
@@ -132,11 +131,6 @@ handling_keywords = {
     "roleplay": ["rpg", "role", "adventure"],
     "moe": ["moe", "mixtral", "deepseek-v2", "gpt-oss", "harmony", "qwen2moe", "qwen2.5moe", "dbrx", "arctic", "grok"],
     "vision": ["vision", "llava", "moondream", "minicpm", "qvq", "apriel", "qwen3-vl", "qwen3vl", "qwen2.5-vl"]
-}
-
-# prompt template table
-current_model_settings = {
-    "category": "chat"
 }
 
 # Classes...

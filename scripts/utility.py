@@ -76,9 +76,8 @@ def beep():
         pass
 
 def detect_cpu_config():
-    """Detect CPU configuration and set thread options"""
+    """Detect CPU configuration and set thread options."""
     try:
-        import psutil
         cpu_info = {
             "physical_cores": psutil.cpu_count(logical=False) or 1,
             "logical_cores": psutil.cpu_count(logical=True) or 1
@@ -87,53 +86,56 @@ def detect_cpu_config():
         temporary.CPU_PHYSICAL_CORES = cpu_info["physical_cores"]
         temporary.CPU_LOGICAL_CORES = cpu_info["logical_cores"]
         
-        # Generate thread options (1 to logical_cores, not logical_cores-1)
-        # This allows full utilization of available threads
+        # Generate thread options
         max_threads = temporary.CPU_LOGICAL_CORES
         temporary.CPU_THREAD_OPTIONS = list(range(1, max_threads + 1))
         
-        # Set default threads if not already configured
+        # Set default threads
         if temporary.CPU_THREADS is None or temporary.CPU_THREADS > max_threads:
-            # Default to 50% of available threads, minimum 1
             temporary.CPU_THREADS = max(1, max_threads // 2)
         
-        # Vulkan-specific: Even with all layers on GPU, still uses some CPU threads
+        # Vulkan-specific: ensure minimum threads
         if "vulkan" in temporary.BACKEND_TYPE.lower():
             temporary.CPU_THREADS = max(2, temporary.CPU_THREADS)
-            
+        
         print(f"[CPU] Detected: {temporary.CPU_PHYSICAL_CORES} cores, "
               f"{temporary.CPU_LOGICAL_CORES} threads")
-        print(f"[CPU] Available thread range: 1-{max_threads}, "
-              f"Current: {temporary.CPU_THREADS}")
-            
+        print(f"[CPU] Current: {temporary.CPU_THREADS}")
+        
     except Exception as e:
         temporary.set_status("CPU fallback", console=True)
         print(f"[CPU] Detection error: {e}")
         # Fallback values
         temporary.CPU_PHYSICAL_CORES = 4
         temporary.CPU_LOGICAL_CORES = 8
-        temporary.CPU_THREAD_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
+        temporary.CPU_THREAD_OPTIONS = list(range(1, 9))
         temporary.CPU_THREADS = 4
 
 def get_available_gpus_windows():
-    """
-    Retrieve available GPUs on Windows using wmic and dxdiag.
-    """
+    """Retrieve available GPUs on Windows using multiple methods."""
     try:
+        # Try WMIC first
         output = subprocess.check_output("wmic path win32_VideoController get name", shell=True).decode()
         gpus = [line.strip() for line in output.split('\n') if line.strip() and 'Name' not in line]
-        return gpus if gpus else ["CPU Only"]
-    except Exception:
-        try:
-            temp_file = Path(temporary.TEMP_DIR) / "dxdiag.txt"
-            subprocess.run(f"dxdiag /t {temp_file}", shell=True, check=True)
-            time.sleep(2)
-            with open(temp_file, 'r') as f:
-                content = f.read()
-                gpu = re.search(r"Card name: (.+)", content)
-                return [gpu.group(1).strip()] if gpu else ["CPU Only"]
-        except Exception:
-            return ["CPU Only"]
+        if gpus:
+            return gpus
+    except:
+        pass
+    
+    # Fallback to dxdiag
+    try:
+        temp_file = Path(temporary.TEMP_DIR) / "dxdiag.txt"
+        subprocess.run(f"dxdiag /t {temp_file}", shell=True, check=True)
+        time.sleep(2)
+        with open(temp_file, 'r') as f:
+            content = f.read()
+            gpu = re.search(r"Card name: (.+)", content)
+            if gpu:
+                return [gpu.group(1).strip()]
+    except:
+        pass
+    
+    return ["CPU Only"]
 
 def calculate_optimal_gpu_layers(model_path, vram_mb, context_size):
     """
@@ -181,71 +183,51 @@ def calculate_optimal_gpu_layers(model_path, vram_mb, context_size):
         return 0
 
 def get_available_gpus_linux():
-    """Get available GPUs on Linux systems - returns clean names without prefixes"""
+    """Get available GPUs on Linux systems with proper Intel detection."""
     gpus = []
-
+    
+    # NVIDIA GPUs
     try:
-        # 1) NVIDIA GPUs (via nvidia-smi)
-        try:
-            output = subprocess.check_output(
-                ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-                stderr=subprocess.DEVNULL,
-                text=True
-            )
-            # Don't add "NVIDIA" prefix - use raw name
-            gpus.extend(line.strip() for line in output.splitlines() if line.strip())
-        except Exception:
-            pass
-
-        # 2) AMD GPUs (via rocminfo – ROCm stack)
-        try:
-            output = subprocess.check_output(
-                ["rocminfo"],
-                stderr=subprocess.DEVNULL,
-                text=True
-            )
-            for line in output.splitlines():
-                if "Marketing Name" in line:
-                    name = line.split(":", 1)[-1].strip()
-                    if name:
-                        # Don't add "AMD" prefix - use raw name
-                        gpus.append(name)
-        except Exception:
-            pass
-
-        # 3) Generic PCI bus scan (catches AMD, Intel, and others)
-        try:
-            output = subprocess.check_output(
-                ["lspci", "-nn"],
-                stderr=subprocess.DEVNULL,
-                text=True
-            )
-            for line in output.splitlines():
-                lower = line.lower()
-                if "vga" in lower or "display" in lower or "3d" in lower:
-                    # Extract clean name after the colon
-                    name = line.split(":", 2)[-1].strip()
-                    
-                    # Clean up the name - remove PCI IDs in brackets
-                    name = re.sub(r'\[[\da-f:]+\]', '', name).strip()
-                    
-                    # Only add if not already in list (from nvidia-smi/rocminfo)
-                    if name and name not in gpus:
-                        gpus.append(name)
-        except Exception:
-            pass
-
-    except Exception as e:
-        print(f"GPU detection error: {str(e)}")
-
+        output = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            stderr=subprocess.DEVNULL, text=True
+        )
+        gpus.extend(line.strip() for line in output.splitlines() if line.strip())
+    except:
+        pass
+    
+    # AMD GPUs via ROCm
+    try:
+        output = subprocess.check_output(["rocminfo"], stderr=subprocess.DEVNULL, text=True)
+        for line in output.splitlines():
+            if "Marketing Name" in line:
+                name = line.split(":", 1)[-1].strip()
+                if name:
+                    gpus.append(name)
+    except:
+        pass
+    
+    # Generic PCI bus scan for all GPU types including Intel
+    try:
+        output = subprocess.check_output(["lspci", "-nn"], stderr=subprocess.DEVNULL, text=True)
+        for line in output.splitlines():
+            lower = line.lower()
+            if any(keyword in lower for keyword in ["vga", "display", "3d"]):
+                name = line.split(":", 2)[-1].strip()
+                name = re.sub(r'\[[\da-f:]+\]', '', name).strip()
+                if name and name not in gpus:
+                    gpus.append(name)
+    except:
+        pass
+    
     # Remove duplicates while preserving order
     seen = set()
     unique_gpus = [g for g in gpus if not (g in seen or seen.add(g))]
-
+    
     if not unique_gpus:
         temporary.set_status("No GPU", console=True)
         sys.exit(1)
-
+    
     return unique_gpus
 
 def get_cpu_info():
@@ -270,6 +252,7 @@ def get_cpu_info():
         except:
             model = "Generic CPU"
         
+        # Return actual CPU info
         return [{
             "label": f"{model} ({cpu_count} cores, {logical_count} threads)",
             "physical_cores": cpu_count,
@@ -291,129 +274,92 @@ def get_cpu_info():
         }]
 
 def get_available_gpus():
-    """Returns list of GPUs with Intel marked appropriately"""
-    gpus = []
+    """Unified GPU detection for both Windows and Linux with Intel support."""
     if temporary.PLATFORM == "windows":
-        # Windows detection logic that identifies Intel GPUs
-        gpus = get_available_gpus_windows()  # Should include Intel GPUs
+        return get_available_gpus_windows()
     elif temporary.PLATFORM == "linux":
-        # Linux detection that identifies Intel GPUs
-        gpus = get_available_gpus_linux()    # Should include Intel GPUs
-    return gpus
+        return get_available_gpus_linux()
+    return ["CPU Only"]
             
 def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def speak_text(text):
-    """Speak the given text using platform-specific text-to-speech with improved Windows support."""
+    """Unified text-to-speech with platform-specific implementations."""
     if not text or not isinstance(text, str):
         return
     
-    # Clean the text
     text = text.strip()
     if not text:
         return
-        
-    # Check if we just spoke this exact text (optional - can be removed if too restrictive)
+    
+    # Avoid duplicate speech
     if hasattr(temporary, 'LAST_SPOKEN') and temporary.LAST_SPOKEN == text:
         print("[TTS] Skipping duplicate speech")
         return
-        
+    
     if temporary.PLATFORM == "windows":
-        import threading
-        
-        def _speak_windows_threaded():
-            """Windows TTS in dedicated thread with proper COM initialization."""
-            import pythoncom
-            import win32com.client
-            
-            # Initialize COM with Single-Threaded Apartment (STA) - CRITICAL for Windows 8.1
-            try:
-                pythoncom.CoInitialize()  # STA initialization
-                
-                try:
-                    # Create SAPI voice object
-                    speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                    
-                    # Optional: Configure voice properties
-                    # speaker.Rate = 0  # -10 to 10, 0 is default
-                    # speaker.Volume = 100  # 0 to 100
-                    
-                    # Speak synchronously (blocks until complete)
-                    speaker.Speak(text)
-                    
-                    # Mark as spoken
-                    temporary.LAST_SPOKEN = text
-                    print(f"[TTS-WIN] Spoke: {text[:50]}...")
-                    
-                except Exception as e:
-                    print(f"[TTS-WIN] SAPI error: {str(e)}")
-                    # Fallback beep to indicate speech failure
-                    try:
-                        import winsound
-                        winsound.Beep(1000, 200)
-                    except:
-                        pass
-                        
-            finally:
-                # CRITICAL: Always uninitialize COM
-                try:
-                    pythoncom.CoUninitialize()
-                except:
-                    pass
-        
-        # Run speech in dedicated thread to avoid COM/async conflicts
-        thread = threading.Thread(target=_speak_windows_threaded, daemon=True)
-        thread.start()
-        thread.join(timeout=30)  # Wait up to 30 seconds
-        
-        if thread.is_alive():
-            print("[TTS-WIN] Speech timed out")
-                
+        _speak_windows(text)
     elif temporary.PLATFORM == "linux":
-        try:
-            # Initialize engine if not exists
-            if not hasattr(temporary, 'tts_engine'):
-                import pyttsx3
-                try:
-                    temporary.tts_engine = pyttsx3.init(driverName='espeak')
-                    temporary.tts_engine.setProperty('rate', 150)
-                    temporary.tts_engine.setProperty('volume', 0.9)
-                except:
-                    temporary.tts_engine = pyttsx3.init()
-                    
-            temporary.tts_engine.say(text)
-            temporary.tts_engine.runAndWait()
-            temporary.LAST_SPOKEN = text
-            print(f"[TTS-LINUX] Spoke: {text[:50]}...")
-            
-        except Exception as e:
-            print(f"[TTS-LINUX] pyttsx3 error: {str(e)}")
-            try:
-                # Fallback to direct espeak
-                subprocess.run(
-                    ['espeak', '-v', 'en-us', '-s', '150', text],
-                    check=False,
-                    timeout=30
-                )
-                print(f"[TTS-LINUX] Fallback espeak: {text[:50]}...")
-            except FileNotFoundError:
-                try:
-                    # Final fallback to spd-say
-                    subprocess.run(
-                        ['spd-say', '--wait', '-r', '-50', '-t', 'female3', text],
-                        check=False,
-                        timeout=30
-                    )
-                    print(f"[TTS-LINUX] Fallback spd-say: {text[:50]}...")
-                except FileNotFoundError:
-                    print("[TTS-LINUX] All TTS methods unavailable")
-                except Exception as e:
-                    print(f"[TTS-LINUX] spd-say error: {str(e)}")
-            except Exception as e:
-                print(f"[TTS-LINUX] espeak error: {str(e)}")
+        _speak_linux(text)
     else:
         raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
+
+def _speak_windows(text):
+    """Windows TTS implementation with proper COM handling."""
+    import threading
+    
+    def _speak_threaded():
+        import pythoncom
+        import win32com.client
+        
+        try:
+            pythoncom.CoInitialize()
+            speaker = win32com.client.Dispatch("SAPI.SpVoice")
+            speaker.Speak(text)
+            temporary.LAST_SPOKEN = text
+            print(f"[TTS-WIN] Spoke: {text[:50]}...")
+        except Exception as e:
+            print(f"[TTS-WIN] SAPI error: {str(e)}")
+            try:
+                import winsound
+                winsound.Beep(1000, 200)
+            except:
+                pass
+        finally:
+            try:
+                pythoncom.CoUninitialize()
+            except:
+                pass
+    
+    thread = threading.Thread(target=_speak_threaded, daemon=True)
+    thread.start()
+    thread.join(timeout=30)
+    
+    if thread.is_alive():
+        print("[TTS-WIN] Speech timed out")
+
+def _speak_linux(text):
+    """Linux TTS implementation with multiple fallbacks."""
+    try:
+        # Initialize engine if needed
+        if not hasattr(temporary, 'tts_engine'):
+            import pyttsx3
+            try:
+                temporary.tts_engine = pyttsx3.init(driverName='espeak')
+                temporary.tts_engine.setProperty('rate', 150)
+                temporary.tts_engine.setProperty('volume', 0.9)
+            except:
+                temporary.tts_engine = pyttsx3.init()
+        
+        temporary.tts_engine.say(text)
+        temporary.tts_engine.runAndWait()
+        temporary.LAST_SPOKEN = text
+        print(f"[TTS-LINUX] Spoke: {text[:50]}...")
+        
+    except Exception as e:
+        print(f"[TTS-LINUX] pyttsx3 error: {str(e)}")
+        _speak_linux_fallback(text)
 
 def get_nlp_model():
     """Lazy load spaCy model on first use."""

@@ -6,12 +6,11 @@ from pathlib import Path
 import gradio as gr
 from scripts.prompts import get_system_message, get_reasoning_instruction
 import scripts.temporary as temporary
-from scripts.prompts import prompt_templates
 from scripts.temporary import (
     CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, BACKEND_TYPE, VRAM_SIZE,
-    DYNAMIC_GPU_LAYERS, MMAP, current_model_settings, handling_keywords, llm,
+    DYNAMIC_GPU_LAYERS, MMAP, handling_keywords, llm,
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED, CHAT_FORMAT_MAP,
-    THINK_MIN_CHARS_BEFORE_CLOSE  # NEW
+    THINK_MIN_CHARS_BEFORE_CLOSE
 )
 
 
@@ -42,15 +41,35 @@ def clean_content(role, content):
 def get_available_models():
     from scripts.utility import short_path    
     model_dir = Path(temporary.MODEL_FOLDER)
-    print(f"Finding Models: {short_path(model_dir)}")
-    files = list(model_dir.glob("*.gguf"))
-    models = [f.name for f in files if f.is_file()]
-    if models:
-        choices = models
-    else:
-        choices = ["Select_a_model..."]
-    print(f"Models Found: {choices}")
-    return choices
+    print(f"[MODELS] Scanning directory: {short_path(model_dir)}")
+    
+    if not model_dir.exists():
+        print(f"[MODELS] ⚠ Directory does not exist: {model_dir}")
+        return ["Select_a_model..."]
+    
+    if not model_dir.is_dir():
+        print(f"[MODELS] ⚠ Path is not a directory: {model_dir}")
+        return ["Select_a_model..."]
+    
+    try:
+        files = list(model_dir.glob("*.gguf"))
+        models = [f.name for f in files if f.is_file()]
+        
+        if models:
+            print(f"[MODELS] ✓ Found {len(models)} models:")
+            for m in models[:5]:  # Show first 5
+                print(f"[MODELS]   - {m}")
+            if len(models) > 5:
+                print(f"[MODELS]   ... and {len(models)-5} more")
+            return models
+        else:
+            print(f"[MODELS] ⚠ No .gguf files found in {short_path(model_dir)}")
+            return ["Select_a_model..."]
+    except Exception as e:
+        print(f"[MODELS] ✗ Error scanning directory: {e}")
+        import traceback
+        traceback.print_exc()
+        return ["Select_a_model..."]
 
 def get_model_settings(model_name):
     model_name_lower = model_name.lower()
@@ -135,31 +154,22 @@ def calculate_gpu_layers(models, available_vram):
 
 # Get Model MetaData
 def get_model_metadata(model_path: str) -> dict:
-    """
-    Extract GGUF metadata without creating a llama_context.
-    Works with Gemma and other models that require large n_ctx_train.
-    Always returns a usable dict.
-    """
+    """Extract GGUF metadata using multiple fallback methods."""
     from pathlib import Path
     import struct
 
     path = Path(model_path)
 
-    # ----------------------------------------------------------
-    # 1.  Zero-cost route:  llama-cpp-python  ≥ 0.2.0
-    # ----------------------------------------------------------
+    # Method 1: Use llama-cpp-python if available
     try:
         from llama_cpp import LlamaMetadata
         meta = LlamaMetadata(model_path=str(path))
         print(f"[META] LlamaMetadata used – keys: {list(meta.keys())}")
         return meta
     except Exception as e:
-        # LlamaMetadata not available or file unreadable → continue
         print(f"[META] LlamaMetadata failed: {e}")
 
-    # ----------------------------------------------------------
-    # 2.  Direct header parse (same as before)
-    # ----------------------------------------------------------
+    # Method 2: Direct header parse
     try:
         with path.open("rb") as f:
             magic = f.read(4)
@@ -167,39 +177,33 @@ def get_model_metadata(model_path: str) -> dict:
                 raise ValueError("Invalid GGUF magic")
             version = struct.unpack('<I', f.read(4))[0]
             print(f"[META] GGUF version: {version}")
-
-        name_lower = path.name.lower()
-        if 'qwen2.5' in name_lower or 'qwen-2.5' in name_lower:
-            arch, layers = 'qwen2', 40
-            if '14b' in name_lower: layers = 40
-            elif '7b' in name_lower: layers = 32
-            elif '32b' in name_lower: layers = 64
-            elif '72b' in name_lower: layers = 80
-            return {
-                'general.architecture': arch,
-                f'{arch}.block_count': layers,
-                f'{arch}.context_length': 131072,
-                'general.name': 'qwen2.5',
-                '_fallback': True
-            }
-        elif 'qwen' in name_lower:
-            return {'general.architecture': 'qwen2', 'qwen2.block_count': 32, '_fallback': True}
     except Exception as e:
         print(f"[META] Direct parsing failed: {e}")
 
-    # ----------------------------------------------------------
-    # 3.  Filename-only fallback
-    # ----------------------------------------------------------
+    # Method 3: Filename-based fallback
     print("[META] Using filename-based defaults")
     name_lower = path.name.lower()
-    if 'llama' in name_lower:
-        return {'general.architecture': 'llama', 'llama.block_count': 32}
-    elif 'mistral' in name_lower:
-        return {'general.architecture': 'llama', 'llama.block_count': 32}
-    elif 'qwen' in name_lower:
-        return {'general.architecture': 'qwen2', 'qwen2.block_count': 40}
+    
+    # Architecture mapping
+    arch_map = {
+        'qwen2.5': ('qwen2', 40, 131072),
+        'qwen2': ('qwen2', 32, 32768),
+        'qwen': ('qwen2', 40, 32768),
+        'llama': ('llama', 32, 32768),
+        'mistral': ('llama', 32, 32768),
+    }
+    
+    for key, (arch, layers, ctx) in arch_map.items():
+        if key in name_lower:
+            return {
+                'general.architecture': arch,
+                f'{arch}.block_count': layers,
+                f'{arch}.context_length': ctx,
+                'general.name': key,
+                '_fallback': True
+            }
 
-    # Ultimate safety
+    # Ultimate fallback
     return {
         'general.architecture': 'unknown',
         'general.name': path.stem,
@@ -208,44 +212,42 @@ def get_model_metadata(model_path: str) -> dict:
     }
 
 def get_model_layers(model_path: str) -> int:
-    """
-    Return layer count for the model with enhanced fallbacks.
-    Always returns a positive integer.
-    """
-    from pathlib import Path
-
+    """Return layer count with enhanced fallbacks."""
     meta = get_model_metadata(model_path)
+    
     if meta.get('_fallback'):
-        print(f"[LAYERS] Using fallback layer count for {Path(model_path).name}")
-
+        print(f"[LAYERS] Using fallback for {Path(model_path).name}")
+    
     arch = meta.get("general.architecture", "unknown")
-
-    keys = (
+    
+    # Try multiple layer keys
+    layer_keys = (
         f"{arch}.block_count",
         "llama.block_count",
         "qwen2.block_count",
-        "qwen.block_count",
         "layers",
         "n_layers",
         "num_hidden_layers",
     )
-    for k in keys:
-        if k in meta:
+    
+    for key in layer_keys:
+        if key in meta:
             try:
-                layers = int(meta[k])
+                layers = int(meta[key])
                 if layers > 0:
-                    print(f"[LAYERS] Using key '{k}' → {layers}")
+                    print(f"[LAYERS] Using key '{key}' → {layers}")
                     return layers
             except (ValueError, TypeError):
-                print(f"[LAYERS] Bad value for key '{k}': {meta[k]}")
+                continue
 
-    # heuristic fallback from filename
+    # Heuristic from filename
     name_lower = Path(model_path).name.lower()
     size_map = {
         '3b': 26, '7b': 32, '8b': 32, '13b': 40, '14b': 40,
         '20b': 48, '30b': 60, '32b': 64, '34b': 60, '40b': 60,
         '70b': 80, '72b': 80, '120b': 120, '180b': 180
     }
+    
     for pattern, count in size_map.items():
         if pattern in name_lower:
             print(f"[LAYERS] Heuristic match '{pattern}' → {count}")
@@ -594,41 +596,34 @@ def calculate_single_model_gpu_layers_with_layers(
     num_layers: int,
     dynamic_gpu_layers: bool = True
 ) -> int:
-    """
-    Fit as many whole layers as possible into the configured VRAM
-    while keeping memory free for Vulkan graph buffers that scale with context.
-    """
+    """Calculate optimal GPU layers for Vulkan backends."""
     from math import floor
     import scripts.temporary as tmp
 
-    if tmp.BACKEND_TYPE == "CPU_CPU":
-        return 0
-    if tmp.BACKEND_TYPE not in ("VULKAN_VULKAN", "VULKAN_CPU"):
-        return 0
-    if available_vram <= 0 or num_layers <= 0:
+    if tmp.BACKEND_TYPE == "CPU_CPU" or available_vram <= 0 or num_layers <= 0:
         return 0
 
     model_mb = get_model_size(model_path)
     meta = get_model_metadata(model_path)
     arch = meta.get("general.architecture", "unknown")
 
-    # model-specific overhead factor
+    # Model-specific overhead factor
     factor = 1.15 if arch in ("qwen2", "qwen2.5", "qwen") else 1.20 if arch == "llama" else 1.25
     adjusted_mb = model_mb * factor
     layer_mb = adjusted_mb / num_layers
 
-    # context-dependent graph buffer reserve
+    # Context-dependent graph buffer reserve
     embedding_dim = {"llama": 4096, "qwen2": 5120, "qwen": 5120}.get(arch, 4096)
     graph_mb = 3 * (tmp.CONTEXT_SIZE / 1024) ** 2 * embedding_dim * 4 / 1024 / 1024
-    reserve_mb = max(64, int(graph_mb))          # at least 64 MB
+    reserve_mb = max(64, int(graph_mb))
     usable_vram = max(0, available_vram - reserve_mb)
 
     max_layers = floor(usable_vram / layer_mb)
     gpu_layers = min(max_layers, num_layers) if dynamic_gpu_layers else num_layers
     gpu_layers = max(0, gpu_layers)
 
-    print(f"[GPU-LAYERS] Model {adjusted_mb:.0f} MB  layer {layer_mb:.1f} MB  "
-          f"VRAM {available_vram} MB  reserve {reserve_mb} MB  usable {usable_vram} MB → GPU {gpu_layers}/{num_layers}")
+    print(f"[GPU-LAYERS] Model {adjusted_mb:.0f}MB, layer {layer_mb:.1f}MB, "
+          f"VRAM {available_vram}MB, reserve {reserve_mb}MB → GPU {gpu_layers}/{num_layers}")
     return gpu_layers
 
 def unload_models(llm_state, models_loaded_state):
