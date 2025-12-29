@@ -836,20 +836,30 @@ async def conversation_interface(
     if speech_enabled and visible_resp and response_complete:
         interaction_phase = "speaking"
         yield (session_log, "Speaking response...",
-               *update_action_buttons(interaction_phase, has_ai_response),  # ADD has_ai_response
+               *update_action_buttons(interaction_phase, has_ai_response),
                cancel_flag, loaded_files, interaction_phase,
                gr.update(), gr.update(), gr.update(),
-               has_ai_response) 
+               has_ai_response)
         
+        # Isolated TTS - errors won't crash main flow
         try:
             chunks = utility.chunk_text_for_speech(visible_resp, max_chars=500)
             for chunk in chunks:
                 if _cancel_event.is_set() or cancel_flag:
+                    print("[TTS] Cancelled by user")
                     break
-                utility.speak_text(chunk)
+                
+                # Each speak_text call is now fully isolated
+                try:
+                    utility.speak_text(chunk)
+                except Exception as chunk_error:
+                    print(f"[TTS] Chunk error (continuing): {chunk_error}")
+                    continue  # Skip this chunk, continue with next
+                
                 await asyncio.sleep(0.1)
         except Exception as e:
-            print(f"[TTS] Speech error: {e}")
+            # Outer catch for chunking errors
+            print(f"[TTS] Processing error (non-fatal): {e}")
 
     # ---------------  cleanup  ---------------------------------------
     context_injector.clear_temporary_input()
@@ -1461,7 +1471,27 @@ def launch_interface():
         def toggle_speech(enabled):
             new_state = not enabled
             variant = "primary" if new_state else "secondary"
+            
+            # Cleanup when disabling
+            if not new_state:
+                try:
+                    utility.cleanup_tts_resources()
+                except Exception as e:
+                    print(f"[TTS] Toggle cleanup error (ignored): {e}")
+            
             return new_state, gr.update(variant=variant), gr.update(variant=variant)
+
+        def _speak_linux_fallback(text):
+            """Linux CLI fallback with error isolation."""
+            try:
+                import subprocess
+                subprocess.run(['espeak', text], 
+                              timeout=30, 
+                              check=False,
+                              stderr=subprocess.DEVNULL,
+                              stdout=subprocess.DEVNULL)
+            except Exception as e:
+                print(f"[TTS-LINUX] Fallback error (ignored): {e}")
 
         action_buttons["speech"].click(
             fn=toggle_speech,

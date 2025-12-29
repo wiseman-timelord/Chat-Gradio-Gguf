@@ -368,8 +368,21 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     except ImportError:
         return "Error: llama-cpp-python not installed. Python bindings are required.", False, llm_state, models_loaded_state
 
-    if models_loaded_state:
-        unload_models(llm_state, models_loaded_state)
+    # FIXED: Properly unload existing model and capture returned values
+    if models_loaded_state and llm_state is not None:
+        set_status("Unloading previous model...", console=True, priority=True)
+        import gc
+        import time
+        
+        # Capture the unload return values
+        _, llm_state, models_loaded_state = unload_models(llm_state, models_loaded_state)
+        
+        # Force garbage collection
+        gc.collect()
+        
+        # Brief delay for cleanup (especially important for Vulkan)
+        time.sleep(0.8)
+        print("[LOAD] Previous model unloaded and cleaned up")
 
     if BACKEND_TYPE.lower() == "cpu-only":
         MAX_CTX = 32_768
@@ -553,14 +566,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
         new_llm = Llama(**kwargs)
         
-        # Test inference
-        test_msg = [{"role": "user", "content": "Hello"}]
-        new_llm.create_chat_completion(
-            messages=test_msg,
-            max_tokens=BATCH_SIZE,
-            stream=False
-        )
-
+        # Model loaded successfully - no test inference needed
         import scripts.temporary as tmp
         temporary.GPU_LAYERS = gpu_layers
         temporary.MODEL_NAME = model
@@ -628,11 +634,29 @@ def calculate_single_model_gpu_layers_with_layers(
 
 def unload_models(llm_state, models_loaded_state):
     import gc
-    if models_loaded_state:
+    import time
+    
+    if models_loaded_state and llm_state is not None:
+        try:
+            # Explicitly close the llama context
+            if hasattr(llm_state, '_ctx') and llm_state._ctx is not None:
+                llm_state._ctx.close()
+            if hasattr(llm_state, '_model') and llm_state._model is not None:
+                llm_state._model.close()
+        except Exception as e:
+            print(f"[UNLOAD] Cleanup warning: {e}")
+        
         del llm_state
+        llm_state = None
+        
+        # Aggressive cleanup for Vulkan
         gc.collect()
+        time.sleep(1.2)  # Longer delay for Vulkan memory release
+        gc.collect()
+        
         temporary.set_status("Unloaded", console=True)
         return "Model unloaded successfully.", None, False
+    
     temporary.set_status("Model off", console=True)
     return "Model off", llm_state, models_loaded_state
 

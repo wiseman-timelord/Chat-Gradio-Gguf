@@ -285,31 +285,27 @@ def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def speak_text(text):
-    """Unified text-to-speech with platform-specific implementations."""
-    if not text or not isinstance(text, str):
+    """Speak text with robust error handling for Windows."""
+    if not text or not text.strip():
         return
     
-    text = text.strip()
-    if not text:
-        return
-    
-    # Avoid duplicate speech
-    if hasattr(temporary, 'LAST_SPOKEN') and temporary.LAST_SPOKEN == text:
-        print("[TTS] Skipping duplicate speech")
-        return
-    
-    if temporary.PLATFORM == "windows":
-        _speak_windows(text)
-    elif temporary.PLATFORM == "linux":
-        _speak_linux(text)
-    else:
-        raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
+    try:
+        if temporary.PLATFORM == "windows":
+            _speak_windows_safe(text)
+        elif temporary.PLATFORM == "linux":
+            _speak_linux(text)
+    except Exception as e:
+        print(f"[TTS] Speech error (contained): {e}")
+        # Don't propagate - speech is non-critical
 
-def _speak_windows(text):
-    """Windows TTS implementation with proper COM handling."""
+def _speak_windows_safe(text):
+    """Windows TTS with isolated COM handling."""
     import threading
+    import queue
     
-    def _speak_threaded():
+    result_queue = queue.Queue()
+    
+    def _speak_isolated():
         import pythoncom
         import win32com.client
         
@@ -317,27 +313,29 @@ def _speak_windows(text):
             pythoncom.CoInitialize()
             speaker = win32com.client.Dispatch("SAPI.SpVoice")
             speaker.Speak(text)
-            temporary.LAST_SPOKEN = text
-            print(f"[TTS-WIN] Spoke: {text[:50]}...")
+            result_queue.put(("success", None))
         except Exception as e:
-            print(f"[TTS-WIN] SAPI error: {str(e)}")
-            try:
-                import winsound
-                winsound.Beep(1000, 200)
-            except:
-                pass
+            result_queue.put(("error", str(e)))
         finally:
             try:
                 pythoncom.CoUninitialize()
             except:
                 pass
     
-    thread = threading.Thread(target=_speak_threaded, daemon=True)
+    thread = threading.Thread(target=_speak_isolated, daemon=True)
     thread.start()
     thread.join(timeout=30)
     
     if thread.is_alive():
-        print("[TTS-WIN] Speech timed out")
+        print("[TTS-WIN] Speech timed out (ignored)")
+        return
+    
+    try:
+        status, error = result_queue.get_nowait()
+        if status == "error":
+            print(f"[TTS-WIN] Error (ignored): {error}")
+    except queue.Empty:
+        pass
 
 def _speak_linux(text):
     """Linux TTS implementation with multiple fallbacks."""
@@ -360,6 +358,26 @@ def _speak_linux(text):
     except Exception as e:
         print(f"[TTS-LINUX] pyttsx3 error: {str(e)}")
         _speak_linux_fallback(text)
+
+def cleanup_tts_resources():
+    """Clean up TTS resources when toggling off."""
+    try:
+        if temporary.PLATFORM == "windows":
+            # Force COM cleanup on main thread
+            import pythoncom
+            try:
+                pythoncom.CoUninitialize()
+            except:
+                pass
+        elif temporary.PLATFORM == "linux":
+            if hasattr(temporary, 'tts_engine'):
+                try:
+                    temporary.tts_engine.stop()
+                    del temporary.tts_engine
+                except:
+                    pass
+    except Exception as e:
+        print(f"[TTS] Cleanup error (ignored): {e}")
 
 def get_nlp_model():
     """Lazy load spaCy model on first use."""
