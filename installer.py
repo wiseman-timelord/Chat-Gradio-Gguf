@@ -9,9 +9,10 @@ import contextlib
 import time
 from pathlib import Path
 import shutil
+import psutil  # Already in BASE_REQ
+import atexit
 
-
-# Constants
+# Constants / Variables ...
 _PY_TAG = f"cp{sys.version_info.major}{sys.version_info.minor}"
 APP_NAME = "Chat-Gradio-Gguf"
 BASE_DIR = Path(__file__).parent
@@ -22,7 +23,11 @@ LLAMACPP_TARGET_VERSION = "b7358"
 DOWNLOAD_RELEASE_TAG = "b7358" 
 WIN_COMPILE_TEMP = Path("C:/temp_compile")      # fixed Windows build folder
 LINUX_COMPILE_TEMP = None                       # Linux keeps using project-local temp
+_INSTALL_PROCESSES = set()
+_DID_COMPILATION = False 
+_PRE_EXISTING_PROCESSES = {} 
 
+# Maps/Lists...
 DIRECTORIES = [
     "data", "scripts", "models",
     "data/history", "data/temp", "data/vectors",
@@ -32,6 +37,7 @@ DIRECTORIES = [
 # Platform detection (windows / linux)
 PLATFORM = None
 
+# Functions...
 def set_platform() -> None:
     global PLATFORM
     if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
@@ -219,6 +225,51 @@ BASE_REQ = [
 if PLATFORM == "windows":
     BASE_REQ.extend(["pywin32", "tk"])
 
+def snapshot_pre_existing_processes() -> None:
+    """Snapshot all build-related processes that exist BEFORE compilation starts"""
+    global _PRE_EXISTING_PROCESSES
+    
+    if PLATFORM != "windows":
+        return
+    
+    build_process_names = [
+        "conhost.exe",
+        "MSBuild.exe", 
+        "VBCSCompiler.exe",
+        "cmake.exe",
+        "ninja.exe",
+        "cl.exe",
+        "link.exe",
+        "git.exe"
+    ]
+    
+    _PRE_EXISTING_PROCESSES = {}
+    
+    try:
+        for proc in psutil.process_iter(['pid', 'name']):
+            if proc.info['name'] in build_process_names:
+                _PRE_EXISTING_PROCESSES[proc.info['pid']] = proc.info['name']
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+
+def track_process(pid: int) -> None:
+    """Track a process and all its current and future descendants."""
+    global _INSTALL_PROCESSES
+    try:
+        parent = psutil.Process(pid)
+        # Immediately add the process and all its current children recursively
+        def add_descendants(p):
+            _INSTALL_PROCESSES.add(p.pid)
+            for child in p.children(recursive=True):
+                _INSTALL_PROCESSES.add(child.pid)
+        add_descendants(parent)
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        _INSTALL_PROCESSES.add(pid)
+
+def print_status(message: str, success: bool = True) -> None:
+    status = "[✓]" if success else "[✗]"
+    print(f"{status} {message}")
+    time.sleep(1 if success else 3)
 
 # Utility helpers
 def clean_compile_temp() -> None:
@@ -242,6 +293,76 @@ def clean_compile_temp() -> None:
                 print(f"Warning: Could not fully remove {WIN_COMPILE_TEMP}: {e}")
                 print("  Continuing anyway...")
 
+def cleanup_build_processes() -> None:
+    """Force-terminate all build-related processes if compilation occurred."""
+    global _DID_COMPILATION
+    if not _DID_COMPILATION or PLATFORM != "windows":
+        return
+
+    current_pid = os.getpid()
+    try:
+        current_proc = psutil.Process(current_pid)
+        current_conhost = None
+
+        # Find the conhost.exe belonging to current console
+        try:
+            # Parent is cmd.exe/PowerShell.exe; its child is our conhost
+            parent = current_proc.parent()
+            if parent:
+                for child in parent.children():
+                    if child.name().lower() == "conhost.exe":
+                        current_conhost = child.pid
+                        break
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+        protected_pids = {current_pid}
+        if current_conhost:
+            protected_pids.add(current_conhost)
+
+        to_kill = []
+
+        # Collect all MSBuild.exe and conhost.exe (except current)
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                if proc.info['pid'] in protected_pids:
+                    continue
+                name = proc.info['name'].lower()
+                if name == "msbuild.exe":
+                    to_kill.append(proc.info['pid'])
+                elif name == "conhost.exe":
+                    to_kill.append(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        if not to_kill:
+            return
+
+        # Terminate first
+        for pid in to_kill:
+            try:
+                p = psutil.Process(pid)
+                p.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        time.sleep(1)
+
+        # Force kill leftovers
+        for pid in to_kill:
+            try:
+                p = psutil.Process(pid)
+                if p.is_running():
+                    p.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        print_status(f"Cleaned up {len(to_kill)} build processes")
+    except Exception as e:
+        print(f"Note: Cleanup had issues: {e}")
+
+atexit.register(cleanup_build_processes)
+
 def print_header(title: str) -> None:
     os.system('clear' if PLATFORM == "linux" else 'cls')
     width = shutil.get_terminal_size().columns - 1
@@ -249,11 +370,6 @@ def print_header(title: str) -> None:
     print(f"    {APP_NAME} - {title}")
     print("=" * width)
     print()
-
-def print_status(message: str, success: bool = True) -> None:
-    status = "[✓]" if success else "[✗]"
-    print(f"{status} {message}")
-    time.sleep(1 if success else 3)
 
 def get_user_choice(prompt: str, options: list) -> str:
     """Display menu exactly as requested"""
@@ -336,6 +452,12 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
     Auto-detects AVX2, FMA, F16C for maximum performance.
     Includes retry logic for git operations with resume capability.
     """
+    global _DID_COMPILATION
+    _DID_COMPILATION = True
+    
+    # Snapshot processes before build starts
+    snapshot_pre_existing_processes()
+    
     print_status("Building llama-cpp-python from source (this takes 10-20 minutes)")
     
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
@@ -546,6 +668,8 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
             bufsize=1,
             universal_newlines=True
         )
+        
+        track_process(process.pid)
         
         for line in process.stdout:
             print(line, end='')
@@ -1671,6 +1795,12 @@ def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
     """
     import traceback
     
+    global _DID_COMPILATION
+    _DID_COMPILATION = True
+    
+    # Snapshot processes before build starts
+    snapshot_pre_existing_processes()
+    
     print_status(f"Compiling llama.cpp binaries from source (15-30 minutes)...")
     
     dest_path = BASE_DIR / info["dest"]
@@ -1948,7 +2078,11 @@ def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
             "--parallel", str(build_threads)
         ]
         
-        subprocess.run(build_cmd, cwd=build_dir, check=True, timeout=2400, env=env)
+        process = subprocess.Popen(build_cmd, cwd=build_dir, env=env)
+        track_process(process.pid)
+        returncode = process.wait(timeout=2400)
+        if returncode != 0:
+            raise subprocess.CalledProcessError(returncode, build_cmd)
         
         # Copy binaries to destination
         print_status("Installing binaries...")
@@ -2124,7 +2258,9 @@ if __name__ == "__main__":
         print(f"\nInstallation failed: {e}")
         sys.exit(1)
     finally:
-        # Always clean temp folder on Windows, regardless of success/failure
+        # Ensure cleanup runs AFTER all file operations (including rmtree)
+        time.sleep(2)  # Let file handles release
+        cleanup_build_processes()
         if PLATFORM == "windows":
             clean_compile_temp()
-    sys.exit(0)
+        sys.exit(0)
