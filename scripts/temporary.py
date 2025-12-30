@@ -88,7 +88,7 @@ demo = None
 # RAG CONSTANTS
 RAG_CHUNK_SIZE_DIVIDER = 6
 RAG_CHUNK_OVERLAP_DIVIDER = 24
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 LARGE_INPUT_THRESHOLD = 0.4  # 40% of context triggers RAG
 RAG_RETRIEVAL_CHUNKS = 8     # How many chunks to retrieve
 CONTEXT_ALLOCATION_RATIOS = {
@@ -158,22 +158,24 @@ class ContextInjector:
         import os
         from pathlib import Path
         
-        # FIX: Use absolute path consistently
+        # Use absolute path consistently - should already be set by launcher
         cache_dir = Path(__file__).parent.parent / "data" / "fastembed_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # Set environment variables BEFORE importing fastembed
-        os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-        os.environ["FASTEMBED_OFFLINE"] = "1"  # Prefer local cache
+        # CRITICAL: Only set env vars if not already set (launcher may have set them)
+        if "FASTEMBED_CACHE_PATH" not in os.environ:
+            os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
+            os.environ["FASTEMBED_OFFLINE"] = "1"
         
         try:
             from fastembed import TextEmbedding
             
-            print(f"[RAG] Loading embedding model from: {cache_dir}")
+            actual_cache = os.environ.get("FASTEMBED_CACHE_PATH", str(cache_dir.absolute()))
+            print(f"[RAG] Loading embedding model from: {actual_cache}")
             
             self.embedding = TextEmbedding(
                 model_name=EMBEDDING_MODEL_NAME,
-                cache_dir=str(cache_dir.absolute()),
+                cache_dir=actual_cache,  # Use the env var value
                 providers=["CPUExecutionProvider"]
             )
             print("[RAG] Embedding model loaded from cache")

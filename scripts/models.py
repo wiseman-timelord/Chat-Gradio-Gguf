@@ -377,12 +377,15 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         # Capture the unload return values
         _, llm_state, models_loaded_state = unload_models(llm_state, models_loaded_state)
         
-        # Force garbage collection
-        gc.collect()
-        
-        # Brief delay for cleanup (especially important for Vulkan)
-        time.sleep(0.8)
-        print("[LOAD] Previous model unloaded and cleaned up")
+        # Vulkan needs extra cleanup time
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            for _ in range(2):
+                gc.collect()
+                time.sleep(1.0)
+            print("[LOAD] Extended Vulkan cleanup complete")
+        else:
+            gc.collect()
+            time.sleep(0.5)
 
     if BACKEND_TYPE.lower() == "cpu-only":
         MAX_CTX = 32_768
@@ -549,12 +552,20 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
         # 3. compute worst-case graph memory with *that* u-batch
         worst_mb = 3 * (n_ubatch * n_vocab * n_embd * 4) / 1024 / 1024
-        if worst_mb > vram_size * 0.75:                # keep 25 % head-room
-            n_ubatch = int((vram_size * 0.75 * 1024 * 1024 /
+        
+        # MODIFIED: More aggressive reduction for Vulkan
+        if worst_mb > vram_size * 0.60:  # Changed from 0.75 to 0.60 - keep 40% headroom
+            n_ubatch = int((vram_size * 0.60 * 1024 * 1024 /
                             (3 * n_vocab * n_embd * 4)))
             n_ubatch = max(64, (n_ubatch // 64) * 64)
-            print(f"[VULKAN] Vocab {n_vocab} huge – graph {worst_mb:.0f} MB – "
-                  f"u-batch capped to {n_ubatch}")
+            print(f"[VULKAN] Graph requires {worst_mb:.0f}MB → reduced batch to {n_ubatch}")
+        
+        # Additional safety check for Qwen models (large vocab)
+        if n_vocab > 150000:  # Qwen3 has 151936 tokens
+            max_safe_batch = min(n_ubatch, 512)  # Hard cap for large vocab
+            if n_ubatch > max_safe_batch:
+                n_ubatch = max_safe_batch
+                print(f"[VULKAN] Large vocab {n_vocab} → hard-capped batch to {n_ubatch}")
 
         kwargs.update({
             "n_ctx": effective_ctx,
@@ -602,7 +613,7 @@ def calculate_single_model_gpu_layers_with_layers(
     num_layers: int,
     dynamic_gpu_layers: bool = True
 ) -> int:
-    """Calculate optimal GPU layers for Vulkan backends."""
+    """Conservative layer calculation with Vulkan safety margins."""
     from math import floor
     import scripts.temporary as tmp
 
@@ -613,52 +624,102 @@ def calculate_single_model_gpu_layers_with_layers(
     meta = get_model_metadata(model_path)
     arch = meta.get("general.architecture", "unknown")
 
-    # Model-specific overhead factor
+    # Model overhead factors
     factor = 1.15 if arch in ("qwen2", "qwen2.5", "qwen") else 1.20 if arch == "llama" else 1.25
     adjusted_mb = model_mb * factor
     layer_mb = adjusted_mb / num_layers
 
-    # Context-dependent graph buffer reserve
-    embedding_dim = {"llama": 4096, "qwen2": 5120, "qwen": 5120}.get(arch, 4096)
-    graph_mb = 3 * (tmp.CONTEXT_SIZE / 1024) ** 2 * embedding_dim * 4 / 1024 / 1024
-    reserve_mb = max(64, int(graph_mb))
-    usable_vram = max(0, available_vram - reserve_mb)
+    # Vulkan needs MORE conservative reserves than CUDA
+    if "vulkan" in tmp.BACKEND_TYPE.lower():
+        # Reserve 30% for Vulkan overhead (graph + fragmentation)
+        context_reserve = int(available_vram * 0.15)
+        batch_reserve = int(tmp.BATCH_SIZE / 256) * 64  # ~64MB per 256 batch
+        vulkan_overhead = int(available_vram * 0.15)  # Additional 15% for Vulkan
+        
+        total_reserve = context_reserve + batch_reserve + vulkan_overhead
+        usable_vram = max(0, available_vram - total_reserve)
+        
+        print(f"[GPU-LAYERS-VULKAN] VRAM {available_vram}MB, reserve {total_reserve}MB "
+              f"(ctx:{context_reserve} batch:{batch_reserve} vk:{vulkan_overhead})")
+    else:
+        # Standard reserve for non-Vulkan
+        embedding_dim = {"llama": 4096, "qwen2": 5120, "qwen": 5120}.get(arch, 4096)
+        graph_mb = 3 * (tmp.CONTEXT_SIZE / 1024) ** 2 * embedding_dim * 4 / 1024 / 1024
+        reserve_mb = max(256, int(graph_mb * 1.2))
+        usable_vram = max(0, available_vram - reserve_mb)
 
     max_layers = floor(usable_vram / layer_mb)
     gpu_layers = min(max_layers, num_layers) if dynamic_gpu_layers else num_layers
     gpu_layers = max(0, gpu_layers)
 
-    print(f"[GPU-LAYERS] Model {adjusted_mb:.0f}MB, layer {layer_mb:.1f}MB, "
-          f"VRAM {available_vram}MB, reserve {reserve_mb}MB → GPU {gpu_layers}/{num_layers}")
+    print(f"[GPU-LAYERS] Model {adjusted_mb:.0f}MB, layer {layer_mb:.1f}MB → GPU {gpu_layers}/{num_layers}")
     return gpu_layers
 
 def unload_models(llm_state, models_loaded_state):
+    """Enhanced unload with aggressive Vulkan cleanup."""
     import gc
     import time
     
-    if models_loaded_state and llm_state is not None:
-        try:
-            # Explicitly close the llama context
-            if hasattr(llm_state, '_ctx') and llm_state._ctx is not None:
+    if not models_loaded_state or llm_state is None:
+        temporary.set_status("Model off", console=True)
+        return "Model off", None, False
+    
+    try:
+        # Explicit context cleanup
+        if hasattr(llm_state, '_ctx') and llm_state._ctx is not None:
+            try:
                 llm_state._ctx.close()
-            if hasattr(llm_state, '_model') and llm_state._model is not None:
+            except:
+                pass
+        if hasattr(llm_state, '_model') and llm_state._model is not None:
+            try:
                 llm_state._model.close()
-        except Exception as e:
-            print(f"[UNLOAD] Cleanup warning: {e}")
+            except:
+                pass
         
+        # Delete reference
         del llm_state
         llm_state = None
         
-        # Aggressive cleanup for Vulkan
-        gc.collect()
-        time.sleep(1.2)  # Longer delay for Vulkan memory release
-        gc.collect()
+        # Vulkan needs aggressive cleanup - 3 GC cycles with delays
+        if "vulkan" in temporary.BACKEND_TYPE.lower():
+            for i in range(3):
+                gc.collect()
+                time.sleep(0.8)  # Extended delay for Vulkan
+            print("[UNLOAD] Vulkan aggressive cleanup complete")
+        else:
+            gc.collect()
+            time.sleep(0.3)
         
         temporary.set_status("Unloaded", console=True)
         return "Model unloaded successfully.", None, False
-    
-    temporary.set_status("Model off", console=True)
-    return "Model off", llm_state, models_loaded_state
+        
+    except Exception as e:
+        import scripts.temporary as tmp
+        temporary.GPU_LAYERS = 0
+        tb = traceback.format_exc()
+        
+        # Detect Windows C++ exception (0xe06d7363)
+        is_vulkan_memory_error = (
+            "0xe06d7363" in str(e) or 
+            "WinError -529697949" in str(e) or
+            "Windows Error 0xe06d7363" in str(e)
+        )
+        
+        if is_vulkan_memory_error and "vulkan" in tmp.BACKEND_TYPE.lower():
+            err = (f"VULKAN MEMORY ERROR: Failed to allocate resources.\n"
+                   f"Try: Reduce VRAM allocation by 1-2GB, or reduce Context Size.\n"
+                   f"Current: {gpu_layers}/{num_layers} layers, {vram_size}MB VRAM\n"
+                   f"Tip: Restart the program for fresh Vulkan state.")
+        else:
+            err = (f"Error loading model: {e}\n"
+                   f"GPU Layers: {gpu_layers}/{num_layers}\n"
+                   f"CPU Threads: {CPU_THREADS if use_cpu_threads else 'none'}\n"
+                   f"{tb}")
+        
+        print(err)
+        set_status(f"Load failed", console=True, priority=True)
+        return err, False, None, False
 
 def update_thinking_phase_constants():
     """
@@ -749,12 +810,6 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                         cancel_event=None, llm_state=None, models_loaded_state=False):
     """
     Enhanced streaming response handler with robust thinking phase detection.
-    Supports:
-    - Standard <think></think> tags
-    - gpt-oss Harmony format with channels
-    - Hybrid models that may or may not use thinking
-    - Filters out repeating AI-Chat: name tags
-    - Vision models with image content (NEW)
     """
     import re
     from scripts import temporary
@@ -774,7 +829,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         is_roleplay=settings.get("is_roleplay", False),
         is_code=settings.get("is_code", False),
         is_moe=settings.get("is_moe", False),
-        is_vision=settings.get("is_vision", False)  # NEW
+        is_vision=settings.get("is_vision", False)
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     if web_search_enabled and search_results:
@@ -791,7 +846,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             "content": clean_content(msg["role"], msg["content"])
         })
     
-    # NEW: Format current user message with images if vision model
+    # Format current user message with images if vision model
     current_content = clean_content("user", session_log[-2]["content"])
     
     if settings.get("is_vision", False) and temporary.session_attached_files:
@@ -800,12 +855,10 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                       if Path(f).suffix.lower() in {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}]
         
         if image_files:
-            # Format multimodal message
             from scripts.utility import read_file_content
             
             multimodal_content = []
             
-            # Add images first
             for img_path in image_files:
                 data_uri, file_type, success, error = read_file_content(img_path)
                 if success and file_type == "image":
@@ -815,7 +868,6 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                     })
                     print(f"[VISION] Added image: {Path(img_path).name}")
             
-            # Add text query
             multimodal_content.append({
                 "type": "text",
                 "text": current_content
@@ -824,10 +876,8 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
             messages.append({"role": "user", "content": multimodal_content})
             print(f"[VISION] Multimodal message: {len(image_files)} images + text")
         else:
-            # No images, standard text
             messages.append({"role": "user", "content": current_content})
     else:
-        # Non-vision model or no images
         messages.append({"role": "user", "content": current_content})
 
     # State tracking
@@ -838,16 +888,35 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     char_count_since_think_start = 0
     raw_output = ""
 
-    # Detect if this is a gpt-oss model
     is_gpt_oss = 'gpt-oss' in temporary.MODEL_NAME.lower() if temporary.MODEL_NAME else False
     
-    for chunk in llm_state.create_chat_completion(
-        messages=messages,
-        max_tokens=temporary.BATCH_SIZE,
-        temperature=float(settings.get("temperature", temporary.TEMPERATURE)),
-        repeat_penalty=float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY)),
-        stream=True
-    ):
+    # NEW: Wrap stream creation in try/catch
+    try:
+        stream = llm_state.create_chat_completion(
+            messages=messages,
+            max_tokens=temporary.BATCH_SIZE,
+            temperature=float(settings.get("temperature", temporary.TEMPERATURE)),
+            repeat_penalty=float(settings.get("repeat_penalty", temporary.REPEAT_PENALTY)),
+            stream=True
+        )
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        
+        # Detect Windows C++ exception
+        if "0xe06d7363" in error_msg or "WinError -529697949" in error_msg:
+            print(f"[ERROR] Vulkan memory allocation failed during inference")
+            print(f"[ERROR] This usually means insufficient VRAM after model load")
+            print(f"[ERROR] Current settings: VRAM={temporary.VRAM_SIZE}MB, Context={temporary.CONTEXT_SIZE}, Batch={temporary.BATCH_SIZE}")
+            yield f"Error: Vulkan memory allocation failed.\n\nTry:\n1. Reduce VRAM allocation by 1-2GB\n2. Reduce Context Size (try 16384 or 8192)\n3. Reduce Batch Size (try 512 or 256)\n4. Restart the program\n\nTechnical: {error_msg}"
+        else:
+            print(f"[ERROR] Response generation failed: {error_msg}")
+            traceback.print_exc()
+            yield f"Error: {error_msg}"
+        return
+    
+    # Process stream tokens
+    for chunk in stream:
         if cancel_event and cancel_event.is_set():
             yield "<CANCELLED>"
             return

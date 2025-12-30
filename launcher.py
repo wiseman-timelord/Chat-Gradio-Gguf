@@ -1,7 +1,15 @@
 # launcher.py
 
+# Set FastEmbed env vars FIRST before ANY imports
+import os
+from pathlib import Path
+cache_dir = Path(__file__).parent / "data" / "fastembed_cache"
+cache_dir.mkdir(parents=True, exist_ok=True)
+os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
+os.environ["FASTEMBED_OFFLINE"] = "1"
+
 # Disable Logging
-import os, logging, logging.config
+import logging, logging.config
 logging.config.dictConfig = lambda *_, **__: None
 logging.config.fileConfig = lambda *_, **__: None
 logging.basicConfig = lambda *_, **__: None
@@ -138,6 +146,43 @@ def print_configuration():
     print(f"  CPU Threads: {temporary.CPU_THREADS}")
     print(f"  GPU Layers: {getattr(temporary, 'GPU_LAYERS', 'Auto')}")
 
+def preload_auxiliary_models():
+    """Pre-load spaCy and FastEmbed before main model to avoid memory conflicts."""
+    
+    # 1. Pre-load spaCy (pip package, no special path needed)
+    try:
+        from scripts.utility import get_nlp_model
+        nlp = get_nlp_model()
+        if nlp:
+            print("[INIT] ✓ spaCy model pre-loaded")
+        else:
+            print("[INIT] ⚠ spaCy model not available (will use fallback)")
+    except Exception as e:
+        print(f"[INIT] ⚠ spaCy pre-load failed: {e}")
+    
+    # 2. Pre-load FastEmbed with correct cache path
+    try:
+        import os
+        from pathlib import Path
+        
+        # Set cache path to match installer location BEFORE importing
+        cache_dir = Path(__file__).parent / "data" / "fastembed_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
+        os.environ["FASTEMBED_OFFLINE"] = "1"  # Prefer local cache
+        
+        # Now trigger the lazy load
+        temporary.context_injector._ensure_embedding_model()
+        
+        if temporary.context_injector.embedding:
+            print("[INIT] ✓ FastEmbed model pre-loaded from cache")
+        else:
+            print("[INIT] ⚠ FastEmbed model not available (RAG disabled)")
+    except Exception as e:
+        print(f"[INIT] ⚠ FastEmbed pre-load failed: {e}")
+        print("[INIT]   RAG features will be unavailable")
+
 def main():
     """Main entry point for the application."""
     try:
@@ -168,6 +213,10 @@ def main():
         # Print final configuration
         temporary.set_status("Config loaded")
         print_configuration()
+        
+        # NEW: Pre-load auxiliary models to avoid memory conflicts
+        print("\n[INIT] Pre-loading auxiliary models...")
+        preload_auxiliary_models()
         
         # Launch interface
         print("\nLaunching Gradio Interface...")

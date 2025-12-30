@@ -1121,42 +1121,41 @@ def install_onnxruntime() -> bool:
         return False
 
 def download_fastembed_model() -> bool:
-    """Download BAAI/bge-small-en-v1.5 model files directly via HTTP (no fastembed needed)."""
+    """Download BAAI/bge-small-en-v1.5 ONNX model files directly via HTTP."""
     model_name = "BAAI/bge-small-en-v1.5"
     cache_dir = BASE_DIR / "data" / "fastembed_cache"
-    model_cache_path = cache_dir / f"models--BAAI--bge-small-en-v1.5"
-    if model_cache_path.exists():
+    # Use 'main' branch instead of specific commit hash
+    revision = "main"
+    model_cache_path = cache_dir / f"models--BAAI--bge-small-en-v1.5" / "snapshots" / revision
+    # Check if already cached
+    if model_cache_path.exists() and (model_cache_path / "onnx" / "model.onnx").exists():
         print_status("Embedding model already cached")
         return True
-
-    files = [
-        "model.safetensors",
-        "config.json",
-        "tokenizer.json",
-        "tokenizer_config.json",
-        "special_tokens_map.json",
-        "1_Pooling/config.json"
-    ]
-    base_url = "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    model_dir = cache_dir / "models--BAAI--bge-small-en-v1.5" / "snapshots" / "main"
-    model_dir.mkdir(parents=True, exist_ok=True)
-
+    # Files to download
+    files = {
+        "onnx/model.onnx": "onnx/model.onnx",
+        "config.json": "config.json",
+        "tokenizer.json": "tokenizer.json",
+        "tokenizer_config.json": "tokenizer_config.json",
+        "special_tokens_map.json": "special_tokens_map.json"
+    }
+    base_url = f"https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/{revision}"
+    model_cache_path.mkdir(parents=True, exist_ok=True)
     try:
-        for file in files:
-            url = f"{base_url}/{file}"
-            dest = model_dir / file
+        for remote_path, local_path in files.items():
+            url = f"{base_url}/{remote_path}"
+            dest = model_cache_path / local_path
             dest.parent.mkdir(parents=True, exist_ok=True)
-            print_status(f"Downloading {file}...")
-            download_with_progress(url, dest, f"  {file}")
+            print_status(f"Downloading {local_path}...")
+            download_with_progress(url, dest, f"  {local_path}")
         print_status("Embedding model downloaded and cached")
         return True
     except Exception as e:
         print_status(f"Model download failed: {e}", False)
         # Clean partial download
-        if model_dir.exists():
+        if model_cache_path.exists():
             try:
-                shutil.rmtree(model_dir)
+                shutil.rmtree(model_cache_path)
             except:
                 pass
         return False
@@ -2141,38 +2140,44 @@ def install():
     if sys.version_info < (3, 8):
         print_status("Python ≥3.8 required", False)
         sys.exit(1)
+    
     # Clean compile temp (Windows only)
     if PLATFORM == "windows":
         clean_compile_temp()
+    
     # Create directories first (needed for temp files)
     create_directories()
+    
     # Install system dependencies BEFORE checking build tools
     if PLATFORM == "linux":
         if not install_linux_system_dependencies(backend):
             print_status("System dependencies installation failed", False)
             sys.exit(1)
+    
     info = BACKEND_OPTIONS[backend]
-    # Now check build tools (dependencies should be installed)
+    
+    # Check build tools (dependencies should be installed)
     if info.get("compile_binary") or info.get("compile_wheel"):
         if not check_build_tools():
             print_status("Missing required build tools", False)
             sys.exit(1)
+    
     if not verify_backend_dependencies(backend):
         print_status("Missing system dependencies", False)
         sys.exit(1)
+    
     if not create_venv():
         print_status("Virtual environment failed", False)
         sys.exit(1)
 
-    # All functions below already handle venv paths internally
-    # DO NOT wrap in activate_venv() context manager
+    # Install Python dependencies FIRST (includes fastembed)
     if not install_python_deps(backend):
         print_status("Python dependencies failed", False)
         sys.exit(1)
 
     install_optional_file_support()
 
-    # Try to download models (now critical - must succeed)
+    # NOW download models (after fastembed is installed)
     embedding_ok = download_fastembed_model()
     if not embedding_ok:
         print("\n" + "!" * 80)
@@ -2188,6 +2193,7 @@ def install():
         print("Session labeling may not work properly")
         # Non-critical, can continue
 
+    # Download/compile backend
     if not download_extract_backend(backend):
         print_status("Backend download failed", False)
         sys.exit(1)

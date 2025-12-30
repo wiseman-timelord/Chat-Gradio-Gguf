@@ -1925,7 +1925,7 @@ def launch_interface():
         )
 
     demo.launch(
-        server_name="127.0.0.1",
+        server_name="localhost",
         server_port=7860,
         show_error=True,
         show_api=False,
