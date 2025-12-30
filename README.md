@@ -1,10 +1,10 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
 ### Status
-Beta - Working fine on v0.96.4...
+Beta - Working fine on v0.96.5...
 
 ### Current News
-- Proper testing/fixing is going on, so v0.96.4 hopefull is working 100% correctly, atleast for qwen3 models, which I am using, improvements/fixes for other models may come. I updated development notes also.
+- Proper testing/fixing is going on in order to make the video, hopefull is working 100% correctly now, atleast for qwen3 models, which I am using, improvements/fixes for other models may come.
 
 ## Description
 Intended as a high-quality chat interface programmed towards, windows 7-11 (non-WSL) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. Dynamic prompting from keywords in models enabling better, interface and prompts, for relating theme of session, With some features but no imposed, limitations or guidelines. This tool providing local, uncensored, and inference with features that enhance productivity and usability, even a comparable interface, found on premium AI services, or as far in that direction as gguf models, will allow. The configuration is intended to be intelligent, while without options reported in forums to make no difference on most models, using offline libraries where possible instead of services requiring registration, and everything is privatly run on your own hardware with your own models. 
