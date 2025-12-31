@@ -33,6 +33,24 @@ DIRECTORIES = [
     "data/fastembed_cache"
 ]
 
+EMBEDDING_MODELS = {
+    "1": {
+        "name": "BAAI/bge-small-en-v1.5",
+        "display": "Bge-Small-En v1.5 (Fastest - 132MB)",
+        "size_mb": 132
+    },
+    "2": {
+        "name": "BAAI/bge-base-en-v1.5", 
+        "display": "Bge-Base-En v1.5 (Regular - 425MB)",
+        "size_mb": 425
+    },
+    "3": {
+        "name": "BAAI/bge-large-en-v1.5",
+        "display": "Bge-Large-En v1.5 (Quality - 1.35GB)", 
+        "size_mb": 1350
+    }
+}
+
 # Platform detection (windows / linux)
 PLATFORM = None
 
@@ -201,11 +219,10 @@ else:  # Linux - mirror structure
         }
     }
 
-
 # Python requirements (CPU-only, no torch)
 BASE_REQ = [
-    "gradio==5.49.1",
     "requests==2.31.0",
+    "gradio==5.49.1",
     "pyperclip",
     "spacy>=3.7.0",
     "psutil",
@@ -223,6 +240,25 @@ BASE_REQ = [
 
 if PLATFORM == "windows":
     BASE_REQ.extend(["pywin32", "tk"])
+
+# Functions...
+def select_embedding_model() -> str:
+    """Let user choose embedding model with size information"""
+    print_header("Embedding Model Selection")
+    print("\n\n\n\n")
+    for key, model in EMBEDDING_MODELS.items():
+        print(f"    {key}) {model['display']}\n")
+    print("\n\n\n\n\n")
+    print("-" * (shutil.get_terminal_size().columns - 1))
+
+    while True:
+        choice = input("Selection; Menu Options 1-3, Abandon Install = A: ").strip().upper()
+        if choice == "A":
+            print("\nAbandoning installation...")
+            sys.exit(0)
+        if choice in EMBEDDING_MODELS:
+            return EMBEDDING_MODELS[choice]["name"]
+        print("Invalid choice, please try again.")
 
 def snapshot_pre_existing_processes() -> None:
     """Snapshot all build-related processes that exist BEFORE compilation starts"""
@@ -718,8 +754,8 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
                 pass
         return False
 
-def build_config(backend: str) -> dict:
-    """Build configuration for all 6 backend options"""
+def build_config(backend: str, embedding_model: str) -> dict:
+    """Build configuration for all 6 backend options with embedding model"""
     info = BACKEND_OPTIONS[backend]
 
     # Determine backend_type based on selection
@@ -763,7 +799,8 @@ def build_config(backend: str) -> dict:
             "cpu_threads": 4,
             "vulkan_available": vulkan_available,
             "backend_type": backend_type,
-            "layer_allocation_mode": layer_allocation_mode
+            "layer_allocation_mode": layer_allocation_mode,
+            "embedding_model": embedding_model  # NEW: Store selected embedding model
         }
     }
 
@@ -785,10 +822,10 @@ def build_config(backend: str) -> dict:
 
     return config
 
-def create_config(backend: str) -> None:
+def create_config(backend: str, embedding_model: str) -> None:
     """Create configuration file with unified format"""
     config_path = BASE_DIR / "data" / "persistent.json"
-    config = build_config(backend)
+    config = build_config(backend, embedding_model)  # Pass embedding model
     
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -801,6 +838,7 @@ def create_config(backend: str) -> None:
         print(f"  Vulkan Available: {config['model_settings']['vulkan_available']}")
         print(f"  VRAM: {config['model_settings']['vram_size']} MB")
         print(f"  Context: {config['model_settings']['context_size']}")
+        print(f"  Embedding Model: {config['model_settings']['embedding_model']}")  # NEW
         if "llama_cli_path" in config["model_settings"]:
             print(f"  llama-cli: {config['model_settings']['llama_cli_path']}")
         else:
@@ -1077,6 +1115,109 @@ def install_vcredist_windows() -> bool:
         vcredist_path.unlink(missing_ok=True)
         return False
 
+def download_file_with_resume(url: str, dest: Path, desc: str = "Downloading") -> bool:
+    """Robust file download with resume, retries, and progress tracking."""
+    import urllib.request
+    import urllib.error
+    import urllib.parse
+    import time
+    
+    max_retries = 5
+    retry_delay = 3  # seconds
+    chunk_size = 8192
+    
+    for attempt in range(max_retries):
+        try:
+            # Check if partial file exists
+            existing_size = dest.stat().st_size if dest.exists() else 0
+            
+            # Create request with range header for resume
+            req = urllib.request.Request(url)
+            if existing_size > 0:
+                req.add_header('Range', f'bytes={existing_size}-')
+                print(f"  Resuming {desc} from {existing_size} bytes...")
+            
+            # Open connection
+            response = urllib.request.urlopen(req, timeout=30)
+            
+            # Get total file size
+            content_length = response.headers.get('Content-Length')
+            if content_length:
+                total_size = int(content_length) + existing_size
+            else:
+                total_size = None  # Unknown size
+            
+            # Open file for append/write
+            mode = 'ab' if existing_size > 0 else 'wb'
+            
+            downloaded = existing_size
+            last_progress = 0
+            
+            with open(dest, mode) as f:
+                while True:
+                    try:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        
+                        # Progress update (only if we know total size)
+                        if total_size and total_size > 0:
+                            progress = (downloaded / total_size) * 100
+                            if progress - last_progress >= 5:  # Update every 5%
+                                print(f"\r  {desc}: {progress:.1f}% ({downloaded}/{total_size} bytes)", end='', flush=True)
+                                last_progress = progress
+                        
+                    except Exception as chunk_error:
+                        print(f"\n  Chunk download error: {chunk_error}")
+                        raise
+            
+            # Final newline after progress
+            if total_size and total_size > 0:
+                print()  # New line after progress
+            
+            # Verify complete download
+            if total_size and downloaded < total_size:
+                raise Exception(f"Download incomplete: got {downloaded} out of {total_size} bytes")
+            
+            print(f"  ✓ {desc} completed ({downloaded} bytes)")
+            return True
+            
+        except urllib.error.HTTPError as e:
+            if e.code == 416:  # Range not satisfiable - file is complete
+                print(f"  ✓ {desc} already complete")
+                return True
+            else:
+                print(f"  HTTP Error {e.code}: {e.reason}")
+                if attempt < max_retries - 1:
+                    print(f"  Retrying in {retry_delay} seconds... (attempt {attempt + 2}/{max_retries})")
+                    time.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, 60)  # Exponential backoff
+                else:
+                    raise
+                    
+        except (urllib.error.URLError, OSError) as e:
+            print(f"  Network error: {e}")
+            if attempt < max_retries - 1:
+                print(f"  Retrying in {retry_delay} seconds... (attempt {attempt + 2}/{max_retries})")
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 60)
+            else:
+                raise
+                
+        except Exception as e:
+            print(f"  Download error: {e}")
+            if attempt < max_retries - 1:
+                print(f"  Retrying in {retry_delay} seconds... (attempt {attempt + 2}/{max_retries})")
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 60)
+            else:
+                raise
+    
+    return False
+
 def install_onnxruntime() -> bool:
     """Install onnxruntime with proper error handling. Do not verify by importing."""
     print_status("Installing onnxruntime (required for embeddings)...")
@@ -1120,45 +1261,138 @@ def install_onnxruntime() -> bool:
         print_status(f"onnxruntime installation error: {e}", False)
         return False
 
-def download_fastembed_model() -> bool:
-    """Download BAAI/bge-small-en-v1.5 ONNX model files directly via HTTP."""
-    model_name = "BAAI/bge-small-en-v1.5"
+def download_fastembed_model(embedding_model: str) -> bool:
+    """Download and properly cache FastEmbed model files with robust error handling."""
+    model_name = embedding_model
     cache_dir = BASE_DIR / "data" / "fastembed_cache"
-    # Use 'main' branch instead of specific commit hash
+    
+    # FastEmbed expects a specific directory structure
+    model_safe_name = model_name.replace("/", "--")
     revision = "main"
-    model_cache_path = cache_dir / f"models--BAAI--bge-small-en-v1.5" / "snapshots" / revision
-    # Check if already cached
-    if model_cache_path.exists() and (model_cache_path / "onnx" / "model.onnx").exists():
+    model_cache_path = cache_dir / f"models--{model_safe_name}" / "snapshots" / revision
+    
+    print_status(f"Setting up embedding model: {model_name}")
+    
+    # UPDATED: Complete list of files needed for FastEmbed to recognize cache
+    expected_files = [
+        "onnx/model.onnx", 
+        "onnx/model_quantized.onnx",  # NEW - quantized version
+        "config.json", 
+        "tokenizer.json", 
+        "tokenizer_config.json", 
+        "special_tokens_map.json",
+        "vocab.txt",  # NEW - vocabulary file
+        ".gitattributes"  # NEW - git metadata
+    ]
+    
+    # Check if already properly cached - ALL files must exist
+    all_files_exist = all((model_cache_path / file).exists() for file in expected_files)
+    if all_files_exist:
         print_status("Embedding model already cached")
         return True
-    # Files to download
+    
+    # Files to download for FastEmbed compatibility
     files = {
         "onnx/model.onnx": "onnx/model.onnx",
+        "onnx/model_quantized.onnx": "onnx/model_quantized.onnx",  # NEW
         "config.json": "config.json",
-        "tokenizer.json": "tokenizer.json",
+        "tokenizer.json": "tokenizer.json", 
         "tokenizer_config.json": "tokenizer_config.json",
-        "special_tokens_map.json": "special_tokens_map.json"
+        "special_tokens_map.json": "special_tokens_map.json",
+        "vocab.txt": "vocab.txt",  # NEW
+        ".gitattributes": ".gitattributes"  # NEW
     }
-    base_url = f"https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/{revision}"
+    
+    base_url = f"https://huggingface.co/{model_name}/resolve/{revision}"
     model_cache_path.mkdir(parents=True, exist_ok=True)
+    
     try:
+        print_status(f"Downloading embedding model files...")
+        
         for remote_path, local_path in files.items():
-            url = f"{base_url}/{remote_path}"
+            url = f"{base_url}/{remote_path}?download=true"
             dest = model_cache_path / local_path
             dest.parent.mkdir(parents=True, exist_ok=True)
-            print_status(f"Downloading {local_path}...")
-            download_with_progress(url, dest, f"  {local_path}")
+            
+            # Skip if file already exists and is non-zero size
+            if dest.exists() and dest.stat().st_size > 0:
+                print(f"  ✓ {local_path} (cached)")
+                continue
+            
+            print(f"  Downloading {local_path}...")
+            
+            success = download_file_with_resume(url, dest, local_path)
+            if not success:
+                # Some files might be optional, only fail on critical files
+                if local_path in ["onnx/model.onnx", "config.json", "tokenizer.json"]:
+                    raise Exception(f"Failed to download critical file {local_path}")
+                else:
+                    print(f"  ⚠ Optional file {local_path} not available (skipping)")
+        
         print_status("Embedding model downloaded and cached")
         return True
+        
     except Exception as e:
         print_status(f"Model download failed: {e}", False)
-        # Clean partial download
         if model_cache_path.exists():
             try:
                 shutil.rmtree(model_cache_path)
             except:
                 pass
         return False
+
+def initialize_fastembed_cache(embedding_model: str) -> bool:
+    """Initialize FastEmbed cache by doing one test embedding during install."""
+    print_status(f"Initializing FastEmbed cache for {embedding_model}...")
+    
+    cache_dir = BASE_DIR / "data" / "fastembed_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                    ("python.exe" if PLATFORM == "windows" else "python"))
+    
+    # Create a small script to trigger FastEmbed download
+    init_script = f'''
+import os
+from pathlib import Path
+
+cache_dir = Path(r"{str(cache_dir)}")
+os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
+
+from fastembed import TextEmbedding
+
+print(f"Loading model: {embedding_model}")
+model = TextEmbedding(
+    model_name="{embedding_model}",
+    cache_dir=str(cache_dir),
+    providers=["CPUExecutionProvider"]
+)
+
+# Do one test embedding to ensure everything works
+test_embedding = list(model.embed(["test"]))
+print(f"Model loaded successfully, embedding dimension: {{len(test_embedding[0])}}")
+'''
+    
+    script_path = TEMP_DIR / "init_fastembed.py"
+    try:
+        with open(script_path, 'w') as f:
+            f.write(init_script)
+        
+        result = subprocess.run(
+            [python_exe, str(script_path)],
+            check=True,
+            timeout=600,
+            capture_output=False  # Show progress
+        )
+        
+        print_status("FastEmbed cache initialized")
+        return True
+        
+    except Exception as e:
+        print_status(f"FastEmbed initialization failed: {e}", False)
+        return False
+    finally:
+        script_path.unlink(missing_ok=True)
 
 def download_spacy_model() -> bool:
     """Download spaCy English model during installation."""
@@ -2076,14 +2310,6 @@ def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
         print_status("Binary compilation complete")
         print(f"Optimizations enabled: {', '.join(optimizations) if optimizations else 'baseline'}")
         
-        # Clean up source directory after successful build
-        if llamacpp_src.exists():
-            try:
-                shutil.rmtree(llamacpp_src)
-                print_status("Cleaned up build directory")
-            except Exception as e:
-                print(f"Warning: Could not remove build directory: {e}")
-        
         return True
         
     except subprocess.TimeoutExpired:
@@ -2135,8 +2361,10 @@ def select_backend_type() -> str:
 # Main install flow
 def install():
     backend = select_backend_type()
+    embedding_model = select_embedding_model()
     print_header("Installation")
     print(f"Installing {APP_NAME} on {PLATFORM} using {backend}")
+    print(f"Embedding model: {embedding_model}")
     if sys.version_info < (3, 8):
         print_status("Python ≥3.8 required", False)
         sys.exit(1)
@@ -2177,11 +2405,10 @@ def install():
 
     install_optional_file_support()
 
-    # NOW download models (after fastembed is installed)
-    embedding_ok = download_fastembed_model()
-    if not embedding_ok:
+    # Initialize FastEmbed cache (replaces manual download)
+    if not initialize_fastembed_cache(embedding_model):
         print("\n" + "!" * 80)
-        print("CRITICAL ERROR: Embedding model download failed!")
+        print("CRITICAL ERROR: Embedding model initialization failed!")
         print("!" * 80)
         print("\nRAG features require this model to function.")
         print("Installation cannot continue.\n")
@@ -2198,7 +2425,7 @@ def install():
         print_status("Backend download failed", False)
         sys.exit(1)
 
-    create_config(backend)
+    create_config(backend, embedding_model)
     
     print_status("Installation complete!")
     print("\nRun the launcher to start Chat-Gradio-Gguf\n")

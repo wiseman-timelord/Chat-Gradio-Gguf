@@ -134,6 +134,10 @@ def load_config():
     temporary.BLEEP_ON_EVENTS = model_settings["bleep_on_events"]
     temporary.USE_PYTHON_BINDINGS = model_settings["use_python_bindings"]
     print(f"[CONFIG] UI: History={temporary.MAX_HISTORY_SLOTS}, Attach={temporary.MAX_ATTACH_SLOTS}, Height={temporary.SESSION_LOG_HEIGHT}")
+
+    # Embedding Model
+    temporary.EMBEDDING_MODEL_NAME = model_settings.get("embedding_model", "BAAI/bge-small-en-v1.5")
+    print(f"[CONFIG] Embedding model: {temporary.EMBEDDING_MODEL_NAME}") 
     
     # Load optional settings with fallback
     optional_map = {
@@ -233,6 +237,7 @@ def save_config():
             "bleep_on_events": temporary.BLEEP_ON_EVENTS,
             "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "layer_allocation_mode": getattr(temporary, 'LAYER_ALLOCATION_MODE', 'SRAM_ONLY'),
+            "embedding_model": getattr(temporary, 'EMBEDDING_MODEL_NAME', 'BAAI/bge-small-en-v1.5'),
         }
     }
 

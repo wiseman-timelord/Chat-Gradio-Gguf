@@ -158,30 +158,40 @@ class ContextInjector:
         import os
         from pathlib import Path
         
-        # Use absolute path consistently - should already be set by launcher
+        # FIXED: Use the value from config (loaded by settings.py)
+        model_to_load = EMBEDDING_MODEL_NAME
+        
+        # Use the SAME cache path as the installer
         cache_dir = Path(__file__).parent.parent / "data" / "fastembed_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # CRITICAL: Only set env vars if not already set (launcher may have set them)
-        if "FASTEMBED_CACHE_PATH" not in os.environ:
-            os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-            os.environ["FASTEMBED_OFFLINE"] = "1"
+        # Set environment variables BEFORE importing fastembed
+        os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
+        os.environ["FASTEMBED_OFFLINE"] = "1"  # Force offline mode to use cache
         
         try:
             from fastembed import TextEmbedding
             
-            actual_cache = os.environ.get("FASTEMBED_CACHE_PATH", str(cache_dir.absolute()))
-            print(f"[RAG] Loading embedding model from: {actual_cache}")
+            print(f"[RAG] Cache directory: {cache_dir}")
+            if cache_dir.exists():
+                cached_models = list(cache_dir.glob("**/model.onnx"))
+                print(f"[RAG] Found {len(cached_models)} cached model files:")
+                for model_file in cached_models:
+                    print(f"  - {model_file}")
             
+            print(f"[RAG] Attempting to load: {model_to_load}")
+            
+            # Try to load with offline mode first
             self.embedding = TextEmbedding(
-                model_name=EMBEDDING_MODEL_NAME,
-                cache_dir=actual_cache,  # Use the env var value
+                model_name=model_to_load,
+                cache_dir=str(cache_dir),
                 providers=["CPUExecutionProvider"]
             )
-            print("[RAG] Embedding model loaded from cache")
+            print(f"[RAG] Successfully loaded: {model_to_load}")
+            
         except Exception as e:
-            print(f"[RAG] Warning: Could not load embedding model: {e}")
-            print("[RAG] RAG features will be disabled. Run installer to download model.")
+            print(f"[RAG] Failed to load cached model: {e}")
+            print("[RAG] RAG features will be disabled.")
             self.embedding = None
 
     def set_session_vectorstore(self, file_paths):
