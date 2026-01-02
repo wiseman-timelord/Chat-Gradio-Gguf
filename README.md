@@ -4,7 +4,7 @@
 Beta - Working fine on v0.97.1...
 
 ### Current News
-- Proper testing/fixing is going on in order to, complete the project and make the video, its working 100% correctly now however there is some streaming issue, ie it only prints after complete output, so possibly here is requried, some visualization or a workflow progress indication or just be streaming the output.
+- Proper testing/fixing is going on in order to, complete the project and make the video, its working 100% correctly now, processing now even has dynamic progress bar.
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-latest. Dynamic prompting from keywords in models, as well as dynamic buttons on the interface, all on local models so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium AI services, with, web-search and tts. The configuration tab is intended to be intelligent, while without options reported in forums to make no difference on most models. The program using offline libraries where possible instead of online services or repeat download or registration. 
@@ -31,6 +31,9 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 - The collapseable Left/Right Panel on the `Interaction` page (click the C-G-G button)...
 ![preview_image](media/conversation_expand.jpg)
+
+- The dynamic progress indication replaces the user input box upon submission...
+![preview_image](media/dynamic_progress.jpg)
 
 - The "Configuration" page - for configuration of, models and hardware, and relevant components, as well as ui customization...
 ![preview_image](media/configuration_page.jpg)
