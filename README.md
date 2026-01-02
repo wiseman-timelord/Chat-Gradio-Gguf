@@ -1,7 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
 ### Status
-Beta - Working fine on v0.96.7...
+Beta - Working fine on v0.97.1...
 
 ### Current News
 - Proper testing/fixing is going on in order to make the video, in process I will be making sure its working 100% correctly now, atleast for qwen3 models, which I am using, improvements/fixes for other models may come, but the program can always be updated with AI by yourselves to work with a specific model, this project is intended as a framework.
@@ -23,7 +23,6 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **ASynchronous Response Stream**: Separate thread with its own event loop, allowing chunks of response queued/processed without blocking Gradio UI event loop.
 - **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, ie, uncensored, nsfw, chat, code.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
-- **Correct Vulkan Installs**: If Vulkan selected, then, `Windows 7-8 = v1.1.126.0` and `Windows 8.1-11 = v1.4.3.04.1`, avoiding API issues. This needs checking.
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
 
 ### Preview
