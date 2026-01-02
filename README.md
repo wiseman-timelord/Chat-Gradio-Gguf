@@ -334,7 +334,7 @@ project_root/
 1. (issues with truncation of input) If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model.
 1. Still additional blank line to each line it prints for "AI-Chat" responses under windows but not linux, and not certain browsers, its not the raw output, its the actual interface, it seemed fine on laptop though, so possibly this is a browser issue or my desktop pc setup, or a driver issue.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-4. Web-searching is a bit iffy, I found the input "latest version of grok?" worked. Need to improve later, DDGS was hard to work with at the time due to being NEW, and most online information is for DuckDuckGo-Search library still. They are used a little differently. Investigate/upgrade.
+4. Web-searching is ok, but it needs to have the current date inputted into the prompt sent to the model in order to understand context of dates, ie current/latest, or it will assume some date in its training data.
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
