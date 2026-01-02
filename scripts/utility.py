@@ -62,18 +62,48 @@ def filter_operational_content(text):
     return text.strip()
 
 def beep():
-    """PC speaker beep if enabled and possible."""
+    """
+    PC speaker beep if enabled. Falls back to system sound if PC speaker unavailable.
+    Uses platform-specific methods for both Windows and Linux.
+    """
     if not getattr(temporary, "BLEEP_ON_EVENTS", False):
         return
-    try:
-        if temporary.PLATFORM == "windows":
+    
+    if temporary.PLATFORM == "windows":
+        try:
+            # Try PC speaker first (frequency, duration in ms)
             import winsound
             winsound.Beep(1000, 120)
-        else:
-            # Linux fallback: terminal bell
-            print("\a", end="", flush=True)
-    except Exception:
-        pass
+            return
+        except RuntimeError:
+            # PC speaker not available, try system sound
+            try:
+                winsound.MessageBeep(winsound.MB_OK)
+            except Exception as e:
+                print(f"[BEEP] Sound unavailable: {e}")
+        except Exception as e:
+            print(f"[BEEP] Windows beep failed: {e}")
+    
+    elif temporary.PLATFORM == "linux":
+        try:
+            # Try PC speaker via /dev/console
+            import subprocess
+            subprocess.run(
+                ['beep', '-f', '1000', '-l', '120'],
+                timeout=1,
+                check=False,
+                stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL
+            )
+            return
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            # beep command not available, try terminal bell
+            try:
+                print("\a", end="", flush=True)
+            except Exception as e:
+                print(f"[BEEP] Linux beep failed: {e}")
+        except Exception as e:
+            print(f"[BEEP] Linux beep error: {e}")
 
 def detect_cpu_config():
     """Detect CPU configuration and set thread options."""

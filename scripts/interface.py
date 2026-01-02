@@ -1652,6 +1652,11 @@ def launch_interface():
                 ]
             )
 
+        config_components["bleep_events"].change(
+            fn=lambda v: setattr(temporary, "BLEEP_ON_EVENTS", bool(v)),
+            inputs=[config_components["bleep_events"]],
+            outputs=[]
+        )
 
         config_components["unload"].click(
             fn=unload_models,

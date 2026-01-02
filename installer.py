@@ -873,6 +873,20 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
                 pass
         return False
 
+def get_optimal_cpu_threads() -> int:
+    """Calculate optimal CPU thread count for model inference - 85% of available cores"""
+    import multiprocessing
+    
+    try:
+        total_threads = multiprocessing.cpu_count()
+    except:
+        total_threads = 4  # fallback
+    
+    # Use 85% of threads
+    use_threads = max(1, int(total_threads * 0.85))
+    
+    return use_threads
+
 def build_config(backend: str) -> dict:
     """Build configuration with only application settings"""
     info = BACKEND_OPTIONS[backend]
@@ -880,12 +894,19 @@ def build_config(backend: str) -> dict:
     # Determine VRAM based on backend selection
     if backend in ["Download CPU Binaries / Download CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
         vram_size = 0
+        layer_allocation = "SRAM_ONLY"
     elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
         vram_size = 8192
+        layer_allocation = "VRAM_SRAM"
     elif backend in ["Download Vulkan Bin / Compile Vulkan Wheel", "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
         vram_size = 8192
+        layer_allocation = "VRAM_SRAM"
     else:
         vram_size = 0
+        layer_allocation = "SRAM_ONLY"
+    
+    # Detect optimal CPU threads (85% of available)
+    cpu_threads = get_optimal_cpu_threads()
     
     config = {
         "model_settings": {
@@ -907,9 +928,9 @@ def build_config(backend: str) -> dict:
             "print_raw_output": False,
             "show_think_phase": False,
             "bleep_on_events": False,
-            "session_log_height": 650,
-            "cpu_threads": 4,
-            "layer_allocation_mode": "SRAM_ONLY",
+            "session_log_height": 625,
+            "cpu_threads": cpu_threads,  # <-- Now auto-detected
+            "layer_allocation_mode": layer_allocation,
         } 
     }
     
@@ -957,7 +978,9 @@ def create_config(backend: str, embedding_model: str) -> None:
         print_status("Configuration file created")
         print("\nGenerated configuration:")
         print(f"  Backend: {display_backend_type}")
-        print(f"  VRAM: {config['model_settings']['vram_size']} MB")  # ← Removed vulkan_available line
+        print(f"  VRAM: {config['model_settings']['vram_size']} MB")
+        print(f"  Layer Allocation: {config['model_settings']['layer_allocation_mode']}")  # <-- Added
+        print(f"  CPU Threads: {config['model_settings']['cpu_threads']}")  # <-- Added
         print(f"  Context: {config['model_settings']['context_size']}")
         print(f"  Embedding Model: {config['model_settings']['embedding_model']}")
         if "llama_cli_path" in config["model_settings"]:
