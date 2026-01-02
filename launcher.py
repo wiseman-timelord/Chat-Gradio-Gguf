@@ -36,22 +36,15 @@ def initialize_platform_settings():
         temporary.BACKEND_TYPE = "CPU_CPU"
         temporary.VULKAN_AVAILABLE = False
 
-    # REMOVED: Don't force SRAM_ONLY here - let config.json control it
-    # The layer allocation mode should be set by load_config() from persistent.json
-
-    # ------------------------------------------------------------------
-    # Vulkan VRAM optimisation – Polaris / AMD+NVIDIA universal
-    # ------------------------------------------------------------------
+    # Vulkan VRAM optimisation
     if temporary.BACKEND_TYPE in ("VULKAN_CPU", "VULKAN_VULKAN"):
         if temporary.PLATFORM == "windows":
-            # Windows: persistent for the whole console session
-            os.environ["GGML_CUDA_NO_PINNED"]   = "1"
+            os.environ["GGML_CUDA_NO_PINNED"] = "1"
             os.environ["GGML_VK_NO_PIPELINE_CACHE"] = "0"
             print("[Vulkan] GGML_CUDA_NO_PINNED=1   (frees ~300 MB VRAM)")
             print("[Vulkan] GGML_VK_NO_PIPELINE_CACHE=0  (cached SPIR-V pipelines)")
         else:
-            # Linux: export for child processes
-            os.environ["GGML_CUDA_NO_PINNED"]   = "1"
+            os.environ["GGML_CUDA_NO_PINNED"] = "1"
             os.environ["GGML_VK_NO_PIPELINE_CACHE"] = "0"
             print("[Vulkan] Exported GGML_CUDA_NO_PINNED=1")
             print("[Vulkan] Exported GGML_VK_NO_PIPELINE_CACHE=0")
@@ -191,10 +184,14 @@ def main():
         # Parse command-line arguments and initialize platform
         args = parse_args()
         temporary.PLATFORM = args.platform
-        
-        # Load config FIRST to get all saved settings including layer allocation
+
+        # Load system constants from INI FIRST (installer-generated)
+        from scripts.settings import load_system_ini
+        load_system_ini()
+
+        # Load user settings from JSON (model, context, etc.)
         load_config()
-        
+
         # Then initialize platform settings (paths, validation)
         initialize_platform_settings()
         

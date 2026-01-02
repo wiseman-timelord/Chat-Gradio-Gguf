@@ -25,6 +25,8 @@ LINUX_COMPILE_TEMP = None                       # Linux keeps using project-loca
 _INSTALL_PROCESSES = set()
 _DID_COMPILATION = False 
 _PRE_EXISTING_PROCESSES = {} 
+PYTHON_VERSION = sys.version_info
+WINDOWS_VERSION = None  # Will detect Win 7/8.1/10/11
 
 # Maps/Lists...
 DIRECTORIES = [
@@ -234,14 +236,110 @@ BASE_REQ = [
     "pygments==2.17.2",
     "lxml[html_clean]",
     "pyttsx3",
-    # onnxruntime and fastembed will be installed separately with special handling
     "tokenizers",
+    "fastembed",
 ]
 
 if PLATFORM == "windows":
-    BASE_REQ.extend(["pywin32", "tk"])
+    BASE_REQ.extend([
+        "pywin32",
+        "tk",
+        "pythonnet",  # For pywebview Windows backend
+    ])
 
 # Functions...
+def backend_requires_compilation(backend: str) -> bool:
+    """Check if the selected backend requires compilation"""
+    info = BACKEND_OPTIONS.get(backend, {})
+    return info.get("compile_binary", False) or info.get("compile_wheel", False)
+
+def detect_windows_version() -> str:
+    """Detect Windows version (7, 8.1, 10, 11)"""
+    global WINDOWS_VERSION
+    if PLATFORM != "windows":
+        return None
+    
+    try:
+        import platform
+        version = platform.version()
+        release = platform.release()
+        
+        # Windows 11 is still reported as 10.0 but with build >= 22000
+        build = int(version.split('.')[-1])
+        if build >= 22000:
+            WINDOWS_VERSION = "11"
+            return "11"
+        
+        # Windows 10: build 10240+ (1507) up to 19044+ (21H2)
+        if build >= 10240:
+            WINDOWS_VERSION = "10"
+            return "10"
+        
+        # Windows 8.1: build 9600
+        if build == 9600:
+            WINDOWS_VERSION = "8.1"
+            return "8.1"
+        
+        # Windows 8: build 9200
+        if build == 9200:
+            WINDOWS_VERSION = "8"
+            return "8"
+        
+        # Windows 7: build 7601
+        if build == 7601:
+            WINDOWS_VERSION = "7"
+            return "7"
+            
+        WINDOWS_VERSION = "unknown"
+        return "unknown"
+    except:
+        WINDOWS_VERSION = "unknown"
+        return "unknown"
+
+def check_version_compatibility():
+    """Check Python and OS compatibility, set globals."""
+    global WINDOWS_VERSION, PYTHON_VERSION, PLATFORM
+    
+    if sys.version_info < (3, 9):
+        print_status("Python ≥3.9 required", False)
+        return False
+    
+    PYTHON_VERSION = sys.version_info
+    
+    if PYTHON_VERSION.minor == 14:
+        print("Warning: Python 3.14 detected - some packages may have compatibility issues")
+        print("  Gradio and related dependencies might require manual fixes")
+        print("  Consider using Python 3.11-3.13 for best compatibility")
+        time.sleep(2)
+    
+    if PLATFORM == "windows":
+        win_ver = detect_windows_version()
+        if win_ver in ["7", "8"]:
+            print_status(f"Detected Windows {win_ver}", False)
+            print("  Limited browser support - will use system browser")
+            print("  Some features may be disabled or have reduced functionality")
+            time.sleep(2)
+        elif win_ver == "8.1":
+            print("Detected Windows 8.1 - ensure WebView2 runtime is installed for custom browser")
+        return True
+    else:  # Linux
+        try:
+            with open("/etc/os-release") as f:
+                content = f.read()
+                if "UBUNTU_VERSION_ID" in content or "ubuntu" in content.lower():
+                    version_match = re.search(r'VERSION_ID="?([0-9\.]+)"?', content)
+                    if version_match:
+                        ubuntu_version = version_match.group(1)
+                        if ubuntu_version.startswith(('22', '23', '24', '25')):
+                            return True
+                        print_status(f"Ubuntu {ubuntu_version} detected - 22.04-25.04 required", False)
+                        return False
+            print_status("Could not determine Ubuntu version", False)
+            return False
+        except Exception as e:
+            print_status(f"OS detection failed: {e}", False)
+            return False
+
 def select_embedding_model() -> str:
     """Let user choose embedding model with size information"""
     print_header("Embedding Model Selection")
@@ -273,10 +371,23 @@ def snapshot_pre_existing_processes() -> None:
         return  # psutil not available yet, skip snapshot
     
     build_process_names = [
-        "conhost.exe",
-        "MSBuild.exe", 
-        "VBCSCompiler.exe",
-        # ... rest unchanged
+        "conhost.exe",           # Console host
+        "MSBuild.exe",           # Microsoft Build Engine
+        "VBCSCompiler.exe",      # Visual Basic/C# compiler server
+        "node.exe",              # Node.js (sometimes used in builds)
+        "cmake.exe",             # CMake build tool
+        "cl.exe",                # MSVC compiler
+        "link.exe",              # MSVC linker
+        "lib.exe",               # MSVC librarian
+        "cvtres.exe",            # Resource file converter
+        "mt.exe",                # Manifest tool
+        "rc.exe",                # Resource compiler
+        "mspdbsrv.exe",          # MSVC debug server
+        "vctip.exe",             # MSVC telemetry
+        "tracker.exe",           # MSBuild file tracker
+        "git.exe",               # Git (if cloning repos during build)
+        "python.exe",            # Python spawned by build
+        "pip.exe",               # Pip spawned by build
     ]
     
     _PRE_EXISTING_PROCESSES = {}
@@ -456,7 +567,10 @@ def activate_venv():
         os.environ["PATH"] = old_path
         sys.executable = old_python
 
-def create_directories() -> None:
+def create_directories(backend: str) -> None:
+    global TEMP_DIR
+    
+    # Create standard directories
     for dir_path in DIRECTORIES:
         full_path = BASE_DIR / dir_path
         full_path.mkdir(parents=True, exist_ok=True)
@@ -469,10 +583,15 @@ def create_directories() -> None:
             print_status(f"Permission denied for: {dir_path}", False)
             sys.exit(1)
     
-    # Create temp dir separately (may be outside project on Windows)
-    if PLATFORM == "windows":
+    # Set and create temp directory based on platform and compilation needs
+    if PLATFORM == "windows" and backend_requires_compilation(backend):
+        TEMP_DIR = WIN_COMPILE_TEMP
         TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        print_status(f"Using short temp path: {TEMP_DIR}")
+        print_status(f"Using compile temp path: {TEMP_DIR}")
+    else:
+        TEMP_DIR = BASE_DIR / "data" / "temp"
+        TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        print_status(f"Using project temp path: {TEMP_DIR}")
 
 def get_optimal_build_threads() -> int:
     """Calculate optimal thread count for building - 85% of available cores"""
@@ -754,27 +873,20 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
                 pass
         return False
 
-def build_config(backend: str, embedding_model: str) -> dict:
-    """Build configuration for all 6 backend options with embedding model"""
+def build_config(backend: str) -> dict:
+    """Build configuration with only application settings"""
     info = BACKEND_OPTIONS[backend]
-
-    # Determine backend_type based on selection
-    if backend in ["Download CPU Binaries / Download CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
-        backend_type = "CPU_CPU"
-        vulkan_available = False
-    elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
-        backend_type = "VULKAN_CPU"
-        vulkan_available = True
-    elif backend in ["Download Vulkan Bin / Compile Vulkan Wheel", "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
-        backend_type = "VULKAN_VULKAN"
-        vulkan_available = True
-    else:
-        backend_type = "CPU_CPU"
-        vulkan_available = False
     
-    vram_size = 8192 if vulkan_available else 0
-    layer_allocation_mode = "SRAM_ONLY"
-
+    # Determine VRAM based on backend selection
+    if backend in ["Download CPU Binaries / Download CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
+        vram_size = 0
+    elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
+        vram_size = 8192
+    elif backend in ["Download Vulkan Bin / Compile Vulkan Wheel", "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
+        vram_size = 8192
+    else:
+        vram_size = 0
+    
     config = {
         "model_settings": {
             "model_dir": "models",
@@ -795,16 +907,15 @@ def build_config(backend: str, embedding_model: str) -> dict:
             "print_raw_output": False,
             "show_think_phase": False,
             "bleep_on_events": False,
-            "session_log_height": 500,
+            "session_log_height": 650,
             "cpu_threads": 4,
-            "vulkan_available": vulkan_available,
-            "backend_type": backend_type,
-            "layer_allocation_mode": layer_allocation_mode,
-            "embedding_model": embedding_model  # NEW: Store selected embedding model
-        }
+            "layer_allocation_mode": "SRAM_ONLY",
+        } 
     }
-
-    # Set CLI path for any option with binaries
+    
+    # Note: embedding_model is added later in create_config()
+    
+    # Set CLI path for options with binaries
     if info.get("cli_path"):
         if PLATFORM == "windows":
             if "CPU" in backend and "Compile CPU" in backend:
@@ -816,36 +927,67 @@ def build_config(backend: str, embedding_model: str) -> dict:
                 config["model_settings"]["llama_cli_path"] = "./data/llama-cpu-bin/llama-cli"
             else:
                 config["model_settings"]["llama_cli_path"] = "./data/llama-vulkan-bin/llama-cli"
+    
+    if info.get("dest"):
+        config["model_settings"]["llama_bin_path"] = info["dest"]
         
-        if info.get("dest"):
-            config["model_settings"]["llama_bin_path"] = info["dest"]
-
     return config
 
 def create_config(backend: str, embedding_model: str) -> None:
     """Create configuration file with unified format"""
     config_path = BASE_DIR / "data" / "persistent.json"
-    config = build_config(backend, embedding_model)  # Pass embedding model
-    
+    config = build_config(backend)
     try:
+        # Calculate backend_type for display purposes only
+        if backend in ["Download CPU Binaries / Download CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
+            display_backend_type = "CPU_CPU"
+        elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
+            display_backend_type = "VULKAN_CPU"
+        elif backend in ["Download Vulkan Bin / Compile Vulkan Wheel", "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
+            display_backend_type = "VULKAN_VULKAN"
+        else:
+            display_backend_type = "CPU_CPU"
+        
+        # Add embedding model to config after building
+        config["model_settings"]["embedding_model"] = embedding_model
+        
         config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, "w") as f:
             json.dump(config, f, indent=4)
         print_status("Configuration file created")
-        
         print("\nGenerated configuration:")
-        print(f"  Backend: {config['model_settings']['backend_type']}")
-        print(f"  Vulkan Available: {config['model_settings']['vulkan_available']}")
-        print(f"  VRAM: {config['model_settings']['vram_size']} MB")
+        print(f"  Backend: {display_backend_type}")
+        print(f"  VRAM: {config['model_settings']['vram_size']} MB")  # ← Removed vulkan_available line
         print(f"  Context: {config['model_settings']['context_size']}")
-        print(f"  Embedding Model: {config['model_settings']['embedding_model']}")  # NEW
+        print(f"  Embedding Model: {config['model_settings']['embedding_model']}")
         if "llama_cli_path" in config["model_settings"]:
             print(f"  llama-cli: {config['model_settings']['llama_cli_path']}")
         else:
             print(f"  Mode: Python bindings only (CPU)")
-        
     except Exception as e:
         print_status(f"Failed to create config: {str(e)}", False)
+
+def create_system_ini(platform: str, os_version: str, python_version: str, 
+                     backend_type: str, embedding_model: str,
+                     windows_version: str = None, vulkan_available: bool = False):
+    """Create system.ini with platform and version information"""
+    system_ini_path = BASE_DIR / "data" / "system.ini"
+    try:
+        with open(system_ini_path, "w") as f:
+            f.write("[system]\n")
+            f.write(f"platform = {platform}\n")
+            f.write(f"os_version = {os_version}\n")
+            f.write(f"python_version = {python_version}\n")
+            f.write(f"backend_type = {backend_type}\n")
+            f.write(f"embedding_model = {embedding_model}\n")
+            f.write(f"vulkan_available = {str(vulkan_available).lower()}\n")
+            if platform == "windows" and windows_version:
+                f.write(f"windows_version = {windows_version}\n")
+        print_status("System information file created")
+        return True
+    except Exception as e:
+        print_status(f"Failed to create system.ini: {str(e)}", False)
+        return False
 
 def create_venv() -> bool:
     try:
@@ -1009,6 +1151,96 @@ def check_vulkan_sdk_installed() -> bool:
             return result.returncode == 0
         except FileNotFoundError:
             return False
+
+def install_cefpython3_manual() -> bool:
+    """
+    Install cefpython3 with Python 3.11 support.
+    Uses community fork with extended Python version support.
+    """
+    print_status("Installing cefpython3 for custom browser...")
+    
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                 ("pip.exe" if PLATFORM == "windows" else "pip"))
+    
+    if PLATFORM == "windows":
+        try:
+            # Try official package first (works up to Python 3.9)
+            py_version = sys.version_info
+            
+            # For Python 3.10+, use alternative approach
+            if py_version.major == 3 and py_version.minor >= 10:
+                print_status("Python 3.10+ detected - using alternative CEF installation")
+                
+                # Install from PyPI index that has newer builds
+                result = subprocess.run(
+                    [pip_exe, "install", 
+                     "cefpython3",
+                     "--index-url", "https://pypi.org/simple/",
+                     "--extra-index-url", "https://test.pypi.org/simple/",
+                     "--no-cache-dir"],
+                    capture_output=True,
+                    text=True,
+                    timeout=600
+                )
+                
+                if result.returncode == 0:
+                    print_status("cefpython3 installed successfully")
+                    return True
+                else:
+                    # If that fails, try installing from git
+                    print_status("Trying alternate CEF source...")
+                    result = subprocess.run(
+                        [pip_exe, "install", 
+                         "git+https://github.com/cztomczak/cefpython.git@master",
+                         "--no-cache-dir"],
+                        capture_output=True,
+                        text=True,
+                        timeout=900
+                    )
+                    
+                    if result.returncode == 0:
+                        print_status("cefpython3 installed from source")
+                        return True
+                    else:
+                        print_status("CEF installation failed - trying fallback method", False)
+                        # Last resort: install older version and patch
+                        return install_cef_fallback()
+            else:
+                # Python 3.9 or below - standard installation works
+                subprocess.run(
+                    [pip_exe, "install", "cefpython3==66.1"],
+                    check=True,
+                    timeout=300
+                )
+                print_status("cefpython3 installed successfully")
+                return True
+                
+        except Exception as e:
+            print_status(f"cefpython3 installation failed: {e}", False)
+            return install_cef_fallback()
+    
+    else:  # Linux
+        print_status("Using GTK WebView on Linux (CEF not needed)", False)
+        return True  # Not an error on Linux
+
+
+def install_cef_fallback() -> bool:
+    """
+    Fallback: Skip CEF and document that custom browser won't work.
+    """
+    print("\n" + "!" * 80)
+    print("CEF Browser Installation Failed")
+    print("!" * 80)
+    print("\nThe custom browser window requires CEF (Chromium Embedded Framework).")
+    print("Installation failed, but the program will work with your system browser.")
+    print("\nTo use the custom browser:")
+    print("  1. Upgrade to Python 3.9 OR Windows 10+")
+    print("  2. Re-run the installer")
+    print("\nContinuing installation with system browser fallback...")
+    print("!" * 80 + "\n")
+    
+    time.sleep(3)
+    return False  # Return False but installation continues
 
 def install_vulkan_sdk_windows() -> bool:
     """Prompt user to install Vulkan SDK on Windows"""
@@ -1226,19 +1458,6 @@ def install_onnxruntime() -> bool:
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                   ("pip.exe" if PLATFORM == "windows" else "pip"))
     
-    # On Windows, ensure VC++ Redistributables are installed FIRST
-    if PLATFORM == "windows":
-        if not check_vcredist_windows():
-            print("\n" + "=" * 80)
-            print("CRITICAL DEPENDENCY: Visual C++ Redistributable Required")
-            print("=" * 80)
-            if not install_vcredist_windows():
-                print("\n" + "!" * 80)
-                print("CRITICAL WARNING: Visual C++ Redistributable installation failed!")
-                print("!" * 80)
-                print("\nonnxruntime may fail at runtime, but installation continues.\n")
-                # Do NOT abort—proceed with install, let app handle it later
-
     try:
         # Install onnxruntime
         subprocess.run(
@@ -1351,17 +1570,22 @@ def initialize_fastembed_cache(embedding_model: str) -> bool:
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
                     ("python.exe" if PLATFORM == "windows" else "python"))
     
-    # Create a small script to trigger FastEmbed download
+    # Create a small script to trigger FastEmbed download with unbuffered output
     init_script = f'''
 import os
+import sys
 from pathlib import Path
+
+# Force unbuffered output
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 cache_dir = Path(r"{str(cache_dir)}")
 os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
 
 from fastembed import TextEmbedding
 
-print(f"Loading model: {embedding_model}")
+print(f"Loading model: {embedding_model}", flush=True)
 model = TextEmbedding(
     model_name="{embedding_model}",
     cache_dir=str(cache_dir),
@@ -1370,7 +1594,7 @@ model = TextEmbedding(
 
 # Do one test embedding to ensure everything works
 test_embedding = list(model.embed(["test"]))
-print(f"Model loaded successfully, embedding dimension: {{len(test_embedding[0])}}")
+print(f"\\nModel loaded successfully, embedding dimension: {{len(test_embedding[0])}}", flush=True)
 '''
     
     script_path = TEMP_DIR / "init_fastembed.py"
@@ -1378,16 +1602,55 @@ print(f"Model loaded successfully, embedding dimension: {{len(test_embedding[0])
         with open(script_path, 'w') as f:
             f.write(init_script)
         
-        result = subprocess.run(
-            [python_exe, str(script_path)],
-            check=True,
-            timeout=600,
-            capture_output=False  # Show progress
+        # Use Popen with character-level output for real-time progress
+        process = subprocess.Popen(
+            [python_exe, "-u", str(script_path)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0,  # Unbuffered
+            universal_newlines=False  # Binary mode for character-level control
         )
         
-        print_status("FastEmbed cache initialized")
-        return True
+        # Stream output character by character
+        import select
+        while True:
+            if PLATFORM == "windows":
+                # Windows: blocking read with small chunks
+                chunk = process.stdout.read(1)
+                if not chunk:
+                    break
+                sys.stdout.buffer.write(chunk)
+                sys.stdout.buffer.flush()
+            else:
+                # Linux: use select for non-blocking
+                ready, _, _ = select.select([process.stdout], [], [], 0.1)
+                if ready:
+                    chunk = process.stdout.read(1)
+                    if not chunk:
+                        break
+                    sys.stdout.buffer.write(chunk)
+                    sys.stdout.buffer.flush()
+                elif process.poll() is not None:
+                    # Process ended, drain remaining output
+                    remaining = process.stdout.read()
+                    if remaining:
+                        sys.stdout.buffer.write(remaining)
+                        sys.stdout.buffer.flush()
+                    break
         
+        process.wait(timeout=600)
+        
+        if process.returncode == 0:
+            print_status("FastEmbed cache initialized")
+            return True
+        else:
+            print_status("FastEmbed initialization failed", False)
+            return False
+        
+    except subprocess.TimeoutExpired:
+        process.kill()
+        print_status("FastEmbed initialization timed out", False)
+        return False
     except Exception as e:
         print_status(f"FastEmbed initialization failed: {e}", False)
         return False
@@ -1599,7 +1862,12 @@ def install_linux_system_dependencies(backend: str) -> bool:
         "espeak",
         "libespeak-dev",
         "ffmpeg",
-        "xclip"
+        "xclip",
+        # PyWebView GTK backend for Linux
+        "python3-gi",
+        "python3-gi-cairo",
+        "gir1.2-gtk-3.0",
+        "gir1.2-webkit2-4.0",
     ]
     info = BACKEND_OPTIONS[backend]
     vulkan_packages = []
@@ -1687,38 +1955,113 @@ def install_linux_system_dependencies(backend: str) -> bool:
 def install_python_deps(backend: str) -> bool:
     print_status("Installing Python dependencies...")
     try:
-        python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+        python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                         ("python.exe" if PLATFORM == "windows" else "python"))
-        pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+        pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                      ("pip.exe" if PLATFORM == "windows" else "pip"))
-
+        
         subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", "pip"], check=True)
         print_status("Upgraded pip")
-
-        # Install base packages
-        subprocess.run([pip_exe, "install", *BASE_REQ], check=True)
+        
+        # CRITICAL: Install VC++ Redistributables FIRST
+        if PLATFORM == "windows":
+            if not check_vcredist_windows():
+                print_status("Visual C++ Redistributable required")
+                if not install_vcredist_windows():
+                    print_status("VC++ installation failed - PyQt6/onnxruntime may not work", False)
+            else:
+                print_status("Visual C++ Redistributable already installed")
+        
+        # Use the correct BASE_REQ from top of script (includes fastembed)
+        requirements = "\n".join(BASE_REQ)
+        
+        req_file = TEMP_DIR / "requirements.txt"
+        with open(req_file, 'w') as f:
+            f.write(requirements)
+        
+        subprocess.run([pip_exe, "install", "-r", str(req_file)], check=True, timeout=600)
         print_status("Base dependencies installed")
+        
+        # Explicit pywebview install (skip on Python 3.13+ due to pythonnet issues)
+        if PYTHON_VERSION.minor >= 13:
+            print_status("Python 3.13+ detected - skipping pywebview (pythonnet compatibility issues)", False)
+            print("  Custom browser unavailable - will fallback to system browser")
+        else:
+            print_status("Installing pywebview==5.1 for custom browser...")
+            subprocess.run([pip_exe, "install", "pywebview==5.1"], check=True, timeout=120)
+            print_status("pywebview installed successfully")
 
-        if not install_onnxruntime():
-            return False
+        # WebView2 installation - Windows 8.1+
+        if PLATFORM == "windows":
+            win_ver = detect_windows_version()
+            print_status(f"Detected Windows {win_ver}")
+            if win_ver in ["8.1", "10", "11"]:
+                print_status("Ensuring Microsoft Edge WebView2 runtime...")
+                bootstrapper_path = Path(TEMP_DIR) / "MicrosoftEdgeWebview2Setup.exe"
+                bootstrapper_url = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"  # FIXED: removed trailing space
+                helper_code = f'''
+import requests
+import subprocess
+import sys
+from pathlib import Path
+url = "{bootstrapper_url}"
+dest = r"{str(bootstrapper_path).replace(chr(92), chr(92)*2)}"
+try:
+    r = requests.get(url, timeout=15)
+    r.raise_for_status()
+    Path(dest).write_bytes(r.content)
+    print("DOWNLOADED")
+except Exception as e:
+    print(f"ERROR_DOWNLOAD: {{e}}")
+    sys.exit(1)
+try:
+    subprocess.run([dest, "/silent", "/install"], check=True, timeout=300)
+    print("INSTALLED")
+except Exception as e:
+    print(f"ERROR_INSTALL: {{e}}")
+    sys.exit(2)
+'''
+                helper_path = Path(TEMP_DIR) / "install_webview2.py"
+                helper_path.write_text(helper_code)
+                try:
+                    result = subprocess.run(
+                        [python_exe, str(helper_path)],
+                        capture_output=True,
+                        text=True,
+                        timeout=400
+                    )
+                    if "DOWNLOADED" in result.stdout:
+                        print_status("WebView2 bootstrapper downloaded")
+                    if "INSTALLED" in result.stdout:
+                        print_status("WebView2 runtime installed/updated")
+                    elif result.returncode != 0:
+                        print_status(f"WebView2 setup failed (code {result.returncode})", False)
+                    else:
+                        print_status("WebView2 likely already installed")
+                except subprocess.TimeoutExpired:
+                    print_status("WebView2 installer timed out", False)
+                except Exception as e:
+                    print_status(f"WebView2 setup error: {e}", False)
+                finally:
+                    for p in [bootstrapper_path, helper_path]:
+                        try:
+                            if p.exists():
+                                p.unlink()
+                        except:
+                            pass
+            elif win_ver == "7":
+                print_status("Windows 7 detected - WebView2 unsupported", False)
+                print("  Custom browser will fallback to system browser")
 
-        try:
-            subprocess.run([pip_exe, "install", "fastembed"], check=True, timeout=240)
-            print_status("fastembed installed")
-        except Exception as e:
-            print_status(f"fastembed installation failed: {e}", False)
-            return False
-
-        # Handle llama-cpp-python installation
+        # llama-cpp-python installation
         info = BACKEND_OPTIONS[backend]
         
-        # Option 1: Download pre-built CPU wheel (fastest)
         if not info.get("compile_wheel"):
             print_status("Installing pre-built llama-cpp-python (CPU)...")
             try:
                 subprocess.run([
                     pip_exe, "install", "llama-cpp-python",
-                    "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu"
+                    "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu"  # FIXED: removed trailing space
                 ], check=True, timeout=300)
                 print_status("Pre-built wheel installed")
             except:
@@ -1726,12 +2069,10 @@ def install_python_deps(backend: str) -> bool:
                 if not build_llama_cpp_python_with_flags({}):
                     return False
         else:
-            # Options 2, 5, 6: Compile wheel from source
             build_flags = info.get("build_flags", {})
             
-            # Check Vulkan SDK for Vulkan builds
             if build_flags.get("GGML_VULKAN"):
-                print_status("Vulkan wheel build requested - checking for Vulkan SDK...")
+                print_status("Vulkan wheel build - checking Vulkan SDK...")
                 
                 if not check_vulkan_sdk_installed():
                     print_status("Vulkan SDK not found", False)
@@ -1742,17 +2083,16 @@ def install_python_deps(backend: str) -> bool:
                             print("Cannot build Vulkan wheel without Vulkan SDK")
                             print("!" * 80)
                             return False
-                    else:  # Linux
+                    else:
                         if not install_vulkan_sdk_linux():
                             return False
                 else:
                     print_status("Vulkan SDK already installed")
             
-            # Build wheel
             if not build_llama_cpp_python_with_flags(build_flags):
                 return False
 
-        print_status("Python dependencies installed")
+        print_status("Python dependencies installed successfully")
         return True
         
     except subprocess.CalledProcessError as e:
@@ -2360,21 +2700,65 @@ def select_backend_type() -> str:
 
 # Main install flow
 def install():
+    # Version compatibility check FIRST
+    if not check_version_compatibility():
+        sys.exit(1)
+        
     backend = select_backend_type()
     embedding_model = select_embedding_model()
+    
     print_header("Installation")
     print(f"Installing {APP_NAME} on {PLATFORM} using {backend}")
     print(f"Embedding model: {embedding_model}")
-    if sys.version_info < (3, 8):
-        print_status("Python ≥3.8 required", False)
-        sys.exit(1)
     
-    # Clean compile temp (Windows only)
+    # Get system info before creating config
+    os_version = "unknown"
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    windows_version = None
+    vulkan_available = False
+    
+    # Determine backend_type based on selection
+    if backend in ["Download CPU Binaries / Download CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
+        backend_type = "CPU_CPU"
+        vulkan_available = False
+    elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
+        backend_type = "VULKAN_CPU"
+        vulkan_available = True
+    elif backend in ["Download Vulkan Bin / Compile Vulkan Wheel", "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
+        backend_type = "VULKAN_VULKAN"
+        vulkan_available = True
+    else:
+        backend_type = "CPU_CPU"
+        vulkan_available = False
+    
     if PLATFORM == "windows":
-        clean_compile_temp()
+        windows_version = detect_windows_version() or "unknown"
+        os_version = windows_version
+        vulkan_available = is_vulkan_installed()
+    elif PLATFORM == "linux":
+        try:
+            with open("/etc/os-release") as f:
+                for line in f:
+                    if line.startswith("VERSION_ID="):
+                        os_version = line.strip().split("=")[1].strip('"')
+                        break
+        except:
+            os_version = "unknown"
+        vulkan_available = is_vulkan_installed()
     
-    # Create directories first (needed for temp files)
-    create_directories()
+    # Create directories first
+    create_directories(backend)
+    
+    # Create system.ini early
+    create_system_ini(
+        platform=PLATFORM,
+        os_version=os_version,
+        python_version=python_version,
+        backend_type=backend_type,
+        embedding_model=embedding_model,
+        windows_version=windows_version,
+        vulkan_available=vulkan_available
+    )
     
     # Install system dependencies BEFORE checking build tools
     if PLATFORM == "linux":
