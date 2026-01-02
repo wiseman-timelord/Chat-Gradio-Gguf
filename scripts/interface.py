@@ -635,6 +635,119 @@ def update_backend_ui():
         gr.update()  # threads (always visible)
     ]
 
+def build_progress_html(step: int):
+    phases = [
+        "Handle Input",
+        "Build Prompt",
+        "Inject RAG",
+        "Add System",
+        "Assemble History",
+        "Check Model",
+        "Generate Stream",
+        "Split Thinking",
+        "Format Response"
+    ]
+    
+    segments = []
+    for i, phase in enumerate(phases):
+        if i < step:
+            color = "#00ff00"  # Green = completed
+        elif i == step:
+            color = "#4488ff"  # Blue = current
+            phase += "..."  # Add dots for animation (cycle in loop)
+        else:
+            color = "#666666"  # Gray = pending
+        segments.append(f'<span style="color:{color}; font-weight:bold;">{phase}</span>')
+    
+    return " → ".join(segments)
+
+def submit_user_input(user_input, session_log, attached_files, vector_files, web_search_enabled, model_settings, selected_panel):
+    if not user_input.strip():
+        return gr.update(), user_input, gr.update(visible=True), gr.update(visible=False), selected_panel, ""
+
+    # Append user message
+    new_log = session_log + f'<span style="color: {USER_COLOR}">\n**User:**\n{user_input.strip()}</span>\n\n'
+    
+    # Start with progress at step 0
+    progress_html = build_progress_html(0)
+    new_log += f'<span style="color: {RESPONSE_COLOR}">\n**AI:**\n{progress_html}</span>\n\n'
+    
+    # Clear input, hide textbox, show progress
+    yield (
+        gr.update(value=new_log),                    # chatbot
+        "",                                          # textbox (clear)
+        gr.update(visible=True),                     # send button
+        gr.update(visible=False),                    # cancel button or whatever
+        selected_panel,                              # panel state
+        progress_html                                # progress_display
+    )
+
+    # Step 1-5: Fast pre-processing (instant)
+    for step in range(1, 6):
+        progress_html = build_progress_html(step)
+        new_log = new_log.rsplit('<span style="color: #add8e6">\n**AI:**\n', 1)[0]
+        new_log += f'<span style="color: {RESPONSE_COLOR}">\n**AI:**\n{progress_html}</span>\n\n'
+        yield (
+            gr.update(value=new_log),
+            "",
+            gr.update(visible=True),
+            gr.update(visible=False),
+            selected_panel,
+            progress_html
+        )
+
+    # Step 6: Model ready → Generating
+    progress_html = build_progress_html(6)
+    new_log = new_log.rsplit('<span style="color: #add8e6">\n**AI:**\n', 1)[0]
+    new_log += f'<span style="color: {RESPONSE_COLOR}">\n**AI:**\n{progress_html}</span>\n\n'
+    yield (
+        gr.update(value=new_log),
+        "",
+        gr.update(visible=True),
+        gr.update(visible=False),
+        selected_panel,
+        progress_html
+    )
+
+    # Step 7: Actual generation with streaming
+    full_response = ""
+    try:
+        for token in get_response_stream(
+            session_log, model_settings, web_search_enabled=web_search_enabled
+        ):
+            full_response += token
+            
+            # Optional: pulse the "Generating response" phase
+            current_progress = build_progress_html(6)  # stays on "Generating response"
+            new_log = new_log.rsplit('<span style="color: #add8e6">\n**AI:**\n', 1)[0]
+            new_log += f'<span style="color: {RESPONSE_COLOR}">\n**AI:**\n{current_progress}<br><br>{full_response}</span>\n\n'
+            
+            yield (
+                gr.update(value=new_log),
+                "",
+                gr.update(visible=True),
+                gr.update(visible=False),
+                selected_panel,
+                current_progress
+            )
+    except Exception as e:
+        full_response = f"Error: {str(e)}"
+
+    # Final: Formatting → Done
+    progress_html = build_progress_html(7)
+    formatted = format_response(full_response) if 'format_response' in globals() else full_response
+    final_log = new_log.rsplit('<span style="color: #add8e6">\n**AI:**\n', 1)[0]
+    final_log += f'<span style="color: {RESPONSE_COLOR}">\n**AI:**\n{formatted}</span>\n\n'
+
+    yield (
+        gr.update(value=final_log),
+        "",
+        gr.update(visible=True),
+        gr.update(visible=False),
+        selected_panel,
+        ""  # Hide progress when done
+    )
+
 def handle_cpu_threads_change(new_threads):
     """Handle CPU threads slider changes"""
     temporary.CPU_THREADS = int(new_threads)
@@ -651,128 +764,110 @@ async def conversation_interface(
     user_input, session_log, loaded_files,
     is_reasoning_model, cancel_flag, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
-    speech_enabled, has_ai_response_state  # ADD THIS 11th PARAMETER
+    speech_enabled, has_ai_response_state
 ):
     """
-    FIXED: All variables defined before use, proper phase management
+    FIXED: Buffer complete response, show progress phases, display only when complete
     """
-    # ---------------  embedded imports  ------------------------------
     import gradio as gr
     from scripts import temporary, utility
     from scripts.models import get_model_settings, get_response_stream
     from scripts.temporary import context_injector
-    import asyncio, queue, threading, random, re, time
-    from pathlib import Path
+    import asyncio, re, time
 
-    # 
-    
-    
-    # ---------------  early guards  ----------------------------------
+    # Early guards
     if not models_loaded_state or not llm_state:
-        yield (session_log, "Please load a model first.",
-               *update_action_buttons("waiting_for_input", False),  # ADD False
+        yield (session_log, "", gr.update(visible=True), gr.update(visible=False),
+               *update_action_buttons("waiting_for_input", False),
                False, loaded_files, "waiting_for_input",
-               gr.update(), gr.update(), gr.update(),
-               False)  # ADD THIS 14th value
+               gr.update(), gr.update(), gr.update())
         return
 
     if not user_input.strip():
-        yield (session_log, "No input provided.",
-               *update_action_buttons("waiting_for_input", has_ai_response_state),  # Use state
+        yield (session_log, "", gr.update(visible=True), gr.update(visible=False),
+               *update_action_buttons("waiting_for_input", has_ai_response_state),
                False, loaded_files, "waiting_for_input",
-               gr.update(), gr.update(), gr.update(),
-               has_ai_response_state)
+               gr.update(), gr.update(), gr.update())
         return
 
-    # ---------------  initialize all variables  ----------------------
-    original_input = user_input
-    processed_input = user_input
-    input_is_large = False
-    error_occurred = False
-    visible_resp = ""
-    count_secs = 2 if is_reasoning_model else 1
-    indicators = ["⏳", "🔄", "⚙️"]
+    # Progress phases
+    phases = [
+        "Handle Input", "Build Prompt", "Inject RAG", "Add System",
+        "Assemble History", "Check Model", "Generate Stream",
+        "Split Thinking", "Format Response"
+    ]
+    current_phase = 0
+    dot_cycle = 0
 
-    # ---------------  RAG processing if needed  ----------------------
+    # RAG processing
     context_threshold = temporary.LARGE_INPUT_THRESHOLD
     max_input_chars = int(temporary.CONTEXT_SIZE * 3 * context_threshold)
     
+    processed_input = user_input
     if len(user_input) > max_input_chars:
-        input_is_large = True
         try:
             context_injector.add_temporary_input(user_input)
-            processed_input = user_input[:1000] + "\n\n[Large input processed with RAG - full content indexed for retrieval]"
+            processed_input = user_input[:1000] + "\n\n[Large input processed with RAG]"
         except Exception as e:
-            print(f"[RAG-TEMP] Error processing large input: {e}")
-            processed_input = user_input[:max_input_chars]
+            print(f"[RAG-TEMP] Error: {e}")
 
-    # ---------------  append to log  ---------------------------------
-    if input_is_large or temporary.session_attached_files:
-        session_log.append({'role':'user','content':processed_input})
-    else:
-        session_log.append({'role':'user','content':f"User:\n{processed_input}"})
-    session_log.append({'role':'assistant','content':"AI-Chat:\n"})
+    # Add to session log
+    session_log.append({'role': 'user', 'content': f"User:\n{processed_input}"})
+    session_log.append({'role': 'assistant', 'content': ""})
     
-    # Determine if we have AI history for button states
-    has_ai_response = len([m for m in session_log[:-1] if m['role'] == 'assistant']) > 0
-    
+    has_ai_response = any(m['role'] == 'assistant' for m in session_log[:-1])
     interaction_phase = "input_submitted"
 
-    yield (session_log,
-           "Processing..."+(" (RAG)" if input_is_large else ""),
-           *update_action_buttons(interaction_phase, has_ai_response),
-           cancel_flag, loaded_files, interaction_phase,
-           gr.update(interactive=False), gr.update(), gr.update(),
-           has_ai_response)
+    # Progress formatter
+    def format_progress(phase_idx, dots):
+        segments = []
+        dot_str = '.' * dots
+        for i, phase in enumerate(phases):
+            if i < phase_idx:
+                color = "#00ff00"
+                display = phase
+            elif i == phase_idx:
+                color = "#4488ff"
+                display = f"{phase}{dot_str}" if i >= 6 else phase
+            else:
+                color = "#666666"
+                display = phase
+            segments.append(f'<span style="color:{color};">{display}</span>')
+        return " → ".join(segments)
 
-    # ---------------  countdown  -------------------------------------
-    for i in range(count_secs, -1, -1):
-        if cancel_flag or _cancel_event.is_set():
-            session_log.pop(); session_log.pop()
-            context_injector.clear_temporary_input()
-            yield (session_log, "Input cancelled.",
-                   *update_action_buttons("waiting_for_input", has_ai_response),
-                   False, loaded_files, "waiting_for_input",
-                   gr.update(interactive=True, value=original_input), gr.update(), gr.update(),
-                   has_ai_response)
-            return
+    # Initial progress (phase 0)
+    yield (
+        session_log,
+        format_progress(0, 0),
+        gr.update(visible=False),
+        gr.update(visible=True),
+        *update_action_buttons("input_submitted", has_ai_response),
+        cancel_flag, loaded_files, "input_submitted",
+        gr.update(), gr.update(), gr.update()
+    )
 
-        yield (session_log, f"{random.choice(indicators)} Processing... {i}s",
-               *update_action_buttons(interaction_phase, has_ai_response),
-               cancel_flag, loaded_files, interaction_phase,
-               gr.update(), gr.update(), gr.update(),
-               has_ai_response)
-        await asyncio.sleep(1)
+    # Fast animation through phases 0–5
+    for phase in range(1, 6):
+        current_phase = phase
+        yield (
+            session_log,
+            format_progress(current_phase, 0),
+            gr.update(visible=False),
+            gr.update(visible=True),
+            *update_action_buttons("input_submitted", has_ai_response),
+            cancel_flag, loaded_files, "input_submitted",
+            gr.update(), gr.update(), gr.update()
+        )
+        await asyncio.sleep(0.15)
 
-    # ---------------  web search  ------------------------------------
-    search_results = None
-    if web_search_enabled:
-        yield (session_log, "🔍 Performing web search...",
-               *update_action_buttons(interaction_phase, has_ai_response),  # ADD has_ai_response
-               cancel_flag, loaded_files, interaction_phase,
-               gr.update(), gr.update(), gr.update(),
-               has_ai_response) 
-        try:
-            search_results = utility.web_search(user_input, num_results=6)
-            status = "✓ Web search complete"
-        except Exception as e:
-            search_results = f"Search error: {str(e)}"
-            status = "⚠️ Web search failed"
-        
-        yield (session_log, status,
-               *update_action_buttons(interaction_phase, has_ai_response),  # ADD has_ai_response
-               cancel_flag, loaded_files, interaction_phase,
-               gr.update(), gr.update(), gr.update(),
-               has_ai_response) 
-
-    # ---------------  get model settings  ----------------------------
+    # Get model settings (once, before generation)
     model_settings = get_model_settings(temporary.MODEL_NAME)
-    
-    # ---------------  streaming  -------------------------------------
+
+    # Phase 6: Generating
+    current_phase = 6
     interaction_phase = "generating_response"
     _cancel_event.clear()
-    
-    response_complete = False
+
     accumulated_response = "AI-Chat:\n"
     
     try:
@@ -780,108 +875,100 @@ async def conversation_interface(
             session_log=session_log,
             settings=model_settings,
             web_search_enabled=web_search_enabled,
-            search_results=search_results,
             cancel_event=_cancel_event,
             llm_state=llm_state,
             models_loaded_state=models_loaded_state
         ):
             if _cancel_event.is_set() or cancel_flag:
-                session_log[-1]['content'] = accumulated_response + "\n\n[Generation cancelled]"
-                context_injector.clear_temporary_input()
-                yield (session_log, "Generation cancelled.",
-                       *update_action_buttons("waiting_for_input", True),  # Will have response
-                       False, loaded_files, "waiting_for_input",
-                       gr.update(interactive=True), gr.update(), gr.update(),
-                       True) 
-                return
-            
+                accumulated_response += "\n\n[Cancelled]"
+                break
             if chunk == "<CANCELLED>":
                 break
-                
+
             accumulated_response += chunk
-            session_log[-1]['content'] = accumulated_response
-            
-            yield (session_log, "Generating response...",
-                   *update_action_buttons(interaction_phase, has_ai_response),  # ADD has_ai_response
-                   cancel_flag, loaded_files, interaction_phase,
-                   gr.update(), gr.update(), gr.update(),
-                   has_ai_response)
-        
-        response_complete = True
-        
+
+            # Animate dots during generation
+            dot_cycle = (dot_cycle + 1) % 4
+            yield (
+                session_log,
+                format_progress(current_phase, dot_cycle),
+                gr.update(visible=False),
+                gr.update(visible=True),
+                *update_action_buttons("generating_response", has_ai_response),
+                cancel_flag, loaded_files, "generating_response",
+                gr.update(), gr.update(), gr.update()
+            )
+            await asyncio.sleep(0.3)
+
     except Exception as e:
-        error_occurred = True
-        error_msg = f"\n\n[Error: {str(e)}]"
-        session_log[-1]['content'] = accumulated_response + error_msg
-        print(f"[ERROR] Response generation failed: {e}")
+        accumulated_response += f"\n\n[Error: {str(e)}]"
+        print(f"[ERROR] Generation failed: {e}")
 
-    # ---------------  extract visible response  ----------------------
-    visible_resp = accumulated_response.replace("AI-Chat:\n", "", 1).strip()
+    # Phase 7: Split Thinking
+    current_phase = 7
+    yield (
+        session_log,
+        format_progress(current_phase, 0),
+        gr.update(visible=False),
+        gr.update(visible=True),
+        *update_action_buttons("generating_response", has_ai_response),
+        cancel_flag, loaded_files, "generating_response",
+        gr.update(), gr.update(), gr.update()
+    )
+    await asyncio.sleep(0.2)
+
+    # Phase 8: Format Response
+    current_phase = 8
+    yield (
+        session_log,
+        format_progress(current_phase, 0),
+        gr.update(visible=False),
+        gr.update(visible=True),
+        *update_action_buttons("generating_response", has_ai_response),
+        cancel_flag, loaded_files, "generating_response",
+        gr.update(), gr.update(), gr.update()
+    )
+    await asyncio.sleep(0.2)
+
+    # Clean response
+    clean_response = accumulated_response.replace("AI-Chat:\n", "", 1)
+    clean_response = re.sub(r'<think>.*?</think>', '', clean_response, flags=re.DOTALL)
+    clean_response = re.sub(r'<\|channel\|>analysis.*?(?:<\|end\|>|<\|channel\|>final)', '', clean_response, flags=re.DOTALL)
+    clean_response = re.sub(r'<\|[^>]+\|>', '', clean_response)
     
-    # Remove thinking tags for speech
-    visible_resp = re.sub(r'<think>.*?</think>', '', visible_resp, flags=re.DOTALL)
-    visible_resp = re.sub(r'<\|channel\|>analysis.*?(?:<\|end\|>|<\|channel\|>final)', '', visible_resp, flags=re.DOTALL)
-    visible_resp = re.sub(r'<\|[^>]+\|>', '', visible_resp)
-    
-    # Remove Thinking.... lines
-    lines = visible_resp.split('\n')
-    filtered_lines = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
-            continue
-        filtered_lines.append(line)
-    visible_resp = '\n'.join(filtered_lines).strip()
+    lines = clean_response.split('\n')
+    filtered = [l for l in lines if not (l.strip().startswith("Thinking") and all(c in '.… ' for c in l.strip()[8:]))]
+    visible_resp = '\n'.join(filtered).strip()
 
-    # ---------------  speech  ----------------------------------------
-    if speech_enabled and visible_resp and response_complete:
-        interaction_phase = "speaking"
-        yield (session_log, "Speaking response...",
-               *update_action_buttons(interaction_phase, has_ai_response),
-               cancel_flag, loaded_files, interaction_phase,
-               gr.update(), gr.update(), gr.update(),
-               has_ai_response)
-        
-        # Isolated TTS - errors won't crash main flow
-        try:
-            chunks = utility.chunk_text_for_speech(visible_resp, max_chars=500)
-            for chunk in chunks:
-                if _cancel_event.is_set() or cancel_flag:
-                    print("[TTS] Cancelled by user")
-                    break
-                
-                # Each speak_text call is now fully isolated
-                try:
-                    utility.speak_text(chunk)
-                except Exception as chunk_error:
-                    print(f"[TTS] Chunk error (continuing): {chunk_error}")
-                    continue  # Skip this chunk, continue with next
-                
-                await asyncio.sleep(0.1)
-        except Exception as e:
-            # Outer catch for chunking errors
-            print(f"[TTS] Processing error (non-fatal): {e}")
+    # Update session log
+    session_log[-1]['content'] = accumulated_response
 
-    # ---------------  cleanup  ---------------------------------------
+    # Speech
+    if speech_enabled and visible_resp:
+        chunks = utility.chunk_text_for_speech(visible_resp, max_chars=500)
+        for chunk in chunks:
+            if _cancel_event.is_set():
+                break
+            utility.speak_text(chunk)
+            await asyncio.sleep(0.1)
+
+    # Cleanup
     context_injector.clear_temporary_input()
-
-    # ---------------  wrap-up  ---------------------------------------
-    interaction_phase = "waiting_for_input"
-    cleared_files = []
     utility.beep()
+    utility.save_session_history(session_log, loaded_files)
 
-    # >>> FIX: actually save the finished session <<<
-    from scripts.utility import save_session_history
-    save_session_history(session_log, loaded_files)
-
-    yield (session_log,
-           "✅ Response ready" if not error_occurred else "⚠️ Response incomplete",
-           *update_action_buttons(interaction_phase, True),  # Now has response
-           False, cleared_files, interaction_phase,
-           gr.update(interactive=True, value=""),
-           gr.update(value=web_search_enabled),
-           gr.update(value=speech_enabled),
-           True)
+    # Final yield - show response, hide progress
+    yield (
+        session_log,
+        "",  # Clear progress
+        gr.update(visible=True, interactive=True, value=""),
+        gr.update(visible=False),
+        *update_action_buttons("waiting_for_input", True),
+        False, loaded_files, "waiting_for_input",
+        gr.update(value=web_search_enabled),
+        gr.update(value=speech_enabled),
+        gr.update()
+    )
  
 # Core Gradio Interface
 def launch_interface():
@@ -917,6 +1004,15 @@ def launch_interface():
         .send-button-red { background-color: red !important; color: white !important }
         .scrollable .message { white-space: pre-wrap; word-break: break-word; }
         .hide-label { display:none !important; }
+        .progress-indicator { 
+            font-family: monospace; 
+            font-size: 14px; 
+            padding: 16px 10px;           /* ← more vertical padding */
+            background: #1a1a1a; 
+            border-radius: 4px;
+            min-height: 100px;            /* ← taller base */
+            line-height: 1.6;             /* ← better spacing */
+        }
         """
     ) as demo:
         temporary.demo = demo
@@ -984,6 +1080,11 @@ def launch_interface():
                         initial_max_lines = max(3, int(((temporary.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
                         temporary.USER_INPUT_MAX_LINES = initial_max_lines
                         conversation_components["user_input"] = gr.Textbox(label="User Input", lines=3, max_lines=initial_max_lines, interactive=False, placeholder="Enter text here...")
+                        conversation_components["progress_indicator"] = gr.Markdown(
+                            value="",
+                            visible=False,
+                            elem_classes=["progress-indicator"]
+                        )                        
                         
                         # Add has_ai_response state
                         states["has_ai_response"] = gr.State(False)
@@ -1375,7 +1476,9 @@ def launch_interface():
             ],
             outputs=[
                 conversation_components["session_log"],
-                shared_status_state,
+                conversation_components["progress_indicator"],  # NEW
+                conversation_components["user_input"],  # Visibility control
+                conversation_components["progress_indicator"],  # Visibility control
                 action_buttons["action"],
                 action_buttons["edit_previous"],
                 action_buttons["copy_response"],
@@ -1384,7 +1487,6 @@ def launch_interface():
                 states["cancel_flag"],
                 states["attached_files"],
                 states["interaction_phase"],
-                conversation_components["user_input"],
                 states["web_search_enabled"],
                 states["speech_enabled"],
                 states["has_ai_response"]

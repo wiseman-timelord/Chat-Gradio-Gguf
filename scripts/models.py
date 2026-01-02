@@ -809,7 +809,8 @@ def build_messages_with_context_management(session_log, system_message, context_
 def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None,
                         cancel_event=None, llm_state=None, models_loaded_state=False):
     """
-    Enhanced streaming response handler with robust thinking phase detection.
+    Streaming response handler – NO phase strings yielded.
+    Progress is now handled in interface.py.
     """
     import re
     from scripts import temporary
@@ -835,30 +836,24 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     if web_search_enabled and search_results:
         system_message += f"\n\nWeb search results:\n{search_results}"
 
-    # Build message list
     messages = []
     if system_message:
         messages.append({"role": "system", "content": system_message})
-    
+
     for msg in reversed(session_log[:-2]):
         messages.insert(1 if messages else 0, {
-            "role": msg["role"], 
+            "role": msg["role"],
             "content": clean_content(msg["role"], msg["content"])
         })
-    
-    # Format current user message with images if vision model
+
     current_content = clean_content("user", session_log[-2]["content"])
-    
+
     if settings.get("is_vision", False) and temporary.session_attached_files:
-        # Check for images in attached files
-        image_files = [f for f in temporary.session_attached_files 
+        image_files = [f for f in temporary.session_attached_files
                       if Path(f).suffix.lower() in {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}]
-        
+
         if image_files:
-            from scripts.utility import read_file_content
-            
             multimodal_content = []
-            
             for img_path in image_files:
                 data_uri, file_type, success, error = read_file_content(img_path)
                 if success and file_type == "image":
@@ -866,15 +861,8 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                         "type": "image_url",
                         "image_url": {"url": data_uri}
                     })
-                    print(f"[VISION] Added image: {Path(img_path).name}")
-            
-            multimodal_content.append({
-                "type": "text",
-                "text": current_content
-            })
-            
+            multimodal_content.append({"type": "text", "text": current_content})
             messages.append({"role": "user", "content": multimodal_content})
-            print(f"[VISION] Multimodal message: {len(image_files)} images + text")
         else:
             messages.append({"role": "user", "content": current_content})
     else:
@@ -882,15 +870,9 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
 
     # State tracking
     in_thinking_phase = False
-    thinking_content_buffer = ""
     output_buffer = ""
-    seen_real_text = False
-    char_count_since_think_start = 0
     raw_output = ""
 
-    is_gpt_oss = 'gpt-oss' in temporary.MODEL_NAME.lower() if temporary.MODEL_NAME else False
-    
-    # NEW: Wrap stream creation in try/catch
     try:
         stream = llm_state.create_chat_completion(
             messages=messages,
@@ -902,20 +884,13 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     except Exception as e:
         import traceback
         error_msg = str(e)
-        
-        # Detect Windows C++ exception
         if "0xe06d7363" in error_msg or "WinError -529697949" in error_msg:
-            print(f"[ERROR] Vulkan memory allocation failed during inference")
-            print(f"[ERROR] This usually means insufficient VRAM after model load")
-            print(f"[ERROR] Current settings: VRAM={temporary.VRAM_SIZE}MB, Context={temporary.CONTEXT_SIZE}, Batch={temporary.BATCH_SIZE}")
-            yield f"Error: Vulkan memory allocation failed.\n\nTry:\n1. Reduce VRAM allocation by 1-2GB\n2. Reduce Context Size (try 16384 or 8192)\n3. Reduce Batch Size (try 512 or 256)\n4. Restart the program\n\nTechnical: {error_msg}"
+            yield "Error: Vulkan memory allocation failed.\n\nTry reducing VRAM/Context/Batch size."
         else:
-            print(f"[ERROR] Response generation failed: {error_msg}")
             traceback.print_exc()
             yield f"Error: {error_msg}"
         return
-    
-    # Process stream tokens
+
     for chunk in stream:
         if cancel_event and cancel_event.is_set():
             yield "<CANCELLED>"
@@ -924,83 +899,46 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         token = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
         if not token:
             continue
-        
+
         raw_output += token
         output_buffer += token
 
-        # ===== Strip repeating AI-Chat: tags =====
         output_buffer = re.sub(r'(^|\n)\s*AI-Chat:\s*(\n|$)', r'\1', output_buffer)
         output_buffer = re.sub(r'\bAI-Chat:\s*\n\s*', '', output_buffer)
-        # ==============================================
 
-        # Skip initial whitespace until we see real content
-        if not seen_real_text:
-            if token.strip() == "":
-                continue
-            seen_real_text = True
-
-        # Guard against model trying to speak as user
         if "[INST]" in output_buffer or "<<USER>>" in output_buffer:
             if temporary.PRINT_RAW_OUTPUT:
                 print("\n***RAW_OUTPUT_FROM_MODEL_START***")
-                print(raw_output, flush=True)
+                print(raw_output)
                 print("***RAW_OUTPUT_FROM_MODEL_END***\n")
             return
 
-        # === THINKING PHASE DETECTION ===
-        
-        # Standard <think> opening
+        # Thinking phase detection
         if not in_thinking_phase and "<think>" in output_buffer:
             in_thinking_phase = True
-            char_count_since_think_start = 0
-            
             before_think = output_buffer.split("<think>", 1)[0]
             if before_think:
                 yield before_think
-            
             output_buffer = output_buffer.split("<think>", 1)[1]
-            thinking_content_buffer = ""
-            
-            if temporary.SHOW_THINK_PHASE:
-                yield "<think>"
-            else:
-                yield "Thinking"
+            yield "Thinking" if not temporary.SHOW_THINK_PHASE else "<think>"
             continue
 
-        # gpt-oss Harmony format detection: <|start|>assistant<|channel|>analysis
         if not in_thinking_phase and "<|channel|>analysis" in output_buffer:
             in_thinking_phase = True
-            char_count_since_think_start = 0
-            
             parts = output_buffer.split("<|channel|>analysis", 1)
-            before_analysis = parts[0]
-            
-            before_analysis = re.sub(r'<\|start\|>assistant', '', before_analysis)
+            before_analysis = re.sub(r'<\|start\|>assistant', '', parts[0])
             if before_analysis.strip():
                 yield before_analysis
-            
             output_buffer = parts[1] if len(parts) > 1 else ""
-            thinking_content_buffer = ""
-            
-            if temporary.SHOW_THINK_PHASE:
-                yield "<|channel|>analysis"
-            else:
-                yield "Thinking"
+            yield "Thinking" if not temporary.SHOW_THINK_PHASE else "<|channel|>analysis"
             continue
 
-        # === INSIDE THINKING PHASE ===
         if in_thinking_phase:
-            thinking_content_buffer += token
-            char_count_since_think_start += len(token)
-            
-            # Standard </think> closing
             if "</think>" in output_buffer:
                 in_thinking_phase = False
-                
                 parts = output_buffer.split("</think>", 1)
                 think_content = parts[0]
                 after_think = parts[1] if len(parts) > 1 else ""
-                
                 if temporary.SHOW_THINK_PHASE:
                     yield think_content + "</think>\n"
                 else:
@@ -1008,44 +946,12 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                     if spaces > 0:
                         yield "." * min(spaces, 50)
                     yield "\n"
-                
                 output_buffer = after_think
-                thinking_content_buffer = ""
                 if after_think:
                     yield after_think
                     output_buffer = ""
                 continue
-            
-            # gpt-oss: Check for channel switch to 'final'
-            if char_count_since_think_start >= temporary.THINK_MIN_CHARS_BEFORE_CLOSE:
-                end_pattern = r'<\|end\|>.*?<\|channel\|>final'
-                match = re.search(end_pattern, output_buffer, re.DOTALL)
-                
-                if match:
-                    in_thinking_phase = False
-                    
-                    think_end_pos = match.start()
-                    think_content = output_buffer[:think_end_pos]
-                    after_think = output_buffer[match.end():]
-                    
-                    if temporary.SHOW_THINK_PHASE:
-                        yield think_content
-                        yield match.group(0)
-                        yield "\n"
-                    else:
-                        spaces = think_content.count(" ")
-                        if spaces > 0:
-                            yield "." * min(spaces, 50)
-                        yield "\n"
-                    
-                    output_buffer = after_think
-                    thinking_content_buffer = ""
-                    if after_think:
-                        yield after_think
-                        output_buffer = ""
-                    continue
-            
-            # Still thinking - display according to mode
+
             if temporary.SHOW_THINK_PHASE:
                 yield token
                 output_buffer = ""
@@ -1056,19 +962,16 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 output_buffer = ""
             continue
 
-        # === NORMAL OUTPUT (not thinking) ===
         if len(output_buffer) > 20:
             yield output_buffer
             output_buffer = ""
 
-    # Final flush
-    if output_buffer and not in_thinking_phase:
+    if output_buffer:
         yield output_buffer
 
-    # Print raw output if debugging enabled
     if temporary.PRINT_RAW_OUTPUT:
         print("\n***RAW_OUTPUT_FROM_MODEL_START***")
-        print(raw_output, flush=True)
+        print(raw_output)
         print("***RAW_OUTPUT_FROM_MODEL_END***\n")
 
 # Helper function to reload model with new settings
