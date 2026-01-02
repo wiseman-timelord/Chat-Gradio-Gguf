@@ -39,8 +39,6 @@ DEFAULTS = {
 # Default configuration template
 DEFAULT_CONFIG = {
     "model_settings": {
-        "backend_type": "CPU_CPU",
-        "vulkan_available": False,
         "layer_allocation_mode": "SRAM_ONLY",
         "model_dir": "path/to/your/models",
         "model_name": "Select_a_model...",
@@ -68,6 +66,52 @@ DEFAULT_CONFIG = {
 }
 
 # Functions...
+def load_system_ini():
+    """Load system constants from system.ini (created by installer)."""
+    import configparser
+    
+    ini_path = Path("data/system.ini")
+    if not ini_path.exists():
+        raise RuntimeError(
+            f"System configuration file not found: {ini_path}\n"
+            "Re-run the installer to generate system.ini."
+        )
+    
+    try:
+        config = configparser.ConfigParser()
+        config.read(ini_path, encoding='utf-8')
+        
+        if 'system' not in config:
+            raise RuntimeError("system.ini missing [system] section")
+        
+        system = config['system']
+        
+        # Load INI-only constants
+        temporary.PLATFORM = system.get('platform')
+        temporary.BACKEND_TYPE = system.get('backend_type', 'CPU_CPU')
+        temporary.VULKAN_AVAILABLE = system.getboolean('vulkan_available', False)
+        temporary.EMBEDDING_MODEL_NAME = system.get('embedding_model', 'BAAI/bge-small-en-v1.5')
+        
+        print(f"[INI] Platform: {temporary.PLATFORM}")
+        print(f"[INI] Backend: {temporary.BACKEND_TYPE}")
+        print(f"[INI] Vulkan: {temporary.VULKAN_AVAILABLE}")
+        print(f"[INI] Embedding: {temporary.EMBEDDING_MODEL_NAME}")
+        
+        # Windows-specific
+        # OS version (generic)
+        temporary.OS_VERSION = system.get('os_version', 'unknown')
+        print(f"[INI] OS Version: {temporary.OS_VERSION}")
+
+        # Windows-specific (legacy compatibility)
+        if temporary.PLATFORM == "windows":
+            temporary.WINDOWS_VERSION = system.get('windows_version', temporary.OS_VERSION)
+            print(f"[INI] Windows Version: {temporary.WINDOWS_VERSION}")
+        
+        return True
+        
+    except Exception as e:
+        raise RuntimeError(f"Cannot read system.ini: {e}") from e
+
 def load_config():
     """Load configuration with validation and error handling."""
     if not CONFIG_PATH.exists():
@@ -86,7 +130,7 @@ def load_config():
 
     # Validate required keys
     required_keys = {
-        "backend_type", "vulkan_available", "model_dir", "context_size",
+        "model_dir", "context_size",
         "vram_size", "temperature", "repeat_penalty", "max_history_slots",
         "max_attach_slots", "session_log_height", "show_think_phase",
         "print_raw_output", "cpu_threads", "bleep_on_events", "use_python_bindings",
@@ -101,22 +145,6 @@ def load_config():
     temporary.MODEL_FOLDER = model_settings["model_dir"]
     print(f"[CONFIG] Model folder: {temporary.MODEL_FOLDER}")
     
-    # Load backend settings
-    temporary.BACKEND_TYPE = temporary.validate_backend_type(model_settings["backend_type"])
-    temporary.VULKAN_AVAILABLE = model_settings["vulkan_available"]
-    print(f"[CONFIG] Backend: {temporary.BACKEND_TYPE}, Vulkan: {temporary.VULKAN_AVAILABLE}")
-    
-    # Load layer allocation mode with validation
-    temporary.LAYER_ALLOCATION_MODE = model_settings["layer_allocation_mode"]
-    if temporary.BACKEND_TYPE == "CPU_CPU":
-        if temporary.LAYER_ALLOCATION_MODE != "SRAM_ONLY":
-            print(f"[CONFIG] CPU_CPU mode detected - forcing SRAM_ONLY (was {temporary.LAYER_ALLOCATION_MODE})")
-            temporary.LAYER_ALLOCATION_MODE = "SRAM_ONLY"
-    if temporary.LAYER_ALLOCATION_MODE not in ["SRAM_ONLY", "VRAM_SRAM"]:
-        print(f"[CONFIG] Invalid layer_allocation_mode '{temporary.LAYER_ALLOCATION_MODE}', defaulting to SRAM_ONLY")
-        temporary.LAYER_ALLOCATION_MODE = "SRAM_ONLY"
-    print(f"[CONFIG] Layer allocation: {temporary.LAYER_ALLOCATION_MODE}")
-    
     # Load hardware settings
     temporary.CONTEXT_SIZE = model_settings["context_size"]
     temporary.VRAM_SIZE = model_settings["vram_size"]
@@ -124,6 +152,19 @@ def load_config():
     temporary.REPEAT_PENALTY = model_settings["repeat_penalty"]
     temporary.CPU_THREADS = model_settings["cpu_threads"]
     print(f"[CONFIG] Context: {temporary.CONTEXT_SIZE}, VRAM: {temporary.VRAM_SIZE}MB, Temp: {temporary.TEMPERATURE}")
+    
+    # Layer allocation
+    temporary.LAYER_ALLOCATION_MODE = model_settings.get("layer_allocation_mode", "SRAM_ONLY")
+    
+    # Only force SRAM_ONLY if backend is CPU_CPU (from INI)
+    if temporary.BACKEND_TYPE == "CPU_CPU":
+        if temporary.LAYER_ALLOCATION_MODE != "SRAM_ONLY":
+            print(f"[CONFIG] CPU_CPU backend requires SRAM_ONLY (was {temporary.LAYER_ALLOCATION_MODE})")
+            temporary.LAYER_ALLOCATION_MODE = "SRAM_ONLY"
+            # Save corrected value back to JSON
+            model_settings["layer_allocation_mode"] = "SRAM_ONLY"
+    
+    print(f"[CONFIG] Layer allocation: {temporary.LAYER_ALLOCATION_MODE}")
     
     # Load UI settings
     temporary.MAX_HISTORY_SLOTS = model_settings["max_history_slots"]
@@ -135,10 +176,6 @@ def load_config():
     temporary.USE_PYTHON_BINDINGS = model_settings["use_python_bindings"]
     print(f"[CONFIG] UI: History={temporary.MAX_HISTORY_SLOTS}, Attach={temporary.MAX_ATTACH_SLOTS}, Height={temporary.SESSION_LOG_HEIGHT}")
 
-    # Embedding Model
-    temporary.EMBEDDING_MODEL_NAME = model_settings.get("embedding_model", "BAAI/bge-small-en-v1.5")
-    print(f"[CONFIG] Embedding model: {temporary.EMBEDDING_MODEL_NAME}") 
-    
     # Load optional settings with fallback
     optional_map = {
         "llama_cli_path": "LLAMA_CLI_PATH",
@@ -198,10 +235,11 @@ def load_config():
         if len(cpu_info) == 1 and temporary.SELECTED_CPU == "Auto-Select":
             temporary.SELECTED_CPU = cpu_labels[0] if cpu_labels else "Default CPU"
             print(f"[CONFIG] Adjusted SELECTED_CPU to: {temporary.SELECTED_CPU}")
-
-        temporary.set_status("Configuration loaded", console=True)
-        print(f"[CONFIG] ==================== Load Complete ====================")
-        return "Configuration loaded."
+    
+    # ← UNINDENT THESE (outside the if block)
+    temporary.set_status("Configuration loaded", console=True)
+    print(f"[CONFIG] ==================== Load Complete ====================")
+    return "Configuration loaded."
 
 def save_config():
     """Save current configuration to persistent storage."""
@@ -232,12 +270,9 @@ def save_config():
             "show_think_phase": temporary.SHOW_THINK_PHASE,
             "print_raw_output": temporary.PRINT_RAW_OUTPUT,
             "cpu_threads": temporary.CPU_THREADS,
-            "vulkan_available": temporary.VULKAN_AVAILABLE,
-            "backend_type": temporary.BACKEND_TYPE,
             "bleep_on_events": temporary.BLEEP_ON_EVENTS,
             "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "layer_allocation_mode": getattr(temporary, 'LAYER_ALLOCATION_MODE', 'SRAM_ONLY'),
-            "embedding_model": getattr(temporary, 'EMBEDDING_MODEL_NAME', 'BAAI/bge-small-en-v1.5'),
         }
     }
 

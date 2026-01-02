@@ -12,6 +12,7 @@ from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
 from queue import Queue
+from gradio.themes import Monochrome
 import scripts.temporary as temporary
 import scripts.settings as settings  # Added import for configuration variables
 from scripts.settings import save_config
@@ -1924,13 +1925,43 @@ def launch_interface():
             outputs=[shared_status_state]
         )
 
-    demo.launch(
-        server_name="localhost",
-        server_port=7860,
-        show_error=True,
-        show_api=False,
-        share=False,
+    # Always use custom browser
+    import threading
+    from scripts.browser import launch_custom_browser, wait_for_gradio
+    
+    print("[BROWSER] Starting Gradio server in background...")
+    
+    # Launch Gradio in daemon thread
+    gradio_thread = threading.Thread(
+        target=lambda: demo.launch(
+            server_name="localhost",
+            server_port=7860,
+            show_error=True,
+            show_api=False,
+            share=False,
+            inbrowser=False,
+            prevent_thread_lock=True
+            # NO theme= here anymore
+        ),
+        daemon=True
     )
+    gradio_thread.start()
+    
+    # Wait for Gradio to be ready
+    if wait_for_gradio("http://localhost:7860", timeout=30):
+        # Launch custom browser (blocking - takes over main thread)
+        launch_custom_browser(
+            gradio_url="http://localhost:7860/?__theme=dark",
+            frameless=False,  # This gives you the native Windows title bar + buttons
+            width=1400,
+            height=900,
+            title="Chat-Gradio-Gguf",
+            maximized=True
+        )
+    else:
+        print("[ERROR] Gradio server failed to start")
+        import sys
+        sys.exit(1)
 
 if __name__ == "__main__":
     launch_interface()

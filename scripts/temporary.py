@@ -5,15 +5,17 @@ import time
 from fastembed import TextEmbedding
 import faiss
 import numpy as np
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
 from pathlib import Path
 
-# Configuration variables with defaults
-PLATFORM = None          # set by launcher.py
-BACKEND_TYPE = "CPU_CPU"  # Fixed: Use correct format
+# System constants (platform, backend, etc.) loaded from data/system.ini
+PLATFORM = None
+BACKEND_TYPE = "CPU_CPU"
 VULKAN_AVAILABLE = False
-LAYER_ALLOCATION_MODE = "SRAM_ONLY" 
+LAYER_ALLOCATION_MODE = "SRAM_ONLY"
+
+# Configuration variables with defaults
 MODEL_FOLDER = "path/to/your/models"
 CONTEXT_SIZE = 32768
 VRAM_SIZE = 8192
@@ -25,7 +27,7 @@ MMAP = True
 MLOCK = True
 MAX_HISTORY_SLOTS = 12
 MAX_ATTACH_SLOTS = 6
-SESSION_LOG_HEIGHT = 500
+SESSION_LOG_HEIGHT = 650
 INPUT_LINES = 27
 VRAM_OPTIONS = [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536]
 CTX_OPTIONS = [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072]
