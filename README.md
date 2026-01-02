@@ -1,7 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
 ### Status
-Beta - Working fine on v0.96.6...
+Beta - Working fine on v0.96.7...
 
 ### Current News
 - Proper testing/fixing is going on in order to make the video, in process I will be making sure its working 100% correctly now, atleast for qwen3 models, which I am using, improvements/fixes for other models may come, but the program can always be updated with AI by yourselves to work with a specific model, this project is intended as a framework.
@@ -10,6 +10,7 @@ Beta - Working fine on v0.96.6...
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-latest. Dynamic prompting from keywords in models, as well as dynamic buttons on the interface, all on local models so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium AI services, with, web-search and tts. The configuration tab is intended to be intelligent, while without options reported in forums to make no difference on most models. The program using offline libraries where possible instead of online services or repeat download or registration. 
 
 ### Features
+- **Edge-WebView Custom Browser**: The interface uses Edge-WebView with Gradio, this, looks better and means your cookies are def safe.  
 - **Comprihensive GPU Support**: Vulkan, with dropdown list in configuration selection supporting multi CPU/GPU setup.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, THINK, and Markdown formatting, and file attachments. 
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
