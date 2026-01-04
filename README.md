@@ -300,6 +300,7 @@ project_root/
 ├── media/
 │ └── project_banner.jpg
 ├── scripts/
+│ └── browser.py
 │ └── interface.py
 │ └── models.py
 │ └── prompts.py
@@ -312,6 +313,7 @@ project_root/
 project_root/
 ├── data/
 │ └── persistent.json
+│ └── settings.ini
 ├── data/vectors/
 └─────── *
 ├── data/temp/
