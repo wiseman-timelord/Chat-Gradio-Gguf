@@ -7,7 +7,7 @@ Beta - Working fine on v0.97.1...
 - Proper testing/fixing is going on in order to, complete the project and make the video, its working 100% correctly now, processing now even has dynamic progress bar.
 
 ## Description
-Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-latest. Dynamic prompting from keywords in models, as well as dynamic buttons on the interface, all on local models so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium AI services, with, web-search and tts. The configuration tab is intended to be intelligent, while without options reported in forums to make no difference on most models. The program using offline libraries where possible instead of online services or repeat download or registration. 
+Intended as a high-quality chat interface with wide hardware/os support, windows 8.1-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-latest. Dynamic prompting from keywords in models, as well as dynamic buttons on the interface, all on local models so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium AI services, with, web-search and tts. The configuration tab is intended to be intelligent, while without options reported in forums to make no difference on most models. The program using offline libraries where possible instead of online services or repeat download or registration. 
 
 ### Features
 - **Edge-WebView Custom Browser**: The interface uses Edge-WebView with Gradio, this, looks better and means your cookies are def safe.  
@@ -207,7 +207,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 </details>
 
 ## Requirements
-- Windows 7-11 and/or ~Ubuntu 22-25, Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
+- Windows 8.1-11 and/or ~Ubuntu 22-25, Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
 - Llama.Cpp - Options here for, Vulkan or X64. This has been limited to what I can test (though its possible to replace llama.cpp with for eg Cuda12).
 - Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [Qwen1.5-0.5B-Chat-GGUF](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GGUF), as this will be super-fast and confirm basic operation, otherwise see models section.
@@ -246,6 +246,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 ```
 
 ### Notation 
+- Support was dripped for Windows 7-8 (not 8.1), because FastEmbed/ONNX is not compatible with 7-8. Implementing Torch/Transformers instead is not possible currently due to size/context issues in AI programming, but may feature later.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
 - The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know.
 - For Vulkan installations, you must install the Vulkan SDK, it may come with your graphics card, otherwise you must go here [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
