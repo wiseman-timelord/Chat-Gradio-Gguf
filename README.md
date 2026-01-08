@@ -72,32 +72,34 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The updoming Install Options menu, regular download and/or compile if having pre-installed tools...
+- The upcoming combined Detection/Install Options menu...
 <details>
     
     ===============================================================================
-        Chat-Gradio-Gguf - Gpu Options
+        Chat-Gradio-Gguf - Installation Configuration
     ===============================================================================
     
+    System Detections...
+       Operating System: Windows 8.1
+       CPU Features: SSE3, SSSE3, SSE4_1
+       Vulkan Present: No
     
+    Backend Type...
+       1) Download CPU Wheel / Download CPU Wheel
+       2) Compile CPU Binaries / Compile CPU Wheel
+       3) Download Vulkan Bin / Download CPU Wheel
+       4) Download Vulkan Bin / Compile Vulkan Wheel
+       5) Compile Vulkan Binaries / Compile Vulkan Wheel
     
-        1) Download CPU Binaries / Download CPU Wheel
+    Embedding Model...
+       a) Bge-Small-En v1.5 (Fastest - 132MB)
+       b) Bge-Base-En v1.5 (Regular - 425MB)
+       c) Bge-Large-En v1.5 (Quality - 1.35GB)
     
-        2) Compile CPU Binaries / Compile CPU Wheel
-    
-        3) Download Vulkan Bin / Download CPU Wheel
-    
-        4) Download Vulkan Bin / Download CPU Wheel (Forced)
-    
-        5) Download Vulkan Bin / Compile Vulkan Wheel
-    
-        6) Compile Vulkan Binaries / Compile Vulkan Wheel
-    
-    
-    
-    
-    -------------------------------------------------------------------------------
-    Selecton; Menu Options 1-6, Abandon Install = A:
+    ===============================================================================
+    Selection; Backend = 1-5 + Embeddings = a-c (e.g. 3b), Abandon = A:
+
+
 
 </details>
 
