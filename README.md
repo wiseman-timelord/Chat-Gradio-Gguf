@@ -76,15 +76,16 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 <details>
     
     ===============================================================================
-        Chat-Gradio-Gguf - Installation Configuration
+        Chat-Gradio-Gguf - Configuration Selection
     ===============================================================================
     
     System Detections...
-       Operating System: Windows 8.1
-       CPU Features: AVX, AVX2, FMA, F16C, SSE3, SSSE3, SSE4_1, SSE4_2
-       Vulkan Present: Yes
+        Operating System: Windows 8.1
+        CPU Features: AVX, AVX2, FMA, F16C, SSE3, SSSE3, SSE4_1, SSE4_2
+        Vulkan Present: Yes
+        Build Tools: Git, CMake, MSVC, MSBuild
     
-    Backend Type...
+    Backend Options...
        1) Download CPU Wheel / Download CPU Wheel
        2) Compile CPU Binaries / Compile CPU Wheel
        3) Download Vulkan Bin / Download CPU Wheel
@@ -98,7 +99,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     ===============================================================================
     Selection; Backend = 1-5 + Embeddings = a-c (e.g. 3b), Abandon = A:
-    
+
 </details>
 
 - Installation processes (CPU-CPU non-compile install)..
