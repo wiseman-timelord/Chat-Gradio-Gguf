@@ -72,7 +72,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The upcoming combined Detection/Install Options menu (core 2 duo laptop)...
+- The upcoming combined Detection/Install Options menu (AMD x3900)...
 <details>
     
     ===============================================================================
