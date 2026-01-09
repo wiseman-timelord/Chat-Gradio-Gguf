@@ -81,8 +81,8 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     System Detections...
        Operating System: Windows 8.1
-       CPU Features: SSE3, SSSE3, SSE4_1
-       Vulkan Present: No
+       CPU Features: AVX, AVX2, FMA, F16C, SSE3, SSSE3, SSE4_1, SSE4_2
+       Vulkan Present: Yes
     
     Backend Type...
        1) Download CPU Wheel / Download CPU Wheel
@@ -98,9 +98,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     ===============================================================================
     Selection; Backend = 1-5 + Embeddings = a-c (e.g. 3b), Abandon = A:
-
-
-
+    
 </details>
 
 - Installation processes (after building Vulkan binaries/Wheel in limited terminal/console buffer)..
