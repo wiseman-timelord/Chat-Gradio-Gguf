@@ -101,33 +101,103 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
 </details>
 
-- Installation processes (after building Vulkan binaries/Wheel in limited terminal/console buffer)..
+- Installation processes (CPU-CPU non-compile install)..
 <details>
     
-          ...shortened...
-      Installed llama-save-load-state.exe
-      Installed llama-server.exe
-      Installed llama-simple-chat.exe
-      Installed llama-simple.exe
-      Installed llama-speculative-simple.exe
-      Installed llama-speculative.exe
-      Installed llama-tokenize.exe
-      Installed llama-tts.exe
-      Installed llama-vdot.exe
-    [V] Binary compilation complete
-    Optimizations enabled: AVX2, FMA, F16C (50% less RAM)
-    [V] Configuration file created
+    ===============================================================================
+        Chat-Gradio-Gguf - Installation
+    ===============================================================================
     
-    Generated configuration:
-      Backend: VULKAN_VULKAN
-      Vulkan Available: True
-      VRAM: 8192 MB
-      Context: 32768
-      llama-cli: .\data\llama-vulkan-bin\llama-cli.exe
+    Installing Chat-Gradio-Gguf on windows using Download CPU Wheel / Download CPU W
+    heel
+    Embedding model: BAAI/bge-small-en-v1.5
+    [V] Verified directory: data
+    [V] Verified directory: scripts
+    [V] Verified directory: models
+    [V] Verified directory: data/history
+    [V] Verified directory: data/temp
+    [V] Verified directory: data/vectors
+    [V] Verified directory: data/embedding_cache
+    [V] Using project temp path: C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-
+    0.97.3\data\temp
+    [V] System information file created
+    [V] Installing Python dependencies...
+    [V] Installing base packages...
+      [1/18] Installing numpy<2... OK
+      [2/18] Installing requests... OK
+      [3/18] Installing gradio... OK
+      [4/18] Installing pyperclip... OK
+      [5/18] Installing spacy... OK
+      [6/18] Installing psutil... OK
+      [7/18] Installing ddgs... OK
+      [8/18] Installing newspaper3k... OK
+      [9/18] Installing langchain-community... OK
+      [10/18] Installing faiss-cpu... OK
+      [11/18] Installing langchain... OK
+      [12/18] Installing pygments... OK
+      [13/18] Installing lxml... OK
+      [14/18] Installing pyttsx3... OK
+      [15/18] Installing tokenizers... OK
+      [16/18] Installing pywin32... OK
+      [17/18] Installing tk... OK
+      [18/18] Installing pythonnet... OK
+    [V] Base packages installed
+    [V] Installing embedding backend (torch + sentence-transformers)...
+    [V] Installing PyTorch 2.2.2 (CPU-only)...
+    [V] PyTorch 2.2.2 (CPU) installed
+    [V] Installing transformers 4.41.2...
+    [V] transformers installed
+    [V] Installing sentence-transformers 3.0.1...
+    [V] sentence-transformers installed
+    [V] Embedding backend verified
+    [V] Installing Qt WebEngine for custom browser...
+    [V] Windows 8.1 - installing PyQt5 + Qt5 WebEngine...
+    [V] Qt WebEngine installed
+    [V] Installing pre-built llama-cpp-python (CPU)...
+    [V] Pre-built wheel installed
+    [V] Python dependencies installed successfully
+    [V] Installing optional file format support...
+    [V]   Installed PyPDF2
+    [V]   Installed python-docx
+    [V]   Installed openpyxl
+    [V]   Installed python-pptx
+    [V] Initializing embedding cache for BAAI/bge-small-en-v1.5...
+    ============================================================
+    Embedding Initialization Output:
+    ============================================================
+    Importing torch...
+    torch version: 2.2.2+cpu
+    CUDA available: False (should be False)
+    Importing sentence_transformers...
+    Loading model: BAAI/bge-small-en-v1.5
+    Testing embedding...
+    SUCCESS: Model loaded, dimension: 384
+    
+    STDERR: C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.97.3\.venv\Lib\site
+    -packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACH
+    E` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instea
+    d.
+      warnings.warn(
+    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.97.3\.venv\Lib\site-package
+    s\huggingface_hub\file_download.py:942: FutureWarning: `resume_download` is depr
+    ecated and will be removed in version 1.0.0. Downloads always resume when possib
+    le. If you want to force a new download, use `force_download=True`.
+      warnings.warn(
+    
+    ============================================================
+    [V] Embedding cache initialized
+    [V] Downloading spaCy language model...
+    Downloading spaCy model: [==============================] 100% (12.2MB/12.2MB) -
+     Complete
+    [V] Installing spaCy model...
+    [V] spaCy model installed
+    [V] No backend download required for this option
+    [V] Configuration file created
     [V] Installation complete!
     
     Run the launcher to start Chat-Gradio-Gguf
     
+    [V] Cleaned up compilation temp folder
     DeActivated: `.venv`
     Press any key to continue . . .
 
@@ -244,7 +314,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 ```
 
 ### Notation 
-- Support was maintained for Windows 7-8, because FastEmbed/ONNX is not compatible with 7-8, so we replaced this with QtWeb or something. So, sorry if its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow, or just version 2 onwards will be OS specific, have not decided.
+- Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
 - The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know.
 - For Vulkan installations, you must install the Vulkan SDK, it may come with your graphics card, otherwise you must go here [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
