@@ -3,9 +3,6 @@
 ### Status
 Beta - Working fine on v0.97.2 on Windows 8.1, however its known that, Win 7/8 do not work with Fastembed and Ubuntu will not work with Edge WebView. Major work is underway to attend to these issues, check back later, 0.98.0 is coming and its an Opus of an overhaul.
 
-### Current News
-- Proper testing/fixing is going on in order to, complete the project and make the video, its working 100% correctly now, processing now even has dynamic progress bar.
-
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-latest. Dynamic prompting from keywords in models, as well as dynamic buttons on the interface, all on local models so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium AI services, with, web-search and tts. The configuration tab is intended to be intelligent, while without options reported in forums to make no difference on most models. The program using offline libraries where possible instead of online services or repeat download or registration. 
 
