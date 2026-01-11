@@ -1,4 +1,5 @@
-# Script: validator.py
+# Script: validater.py - Validation script for Chat-Gradio-Gguf
+# Note: Reads constants.ini to determine install configuration, checks presence of files/libraries
 
 # Imports
 import os
@@ -6,6 +7,14 @@ import sys
 import subprocess
 import json
 from pathlib import Path
+
+# Platform setup (MUST come before any PLATFORM-dependent code)
+if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
+    print("ERROR: Platform argument required (windows/linux)")
+    sys.exit(1)
+PLATFORM = sys.argv[1].lower()
+
+# Platform-specific import
 if PLATFORM == "windows":
     import winreg
 
@@ -13,117 +22,108 @@ if PLATFORM == "windows":
 BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 CONFIG_PATH = BASE_DIR / "data" / "persistent.json"
-SYSTEM_INI_PATH = BASE_DIR / "data" / "system.ini"  # NEW
-FASTEMBED_CACHE = BASE_DIR / "data" / "fastembed_cache"
-
-# Platform setup
-if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
-    print("ERROR: Platform argument required (windows/linux)")
-    sys.exit(1)
-PLATFORM = sys.argv[1].lower()
+CONSTANTS_INI_PATH = BASE_DIR / "data" / "constants.ini"
+EMBEDDING_CACHE = BASE_DIR / "data" / "embedding_cache"
 
 # System info from ini - loaded at start
 SYSTEM_INFO = {}
 
-# Core requirements (matching installer BASE_REQ)
-CORE_REQS = [
-    "gradio==5.49.1",
-    "requests==2.31.0",
-    "pyperclip",
-    "spacy>=3.7.0",
-    "psutil",
-    "ddgs",
-    "newspaper3k",
-    "langchain-community>=0.3.18",
-    "faiss-cpu>=1.8.0",
-    "langchain>=0.3.18",
-    "pygments==2.17.2",
-    "lxml[html_clean]",
-    "pyttsx3",
-    "onnxruntime",
-    "fastembed",
-    "tokenizers",
+# Required script files
+REQUIRED_SCRIPTS = [
+    "browser.py", "interface.py", "models.py", 
+    "prompts.py", "settings.py", "temporary.py", "utility.py"
 ]
 
-# Optional file format support (matching installer optional packages)
-OPTIONAL_REQS = [
-    "PyPDF2",
-    "python-docx",
-    "openpyxl",
-    "python-pptx"
+# Required directories (matching installer DIRECTORIES)
+REQUIRED_DIRS = [
+    "data", "scripts", "models",
+    "data/history", "data/temp", "data/vectors",
+    "data/embedding_cache"
 ]
-
-# Platform-specific Code
-if PLATFORM == "windows":
-    CORE_REQS.extend(["pywin32", "tk"])
 
 def print_status(msg: str, success: bool = True) -> None:
     """Simplified status printer"""
     status = "✓" if success else "✗"
     print(f"  {status} {msg}")
 
-def load_system_ini():
-    """Load system.ini to determine what to validate"""
+def load_constants_ini() -> bool:
+    """Load constants.ini to determine what to validate"""
     global SYSTEM_INFO
     
-    if not SYSTEM_INI_PATH.exists():
-        print("WARNING: system.ini not found - using defaults")
+    if not CONSTANTS_INI_PATH.exists():
+        print("WARNING: constants.ini not found - installation incomplete")
         return False
     
     try:
         import configparser
         config = configparser.ConfigParser()
-        config.read(SYSTEM_INI_PATH)
+        config.read(CONSTANTS_INI_PATH)
         
         SYSTEM_INFO = {
             'platform': config.get('system', 'platform', fallback=PLATFORM),
             'os_version': config.get('system', 'os_version', fallback='unknown'),
             'python_version': config.get('system', 'python_version', fallback='unknown'),
             'backend_type': config.get('system', 'backend_type', fallback='CPU_CPU'),
-            'embedding_model': config.get('system', 'embedding_model', fallback='unknown'),
+            'embedding_model': config.get('system', 'embedding_model', fallback='BAAI/bge-small-en-v1.5'),
+            'embedding_backend': config.get('system', 'embedding_backend', fallback='sentence_transformers'),
             'vulkan_available': config.getboolean('system', 'vulkan_available', fallback=False),
-            'windows_version': config.get('system', 'windows_version', fallback=None) if PLATFORM == 'windows' else None
+            'llama_cli_path': config.get('system', 'llama_cli_path', fallback=None),
+            'llama_bin_path': config.get('system', 'llama_bin_path', fallback=None),
         }
+        
+        if PLATFORM == 'windows':
+            SYSTEM_INFO['windows_version'] = config.get('system', 'windows_version', fallback=None)
+        
         return True
     except Exception as e:
-        print(f"ERROR reading system.ini: {e}")
+        print(f"ERROR reading constants.ini: {e}")
         return False
 
-# Functions...
-def test_directories():
+def test_directories() -> bool:
     """Verify required directories exist"""
     print("=== Directory Validation ===")
     success = True
     
-    required_dirs = [
-        BASE_DIR / "data",
-        BASE_DIR / "scripts",
-        BASE_DIR / "models",
-        BASE_DIR / "data/history",
-        BASE_DIR / "data/temp",
-        BASE_DIR / "data/vectors",
-        BASE_DIR / "data/fastembed_cache"
-    ]
-    
-    for dir_path in required_dirs:
+    for dir_name in REQUIRED_DIRS:
+        dir_path = BASE_DIR / dir_name
         if dir_path.exists() and dir_path.is_dir():
-            print_status(f"{dir_path.name}")
+            print_status(f"{dir_name}")
         else:
-            print_status(f"Missing: {dir_path}", False)
+            print_status(f"Missing: {dir_name}", False)
             success = False
-            
+    
     return success
 
-def test_config():
+def test_scripts() -> bool:
+    """Verify required script files exist"""
+    print("\n=== Script Files Validation ===")
+    success = True
+    scripts_dir = BASE_DIR / "scripts"
+    
+    if not scripts_dir.exists():
+        print_status("scripts/ directory missing", False)
+        return False
+    
+    for script_name in REQUIRED_SCRIPTS:
+        script_path = scripts_dir / script_name
+        if script_path.exists():
+            print_status(f"{script_name}")
+        else:
+            print_status(f"Missing: {script_name}", False)
+            success = False
+    
+    return success
+
+def test_config() -> bool:
     """Verify configuration files exist and are valid"""
     print("\n=== Configuration Validation ===")
     
-    # system.ini already loaded in main(), just verify it exists
-    if not SYSTEM_INI_PATH.exists():
-        print_status("system.ini missing!", False)
+    # constants.ini already loaded in main(), just verify it exists
+    if not CONSTANTS_INI_PATH.exists():
+        print_status("constants.ini missing!", False)
         return False
     
-    print_status(f"system.ini valid (Backend: {SYSTEM_INFO['backend_type']})")
+    print_status(f"constants.ini valid (Backend: {SYSTEM_INFO['backend_type']})")
     
     # Check persistent.json
     if not CONFIG_PATH.exists():
@@ -146,61 +146,61 @@ def test_config():
         print_status(f"persistent.json corrupted: {str(e)}", False)
         return False
 
-def test_llama_cli():
+def test_llama_cli() -> bool:
     """Verify llama-cli exists if backend uses binaries"""
     print("\n=== Backend Binary Validation ===")
     
     backend_type = SYSTEM_INFO.get('backend_type', 'CPU_CPU')
+    llama_cli_path = SYSTEM_INFO.get('llama_cli_path')
     
-    # CPU_CPU with Python bindings only (Option 1)
-    if backend_type == "CPU_CPU":
-        try:
-            with open(CONFIG_PATH, 'r') as f:
-                config = json.load(f)
-            llama_cli_path = config.get("model_settings", {}).get("llama_cli_path")
-            
-            if not llama_cli_path:
-                print_status("Python bindings mode: No binary needed")
-                return True
-        except:
-            print_status("Python bindings mode: No binary needed")
-            return True
+    # CPU_CPU without cli_path = Python bindings only mode
+    if backend_type == "CPU_CPU" and not llama_cli_path:
+        print_status("Python bindings mode: No binary needed")
+        return True
     
-    # Other backends need binaries
-    try:
-        with open(CONFIG_PATH, 'r') as f:
-            config = json.load(f)
-        
-        llama_cli_path = config.get("model_settings", {}).get("llama_cli_path")
-        
-        if not llama_cli_path:
-            print_status(f"Backend {backend_type} missing llama_cli_path", False)
-            return False
-        
+    # If cli_path is set, verify it exists
+    if llama_cli_path:
         if os.path.isabs(llama_cli_path):
             cli_path = Path(llama_cli_path)
         else:
             clean_path = llama_cli_path.lstrip("./").lstrip(".\\")
             cli_path = BASE_DIR / clean_path
         
-        if not cli_path.exists():
-            print_status(f"llama-cli not found: {cli_path.name}", False)
+        if cli_path.exists():
+            print_status(f"llama-cli found: {cli_path.name}")
+            return True
+        else:
+            print_status(f"llama-cli not found: {cli_path}", False)
             return False
-        
-        print_status(f"llama-cli found: {cli_path.name}")
-        return True
-            
-    except Exception as e:
-        print_status(f"Backend validation error: {str(e)}", False)
+    
+    # VULKAN_CPU or VULKAN_VULKAN should have binaries
+    if backend_type in ["VULKAN_CPU", "VULKAN_VULKAN"]:
+        print_status(f"Backend {backend_type} missing llama_cli_path in config", False)
         return False
+    
+    print_status("Python bindings mode")
+    return True
 
-def test_core_libs():
-    """Test if core libraries are installed based on system.ini"""
-    print("\n=== Core Library Validation ===")
+def test_venv() -> bool:
+    """Verify virtual environment exists"""
+    print("\n=== Virtual Environment Validation ===")
     
     if not VENV_DIR.exists():
         print_status("Virtual environment not found", False)
         return False
+    
+    venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
+    
+    if not venv_py.exists():
+        print_status("Python executable missing from venv", False)
+        return False
+    
+    print_status("Virtual environment OK")
+    return True
+
+def test_core_libs() -> bool:
+    """Test if core libraries are installed based on constants.ini"""
+    print("\n=== Core Library Validation ===")
     
     venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
@@ -210,7 +210,7 @@ def test_core_libs():
     
     success = True
     
-    # Always check these
+    # Core packages all installs need
     core_checks = [
         ("gradio", "gradio"),
         ("requests", "requests"),
@@ -220,23 +220,19 @@ def test_core_libs():
         ("newspaper3k", "newspaper"),
         ("langchain", "langchain"),
         ("faiss-cpu", "faiss"),
-        ("fastembed", "fastembed"),
-        ("onnxruntime", "onnxruntime"),
-        ("llama-cpp-python", "llama_cpp")  # NEW - always check this
+        ("sentence-transformers", "sentence_transformers"),
+        ("torch", "torch"),
+        ("llama-cpp-python", "llama_cpp"),
+        ("pyttsx3", "pyttsx3"),
     ]
     
     # Platform-specific
     if PLATFORM == "windows":
         core_checks.extend([
             ("pywin32", "win32api"),
-            ("tk", "tkinter")
+            ("tk", "tkinter"),
+            ("pythonnet", "clr"),
         ])
-        
-        # Only check pywebview if Python < 3.13
-        py_version = SYSTEM_INFO.get('python_version', '3.11.0')
-        py_minor = int(py_version.split('.')[1])
-        if py_minor < 13:
-            core_checks.append(("pywebview", "webview"))
     
     for pkg_name, import_name in core_checks:
         try:
@@ -244,7 +240,7 @@ def test_core_libs():
                 [str(venv_py), "-c", f"import {import_name}; print('OK')"],
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=30
             )
             
             if result.returncode == 0 and "OK" in result.stdout:
@@ -262,26 +258,23 @@ def test_core_libs():
     
     return success
 
-def test_optional_libs():
+def test_optional_libs() -> None:
     """Test optional file format libraries"""
     print("\n=== Optional Library Validation ===")
     
     venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
-    import_names = {
-        "PyPDF2": "PyPDF2",
-        "python-docx": "docx",
-        "openpyxl": "openpyxl",
-        "python-pptx": "pptx"
-    }
+    optional_checks = [
+        ("PyPDF2", "PyPDF2"),
+        ("python-docx", "docx"),
+        ("openpyxl", "openpyxl"),
+        ("python-pptx", "pptx"),
+    ]
     
     optional_ok = 0
     optional_missing = 0
     
-    for req in OPTIONAL_REQS:
-        pkg_name = req.split('>=')[0].split('==')[0].strip()
-        import_name = import_names.get(pkg_name, pkg_name.replace('-', '_'))
-        
+    for pkg_name, import_name in optional_checks:
         try:
             result = subprocess.run(
                 [str(venv_py), "-c", f"import {import_name}; print('OK')"],
@@ -302,45 +295,68 @@ def test_optional_libs():
             optional_missing += 1
     
     if optional_missing > 0:
-        print(f"\nNote: {optional_missing} optional packages missing (text-only fallback will be used)")
-    
-    return True  # Optional packages don't fail validation
+        print(f"\n  Note: {optional_missing} optional packages missing (text-only fallback will be used)")
 
-def test_browser_setup():
-    """Check browser components based on OS version"""
-    if PLATFORM != "windows":
-        print("\n=== Browser Validation (Linux) ===")
-        print_status("Using GTK WebView (system)")
-        return True
+def test_browser_setup() -> bool:
+    """Check Qt WebEngine browser components based on OS version"""
+    print("\n=== Browser Validation ===")
     
-    print("\n=== Browser Validation (Windows) ===")
+    venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
+    if PLATFORM == "linux":
+        # Linux uses PyQt6
+        try:
+            result = subprocess.run(
+                [str(venv_py), "-c", "from PyQt6.QtWebEngineWidgets import QWebEngineView; print('OK')"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                print_status("PyQt6-WebEngine installed")
+                return True
+            else:
+                print_status("PyQt6-WebEngine not found - will use system browser", False)
+                return True  # Non-fatal, fallback to system browser
+        except Exception:
+            print_status("PyQt6-WebEngine check failed - will use system browser", False)
+            return True
+    
+    # Windows
     win_ver = SYSTEM_INFO.get('windows_version', 'unknown')
     
-    if win_ver in ["7", "8"]:
-        print_status(f"Windows {win_ver} - system browser fallback")
-        return True
-    
-    # Windows 8.1+ should have WebView2 runtime
-    if win_ver in ["8.1", "10", "11"]:
+    if win_ver in ["7", "8", "8.1"]:
+        # Windows 7-8.1 use PyQt5
         try:
-            import winreg  # Import here to avoid issues on Linux
-            key_path = r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path):
-                print_status(f"WebView2 runtime installed (Win {win_ver})")
+            result = subprocess.run(
+                [str(venv_py), "-c", "from PyQt5.QtWebEngineWidgets import QWebEngineView; print('OK')"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                print_status(f"PyQt5-WebEngine installed (Win {win_ver})")
                 return True
-        except ImportError:
-            print_status("winreg module not available", False)
-            return False
-        except:
-            print_status("WebView2 runtime not detected", False)
-            print("  Custom browser may not work")
-            return False
-    
-    print_status(f"Unknown Windows version: {win_ver}", False)
-    return False
+            else:
+                print_status(f"PyQt5-WebEngine not found (Win {win_ver}) - will use system browser", False)
+                return True
+        except Exception:
+            print_status("PyQt5-WebEngine check failed - will use system browser", False)
+            return True
+    else:
+        # Windows 10/11 use PyQt6
+        try:
+            result = subprocess.run(
+                [str(venv_py), "-c", "from PyQt6.QtWebEngineWidgets import QWebEngineView; print('OK')"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                print_status(f"PyQt6-WebEngine installed (Win {win_ver})")
+                return True
+            else:
+                print_status(f"PyQt6-WebEngine not found (Win {win_ver}) - will use system browser", False)
+                return True
+        except Exception:
+            print_status("PyQt6-WebEngine check failed - will use system browser", False)
+            return True
 
-def test_spacy_model():
+def test_spacy_model() -> bool:
     """Verify spaCy English model is downloaded"""
     print("\n=== spaCy Model Validation ===")
     
@@ -351,7 +367,7 @@ def test_spacy_model():
             [str(venv_py), "-c", "import spacy; nlp = spacy.load('en_core_web_sm'); print('OK')"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=15
         )
         
         if result.returncode == 0 and "OK" in result.stdout:
@@ -359,82 +375,73 @@ def test_spacy_model():
             return True
         else:
             print_status("en_core_web_sm model not found", False)
-            print("  Run: python -m spacy download en_core_web_sm")
             return False
             
     except Exception as e:
         print_status(f"spaCy model check failed: {str(e)}", False)
         return False
 
-def test_fastembed_model():
-    """Verify FastEmbed model is cached"""
-    print("\n=== FastEmbed Model Validation ===")
+def test_embedding_model() -> bool:
+    """Verify sentence-transformers embedding model is cached"""
+    print("\n=== Embedding Model Validation ===")
     
-    if not FASTEMBED_CACHE.exists():
-        print_status("FastEmbed cache directory missing", False)
+    if not EMBEDDING_CACHE.exists():
+        print_status("Embedding cache directory missing", False)
         return False
     
     # Check if cache has model files
-    cache_contents = list(FASTEMBED_CACHE.rglob("*"))
+    cache_contents = list(EMBEDDING_CACHE.rglob("*"))
     model_files = [f for f in cache_contents if f.is_file()]
     
     if len(model_files) == 0:
-        print_status("FastEmbed cache is empty", False)
-        print("  Model needs to be downloaded")
+        print_status("Embedding cache is empty", False)
         return False
     
     # Try to load the model
     venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
+    target_model = SYSTEM_INFO.get('embedding_model', 'BAAI/bge-small-en-v1.5')
+    cache_dir_abs = str(EMBEDDING_CACHE.absolute())
+    
+    test_code = f'''
+import os
+os.environ["TRANSFORMERS_CACHE"] = r"{cache_dir_abs}"
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = r"{cache_dir_abs}"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+try:
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer("{target_model}", device="cpu")
+    result = model.encode(["test"], convert_to_tensor=True)
+    print("OK")
+except Exception as e:
+    print(f"Error: {{e}}")
+'''
+    
     try:
-        cache_dir_abs = FASTEMBED_CACHE.absolute()
-        # Match the model name used in installer.py
-        target_model = SYSTEM_INFO.get('embedding_model', 'BAAI/bge-small-en-v1.5')
-
-        test_code = f'''
-        import os
-        import sys
-        from pathlib import Path
-        try:
-            cache_dir = Path(r"{str(cache_dir_abs)}")
-            os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-
-            from fastembed import TextEmbedding
-            model = TextEmbedding(
-                model_name="{target_model}", 
-                cache_dir=str(cache_dir),
-                providers=["CPUExecutionProvider"]
-            )
-            print('OK')
-        except Exception as e:
-            print(f"Error: {{e}}")
-            sys.exit(1)
-        '''
-        
         result = subprocess.run(
             [str(venv_py), "-c", test_code],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=60
         )
         
         if result.returncode == 0 and "OK" in result.stdout:
-            print_status(f"FastEmbed model verified ({target_model})")
+            print_status(f"Embedding model verified ({target_model})")
             return True
         else:
-            print_status("FastEmbed model failed to load", False)
+            print_status("Embedding model failed to load", False)
             if result.stderr:
                 print(f"  Error: {result.stderr.strip()[:200]}")
             return False
             
     except subprocess.TimeoutExpired:
-        print_status("FastEmbed model check timed out", False)
+        print_status("Embedding model check timed out", False)
         return False
     except Exception as e:
-        print_status(f"FastEmbed validation error: {str(e)}", False)
+        print_status(f"Embedding validation error: {str(e)}", False)
         return False
 
-def test_linux_system_packages():
+def test_linux_system_packages() -> bool:
     """Check Linux system dependencies"""
     if PLATFORM != "linux":
         return True
@@ -446,10 +453,7 @@ def test_linux_system_packages():
         "python3-venv",
         "python3-dev",
         "portaudio19-dev",
-        "libasound2-dev",
-        "python3-tk",      # installer installs this meta-package
         "espeak",
-        "libespeak-dev",
         "ffmpeg",
         "xclip"
     ]
@@ -470,87 +474,84 @@ def test_linux_system_packages():
                 print_status(f"{pkg} not installed", False)
                 success = False
                 
-        except Exception as e:
+        except Exception:
             print_status(f"{pkg} check failed", False)
             success = False
-    
-    # Check for python3-tk or python3.X-tk
-    tk_found = False
-    for tk_pkg in ["python3-tk", f"python3.{sys.version_info.minor}-tk"]:
-        try:
-            result = subprocess.run(
-                ["dpkg", "-s", tk_pkg],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            if result.returncode == 0:
-                print_status(f"{tk_pkg}")
-                tk_found = True
-                break
-        except:
-            pass
-    
-    if not tk_found:
-        print_status("python3-tk not installed", False)
-        success = False
     
     return success
 
 def main():
     """Main validation routine"""
-    print(f"=== Chat-Gradio-Gguf Validator ({PLATFORM.upper()}) ===\n")
+    print(f"{'=' * 50}")
+    print(f"  Chat-Gradio-Gguf Validator ({PLATFORM.upper()})")
+    print(f"{'=' * 50}\n")
     
-    # Load system.ini FIRST
-    if not SYSTEM_INI_PATH.exists():
-        print_status("system.ini not found!", False)
+    # Check for installation files FIRST
+    if not CONSTANTS_INI_PATH.exists() or not CONFIG_PATH.exists():
+        missing = []
+        if not CONSTANTS_INI_PATH.exists():
+            missing.append("constants.ini")
+        if not CONFIG_PATH.exists():
+            missing.append("persistent.json")
+        print_status(f"Missing: {', '.join(missing)}", False)
         print("\nNo installation detected. Run installer first.")
+        input("\nPress Enter to exit...")
         return 1
     
-    if not load_system_ini():
-        print_status("system.ini corrupted", False)
+    if not load_constants_ini():
+        print_status("constants.ini corrupted", False)
+        print("\nRe-run installer to fix.")
+        input("\nPress Enter to exit...")
         return 1
     
     print(f"System: {SYSTEM_INFO['platform']} {SYSTEM_INFO['os_version']}")
     print(f"Python: {SYSTEM_INFO['python_version']}")
-    print(f"Backend: {SYSTEM_INFO['backend_type']}\n")
+    print(f"Backend: {SYSTEM_INFO['backend_type']}")
+    print(f"Embedding: {SYSTEM_INFO['embedding_model']}\n")
     
-    overall_success = True
+    results = {
+        "directories": test_directories(),
+        "scripts": test_scripts(),
+        "config": test_config(),
+        "venv": test_venv(),
+    }
     
-    if not test_directories():
-        overall_success = False
+    # Only test further if venv exists
+    if results["venv"]:
+        results["llama_cli"] = test_llama_cli()
+        results["core_libs"] = test_core_libs()
+        test_optional_libs()  # Non-fatal
+        results["spacy"] = test_spacy_model()
+        results["embedding"] = test_embedding_model()
+        results["browser"] = test_browser_setup()
         
-    if not test_config():
-        overall_success = False
-        
-    if not test_llama_cli():
-        overall_success = False
-        
-    if not test_core_libs():
-        overall_success = False
+        if PLATFORM == "linux":
+            results["linux_packages"] = test_linux_system_packages()
     
-    test_optional_libs()
+    # Summary
+    print(f"\n{'=' * 50}")
+    print("  Validation Summary")
+    print(f"{'=' * 50}")
     
-    if not test_spacy_model():
-        overall_success = False
-        
-    if not test_fastembed_model():
-        overall_success = False
+    passed = sum(1 for v in results.values() if v)
+    total = len(results)
     
-    if not test_browser_setup():  # NEW
-        overall_success = False
+    for name, result in results.items():
+        status = "✓ PASS" if result else "✗ FAIL"
+        print(f"  {name}: {status}")
     
-    if PLATFORM == "linux":
-        if not test_linux_system_packages():
-            overall_success = False
+    print(f"\n  Result: {passed}/{total} checks passed")
     
-    print("\n=== Validation Summary ===")
+    overall_success = all(results.values())
+    
     if overall_success:
-        print_status("All validations passed!")
-        return 0
+        print_status("\nAll validations passed!")
     else:
-        print_status("Some checks failed", False)
-        print("\nRe-run installer if needed.")
-        return 1
+        print_status("\nSome checks failed", False)
+        print("  Re-run installer if needed.")
+    
+    input("\nPress Enter to exit...")
+    return 0 if overall_success else 1
 
 if __name__ == "__main__":
     sys.exit(main())
