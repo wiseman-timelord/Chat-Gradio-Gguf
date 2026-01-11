@@ -69,7 +69,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The upcoming combined Detection/Install Options menu (AMD x3900)...
+- The combined Detection/Install Options menu  (v0.98.0)...
 <details>
     
     ===============================================================================
@@ -98,7 +98,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Installation processes (CPU-CPU non-compile install)..
+- Installation processes (v0.98.0)..
 <details>
     
     ===============================================================================
@@ -192,7 +192,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Validation of Install (script needs checking/updating since compiling update)..
+- Validation of Install (v0.98.0)..
 <details>
     
     ===============================================================================
