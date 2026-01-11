@@ -77,15 +77,15 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     ===============================================================================
     
     System Detections...
-        Operating System: Windows 8.1, Optimal Python: 3.11
         CPU Features: AVX, AVX2, FMA, F16C, SSE3, SSSE3, SSE4_1, SSE4_2
-        Vulkan Present: Yes, Build Tools: Git, CMake, MSVC, MSBuild
-        Llama.Cpp Used: b7688, Qt-Web Used: v5, Gradio Used: 3.50.2
+        Operating System: Windows 8.1
+        Optimal Python: 3.11; Vulkan Present: Yes
+        Build Tools: Git, CMake, MSVC, MSBuild
     
     Backend Options...
-       1) Download CPU Wheel / Download CPU Wheel
-       2) Compile CPU Binaries / Compile CPU Wheel
-       3) Download Vulkan Bin / Download CPU Wheel
+       1) Download CPU Wheel / Default CPU Wheel
+       2) Download Vulkan Bin / Default CPU Wheel
+       3) Compile CPU Binaries / Compile CPU Wheel
        4) Compile Vulkan Binaries / Compile Vulkan Wheel
     
     Embedding Model...
@@ -94,7 +94,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
        c) Bge-Large-En v1.5 (Quality - 1.35GB)
     
     ===============================================================================
-    Selection; Backend = 1-4 + Embeddings = a-c (e.g. 3b), Abandon = A:
+    Selection; Backend = 1-4 + Embeddings = a-c (e.g. 2b), Abandon = A:
 
 </details>
 
