@@ -1,4 +1,7 @@
-# Script: installer.py (Installation script for Chat-Gradio-Gguf)
+# Script: installer.py - Installation script for Chat-Gradio-Gguf
+# Note: All install routes that state download NOT compile, should NOT compile.
+# Note: Uses sentence-transformers for embeddings, cross-platform, Win 7-11 and Ubuntu 22-25
+# Note: Uses Qt WebEngine for custom browser, Qt5 for Win 7/8/8.1, Qt6 for Win 10/11 and Ubuntu
 
 # Imports
 import os
@@ -10,29 +13,38 @@ import time
 from pathlib import Path
 import shutil
 import atexit
+import re
 
 # Constants / Variables ...
 _PY_TAG = f"cp{sys.version_info.major}{sys.version_info.minor}"
 APP_NAME = "Chat-Gradio-Gguf"
 BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
-LLAMACPP_GIT_REPO = "https://github.com/ggerganov/llama.cpp.git"
+LLAMACPP_GIT_REPO = "https://github.com/ggml-org/llama.cpp.git"
 LLAMACPP_PYTHON_GIT_REPO = "https://github.com/abetlen/llama-cpp-python.git"
-LLAMACPP_TARGET_VERSION = "b7358"
-DOWNLOAD_RELEASE_TAG = "b7358" 
-WIN_COMPILE_TEMP = Path("C:/temp_compile")      # fixed Windows build folder
+LLAMACPP_PYTHON_VERSION = "v0.3.16"  # Latest stable release
+LLAMACPP_TARGET_VERSION = "b7688"
+DOWNLOAD_RELEASE_TAG = "b7688" 
+WIN_COMPILE_TEMP = Path("C:/temp_build")      # fixed Windows build folder (short path)
 LINUX_COMPILE_TEMP = None                       # Linux keeps using project-local temp
 _INSTALL_PROCESSES = set()
 _DID_COMPILATION = False 
 _PRE_EXISTING_PROCESSES = {} 
 PYTHON_VERSION = sys.version_info
-WINDOWS_VERSION = None  # Will detect Win 7/8.1/10/11
+WINDOWS_VERSION = None  # Will detect Windows version
+_CPU_FEATURES = None  # Will hold the detected features dict
+_CPU_DETECTED_EARLY = False
+OS_VERSION = None
+VS_GENERATOR = None
+DETECTED_PYTHON_INFO = {}
+SELECTED_GRADIO = ""
+SELECTED_QTWEB = ""
 
 # Maps/Lists...
 DIRECTORIES = [
     "data", "scripts", "models",
     "data/history", "data/temp", "data/vectors",
-    "data/fastembed_cache"
+    "data/embedding_cache"
 ]
 
 EMBEDDING_MODELS = {
@@ -53,10 +65,9 @@ EMBEDDING_MODELS = {
     }
 }
 
-# Platform detection (windows / linux)
+# Platform detection windows / linux
 PLATFORM = None
 
-# Functions...
 def set_platform() -> None:
     global PLATFORM
     if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
@@ -66,165 +77,159 @@ def set_platform() -> None:
 
 set_platform()
 
-# Set TEMP_DIR based on platform (Windows uses short path to avoid 260 char limit)
+# Functions...
+def print_status(message: str, success: bool = True) -> None:
+    status = "[✓]" if success else "[✗]"
+    print(f"{status} {message}")
+    time.sleep(1 if success else 3)
+
+def detect_cpu_features() -> dict:
+    """Detect CPU SIMD features accurately."""
+    global _CPU_FEATURES, _CPU_DETECTED_EARLY
+    
+    if _CPU_FEATURES is not None:
+        return _CPU_FEATURES
+    
+    features = {
+        "AVX": False, "AVX2": False, "AVX512": False, "FMA": False,
+        "F16C": False, "SSE3": False, "SSSE3": False, "SSE4_1": False, "SSE4_2": False
+    }
+    
+    success = False
+    
+    if PLATFORM == "windows":
+        if VENV_DIR.exists():
+            python_exe = VENV_DIR / "Scripts" / "python.exe"
+            script_code = """
+import cpuinfo
+try:
+    info = cpuinfo.get_cpu_info()
+    flags = [f.lower() for f in info.get('flags', [])]
+    print('|'.join(flags))
+except Exception as e:
+    print(f"ERROR:{e}")
+"""
+            temp_script = TEMP_DIR / "get_cpu_flags.py"
+            try:
+                temp_script.write_text(script_code)
+                result = subprocess.run([str(python_exe), str(temp_script)], capture_output=True, text=True, timeout=10)
+                output = result.stdout.strip()
+                if result.returncode == 0 and not output.startswith("ERROR:"):
+                    flags = output.split('|')
+                    features["AVX"] = 'avx' in flags
+                    features["AVX2"] = 'avx2' in flags
+                    features["AVX512"] = any('avx512' in f for f in flags)
+                    features["FMA"] = 'fma' in flags
+                    features["F16C"] = 'f16c' in flags
+                    features["SSE3"] = 'sse3' in flags or 'pni' in flags
+                    features["SSSE3"] = 'ssse3' in flags
+                    features["SSE4_1"] = 'sse4_1' in flags
+                    features["SSE4_2"] = 'sse4_2' in flags
+                    success = True
+                else:
+                    print_status(f"venv cpuinfo failed: {output or result.stderr}", False)
+            finally:
+                temp_script.unlink(missing_ok=True)
+        
+        if not success:
+            features["SSE3"] = True
+            print_status("Detected Legacy CPU, Using SSE3")
+            success = True
+    
+    else:  # Linux
+        try:
+            with open('/proc/cpuinfo', 'r') as f:
+                content = f.read().lower()
+            features["AVX"] = 'avx' in content
+            features["AVX2"] = 'avx2' in content
+            features["AVX512"] = 'avx512' in content
+            features["FMA"] = 'fma' in content
+            features["F16C"] = 'f16c' in content
+            features["SSE3"] = 'sse3' in content or 'pni' in content
+            features["SSSE3"] = 'ssse3' in content
+            features["SSE4_1"] = 'sse4_1' in content
+            features["SSE4_2"] = 'sse4_2' in content
+            success = True
+        except Exception:
+            features["SSE3"] = True
+            print_status("Linux CPU detection fallback - SSE3 only")
+            success = True
+    
+    if success:
+        _CPU_FEATURES = features
+        _CPU_DETECTED_EARLY = True
+    
+    return features
+
+# Set TEMP_DIR based on platform
 if PLATFORM == "windows":
-    TEMP_DIR = WIN_COMPILE_TEMP                 # always the same folder
+    TEMP_DIR = WIN_COMPILE_TEMP
 else:
     TEMP_DIR = BASE_DIR / "data" / "temp"
+    
 # Backend definitions
 if PLATFORM == "windows":
     BACKEND_OPTIONS = {
-        # Option 1: Download CPU binary + Download CPU wheel
-        "Download CPU Binaries / Download CPU Wheel": {
-            "url": None,  # CPU binaries not used anymore
-            "dest": None,
-            "cli_path": None,
-            "needs_python_bindings": True,
-            "compile_binary": False,
-            "compile_wheel": False,
-            "vulkan_required": False,
-            "build_flags": {}
+        "Download CPU Wheel / Default CPU Wheel": {
+            "url": None, "dest": None, "cli_path": None,
+            "needs_python_bindings": True, "compile_binary": False,
+            "compile_wheel": False, "vulkan_required": False, "build_flags": {}
         },
-        
-        # Option 2: Compile CPU binary + Compile CPU wheel
+        "Download Vulkan Bin / Default CPU Wheel": {
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-win-vulkan-x64.zip",
+            "dest": "data/llama-vulkan-bin",
+            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
+            "needs_python_bindings": True, "compile_binary": False,
+            "compile_wheel": False, "vulkan_required": False, "build_flags": {}
+        },
         "Compile CPU Binaries / Compile CPU Wheel": {
-            "url": None,
-            "dest": "data/llama-cpu-bin",
+            "url": None, "dest": "data/llama-cpu-bin",
             "cli_path": "data/llama-cpu-bin/llama-cli.exe",
-            "needs_python_bindings": True,
-            "compile_binary": True,
-            "compile_wheel": True,
-            "vulkan_required": False,
-            "build_flags": {}  # Will auto-detect AVX2, F16C, FMA
+            "needs_python_bindings": True, "compile_binary": True,
+            "compile_wheel": True, "vulkan_required": False, "build_flags": {}
         },
-        
-        # Option 3: Download Vulkan binary + Download CPU wheel
-        "Download Vulkan Bin / Download CPU Wheel": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-win-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
-            "needs_python_bindings": True,
-            "compile_binary": False,
-            "compile_wheel": False,
-            "vulkan_required": True,
-            "build_flags": {}
-        },
-        
-        # Option 4: Download Vulkan binary + Download CPU wheel (Forced)
-        "Download Vulkan Bin / Download CPU Wheel (Forced)": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-win-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
-            "needs_python_bindings": True,
-            "compile_binary": False,
-            "compile_wheel": False,
-            "vulkan_required": False,  # Skip checks
-            "build_flags": {}
-        },
-        
-        # Option 5: Download Vulkan binary + Compile Vulkan wheel
-        "Download Vulkan Bin / Compile Vulkan Wheel": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-win-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
-            "needs_python_bindings": True,
-            "compile_binary": False,
-            "compile_wheel": True,
-            "vulkan_required": True,
-            "build_flags": {"GGML_VULKAN": "1"}
-        },
-        
-        # Option 6: Compile Vulkan binary + Compile Vulkan wheel
         "Compile Vulkan Binaries / Compile Vulkan Wheel": {
-            "url": None,
-            "dest": "data/llama-vulkan-bin",
+            "url": None, "dest": "data/llama-vulkan-bin",
             "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
-            "needs_python_bindings": True,
-            "compile_binary": True,
-            "compile_wheel": True,
-            "vulkan_required": True,
-            "build_flags": {"GGML_VULKAN": "1"}  # Will also auto-detect AVX2, F16C, FMA
+            "needs_python_bindings": True, "compile_binary": True,
+            "compile_wheel": True, "vulkan_required": True,
+            "build_flags": {"GGML_VULKAN": "1"}
         }
     }
-else:  # Linux - mirror structure
+else:  # Linux
     BACKEND_OPTIONS = {
-        # Option 1: Download CPU binary + Download CPU wheel
-        "Download CPU Binaries / Download CPU Wheel": {
-            "url": None,
-            "dest": None,
-            "cli_path": None,
-            "needs_python_bindings": True,
-            "compile_binary": False,
-            "compile_wheel": False,
-            "vulkan_required": False,
-            "build_flags": {}
+        "Download CPU Wheel / Default CPU Wheel": {
+            "url": None, "dest": None, "cli_path": None,
+            "needs_python_bindings": True, "compile_binary": False,
+            "compile_wheel": False, "vulkan_required": False, "build_flags": {}
         },
-        
-        # Option 2: Compile CPU binary + Compile CPU wheel
+        "Download Vulkan Bin / Default CPU Wheel": {
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-ubuntu-vulkan-x64.tar.gz",
+            "dest": "data/llama-vulkan-bin",
+            "cli_path": "data/llama-vulkan-bin/llama-cli",
+            "needs_python_bindings": True, "compile_binary": False,
+            "compile_wheel": False, "vulkan_required": False, "build_flags": {}
+        },
         "Compile CPU Binaries / Compile CPU Wheel": {
-            "url": None,
-            "dest": "data/llama-cpu-bin",
+            "url": None, "dest": "data/llama-cpu-bin",
             "cli_path": "data/llama-cpu-bin/llama-cli",
-            "needs_python_bindings": True,
-            "compile_binary": True,
-            "compile_wheel": True,
-            "vulkan_required": False,
-            "build_flags": {}
+            "needs_python_bindings": True, "compile_binary": True,
+            "compile_wheel": True, "vulkan_required": False, "build_flags": {}
         },
-        
-        # Option 3: Download Vulkan binary + Download CPU wheel
-        "Download Vulkan Bin / Download CPU Wheel": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-ubuntu-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli",
-            "needs_python_bindings": True,
-            "compile_binary": False,
-            "compile_wheel": False,
-            "vulkan_required": True,
-            "build_flags": {}
-        },
-        
-        # Option 4: Download Vulkan binary + Download CPU wheel (Forced)
-        "Download Vulkan Bin / Download CPU Wheel (Forced)": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-ubuntu-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli",
-            "needs_python_bindings": True,
-            "compile_binary": False,
-            "compile_wheel": False,
-            "vulkan_required": False,
-            "build_flags": {}
-        },
-        
-        # Option 5: Download Vulkan binary + Compile Vulkan wheel
-        "Download Vulkan Bin / Compile Vulkan Wheel": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-ubuntu-vulkan-x64.zip",
-            "dest": "data/llama-vulkan-bin",
-            "cli_path": "data/llama-vulkan-bin/llama-cli",
-            "needs_python_bindings": True,
-            "compile_binary": False,
-            "compile_wheel": True,
-            "vulkan_required": True,
-            "build_flags": {"GGML_VULKAN": "1"}
-        },
-        
-        # Option 6: Compile Vulkan binary + Compile Vulkan wheel
         "Compile Vulkan Binaries / Compile Vulkan Wheel": {
-            "url": None,
-            "dest": "data/llama-vulkan-bin",
+            "url": None, "dest": "data/llama-vulkan-bin",
             "cli_path": "data/llama-vulkan-bin/llama-cli",
-            "needs_python_bindings": True,
-            "compile_binary": True,
-            "compile_wheel": True,
-            "vulkan_required": True,
+            "needs_python_bindings": True, "compile_binary": True,
+            "compile_wheel": True, "vulkan_required": True,
             "build_flags": {"GGML_VULKAN": "1"}
         }
     }
 
-# Python requirements (CPU-only, no torch)
+# Python requirements using sentence-transformers for cross-platform compatibility
 BASE_REQ = [
+    "numpy<2",  # Required: torch 2.2.2 incompatible with numpy 2.x
     "requests==2.31.0",
-    "gradio==5.49.1",
+    "gradio==3.50.2",
     "pyperclip",
     "spacy>=3.7.0",
     "psutil",
@@ -235,17 +240,13 @@ BASE_REQ = [
     "langchain>=0.3.18",
     "pygments==2.17.2",
     "lxml[html_clean]",
+    "lxml_html_clean",
     "pyttsx3",
     "tokenizers",
-    "fastembed",
 ]
 
 if PLATFORM == "windows":
-    BASE_REQ.extend([
-        "pywin32",
-        "tk",
-        "pythonnet",  # For pywebview Windows backend
-    ])
+    BASE_REQ.extend(["pywin32", "tk", "pythonnet"])
 
 # Functions...
 def backend_requires_compilation(backend: str) -> bool:
@@ -254,47 +255,184 @@ def backend_requires_compilation(backend: str) -> bool:
     return info.get("compile_binary", False) or info.get("compile_wheel", False)
 
 def detect_windows_version() -> str:
-    """Detect Windows version (7, 8.1, 10, 11)"""
+    """Detect Windows version and cache in global"""
     global WINDOWS_VERSION
+    if WINDOWS_VERSION is not None:
+        return WINDOWS_VERSION
+    
     if PLATFORM != "windows":
         return None
     
     try:
         import platform
         version = platform.version()
-        release = platform.release()
-        
-        # Windows 11 is still reported as 10.0 but with build >= 22000
         build = int(version.split('.')[-1])
+        
         if build >= 22000:
             WINDOWS_VERSION = "11"
-            return "11"
-        
-        # Windows 10: build 10240+ (1507) up to 19044+ (21H2)
-        if build >= 10240:
+        elif build >= 10240:
             WINDOWS_VERSION = "10"
-            return "10"
-        
-        # Windows 8.1: build 9600
-        if build == 9600:
+        elif build == 9600:
             WINDOWS_VERSION = "8.1"
-            return "8.1"
-        
-        # Windows 8: build 9200
-        if build == 9200:
+        elif build == 9200:
             WINDOWS_VERSION = "8"
-            return "8"
-        
-        # Windows 7: build 7601
-        if build == 7601:
+        elif build == 7601:
             WINDOWS_VERSION = "7"
-            return "7"
-            
-        WINDOWS_VERSION = "unknown"
-        return "unknown"
+        else:
+            WINDOWS_VERSION = "unknown"
+        return WINDOWS_VERSION
     except:
         WINDOWS_VERSION = "unknown"
         return "unknown"
+
+def detect_linux_version() -> str:
+    """Detect Ubuntu version and cache in global OS_VERSION"""
+    global OS_VERSION
+    if OS_VERSION is not None:
+        return OS_VERSION
+    
+    try:
+        with open("/etc/os-release") as f:
+            content = f.read()
+        
+        if "ubuntu" not in content.lower():
+            OS_VERSION = "unknown"
+            return "unknown"
+        
+        version_match = re.search(r'VERSION_ID="?([0-9\.]+)"?', content)
+        if version_match:
+            OS_VERSION = version_match.group(1)
+            return OS_VERSION
+        
+        OS_VERSION = "unknown"
+        return "unknown"
+    except Exception as e:
+        print_status(f"OS detection failed: {e}", False)
+        OS_VERSION = "unknown"
+        return "unknown"
+
+def detect_version_selections() -> None:
+    """Populate DETECTED_PYTHON_INFO, SELECTED_GRADIO, SELECTED_QTWEB based on OS."""
+    global DETECTED_PYTHON_INFO, SELECTED_GRADIO, SELECTED_QTWEB
+    import platform as plat
+    
+    DETECTED_PYTHON_INFO = detect_all_pythons()
+    
+    if PLATFORM == "windows":
+        try:
+            major_ver = int(plat.version().split('.')[0])
+            if major_ver < 10:
+                SELECTED_GRADIO = "3.50.2"
+                SELECTED_QTWEB = "v5"
+            else:
+                SELECTED_GRADIO = "5.49.1"
+                SELECTED_QTWEB = "v6"
+        except:
+            SELECTED_GRADIO = "5.49.1"
+            SELECTED_QTWEB = "v6"
+    else:
+        try:
+            with open("/etc/os-release", "r") as f:
+                os_release = f.read()
+            match = re.search(r'VERSION_ID="?(\d+)', os_release)
+            if match and int(match.group(1)) < 24:
+                SELECTED_GRADIO = "3.50.2"
+                SELECTED_QTWEB = "v5"
+            else:
+                SELECTED_GRADIO = "5.49.1"
+                SELECTED_QTWEB = "v6"
+        except:
+            SELECTED_GRADIO = "5.49.1"
+            SELECTED_QTWEB = "v6"
+
+def detect_all_pythons() -> dict:
+    """Detect all Python installations and select optimal version for OS compatibility."""
+    import platform as plat
+    found_pythons = []
+    
+    if PLATFORM == "windows":
+        possible_commands = ["python", "python3", "py -3.14", "py -3.13", "py -3.12", "py -3.11", "py -3.10", "py -3.9"]
+        for cmd in possible_commands:
+            try:
+                parts = cmd.split()
+                result = subprocess.run(parts + ["--version"], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    version_str = result.stdout.strip() or result.stderr.strip()
+                    match = re.search(r"Python\s+(\d+)\.(\d+)", version_str)
+                    if match:
+                        major, minor = int(match.group(1)), int(match.group(2))
+                        found_pythons.append((major, minor, cmd))
+            except:
+                pass
+    else:
+        possible_commands = ["python3", "python3.14", "python3.13", "python3.12", "python3.11", "python3.10", "python3.9", "python"]
+        for cmd in possible_commands:
+            try:
+                result = subprocess.run([cmd, "--version"], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    version_str = result.stdout.strip() or result.stderr.strip()
+                    match = re.search(r"Python\s+(\d+)\.(\d+)", version_str)
+                    if match:
+                        major, minor = int(match.group(1)), int(match.group(2))
+                        found_pythons.append((major, minor, cmd))
+            except:
+                pass
+    
+    seen_versions = set()
+    unique_pythons = []
+    for major, minor, cmd in found_pythons:
+        if (major, minor) not in seen_versions:
+            seen_versions.add((major, minor))
+            unique_pythons.append((major, minor, cmd))
+    
+    # Determine valid range based on OS
+    # Windows 7/8/8.1 + Ubuntu 22-23: Gradio 3.50.2 -> Python 3.9-3.11
+    # Windows 10/11 + Ubuntu 24-25: Gradio 5.49.1 -> Python 3.10-3.14
+    
+    if PLATFORM == "windows":
+        try:
+            major_ver = int(plat.version().split('.')[0])
+            if major_ver < 10:
+                min_py, max_py = (3, 9), (3, 11)
+            else:
+                min_py, max_py = (3, 10), (3, 14)
+        except:
+            min_py, max_py = (3, 10), (3, 14)
+    else:
+        try:
+            with open("/etc/os-release", "r") as f:
+                os_release = f.read()
+            match = re.search(r'VERSION_ID="?(\d+)', os_release)
+            if match and int(match.group(1)) < 24:
+                min_py, max_py = (3, 9), (3, 11)
+            else:
+                min_py, max_py = (3, 10), (3, 14)
+        except:
+            min_py, max_py = (3, 10), (3, 14)
+    
+    valid_pythons = [
+        (major, minor, cmd) for major, minor, cmd in unique_pythons
+        if (major, minor) >= min_py and (major, minor) <= max_py
+    ]
+    
+    if valid_pythons:
+        valid_pythons.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        optimal = valid_pythons[0]
+        return {
+            "all_found": unique_pythons,
+            "valid_range": (min_py, max_py),
+            "optimal": optimal,
+            "optimal_version": f"{optimal[0]}.{optimal[1]}",
+            "optimal_command": optimal[2]
+        }
+    
+    return {
+        "all_found": unique_pythons,
+        "valid_range": (min_py, max_py),
+        "optimal": None,
+        "optimal_version": "None",
+        "optimal_command": None
+    }
 
 def check_version_compatibility():
     """Check Python and OS compatibility, set globals."""
@@ -308,20 +446,11 @@ def check_version_compatibility():
     
     if PYTHON_VERSION.minor == 14:
         print("Warning: Python 3.14 detected - some packages may have compatibility issues")
-        print("  Gradio and related dependencies might require manual fixes")
-        print("  Consider using Python 3.11-3.13 for best compatibility")
         time.sleep(2)
     
     if PLATFORM == "windows":
         win_ver = detect_windows_version()
-        if win_ver in ["7", "8"]:
-            print_status(f"Detected Windows {win_ver}", False)
-            print("  Limited browser support - will use system browser")
-            print("  Some features may be disabled or have reduced functionality")
-            time.sleep(2)
-        elif win_ver == "8.1":
-            print("Detected Windows 8.1 - ensure WebView2 runtime is installed for custom browser")
-        return True
+        return True  # Windows 7-11 supported
     else:  # Linux
         try:
             with open("/etc/os-release") as f:
@@ -332,31 +461,13 @@ def check_version_compatibility():
                         ubuntu_version = version_match.group(1)
                         if ubuntu_version.startswith(('22', '23', '24', '25')):
                             return True
-                        print_status(f"Ubuntu {ubuntu_version} detected - 22.04-25.04 required", False)
+                        print_status(f"Ubuntu {ubuntu_version} unsupported - requires 22.04-25.04", False)
                         return False
             print_status("Could not determine Ubuntu version", False)
             return False
         except Exception as e:
             print_status(f"OS detection failed: {e}", False)
             return False
-
-def select_embedding_model() -> str:
-    """Let user choose embedding model with size information"""
-    print_header("Embedding Model Selection")
-    print("\n\n\n\n")
-    for key, model in EMBEDDING_MODELS.items():
-        print(f"    {key}) {model['display']}\n")
-    print("\n\n\n\n\n")
-    print("-" * (shutil.get_terminal_size().columns - 1))
-
-    while True:
-        choice = input("Selection; Menu Options 1-3, Abandon Install = A: ").strip().upper()
-        if choice == "A":
-            print("\nAbandoning installation...")
-            sys.exit(0)
-        if choice in EMBEDDING_MODELS:
-            return EMBEDDING_MODELS[choice]["name"]
-        print("Invalid choice, please try again.")
 
 def snapshot_pre_existing_processes() -> None:
     """Snapshot all build-related processes that exist BEFORE compilation starts"""
@@ -368,26 +479,13 @@ def snapshot_pre_existing_processes() -> None:
     try:
         import psutil
     except ImportError:
-        return  # psutil not available yet, skip snapshot
+        return
     
     build_process_names = [
-        "conhost.exe",           # Console host
-        "MSBuild.exe",           # Microsoft Build Engine
-        "VBCSCompiler.exe",      # Visual Basic/C# compiler server
-        "node.exe",              # Node.js (sometimes used in builds)
-        "cmake.exe",             # CMake build tool
-        "cl.exe",                # MSVC compiler
-        "link.exe",              # MSVC linker
-        "lib.exe",               # MSVC librarian
-        "cvtres.exe",            # Resource file converter
-        "mt.exe",                # Manifest tool
-        "rc.exe",                # Resource compiler
-        "mspdbsrv.exe",          # MSVC debug server
-        "vctip.exe",             # MSVC telemetry
-        "tracker.exe",           # MSBuild file tracker
-        "git.exe",               # Git (if cloning repos during build)
-        "python.exe",            # Python spawned by build
-        "pip.exe",               # Pip spawned by build
+        "conhost.exe", "MSBuild.exe", "VBCSCompiler.exe", "node.exe",
+        "cmake.exe", "cl.exe", "link.exe", "lib.exe", "cvtres.exe",
+        "mt.exe", "rc.exe", "mspdbsrv.exe", "vctip.exe", "tracker.exe",
+        "git.exe", "python.exe", "pip.exe",
     ]
     
     _PRE_EXISTING_PROCESSES = {}
@@ -396,7 +494,7 @@ def snapshot_pre_existing_processes() -> None:
         for proc in psutil.process_iter(['pid', 'name']):
             if proc.info['name'] in build_process_names:
                 _PRE_EXISTING_PROCESSES[proc.info['pid']] = proc.info['name']
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
+    except:
         pass
 
 def track_process(pid: int) -> None:
@@ -404,69 +502,44 @@ def track_process(pid: int) -> None:
     global _INSTALL_PROCESSES
     try:
         import psutil
-        parent = psutil.Process(pid)
-        # Immediately add the process and all its current children recursively
-        def add_descendants(p):
-            _INSTALL_PROCESSES.add(p.pid)
-            for child in p.children(recursive=True):
+        try:
+            proc = psutil.Process(pid)
+            _INSTALL_PROCESSES.add(pid)
+            for child in proc.children(recursive=True):
                 _INSTALL_PROCESSES.add(child.pid)
-        add_descendants(parent)
-    except (ImportError, Exception):
-        _INSTALL_PROCESSES.add(pid)
-
-def print_status(message: str, success: bool = True) -> None:
-    status = "[✓]" if success else "[✗]"
-    print(f"{status} {message}")
-    time.sleep(1 if success else 3)
-
-# Utility helpers
-def clean_compile_temp() -> None:
-    """Wipe the fixed compile folder (Windows only), handling read-only files."""
-    if PLATFORM == "windows":
-        if WIN_COMPILE_TEMP.exists():
-            try:
-                # Handle read-only files (common in .git folders)
-                def handle_remove_readonly(func, path, exc):
-                    """Error handler for rmtree to handle read-only files"""
-                    import stat
-                    if not os.access(path, os.W_OK):
-                        os.chmod(path, stat.S_IWUSR | stat.S_IREAD)
-                        func(path)
-                    else:
-                        raise
-                
-                shutil.rmtree(WIN_COMPILE_TEMP, onerror=handle_remove_readonly)
-                print_status(f"Removed temp folder {WIN_COMPILE_TEMP}")
-            except Exception as e:
-                print(f"Warning: Could not fully remove {WIN_COMPILE_TEMP}: {e}")
-                print("  Continuing anyway...")
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    except ImportError:
+        pass
 
 def cleanup_build_processes() -> None:
-    """Force-terminate all build-related processes if compilation occurred."""
-    global _DID_COMPILATION
-    if not _DID_COMPILATION or PLATFORM != "windows":
+    """Terminate lingering build processes created during installation."""
+    global _DID_COMPILATION, _INSTALL_PROCESSES, _PRE_EXISTING_PROCESSES
+    
+    if not _DID_COMPILATION:
         return
-
+    
+    if PLATFORM != "windows":
+        return
+    
     try:
         import psutil
     except ImportError:
-        return  # psutil not available, skip cleanup
+        return
     
-    current_pid = os.getpid()
     try:
-        current_proc = psutil.Process(current_pid)
+        current_proc = psutil.Process()
+        current_pid = current_proc.pid
         current_conhost = None
 
-        # Find the conhost.exe belonging to current console
         try:
-            # Parent is cmd.exe/PowerShell.exe; its child is our conhost
             parent = current_proc.parent()
             if parent:
                 for child in parent.children():
                     if child.name().lower() == "conhost.exe":
                         current_conhost = child.pid
                         break
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except:
             pass
 
         protected_pids = {current_pid}
@@ -475,39 +548,34 @@ def cleanup_build_processes() -> None:
 
         to_kill = []
 
-        # Collect all MSBuild.exe and conhost.exe (except current)
         for proc in psutil.process_iter(['pid', 'name']):
             try:
                 if proc.info['pid'] in protected_pids:
                     continue
                 name = proc.info['name'].lower()
-                if name == "msbuild.exe":
+                if name in ["msbuild.exe", "conhost.exe"]:
                     to_kill.append(proc.info['pid'])
-                elif name == "conhost.exe":
-                    to_kill.append(proc.info['pid'])
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except:
                 continue
 
         if not to_kill:
             return
 
-        # Terminate first
         for pid in to_kill:
             try:
                 p = psutil.Process(pid)
                 p.terminate()
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except:
                 pass
 
         time.sleep(1)
 
-        # Force kill leftovers
         for pid in to_kill:
             try:
                 p = psutil.Process(pid)
                 if p.is_running():
                     p.kill()
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except:
                 pass
 
         print_status(f"Cleaned up {len(to_kill)} build processes")
@@ -525,16 +593,38 @@ def print_header(title: str) -> None:
     print()
 
 def get_user_choice(prompt: str, options: list) -> str:
-    """Display menu exactly as requested"""
-    print_header("Gpu Options")
-    print("\n")
+    """Display menu with system detections, then options"""
+    width = shutil.get_terminal_size().columns - 1
+    print_header("Backend/Wheel Menu")
+   
+    print("System Detections...")
+    
+    if PLATFORM == "windows":
+        win_ver = WINDOWS_VERSION or "unknown"
+        print(f"    Operating System: Windows {win_ver}")
+    else:
+        ubuntu_ver = OS_VERSION or "unknown"
+        print(f"    Operating System: Ubuntu {ubuntu_ver}")
+    
+    cpu_features = detect_cpu_features()
+    features_list = [feat for feat, supported in cpu_features.items() if supported]
+    if features_list:
+        print(f"    CPU Features: {', '.join(features_list)}")
+    else:
+        print("    CPU Features: Baseline (no advanced features)")
+    
+    vulkan_present = is_vulkan_installed()
+    print(f"    Vulkan Present: {'Yes' if vulkan_present else 'No'}")
+    
+    print()
+    
+    print("Backend/Wheel Type...")
     for i, option in enumerate(options, 1):
-        print(f"    {i}) {option}\n")
-    print("\n\n")
-    print("-" * (shutil.get_terminal_size().columns - 1))
+        print(f"    {i}) {option}")
+    print()
 
     while True:
-        choice = input(f"Selecton; Menu Options 1-{len(options)}, Abandon Install = A: ").strip().upper()
+        choice = input(f"Selection; Menu Options 1-{len(options)}, Abandon Install = A: ").strip().upper()
         if choice == "A":
             print("\nAbandoning installation...")
             sys.exit(0)
@@ -570,7 +660,6 @@ def activate_venv():
 def create_directories(backend: str) -> None:
     global TEMP_DIR
     
-    # Create standard directories
     for dir_path in DIRECTORIES:
         full_path = BASE_DIR / dir_path
         full_path.mkdir(parents=True, exist_ok=True)
@@ -583,43 +672,32 @@ def create_directories(backend: str) -> None:
             print_status(f"Permission denied for: {dir_path}", False)
             sys.exit(1)
     
-    # Set and create temp directory based on platform and compilation needs
     if PLATFORM == "windows" and backend_requires_compilation(backend):
         TEMP_DIR = WIN_COMPILE_TEMP
         TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        print_status(f"Using compile temp path: {TEMP_DIR}")
+        print_status(f"Using build temp path: {TEMP_DIR}")
     else:
         TEMP_DIR = BASE_DIR / "data" / "temp"
         TEMP_DIR.mkdir(parents=True, exist_ok=True)
         print_status(f"Using project temp path: {TEMP_DIR}")
 
 def get_optimal_build_threads() -> int:
-    """Calculate optimal thread count for building - 85% of available cores"""
+    """Calculate optimal thread count for building - 85 percent of available cores"""
     import multiprocessing
-    
     try:
         total_threads = multiprocessing.cpu_count()
     except:
-        total_threads = 4  # fallback
-    
-    # Use 85% of threads as requested
-    use_threads = max(1, int(total_threads * 0.85))
-    
-    return use_threads
+        total_threads = 4
+    return max(1, int(total_threads * 0.85))
 
 def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
-    """
-    Build llama-cpp-python from latest git master with optimal CPU flags.
-    Auto-detects AVX2, FMA, F16C for maximum performance.
-    Includes retry logic for git operations with resume capability.
-    """
+    """Build llama-cpp-python from source with optimal CPU flags."""
     global _DID_COMPILATION
     _DID_COMPILATION = True
     
-    # Snapshot processes before build starts
     snapshot_pre_existing_processes()
     
-    print_status("Building llama-cpp-python from source (this takes 10-20 minutes)")
+    print_status("Building llama-cpp-python from source (10-20 minutes)")
     
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
                     ("python.exe" if PLATFORM == "windows" else "python"))
@@ -629,372 +707,210 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
     build_threads = get_optimal_build_threads()
     print(f"  Using {build_threads} parallel build threads")
     
-    # Set up environment for parallel compilation
     env = os.environ.copy()
     env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(build_threads)
-    env["GIT_PROGRESS"] = "1"
+    env["FORCE_CMAKE"] = "1"
+    
+    # Detect CPU features and add to build flags
+    cpu_features = detect_cpu_features()
+    
+    # CPU optimization flags
+    if cpu_features.get("AVX2"):
+        build_flags["GGML_AVX2"] = "ON"
+    if cpu_features.get("AVX"):
+        build_flags["GGML_AVX"] = "ON"
+    if cpu_features.get("FMA"):
+        build_flags["GGML_FMA"] = "ON"
+    if cpu_features.get("F16C"):
+        build_flags["GGML_F16C"] = "ON"
+    
+    # Minimal safe flags - do NOT disable LLAMA_BUILD_EXAMPLES or LLAMA_BUILD_SERVER
+    # as this causes CMake errors with mtmd/llava targets in v0.3.16
+    build_flags["LLAMA_CURL"] = "OFF"
+    build_flags["GGML_OPENMP"] = "ON"
+    
+    # Build CMAKE_ARGS properly - use -D prefix for CMake
+    cmake_args = []
+    for flag, value in build_flags.items():
+        cmake_args.append(f"-D{flag}={value}")
+    
+    # Set CMAKE_ARGS environment variable
+    env["CMAKE_ARGS"] = " ".join(cmake_args)
+    
+    # Also set individual flags as env vars, some builds check these
+    for flag, value in build_flags.items():
+        env[flag] = value
+    
+    if cmake_args:
+        print(f"  Build flags: {', '.join(f'{k}={v}' for k, v in build_flags.items())}")
     
     if PLATFORM == "windows":
-        env["FORCE_CMAKE"] = "1"
         env["CL"] = f"/MP{build_threads}"
     else:
         env["MAKEFLAGS"] = f"-j{build_threads}"
-        env["NINJAFLAGS"] = f"-j{build_threads}"
     
-    # Detect CPU features for optimization
-    print_status("Detecting CPU features...")
-    cpu_features = detect_cpu_features()
-    
-    print("CPU Features detected:")
-    for feature, supported in cpu_features.items():
-        status = "✓" if supported else "✗"
-        print(f"  {status} {feature}")
-    
-    # Build CMAKE_ARGS with CPU optimizations
-    cmake_args = []
-    
-    # User-specified flags (Vulkan, etc.)
-    if build_flags:
-        cmake_args.extend([f"-D{k}={v}" for k, v in build_flags.items()])
-    
-    # CPU optimization flags (CRITICAL for performance)
-    cmake_args.append(f"-DGGML_AVX={'ON' if cpu_features['AVX'] else 'OFF'}")
-    cmake_args.append(f"-DGGML_AVX2={'ON' if cpu_features['AVX2'] else 'OFF'}")
-    cmake_args.append(f"-DGGML_AVX512={'ON' if cpu_features['AVX512'] else 'OFF'}")
-    cmake_args.append(f"-DGGML_FMA={'ON' if cpu_features['FMA'] else 'OFF'}")
-    cmake_args.append(f"-DGGML_F16C={'ON' if cpu_features['F16C'] else 'OFF'}")
-    cmake_args.append("-DGGML_OPENMP=ON")
-    
-    # Parallel compilation flags - NOW APPLIED TO LINUX TOO
-    if PLATFORM == "windows":
-        cmake_args.extend([
-            "-DCMAKE_CXX_FLAGS=/MP",
-            f"-DCMAKE_BUILD_PARALLEL_LEVEL={build_threads}"
-        ])
-    else:
-        cmake_args.extend([
-            f"-DCMAKE_BUILD_PARALLEL_LEVEL={build_threads}",
-            "-DCMAKE_CXX_FLAGS=-pthread"
-        ])
-    
-    if cmake_args:
-        env["CMAKE_ARGS"] = " ".join(cmake_args)
-        if PLATFORM == "windows":
-            env["FORCE_CMAKE"] = "1"
-        print(f"\nCompilation flags:")
-        for arg in cmake_args:
-            if arg.startswith("-DGGML_"):
-                print(f"  {arg}")
-    
-    # Configure git globally for unreliable connections
-    subprocess.run(["git", "config", "--global", "http.lowSpeedLimit", "50"], 
-                   capture_output=True)
-    subprocess.run(["git", "config", "--global", "http.lowSpeedTime", "300"], 
-                   capture_output=True)
-    subprocess.run(["git", "config", "--global", "http.postBuffer", "524288000"], 
-                   capture_output=True)
-    subprocess.run(["git", "config", "--global", "progress.showProgress", "true"], 
-                   capture_output=True)
-    
-    print("\n" + "=" * 80)
-    print("BUILD OUTPUT (building from latest git master):")
-    print("  This will:")
-    print("    1. Clone llama-cpp-python repository with retry logic")
-    print("    2. Clone matching llama.cpp submodule with retry logic")
-    print("    3. Build with CPU optimizations for your hardware")
-    print("=" * 80 + "\n")
-    
-    # Create random hash for unique build directory
-    import hashlib
-    import random
-    random_hash = hashlib.md5(str(time.time() + random.random()).encode()).hexdigest()[:12]
-    llama_cpp_python_dir = TEMP_DIR / f"build_{random_hash}"
+    repo_dir = TEMP_DIR / "llama-cpp-python"
     
     try:
-        # Step 1: Clone main repo with retry
-        if not llama_cpp_python_dir.exists():
-            print_status("Cloning llama-cpp-python repository...")
-            print(f"  Build directory: {llama_cpp_python_dir}")
-            max_retries = 10
-            retry_delay = 30
-            
-            for attempt in range(max_retries):
-                try:
-                    subprocess.run([
-                        "git", "clone", "--progress",
-                        "https://github.com/abetlen/llama-cpp-python.git",
-                        str(llama_cpp_python_dir)
-                    ], check=True, timeout=600, env=env)
-                    print_status("Main repository cloned")
-                    break
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                    if llama_cpp_python_dir.exists():
-                        shutil.rmtree(llama_cpp_python_dir)
-                    
-                    if attempt < max_retries - 1:
-                        print(f"\n{'=' * 80}")
-                        print(f"Clone attempt {attempt + 1}/{max_retries} failed")
-                        print(f"Retrying in {retry_delay} seconds...")
-                        print(f"{'=' * 80}")
-                        
-                        for remaining in range(retry_delay, 0, -1):
-                            print(f"\rRetrying in {remaining} seconds...  ", end='', flush=True)
-                            time.sleep(1)
-                        print("\r" + " " * 40 + "\r", end='', flush=True)
-                        retry_delay = min(retry_delay + 15, 60)
-                    else:
-                        print_status("Failed to clone main repository", False)
-                        return False
-        else:
-            print_status("Using existing llama-cpp-python clone")
-        
-        # Step 2: Initialize submodules with aggressive retry
-        print_status("Initializing submodules (llama.cpp)...")
-        
-        max_submodule_retries = 10
-        retry_delay = 15
-        
-        for attempt in range(max_submodule_retries):
+        # Clean any leftover repo directory
+        if repo_dir.exists():
+            print_status("Cleaning previous build artifacts...")
             try:
-                # Use git submodule update with resume capability
-                # Don't capture output so progress shows in real-time
-                process = subprocess.Popen([
-                    "git", "submodule", "update", "--init", "--recursive", "--progress"
-                ], cwd=llama_cpp_python_dir, env=env)
-                
-                # Wait for process with timeout
-                try:
-                    process.wait(timeout=900)
-                    
-                    if process.returncode == 0:
-                        print_status("Submodules initialized successfully")
-                        break
-                    else:
-                        raise subprocess.CalledProcessError(process.returncode, "git submodule")
-                        
-                except subprocess.TimeoutExpired:
-                    # Kill the process if it times out
-                    process.kill()
-                    try:
-                        process.wait(timeout=5)
-                    except:
-                        pass
-                    raise
-                
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                # Make sure process is dead before retry
-                try:
-                    if 'process' in locals():
-                        process.kill()
-                        process.wait(timeout=5)
-                except:
-                    pass
-                
-                if attempt < max_submodule_retries - 1:
-                    print(f"\n{'=' * 80}")
-                    print(f"Submodule attempt {attempt + 1}/{max_submodule_retries} failed")
-                    print(f"Retrying in {retry_delay} seconds (git will resume partial download)...")
-                    print(f"{'=' * 80}\n")
-                    
-                    # Countdown on same line
-                    for remaining in range(retry_delay, 0, -1):
-                        print(f"\rRetrying in {remaining} seconds...  ", end='', flush=True)
-                        time.sleep(1)
-                    print("\r" + " " * 40 + "\r", end='', flush=True)
-                    retry_delay = min(retry_delay + 15, 90)
-                else:
-                    print_status("Failed to clone submodules after all retries", False)
-                    shutil.rmtree(llama_cpp_python_dir)
-                    return False
+                shutil.rmtree(repo_dir, ignore_errors=False)
+            except PermissionError:
+                # On Windows, try harder
+                if PLATFORM == "windows":
+                    subprocess.run(["cmd", "/c", "rmdir", "/s", "/q", str(repo_dir)], 
+                                  capture_output=True, timeout=30)
+                time.sleep(1)
+                if repo_dir.exists():
+                    shutil.rmtree(repo_dir, ignore_errors=True)
         
-        # Step 3: Install from local directory
-        print_status("Building and installing llama-cpp-python...")
-        print("  This will take 10-20 minutes depending on your CPU")
+        print_status(f"Cloning llama-cpp-python {LLAMACPP_PYTHON_VERSION}...")
         
-        cmd = [
-            pip_exe, "install",
-            str(llama_cpp_python_dir),
-            "--no-cache-dir",
-            "--force-reinstall",
-            "--upgrade",
-            "--verbose"
-        ]
+        # Clone specific release version with retry for network issues
+        max_retries = 5
+        retry_delay = 10
+        clone_success = False
+        
+        for attempt in range(max_retries):
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", "--branch", LLAMACPP_PYTHON_VERSION,
+                 "--recurse-submodules", LLAMACPP_PYTHON_GIT_REPO, str(repo_dir)],
+                capture_output=True, text=True, timeout=300, env=env
+            )
+            
+            if result.returncode == 0:
+                clone_success = True
+                break
+            else:
+                if repo_dir.exists():
+                    shutil.rmtree(repo_dir, ignore_errors=True)
+                if attempt < max_retries - 1:
+                    print(f"  Clone failed, retry {attempt + 1}/{max_retries} in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+        
+        if not clone_success:
+            print_status(f"Git clone failed after {max_retries} attempts: {result.stderr}", False)
+            return False
+        
+        print_status("Building wheel (this takes a while)...")
+        
+        # Capture full output for error diagnosis
+        full_output = []
         
         process = subprocess.Popen(
-            cmd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True
+            [pip_exe, "install", str(repo_dir), "-v", "--no-cache-dir"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1, env=env
         )
         
         track_process(process.pid)
         
+        last_progress_line = ""
         for line in process.stdout:
-            print(line, end='')
+            line = line.strip()
+            if not line:
+                continue
+            full_output.append(line)
+            if any(x in line.lower() for x in ["building", "compiling", "linking", "cmake", "installing", "error", "fatal"]):
+                if last_progress_line:
+                    print(f"\r{' ' * len(last_progress_line)}\r", end='', flush=True)
+                display_line = line[:80] + "..." if len(line) > 80 else line
+                print(f"\r  {display_line}", end='', flush=True)
+                last_progress_line = display_line
         
-        process.wait()
+        process.wait(timeout=3600)
+        
+        if last_progress_line:
+            print()
         
         if process.returncode == 0:
-            optimizations = []
-            if cpu_features['AVX2']:
-                optimizations.append("AVX2")
-            if cpu_features['FMA']:
-                optimizations.append("FMA (15-25% faster)")
-            if cpu_features['F16C']:
-                optimizations.append("F16C (50% less RAM, 10-30% faster)")
-            if cpu_features['AVX512']:
-                optimizations.append("AVX512")
-            
-            print("\n" + "=" * 80)
-            print_status("llama-cpp-python built from source successfully")
-            print(f"Optimizations enabled: {', '.join(optimizations) if optimizations else 'baseline'}")
-            
-            # Clean up on success
-            try:
-                shutil.rmtree(llama_cpp_python_dir)
-                print_status("Cleaned up build directory")
-            except:
-                pass
-            
+            print_status("llama-cpp-python built and installed")
             return True
         else:
-            print_status("Build failed", False)
+            print_status("llama-cpp-python build failed", False)
+            # Show last 20 lines of output to help diagnose
+            print("  Build output (last 20 lines):")
+            for line in full_output[-20:]:
+                if "error" in line.lower() or "fatal" in line.lower():
+                    print(f"    >>> {line[:100]}")
+                else:
+                    print(f"    {line[:100]}")
             return False
             
+    except subprocess.TimeoutExpired:
+        print_status("Build timed out", False)
+        return False
     except Exception as e:
         print_status(f"Build error: {e}", False)
-        if llama_cpp_python_dir.exists():
+        return False
+    finally:
+        if repo_dir.exists():
             try:
-                shutil.rmtree(llama_cpp_python_dir)
+                shutil.rmtree(repo_dir, ignore_errors=True)
             except:
                 pass
-        return False
 
-def get_optimal_cpu_threads() -> int:
-    """Calculate optimal CPU thread count for model inference - 85% of available cores"""
-    import multiprocessing
+def create_config(backend: str, embedding_model: str) -> None:
+    """Create persistent.json configuration file (variables only)"""
+    config_path = BASE_DIR / "data" / "persistent.json"
     
-    try:
-        total_threads = multiprocessing.cpu_count()
-    except:
-        total_threads = 4  # fallback
+    vulkan_enabled = "vulkan" in backend.lower()
     
-    # Use 85% of threads
-    use_threads = max(1, int(total_threads * 0.85))
+    # Set layer_allocation_mode based on install route:
+    # - Vulkan routes (2, 4): VRAM_SRAM (enables VRAM dropdown for GPU inference)
+    # - CPU-only routes (1, 3): SRAM_ONLY (CPU-only inference)
+    layer_mode = "VRAM_SRAM" if vulkan_enabled else "SRAM_ONLY"
+    default_vram = 8192 if vulkan_enabled else 0
     
-    return use_threads
-
-def build_config(backend: str) -> dict:
-    """Build configuration with only application settings"""
-    info = BACKEND_OPTIONS[backend]
+    # Calculate optimal CPU threads (85% of available)
+    optimal_threads = get_optimal_build_threads()
     
-    # Determine VRAM based on backend selection
-    if backend in ["Download CPU Binaries / Download CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
-        vram_size = 0
-        layer_allocation = "SRAM_ONLY"
-    elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
-        vram_size = 8192
-        layer_allocation = "VRAM_SRAM"
-    elif backend in ["Download Vulkan Bin / Compile Vulkan Wheel", "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
-        vram_size = 8192
-        layer_allocation = "VRAM_SRAM"
-    else:
-        vram_size = 0
-        layer_allocation = "SRAM_ONLY"
-    
-    # Detect optimal CPU threads (85% of available)
-    cpu_threads = get_optimal_cpu_threads()
-    
+    # Use model_settings format for compatibility with settings.py
+    # Note: Constants like llama_cli_path, llama_bin_path, embedding_model, 
+    # embedding_backend are stored in constants.ini, not here
     config = {
         "model_settings": {
+            "layer_allocation_mode": layer_mode,
             "model_dir": "models",
-            "model_name": "",
-            "context_size": 32768,
+            "model_name": "Select_a_model...",
+            "context_size": 8192,
+            "vram_size": default_vram,
             "temperature": 0.66,
             "repeat_penalty": 1.1,
-            "use_python_bindings": True,
-            "vram_size": vram_size,
-            "selected_gpu": None,
-            "selected_cpu": None,
+            "selected_gpu": "Auto",
+            "selected_cpu": "Auto-Select",
             "mmap": True,
-            "mlock": True,
+            "mlock": False,
             "n_batch": 1024,
             "dynamic_gpu_layers": True,
             "max_history_slots": 12,
             "max_attach_slots": 6,
-            "print_raw_output": False,
+            "session_log_height": 650,
             "show_think_phase": False,
+            "print_raw_output": False,
+            "cpu_threads": optimal_threads,
             "bleep_on_events": False,
-            "session_log_height": 625,
-            "cpu_threads": cpu_threads,  # <-- Now auto-detected
-            "layer_allocation_mode": layer_allocation,
-        } 
+            "use_python_bindings": True,
+            "vulkan_enabled": vulkan_enabled,
+        }
     }
     
-    # Note: embedding_model is added later in create_config()
-    
-    # Set CLI path for options with binaries
-    if info.get("cli_path"):
-        if PLATFORM == "windows":
-            if "CPU" in backend and "Compile CPU" in backend:
-                config["model_settings"]["llama_cli_path"] = ".\\data\\llama-cpu-bin\\llama-cli.exe"
-            else:
-                config["model_settings"]["llama_cli_path"] = ".\\data\\llama-vulkan-bin\\llama-cli.exe"
-        else:  # Linux
-            if "CPU" in backend and "Compile CPU" in backend:
-                config["model_settings"]["llama_cli_path"] = "./data/llama-cpu-bin/llama-cli"
-            else:
-                config["model_settings"]["llama_cli_path"] = "./data/llama-vulkan-bin/llama-cli"
-    
-    if info.get("dest"):
-        config["model_settings"]["llama_bin_path"] = info["dest"]
-        
-    return config
-
-def create_config(backend: str, embedding_model: str) -> None:
-    """Create configuration file with unified format"""
-    config_path = BASE_DIR / "data" / "persistent.json"
-    config = build_config(backend)
     try:
-        # Calculate backend_type for display purposes only
-        if backend in ["Download CPU Binaries / Download CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
-            display_backend_type = "CPU_CPU"
-        elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
-            display_backend_type = "VULKAN_CPU"
-        elif backend in ["Download Vulkan Bin / Compile Vulkan Wheel", "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
-            display_backend_type = "VULKAN_VULKAN"
-        else:
-            display_backend_type = "CPU_CPU"
-        
-        # Add embedding model to config after building
-        config["model_settings"]["embedding_model"] = embedding_model
-        
-        config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, "w") as f:
             json.dump(config, f, indent=4)
         print_status("Configuration file created")
-        print("\nGenerated configuration:")
-        print(f"  Backend: {display_backend_type}")
-        print(f"  VRAM: {config['model_settings']['vram_size']} MB")
-        print(f"  Layer Allocation: {config['model_settings']['layer_allocation_mode']}")  # <-- Added
-        print(f"  CPU Threads: {config['model_settings']['cpu_threads']}")  # <-- Added
-        print(f"  Context: {config['model_settings']['context_size']}")
-        print(f"  Embedding Model: {config['model_settings']['embedding_model']}")
-        if "llama_cli_path" in config["model_settings"]:
-            print(f"  llama-cli: {config['model_settings']['llama_cli_path']}")
-        else:
-            print(f"  Mode: Python bindings only (CPU)")
     except Exception as e:
-        print_status(f"Failed to create config: {str(e)}", False)
+        print_status(f"Failed to create config: {e}", False)
 
 def create_system_ini(platform: str, os_version: str, python_version: str, 
                      backend_type: str, embedding_model: str,
-                     windows_version: str = None, vulkan_available: bool = False):
-    """Create system.ini with platform and version information"""
-    system_ini_path = BASE_DIR / "data" / "system.ini"
+                     windows_version: str = None, vulkan_available: bool = False,
+                     llama_cli_path: str = None, llama_bin_path: str = None):
+    """Create constants.ini with platform and version information"""
+    system_ini_path = BASE_DIR / "data" / "constants.ini"
     try:
         with open(system_ini_path, "w") as f:
             f.write("[system]\n")
@@ -1003,13 +919,18 @@ def create_system_ini(platform: str, os_version: str, python_version: str,
             f.write(f"python_version = {python_version}\n")
             f.write(f"backend_type = {backend_type}\n")
             f.write(f"embedding_model = {embedding_model}\n")
+            f.write(f"embedding_backend = sentence_transformers\n")
             f.write(f"vulkan_available = {str(vulkan_available).lower()}\n")
+            if llama_cli_path:
+                f.write(f"llama_cli_path = {llama_cli_path}\n")
+            if llama_bin_path:
+                f.write(f"llama_bin_path = {llama_bin_path}\n")
             if platform == "windows" and windows_version:
                 f.write(f"windows_version = {windows_version}\n")
         print_status("System information file created")
         return True
     except Exception as e:
-        print_status(f"Failed to create system.ini: {str(e)}", False)
+        print_status(f"Failed to create constants.ini: {str(e)}", False)
         return False
 
 def create_venv() -> bool:
@@ -1019,11 +940,20 @@ def create_venv() -> bool:
             print_status("Removed existing virtual environment")
 
         subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+        
+        print_header("Installer") # mounting the venv cleared the display
         print_status("Created new virtual environment")
 
         python_exe = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
+        pip_exe = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("pip.exe" if PLATFORM == "windows" else "pip")
+        
         if not python_exe.exists():
             raise FileNotFoundError(f"Python executable not found at {python_exe}")
+
+        # Upgrade pip immediately to avoid "new release available" notices
+        subprocess.run([str(pip_exe), "install", "--upgrade", "pip"], 
+                      capture_output=True, timeout=120)
+        print_status("Upgraded pip to latest version")
 
         print_status("Verified virtual environment setup")
         return True
@@ -1031,8 +961,6 @@ def create_venv() -> bool:
         print_status(f"Failed to create venv: {e}", False)
         return False
 
-
-# Progress helpers
 def simple_progress_bar(current: int, total: int, width: int = 25) -> str:
     if total == 0:
         return "[" + "=" * width + "] 100%"
@@ -1049,86 +977,21 @@ def simple_progress_bar(current: int, total: int, width: int = 25) -> str:
 
     return f"[{bar}] {percent}% ({format_bytes(current)}/{format_bytes(total)})"
 
-def detect_cpu_features() -> dict:
-    """
-    Detect CPU SIMD features for optimal compilation.
-    Returns dict with feature flags for CMake.
-    """
-    features = {
-        "AVX": False,
-        "AVX2": False,
-        "AVX512": False,
-        "FMA": False,
-        "F16C": False
-    }
-    
-    if PLATFORM == "windows":
-        try:
-            import subprocess
-            # Use WMIC to get CPU info
-            result = subprocess.run(
-                ["wmic", "cpu", "get", "caption"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            cpu_info = result.stdout.lower()
-            
-            # Try cpuinfo if available
-            try:
-                import cpuinfo
-                info = cpuinfo.get_cpu_info()
-                flags = info.get('flags', [])
-                
-                features["AVX"] = 'avx' in flags
-                features["AVX2"] = 'avx2' in flags
-                features["AVX512"] = any('avx512' in f for f in flags)
-                features["FMA"] = 'fma' in flags
-                features["F16C"] = 'f16c' in flags
-                
-            except ImportError:
-                # Fallback: assume modern CPU has these if Intel/AMD
-                if any(x in cpu_info for x in ['intel', 'amd']):
-                    # Conservative assumption for Intel Haswell+ / AMD Piledriver+
-                    features["AVX"] = True
-                    features["AVX2"] = True
-                    features["FMA"] = True
-                    features["F16C"] = True
-                    print_status("CPU detection limited - assuming AVX2+FMA+F16C support")
-                
-        except Exception as e:
-            print(f"Warning: CPU detection failed: {e}")
-            # Safe fallback
-            features["AVX"] = True
-            features["AVX2"] = True
-            
-    else:  # Linux
-        try:
-            with open('/proc/cpuinfo', 'r') as f:
-                cpuinfo = f.read().lower()
-            
-            features["AVX"] = 'avx' in cpuinfo
-            features["AVX2"] = 'avx2' in cpuinfo
-            features["AVX512"] = 'avx512' in cpuinfo
-            features["FMA"] = 'fma' in cpuinfo
-            features["F16C"] = 'f16c' in cpuinfo
-            
-        except Exception as e:
-            print(f"Warning: CPU detection failed: {e}")
-            features["AVX"] = True
-            features["AVX2"] = True
-    
-    return features
+def has_avx_support() -> bool:
+    """Check if CPU has AVX support"""
+    global _CPU_FEATURES
+    if _CPU_FEATURES is None:
+        detect_cpu_features()
+    return _CPU_FEATURES.get('AVX', False) if _CPU_FEATURES is not None else False
 
 def check_vcredist_windows() -> bool:
     """Check if Visual C++ Redistributables are installed on Windows"""
     try:
         import winreg
         key_paths = [
-            r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",  # VS 2015+
+            r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
             r"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
         ]
-        
         for key_path in key_paths:
             try:
                 with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path):
@@ -1136,709 +999,36 @@ def check_vcredist_windows() -> bool:
             except FileNotFoundError:
                 continue
         return False
-    except Exception as e:
-        print(f"Warning: Could not check VC++ Redistributables: {e}")
+    except:
         return False
 
 def check_vulkan_sdk_installed() -> bool:
-    """Check if Vulkan SDK (not just runtime) is installed"""
+    """Check if Vulkan SDK is installed not just runtime"""
     if PLATFORM == "windows":
-        # 1. Environment variable set and points to existing dir
         vulkan_sdk = os.environ.get("VULKAN_SDK")
         if vulkan_sdk and Path(vulkan_sdk).is_dir():
             return True
 
-        # 2. Fallback: default Lunarg install path
         default_sdk = Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "VulkanSDK"
         if default_sdk.exists():
-            # any version sub-dir is enough
             for child in default_sdk.iterdir():
                 if child.is_dir() and (child/"Bin"/"vulkaninfoSDK.exe").exists():
-                    # add it to env for the current session so pip build sees it
                     os.environ["VULKAN_SDK"] = str(child)
                     return True
         return False
     else:  # Linux
         try:
-            # Check for vulkaninfo command
             result = subprocess.run(["vulkaninfo", "--summary"], 
-                                   stdout=subprocess.DEVNULL, 
-                                   stderr=subprocess.DEVNULL)
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if result.returncode != 0:
                 return False
-            
-            # Check for vulkan-sdk or development headers
-            result = subprocess.run(["pkg-config", "--exists", "vulkan"],
-                                   stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL)
+            result = subprocess.run(["which", "glslc"], capture_output=True)
             return result.returncode == 0
-        except FileNotFoundError:
+        except:
             return False
 
-def install_cefpython3_manual() -> bool:
-    """
-    Install cefpython3 with Python 3.11 support.
-    Uses community fork with extended Python version support.
-    """
-    print_status("Installing cefpython3 for custom browser...")
-    
-    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
-                 ("pip.exe" if PLATFORM == "windows" else "pip"))
-    
-    if PLATFORM == "windows":
-        try:
-            # Try official package first (works up to Python 3.9)
-            py_version = sys.version_info
-            
-            # For Python 3.10+, use alternative approach
-            if py_version.major == 3 and py_version.minor >= 10:
-                print_status("Python 3.10+ detected - using alternative CEF installation")
-                
-                # Install from PyPI index that has newer builds
-                result = subprocess.run(
-                    [pip_exe, "install", 
-                     "cefpython3",
-                     "--index-url", "https://pypi.org/simple/",
-                     "--extra-index-url", "https://test.pypi.org/simple/",
-                     "--no-cache-dir"],
-                    capture_output=True,
-                    text=True,
-                    timeout=600
-                )
-                
-                if result.returncode == 0:
-                    print_status("cefpython3 installed successfully")
-                    return True
-                else:
-                    # If that fails, try installing from git
-                    print_status("Trying alternate CEF source...")
-                    result = subprocess.run(
-                        [pip_exe, "install", 
-                         "git+https://github.com/cztomczak/cefpython.git@master",
-                         "--no-cache-dir"],
-                        capture_output=True,
-                        text=True,
-                        timeout=900
-                    )
-                    
-                    if result.returncode == 0:
-                        print_status("cefpython3 installed from source")
-                        return True
-                    else:
-                        print_status("CEF installation failed - trying fallback method", False)
-                        # Last resort: install older version and patch
-                        return install_cef_fallback()
-            else:
-                # Python 3.9 or below - standard installation works
-                subprocess.run(
-                    [pip_exe, "install", "cefpython3==66.1"],
-                    check=True,
-                    timeout=300
-                )
-                print_status("cefpython3 installed successfully")
-                return True
-                
-        except Exception as e:
-            print_status(f"cefpython3 installation failed: {e}", False)
-            return install_cef_fallback()
-    
-    else:  # Linux
-        print_status("Using GTK WebView on Linux (CEF not needed)", False)
-        return True  # Not an error on Linux
-
-
-def install_cef_fallback() -> bool:
-    """
-    Fallback: Skip CEF and document that custom browser won't work.
-    """
-    print("\n" + "!" * 80)
-    print("CEF Browser Installation Failed")
-    print("!" * 80)
-    print("\nThe custom browser window requires CEF (Chromium Embedded Framework).")
-    print("Installation failed, but the program will work with your system browser.")
-    print("\nTo use the custom browser:")
-    print("  1. Upgrade to Python 3.9 OR Windows 10+")
-    print("  2. Re-run the installer")
-    print("\nContinuing installation with system browser fallback...")
-    print("!" * 80 + "\n")
-    
-    time.sleep(3)
-    return False  # Return False but installation continues
-
-def install_vulkan_sdk_windows() -> bool:
-    """Prompt user to install Vulkan SDK on Windows"""
-    print("\n" + "!" * 80)
-    print("VULKAN SDK REQUIRED")
-    print("!" * 80)
-    print("\nBuilding llama-cpp-python with Vulkan requires the Vulkan SDK.")
-    print("\nPlease install from: https://vulkan.lunarg.com/sdk/home")
-    print("  - Download the Windows SDK installer")
-    print("  - Run the installer")
-    print("  - Only 'Vulkan SDK Core' is required (uncheck other components)")
-    print("  - After installation, re-run this installer")
-    print("!" * 80 + "\n")
-    
-    input("Press Enter after installing Vulkan SDK (or Ctrl+C to cancel)...")
-    
-    if check_vulkan_sdk_installed():
-        print_status("Vulkan SDK detected")
-        return True
-    else:
-        print_status("Vulkan SDK still not detected", False)
-        return False
-
-def install_vulkan_sdk_linux() -> bool:
-    """Install Vulkan SDK on Linux with shader compiler support"""
-    print_status("Installing Vulkan SDK for building llama-cpp-python...")
-    packages = [
-        "vulkan-tools",
-        "libvulkan-dev", 
-        "vulkan-headers",
-        "vulkan-validationlayers-dev",
-        "mesa-utils",
-        "shaderc",  # Provides glslc shader compiler
-        "glslang-tools"  # Alternative shader compiler tools
-    ]
-    try:
-        subprocess.run(["sudo", "apt-get", "update"], check=True)
-        subprocess.run(["sudo", "apt-get", "install", "-y"] + packages, check=True)
-        # Verify glslc is available
-        result = subprocess.run(["which", "glslc"], capture_output=True, text=True)
-        if result.returncode == 0:
-            print_status("Vulkan SDK with shader compiler installed")
-            return True
-        else:
-            print_status("Vulkan SDK installed but glslc not found", False)
-            print("  Please ensure shaderc package was installed correctly")
-            return False
-    except subprocess.CalledProcessError as e:
-        print_status(f"Vulkan SDK installation failed: {e}", False)
-        return False
-
-def install_vcredist_windows() -> bool:
-    """Download and install Visual C++ Redistributable on Windows"""
-    print_status("Visual C++ Redistributable not found")
-    print_status("Downloading Visual C++ 2015-2022 Redistributable...")
-    
-    TEMP_DIR.mkdir(exist_ok=True)
-    vcredist_url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-    vcredist_path = TEMP_DIR / "vc_redist.x64.exe"
-    
-    try:
-        # Download with progress bar (matching your theme)
-        download_with_progress(vcredist_url, vcredist_path, "Downloading VC++ Redistributable")
-        
-        print_status("Installing Visual C++ Redistributable (silent mode)...")
-        print("  This may take 1-2 minutes...")
-        
-        # Silent install: /install /quiet /norestart
-        result = subprocess.run(
-            [str(vcredist_path), "/install", "/quiet", "/norestart"],
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 minute timeout
-        )
-        
-        # Clean up installer
-        vcredist_path.unlink(missing_ok=True)
-        
-        # Check if installation succeeded
-        if result.returncode == 0:
-            print_status("Visual C++ Redistributable installed successfully")
-            return True
-        elif result.returncode == 1638:
-            # Already installed (edge case)
-            print_status("Visual C++ Redistributable already present")
-            return True
-        elif result.returncode == 3010:
-            # Success but reboot required
-            print_status("Visual C++ Redistributable installed (reboot recommended)")
-            print("\nNote: A system reboot is recommended but not required.")
-            return True
-        else:
-            print_status(f"Installation returned code {result.returncode}", False)
-            print(f"Output: {result.stdout}")
-            print(f"Error: {result.stderr}")
-            return False
-            
-    except subprocess.TimeoutExpired:
-        print_status("Visual C++ installation timed out", False)
-        vcredist_path.unlink(missing_ok=True)
-        return False
-    except Exception as e:
-        print_status(f"Failed to install VC++ Redistributable: {e}", False)
-        vcredist_path.unlink(missing_ok=True)
-        return False
-
-def download_file_with_resume(url: str, dest: Path, desc: str = "Downloading") -> bool:
-    """Robust file download with resume, retries, and progress tracking."""
-    import urllib.request
-    import urllib.error
-    import urllib.parse
-    import time
-    
-    max_retries = 5
-    retry_delay = 3  # seconds
-    chunk_size = 8192
-    
-    for attempt in range(max_retries):
-        try:
-            # Check if partial file exists
-            existing_size = dest.stat().st_size if dest.exists() else 0
-            
-            # Create request with range header for resume
-            req = urllib.request.Request(url)
-            if existing_size > 0:
-                req.add_header('Range', f'bytes={existing_size}-')
-                print(f"  Resuming {desc} from {existing_size} bytes...")
-            
-            # Open connection
-            response = urllib.request.urlopen(req, timeout=30)
-            
-            # Get total file size
-            content_length = response.headers.get('Content-Length')
-            if content_length:
-                total_size = int(content_length) + existing_size
-            else:
-                total_size = None  # Unknown size
-            
-            # Open file for append/write
-            mode = 'ab' if existing_size > 0 else 'wb'
-            
-            downloaded = existing_size
-            last_progress = 0
-            
-            with open(dest, mode) as f:
-                while True:
-                    try:
-                        chunk = response.read(chunk_size)
-                        if not chunk:
-                            break
-                        
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        
-                        # Progress update (only if we know total size)
-                        if total_size and total_size > 0:
-                            progress = (downloaded / total_size) * 100
-                            if progress - last_progress >= 5:  # Update every 5%
-                                print(f"\r  {desc}: {progress:.1f}% ({downloaded}/{total_size} bytes)", end='', flush=True)
-                                last_progress = progress
-                        
-                    except Exception as chunk_error:
-                        print(f"\n  Chunk download error: {chunk_error}")
-                        raise
-            
-            # Final newline after progress
-            if total_size and total_size > 0:
-                print()  # New line after progress
-            
-            # Verify complete download
-            if total_size and downloaded < total_size:
-                raise Exception(f"Download incomplete: got {downloaded} out of {total_size} bytes")
-            
-            print(f"  ✓ {desc} completed ({downloaded} bytes)")
-            return True
-            
-        except urllib.error.HTTPError as e:
-            if e.code == 416:  # Range not satisfiable - file is complete
-                print(f"  ✓ {desc} already complete")
-                return True
-            else:
-                print(f"  HTTP Error {e.code}: {e.reason}")
-                if attempt < max_retries - 1:
-                    print(f"  Retrying in {retry_delay} seconds... (attempt {attempt + 2}/{max_retries})")
-                    time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 2, 60)  # Exponential backoff
-                else:
-                    raise
-                    
-        except (urllib.error.URLError, OSError) as e:
-            print(f"  Network error: {e}")
-            if attempt < max_retries - 1:
-                print(f"  Retrying in {retry_delay} seconds... (attempt {attempt + 2}/{max_retries})")
-                time.sleep(retry_delay)
-                retry_delay = min(retry_delay * 2, 60)
-            else:
-                raise
-                
-        except Exception as e:
-            print(f"  Download error: {e}")
-            if attempt < max_retries - 1:
-                print(f"  Retrying in {retry_delay} seconds... (attempt {attempt + 2}/{max_retries})")
-                time.sleep(retry_delay)
-                retry_delay = min(retry_delay * 2, 60)
-            else:
-                raise
-    
-    return False
-
-def install_onnxruntime() -> bool:
-    """Install onnxruntime with proper error handling. Do not verify by importing."""
-    print_status("Installing onnxruntime (required for embeddings)...")
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                     ("python.exe" if PLATFORM == "windows" else "python"))
-    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                  ("pip.exe" if PLATFORM == "windows" else "pip"))
-    
-    try:
-        # Install onnxruntime
-        subprocess.run(
-            [pip_exe, "install", "onnxruntime"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        print_status("onnxruntime installed")
-        return True
-    except subprocess.CalledProcessError as e:
-        print_status(f"onnxruntime installation failed", False)
-        print(f"Error output: {e.stderr if e.stderr else 'No error output'}")
-        return False
-    except subprocess.TimeoutExpired:
-        print_status("onnxruntime installation timed out", False)
-        return False
-    except Exception as e:
-        print_status(f"onnxruntime installation error: {e}", False)
-        return False
-
-def download_fastembed_model(embedding_model: str) -> bool:
-    """Download and properly cache FastEmbed model files with robust error handling."""
-    model_name = embedding_model
-    cache_dir = BASE_DIR / "data" / "fastembed_cache"
-    
-    # FastEmbed expects a specific directory structure
-    model_safe_name = model_name.replace("/", "--")
-    revision = "main"
-    model_cache_path = cache_dir / f"models--{model_safe_name}" / "snapshots" / revision
-    
-    print_status(f"Setting up embedding model: {model_name}")
-    
-    # UPDATED: Complete list of files needed for FastEmbed to recognize cache
-    expected_files = [
-        "onnx/model.onnx", 
-        "onnx/model_quantized.onnx",  # NEW - quantized version
-        "config.json", 
-        "tokenizer.json", 
-        "tokenizer_config.json", 
-        "special_tokens_map.json",
-        "vocab.txt",  # NEW - vocabulary file
-        ".gitattributes"  # NEW - git metadata
-    ]
-    
-    # Check if already properly cached - ALL files must exist
-    all_files_exist = all((model_cache_path / file).exists() for file in expected_files)
-    if all_files_exist:
-        print_status("Embedding model already cached")
-        return True
-    
-    # Files to download for FastEmbed compatibility
-    files = {
-        "onnx/model.onnx": "onnx/model.onnx",
-        "onnx/model_quantized.onnx": "onnx/model_quantized.onnx",  # NEW
-        "config.json": "config.json",
-        "tokenizer.json": "tokenizer.json", 
-        "tokenizer_config.json": "tokenizer_config.json",
-        "special_tokens_map.json": "special_tokens_map.json",
-        "vocab.txt": "vocab.txt",  # NEW
-        ".gitattributes": ".gitattributes"  # NEW
-    }
-    
-    base_url = f"https://huggingface.co/{model_name}/resolve/{revision}"
-    model_cache_path.mkdir(parents=True, exist_ok=True)
-    
-    try:
-        print_status(f"Downloading embedding model files...")
-        
-        for remote_path, local_path in files.items():
-            url = f"{base_url}/{remote_path}?download=true"
-            dest = model_cache_path / local_path
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Skip if file already exists and is non-zero size
-            if dest.exists() and dest.stat().st_size > 0:
-                print(f"  ✓ {local_path} (cached)")
-                continue
-            
-            print(f"  Downloading {local_path}...")
-            
-            success = download_file_with_resume(url, dest, local_path)
-            if not success:
-                # Some files might be optional, only fail on critical files
-                if local_path in ["onnx/model.onnx", "config.json", "tokenizer.json"]:
-                    raise Exception(f"Failed to download critical file {local_path}")
-                else:
-                    print(f"  ⚠ Optional file {local_path} not available (skipping)")
-        
-        print_status("Embedding model downloaded and cached")
-        return True
-        
-    except Exception as e:
-        print_status(f"Model download failed: {e}", False)
-        if model_cache_path.exists():
-            try:
-                shutil.rmtree(model_cache_path)
-            except:
-                pass
-        return False
-
-def initialize_fastembed_cache(embedding_model: str) -> bool:
-    """Initialize FastEmbed cache by doing one test embedding during install."""
-    print_status(f"Initializing FastEmbed cache for {embedding_model}...")
-    
-    cache_dir = BASE_DIR / "data" / "fastembed_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
-                    ("python.exe" if PLATFORM == "windows" else "python"))
-    
-    # Create a small script to trigger FastEmbed download with unbuffered output
-    init_script = f'''
-import os
-import sys
-from pathlib import Path
-
-# Force unbuffered output
-sys.stdout.reconfigure(line_buffering=True)
-sys.stderr.reconfigure(line_buffering=True)
-
-cache_dir = Path(r"{str(cache_dir)}")
-os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-
-from fastembed import TextEmbedding
-
-print(f"Loading model: {embedding_model}", flush=True)
-model = TextEmbedding(
-    model_name="{embedding_model}",
-    cache_dir=str(cache_dir),
-    providers=["CPUExecutionProvider"]
-)
-
-# Do one test embedding to ensure everything works
-test_embedding = list(model.embed(["test"]))
-print(f"\\nModel loaded successfully, embedding dimension: {{len(test_embedding[0])}}", flush=True)
-'''
-    
-    script_path = TEMP_DIR / "init_fastembed.py"
-    try:
-        with open(script_path, 'w') as f:
-            f.write(init_script)
-        
-        # Use Popen with character-level output for real-time progress
-        process = subprocess.Popen(
-            [python_exe, "-u", str(script_path)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            bufsize=0,  # Unbuffered
-            universal_newlines=False  # Binary mode for character-level control
-        )
-        
-        # Stream output character by character
-        import select
-        while True:
-            if PLATFORM == "windows":
-                # Windows: blocking read with small chunks
-                chunk = process.stdout.read(1)
-                if not chunk:
-                    break
-                sys.stdout.buffer.write(chunk)
-                sys.stdout.buffer.flush()
-            else:
-                # Linux: use select for non-blocking
-                ready, _, _ = select.select([process.stdout], [], [], 0.1)
-                if ready:
-                    chunk = process.stdout.read(1)
-                    if not chunk:
-                        break
-                    sys.stdout.buffer.write(chunk)
-                    sys.stdout.buffer.flush()
-                elif process.poll() is not None:
-                    # Process ended, drain remaining output
-                    remaining = process.stdout.read()
-                    if remaining:
-                        sys.stdout.buffer.write(remaining)
-                        sys.stdout.buffer.flush()
-                    break
-        
-        process.wait(timeout=600)
-        
-        if process.returncode == 0:
-            print_status("FastEmbed cache initialized")
-            return True
-        else:
-            print_status("FastEmbed initialization failed", False)
-            return False
-        
-    except subprocess.TimeoutExpired:
-        process.kill()
-        print_status("FastEmbed initialization timed out", False)
-        return False
-    except Exception as e:
-        print_status(f"FastEmbed initialization failed: {e}", False)
-        return False
-    finally:
-        script_path.unlink(missing_ok=True)
-
-def download_spacy_model() -> bool:
-    """Download spaCy English model during installation."""
-    
-    try:
-        pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
-                     ("pip.exe" if PLATFORM == "windows" else "pip"))
-        
-        print_status("Downloading spaCy language model...")
-        
-        # Keep original filename so pip recognizes the wheel tags
-        filename = "en_core_web_sm-3.8.0-py3-none-any.whl"
-        url = f"https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/{filename}"
-        whl_path = TEMP_DIR / filename
-        
-        download_with_progress(url, whl_path, "Downloading spaCy model")
-        
-        print_status("Installing spaCy model...")
-        result = subprocess.run(
-            [pip_exe, "install", "--no-cache-dir", str(whl_path)], 
-            capture_output=True, 
-            text=True, 
-            timeout=600
-        )
-        
-        whl_path.unlink(missing_ok=True)
-        
-        if result.returncode == 0:
-            print_status("spaCy model installed")
-            return True
-        else:
-            print_status(f"spaCy install failed (code {result.returncode})", False)
-            if result.stderr:
-                print(f"Error output: {result.stderr[:200]}")
-            if result.stdout:
-                print(f"Install output: {result.stdout[:200]}")
-            return False
-            
-    except subprocess.TimeoutExpired:
-        print_status("spaCy install timed out", False)
-        if 'whl_path' in locals():
-            whl_path.unlink(missing_ok=True)
-        return False
-    except Exception as e:
-        print_status(f"spaCy error: {e}", False)
-        return False
-
-def download_with_progress(url: str, filepath: Path, description: str = "Downloading") -> None:
-    """Download file with progress bar, resume capability, and retries"""
-    import time
-    
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
-                    ("python.exe" if PLATFORM == "windows" else "python"))
-    
-    download_script = f'''
-import requests
-import time
-from pathlib import Path
-
-def format_bytes(b):
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if b < 1024.0:
-            return f"{{b:.1f}}{{unit}}"
-        b /= 1024.0
-    return f"{{b:.1f}}TB"
-
-def simple_progress_bar(current, total, width=25):
-    if total == 0:
-        return "[" + "=" * width + "] 100%"
-    filled_width = int(width * current // total)
-    bar = "=" * filled_width + "-" * (width - filled_width)
-    percent = 100 * current // total
-    return f"[{{bar}}] {{percent}}% ({{format_bytes(current)}}/{{format_bytes(total)}})"
-
-filepath = Path(r"{str(filepath)}")
-max_retries = 5
-retry_delay = 2
-
-for attempt in range(max_retries):
-    try:
-        existing_size = filepath.stat().st_size if filepath.exists() else 0
-        
-        headers = {{}}
-        if existing_size > 0:
-            headers['Range'] = f'bytes={{existing_size}}-'
-        
-        response = requests.get("{url}", stream=True, headers=headers, timeout=30)
-        
-        if response.status_code == 416:
-            break
-        elif response.status_code == 206:
-            total_size = existing_size + int(response.headers.get('content-length', 0))
-        elif response.status_code == 200:
-            total_size = int(response.headers.get('content-length', 0))
-            existing_size = 0
-            filepath.unlink(missing_ok=True)
-        else:
-            response.raise_for_status()
-        
-        downloaded = existing_size
-        chunk_size = 8192
-        update_interval = max(total_size // 15, 8192) if total_size > 0 else 1024 * 1024
-        last_update_at = downloaded
-        
-        mode = 'ab' if existing_size > 0 else 'wb'
-        with open(filepath, mode) as f:
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    
-                    if (downloaded - last_update_at >= update_interval) or (downloaded >= total_size):
-                        if total_size > 0:
-                            progress = simple_progress_bar(downloaded, total_size)
-                            print(f"\\r{description}: {{progress}}", end='', flush=True)
-                        else:
-                            downloaded_mb = downloaded / 1024 / 1024
-                            print(f"\\r{description}: {{downloaded_mb:.1f}} MB downloaded", end='', flush=True)
-                        last_update_at = downloaded
-        
-        print()
-        break
-        
-    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, 
-            requests.exceptions.ChunkedEncodingError, ConnectionResetError) as e:
-        if attempt < max_retries - 1:
-            print(f"\\n{description}: Connection reset, retrying in {{retry_delay}}s... ({{attempt+1}}/{{max_retries}})")
-            time.sleep(retry_delay)
-            retry_delay *= 2
-        else:
-            filepath.unlink(missing_ok=True)
-            raise Exception(f"Download failed after {{max_retries}} attempts: {{e}}")
-    except Exception as e:
-        filepath.unlink(missing_ok=True)
-        raise e
-'''
-    
-    download_script_path = TEMP_DIR / "download_file.py"
-    try:
-        with open(download_script_path, 'w') as f:
-            f.write(download_script)
-        
-        result = subprocess.run(
-            [python_exe, str(download_script_path)],
-            check=True,
-            timeout=1800
-        )
-        
-    except subprocess.CalledProcessError as e:
-        filepath.unlink(missing_ok=True)
-        raise Exception(f"Download failed: {e}")
-    except subprocess.TimeoutExpired:
-        filepath.unlink(missing_ok=True)
-        raise Exception("Download timed out")
-    finally:
-        download_script_path.unlink(missing_ok=True)
-
-# Dependency checks
 def is_vulkan_installed() -> bool:
-    """Check if Vulkan is installed on the system"""
+    """Check if Vulkan runtime is installed on the system"""
     if PLATFORM == "windows":
         try:
             import winreg
@@ -1858,16 +1048,10 @@ def verify_backend_dependencies(backend: str) -> bool:
     """Only check dependencies for Vulkan backend"""
     if backend == "Vulkan GPU":
         if not is_vulkan_installed():
-            print("\n" + "!" * 80)
-            print(f"⚠️  WARNING: Vulkan not detected!")
-            if PLATFORM == "windows":
-                print("  Download from: https://vulkan.lunarg.com/sdk/home")
-            else:
-                print("  Install with: sudo apt install vulkan-tools libvulkan-dev")
-            print("!" * 80 + "\n")
+            print_status("Warning: Vulkan not detected!", False)
             return False
     if backend == "Force Vulkan GPU":
-        return True  # skip all checks
+        return True
     return True
 
 def install_linux_system_dependencies(backend: str) -> bool:
@@ -1875,98 +1059,43 @@ def install_linux_system_dependencies(backend: str) -> bool:
         return True
     print_status("Installing Linux system dependencies...")
     base_packages = [
-        "build-essential",
-        "cmake",
-        "python3-venv",
-        "python3-dev",
-        "portaudio19-dev",
-        "libasound2-dev",
-        "python3-tk",
-        "espeak",
-        "libespeak-dev",
-        "ffmpeg",
-        "xclip",
-        # PyWebView GTK backend for Linux
-        "python3-gi",
-        "python3-gi-cairo",
-        "gir1.2-gtk-3.0",
-        "gir1.2-webkit2-4.0",
+        "build-essential", "cmake", "python3-venv", "python3-dev",
+        "portaudio19-dev", "libasound2-dev", "python3-tk",
+        "espeak", "libespeak-dev", "ffmpeg", "xclip",
+        # Qt6 WebEngine dependencies for Linux
+        "libxcb-cursor0", "libxkbcommon0", "libegl1", "libgl1",
     ]
+    
     info = BACKEND_OPTIONS[backend]
     vulkan_packages = []
     if info.get("build_flags", {}).get("GGML_VULKAN"):
-        # Try minimal Vulkan packages first
         vulkan_packages = [
-            "vulkan-tools",
-            "libvulkan-dev",
-            "mesa-utils",
-            "glslang-tools",  # Provides glslc
-            "spirv-tools"     # SPIR-V tools
+            "vulkan-tools", "libvulkan-dev", "mesa-utils",
+            "glslang-tools", "spirv-tools"
         ]
-    elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
+    elif backend in ["Download Vulkan Bin / Default CPU Wheel"]:
         vulkan_packages = ["vulkan-tools", "libvulkan1"]
     
     try:
-        # Update package lists
         subprocess.run(["sudo", "apt-get", "update"], check=True)
-        
-        # Install base packages
         subprocess.run(["sudo", "apt-get", "install", "-y"] + list(set(base_packages)), check=True)
         print_status("Base dependencies installed")
         
-        # Install Vulkan packages if needed, one by one with fallbacks
         if vulkan_packages:
             print_status("Installing Vulkan development packages...")
-            successful_vulkan_packages = []
-            
-            # Try modern package names first
             for package in vulkan_packages:
                 try:
                     subprocess.run(["sudo", "apt-get", "install", "-y", package], check=True)
-                    successful_vulkan_packages.append(package)
-                    print_status(f"  ✓ {package}")
-                except subprocess.CalledProcessError as e:
-                    print_status(f"  ✗ {package} not available, trying alternatives...", False)
-                    
-                    # Fallback package mappings for Ubuntu 25.04
-                    fallbacks = {
-                        "glslang-tools": ["glslc"],
-                        "spirv-tools": ["spirv-tools"],
-                        "vulkan-tools": ["vulkan-utils"],
-                        "libvulkan-dev": ["vulkan-headers", "libvulkan1-dev"],
-                        "mesa-utils": ["mesa-utils"]
-                    }
-                    
-                    if package in fallbacks:
-                        for fallback in fallbacks[package]:
-                            try:
-                                subprocess.run(["sudo", "apt-get", "install", "-y", fallback], check=True)
-                                successful_vulkan_packages.append(fallback)
-                                print_status(f"    ✓ Fallback: {fallback}")
-                                break
-                            except subprocess.CalledProcessError:
-                                continue
+                    print_status(f"  Installed {package}")
+                except subprocess.CalledProcessError:
+                    print_status(f"  Package {package} not available, trying alternatives...", False)
             
-            # Verify glslc is available
             if info.get("build_flags", {}).get("GGML_VULKAN"):
                 result = subprocess.run(["which", "glslc"], capture_output=True, text=True)
-                if result.returncode == 0:
-                    print_status("glslc shader compiler found")
-                else:
-                    print_status("glslc not found, trying manual installation steps...", False)
-                    # Try direct installation of shader tools
-                    try:
-                        subprocess.run(["sudo", "apt-get", "install", "-y", "glslc"], check=True)
-                        print_status("glslc installed directly")
-                    except subprocess.CalledProcessError:
-                        print_status("glslc still not found", False)
-                        print("Please install Vulkan shader compiler manually:")
-                        print("  sudo apt update")
-                        print("  sudo apt install -y glslang-tools spirv-tools")
-                        print("  sudo apt install -y shaderc")  # Alternative shader compiler
-                        print("If still failing, try:")
-                        print("  sudo apt install -y vulkan-sdk")
-                        return False
+                if result.returncode != 0:
+                    print_status("Error: glslc shader compiler not found", False)
+                    print("Please install: sudo apt install glslang-tools shaderc")
+                    return False
         
         print_status("Linux dependencies installed")
         return True
@@ -1974,7 +1103,380 @@ def install_linux_system_dependencies(backend: str) -> bool:
         print_status(f"System dependencies failed: {e}", False)
         return False
 
-# Python dependencies
+def install_embedding_backend() -> bool:
+    """Install torch + sentence-transformers for all platforms"""
+    print_status("Installing embedding backend (torch + sentence-transformers)...")
+    
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                    ("python.exe" if PLATFORM == "windows" else "python"))
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                ("pip.exe" if PLATFORM == "windows" else "pip"))
+    
+    # Install PyTorch CPU-only pinned for Win 8.1+ / Ubuntu 22+ compatibility
+    print_status("Installing PyTorch 2.2.2 (CPU-only)...")
+    if not pip_install_with_retry(pip_exe, "torch==2.2.2+cpu", 
+                                   ["--index-url", "https://download.pytorch.org/whl/cpu"],
+                                   max_retries=10, initial_delay=5.0):
+        print_status("PyTorch installation failed after retries", False)
+        return False
+    print_status("PyTorch 2.2.2 (CPU) installed")
+    
+    # Install transformers (pinned)
+    print_status("Installing transformers 4.41.2...")
+    if not pip_install_with_retry(pip_exe, "transformers==4.41.2", 
+                                   max_retries=10, initial_delay=5.0):
+        print_status("transformers installation failed", False)
+        return False
+    print_status("transformers installed")
+    
+    # Install sentence-transformers
+    print_status("Installing sentence-transformers 3.0.1...")
+    if not pip_install_with_retry(pip_exe, "sentence-transformers==3.0.1",
+                                   max_retries=10, initial_delay=5.0):
+        print_status("sentence-transformers installation failed", False)
+        return False
+    print_status("sentence-transformers installed")
+    
+    # Verify
+    verify_script = '''
+import sys, os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+try:
+    import torch
+    torch.set_grad_enabled(False)
+    print(f"torch: {torch.__version__}")
+    from sentence_transformers import SentenceTransformer
+    print("sentence_transformers: OK")
+    print("SUCCESS")
+except Exception as e:
+    print(f"FAILED: {e}")
+    sys.exit(1)
+'''
+    verify_path = TEMP_DIR / "verify_embedding.py"
+    try:
+        with open(verify_path, 'w') as f:
+            f.write(verify_script)
+            
+        verify_result = subprocess.run(
+            [python_exe, str(verify_path)], capture_output=True, text=True, timeout=120  # Embeddings verification Timer
+        )
+        verify_path.unlink(missing_ok=True)
+        
+        if verify_result.returncode == 0 and "SUCCESS" in verify_result.stdout:
+            print_status("Embedding backend verified")
+            return True
+        else:
+            print_status("Embedding backend verification failed", False)
+            print(f"Output: {verify_result.stdout}")
+            return False
+    except Exception as e:
+        print_status(f"Verification error: {e}", False)
+        return False
+
+def install_qt_webengine() -> bool:
+    """Install Qt WebEngine for custom browser Qt5 for Win 7-8.1, Qt6 for 10/11"""
+    print_status("Installing Qt WebEngine for custom browser...")
+    
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                ("pip.exe" if PLATFORM == "windows" else "pip"))
+    
+    try:
+        if PLATFORM == "windows":
+            win_ver = detect_windows_version()
+            if win_ver in ["7", "8", "8.1"]:
+                print_status("Windows 7-8.1 - installing PyQt5 + Qt5 WebEngine...")
+                # Install PyQt5 and PyQtWebEngine separately with retry
+                if not pip_install_with_retry(pip_exe, "PyQt5>=5.15.0", max_retries=3, initial_delay=5.0):
+                    print_status("PyQt5 installation failed - will use system browser", False)
+                    return False
+                if not pip_install_with_retry(pip_exe, "PyQtWebEngine", max_retries=3, initial_delay=5.0):
+                    print_status("PyQtWebEngine installation failed - will use system browser", False)
+                    return False
+            else:
+                print_status(f"Windows {win_ver} - installing PyQt6 + Qt6 WebEngine...")
+                if not pip_install_with_retry(pip_exe, "PyQt6>=6.5.0", max_retries=3, initial_delay=5.0):
+                    print_status("PyQt6 installation failed - will use system browser", False)
+                    return False
+                if not pip_install_with_retry(pip_exe, "PyQt6-WebEngine>=6.5.0", max_retries=3, initial_delay=5.0):
+                    print_status("PyQt6-WebEngine installation failed - will use system browser", False)
+                    return False
+        else:
+            print_status("Linux - installing PyQt6 + Qt6 WebEngine...")
+            if not pip_install_with_retry(pip_exe, "PyQt6>=6.5.0", max_retries=3, initial_delay=5.0):
+                print_status("PyQt6 installation failed - will use system browser", False)
+                return False
+            if not pip_install_with_retry(pip_exe, "PyQt6-WebEngine>=6.5.0", max_retries=3, initial_delay=5.0):
+                print_status("PyQt6-WebEngine installation failed - will use system browser", False)
+                return False
+        
+        print_status("Qt WebEngine installed")
+        return True
+            
+    except Exception as e:
+        print_status(f"Qt WebEngine error: {e} - will use system browser", False)
+        return False
+
+def initialize_embedding_cache(embedding_model: str) -> bool:
+    """Initialize embedding model cache using sentence-transformers"""
+    print_status(f"Initializing embedding cache for {embedding_model}...")
+    
+    cache_dir = BASE_DIR / "data" / "embedding_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                    ("python.exe" if PLATFORM == "windows" else "python"))
+    
+    init_script = f'''
+import os, sys
+from pathlib import Path
+
+# Force CPU-only mode - no CUDA
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["TORCH_DEVICE"] = "cpu"
+
+cache_dir = Path(r"{str(cache_dir)}")
+os.environ["TRANSFORMERS_CACHE"] = str(cache_dir.absolute())
+os.environ["HF_HOME"] = str(cache_dir.parent.absolute())
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(cache_dir.absolute())
+
+try:
+    print("Importing torch...", flush=True)
+    import torch
+    torch.set_grad_enabled(False)
+    print(f"torch version: {{torch.__version__}}", flush=True)
+    print(f"CUDA available: {{torch.cuda.is_available()}} (should be False)", flush=True)
+    
+    print("Importing sentence_transformers...", flush=True)
+    from sentence_transformers import SentenceTransformer
+    
+    print(f"Loading model: {embedding_model}", flush=True)
+    model = SentenceTransformer("{embedding_model}", device="cpu")
+    model.eval()
+    
+    print("Testing embedding...", flush=True)
+    # Use convert_to_tensor=True to avoid numpy conversion issues
+    test_embedding = model.encode(["test"], batch_size=1, normalize_embeddings=True, convert_to_tensor=True)
+    dim = test_embedding.shape[1] if len(test_embedding.shape) > 1 else len(test_embedding)
+    print(f"SUCCESS: Model loaded, dimension: {{dim}}", flush=True)
+    
+except ImportError as e:
+    print(f"FATAL: Import failed - {{type(e).__name__}}: {{str(e)}}", flush=True)
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+except Exception as e:
+    print(f"FATAL: {{type(e).__name__}}: {{str(e)}}", flush=True)
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+'''
+
+    script_path = TEMP_DIR / "init_embedding.py"
+    try:
+        with open(script_path, 'w') as f:
+            f.write(init_script)
+        
+        print("Embedding Initialization Output...")
+        
+        result = subprocess.run(
+            [python_exe, str(script_path)], capture_output=True, text=True, timeout=600
+        )
+        
+        if result.stdout:
+            for line in result.stdout.strip().split('\n'):
+                print(f"    {line}")
+        if result.stderr and "error" in result.stderr.lower():
+            print("    STDERR:", result.stderr[:200])
+        
+        if result.returncode == 0 and "SUCCESS" in result.stdout:
+            print_status("Embedding cache initialized")
+            return True
+        else:
+            print_status("Embedding initialization failed", False)
+            print(f"Return code: {result.returncode}")
+            return False
+        
+    except subprocess.TimeoutExpired:
+        print_status("Embedding initialization timed out (>600s)", False)
+        return False
+    except Exception as e:
+        print_status(f"Embedding initialization failed: {e}", False)
+        return False
+    finally:
+        script_path.unlink(missing_ok=True)
+
+def download_spacy_model() -> bool:
+    """Download spaCy English model during installation."""
+    try:
+        pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                     ("pip.exe" if PLATFORM == "windows" else "pip"))
+        
+        print_status("Downloading spaCy language model...")
+        
+        filename = "en_core_web_sm-3.8.0-py3-none-any.whl"
+        url = f"https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/{filename}"
+        whl_path = TEMP_DIR / filename
+        
+        download_with_progress(url, whl_path, "Downloading spaCy model")
+        
+        print_status("Installing spaCy model...")
+        result = subprocess.run(
+            [pip_exe, "install", "--no-cache-dir", str(whl_path)], 
+            capture_output=True, text=True, timeout=600
+        )
+        
+        whl_path.unlink(missing_ok=True)
+        
+        if result.returncode == 0:
+            print_status("spaCy model installed")
+            return True
+        else:
+            print_status(f"spaCy install failed (code {result.returncode})", False)
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print_status("spaCy install timed out", False)
+        return False
+    except Exception as e:
+        print_status(f"spaCy error: {e}", False)
+        return False
+
+def download_with_progress(url: str, filepath: Path, description: str = "Downloading",
+                          max_retries: int = 10, initial_delay: float = 5.0) -> None:
+    """Download file with progress bar, resume capability, and exponential backoff retries"""
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
+                    ("python.exe" if PLATFORM == "windows" else "python"))
+    
+    download_script = f'''
+import requests, time, sys
+from pathlib import Path
+
+def format_bytes(b):
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if b < 1024.0:
+            return f"{{b:.1f}}{{unit}}"
+        b /= 1024.0
+    return f"{{b:.1f}}TB"
+
+def progress_bar(current, total, width=30):
+    if total == 0:
+        return "[" + "=" * width + "] 100%"
+    filled = int(width * current // total)
+    bar = "=" * filled + "-" * (width - filled)
+    pct = 100 * current // total
+    return f"[{{bar}}] {{pct}}% ({{format_bytes(current)}}/{{format_bytes(total)}})"
+
+filepath = Path(r"{str(filepath)}")
+max_retries = {max_retries}
+delay = {initial_delay}
+
+for attempt in range(max_retries):
+    try:
+        existing_size = filepath.stat().st_size if filepath.exists() else 0
+        headers = {{'Range': f'bytes={{existing_size}}-'}} if existing_size > 0 else {{}}
+        
+        response = requests.get("{url}", stream=True, headers=headers, timeout=60)
+        
+        if response.status_code == 416:
+            print(f"\\r{description}: Already complete", flush=True)
+            break
+        elif response.status_code == 206:
+            total_size = existing_size + int(response.headers.get('content-length', 0))
+        elif response.status_code == 200:
+            total_size = int(response.headers.get('content-length', 0))
+            existing_size = 0
+            filepath.unlink(missing_ok=True)
+        else:
+            response.raise_for_status()
+        
+        downloaded = existing_size
+        mode = 'ab' if existing_size > 0 else 'wb'
+        last_update = 0
+        
+        with open(filepath, mode) as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    # Update progress every 1%
+                    if total_size > 0:
+                        current_pct = int(100 * downloaded / total_size)
+                        if current_pct > last_update:
+                            print(f"\\r{description}: {{progress_bar(downloaded, total_size)}}", end='', flush=True)
+                            last_update = current_pct
+                    elif downloaded % (1024 * 1024) < 8192:  # Every ~1MB for unknown size
+                        print(f"\\r{description}: {{format_bytes(downloaded)}} downloaded", end='', flush=True)
+        
+        print(f"\\r{description}: {{progress_bar(total_size, total_size)}} - Complete", flush=True)
+        break
+        
+    except Exception as e:
+        print(f"\\n{description}: Error - {{e}}", flush=True)
+        if attempt < max_retries - 1:
+            print(f"{description}: Retry {{attempt + 1}}/{{max_retries}} in {{delay:.0f}}s...", flush=True)
+            time.sleep(delay)
+            delay = min(delay * 2, 300)  # Cap at 5 minutes
+        else:
+            filepath.unlink(missing_ok=True)
+            print(f"{description}: FAILED after {{max_retries}} attempts", flush=True)
+            sys.exit(1)
+'''
+    
+    download_script_path = TEMP_DIR / "download_file.py"
+    try:
+        with open(download_script_path, 'w') as f:
+            f.write(download_script)
+        
+        subprocess.run([python_exe, str(download_script_path)], check=True, timeout=3600)
+        
+    except subprocess.CalledProcessError as e:
+        filepath.unlink(missing_ok=True)
+        raise Exception(f"Download failed: {e}")
+    except subprocess.TimeoutExpired:
+        filepath.unlink(missing_ok=True)
+        raise Exception("Download timed out")
+    finally:
+        download_script_path.unlink(missing_ok=True)
+
+def pip_install_with_retry(pip_exe: str, package: str, extra_args: list = None, 
+                           max_retries: int = 10, initial_delay: float = 5.0) -> bool:
+    """Install a pip package with retry logic and exponential backoff."""
+    if extra_args is None:
+        extra_args = []
+    
+    pkg_name = package.split('>=')[0].split('==')[0].split('[')[0]
+    delay = initial_delay
+    
+    for attempt in range(max_retries):
+        try:
+            cmd = [pip_exe, "install", package] + extra_args
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            
+            if result.returncode == 0:
+                return True
+            
+            # Check if already installed
+            if "already satisfied" in result.stdout.lower():
+                return True
+                
+            if attempt < max_retries - 1:
+                print(f"    Retry {attempt + 1}/{max_retries} for {pkg_name} in {delay:.0f}s...")
+                time.sleep(delay)
+                delay = min(delay * 2, 300)  # Cap at 5 minutes
+            
+        except subprocess.TimeoutExpired:
+            if attempt < max_retries - 1:
+                print(f"    Timeout, retry {attempt + 1}/{max_retries} for {pkg_name} in {delay:.0f}s...")
+                time.sleep(delay)
+                delay = min(delay * 2, 300)
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"    Error: {e}, retry {attempt + 1}/{max_retries} in {delay:.0f}s...")
+                time.sleep(delay)
+                delay = min(delay * 2, 300)
+    
+    return False
+
 def install_python_deps(backend: str) -> bool:
     print_status("Installing Python dependencies...")
     try:
@@ -1983,111 +1485,40 @@ def install_python_deps(backend: str) -> bool:
         pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                      ("pip.exe" if PLATFORM == "windows" else "pip"))
         
-        subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", "pip"], check=True)
-        print_status("Upgraded pip")
-        
-        # CRITICAL: Install VC++ Redistributables FIRST
-        if PLATFORM == "windows":
-            if not check_vcredist_windows():
-                print_status("Visual C++ Redistributable required")
-                if not install_vcredist_windows():
-                    print_status("VC++ installation failed - PyQt6/onnxruntime may not work", False)
+        # Install base requirements, use system cache for speed
+        print_status("Installing base packages...")
+        total_packages = len(BASE_REQ)
+        for i, req in enumerate(BASE_REQ, 1):
+            pkg_name = req.split('>=')[0].split('==')[0].split('[')[0]
+            print(f"  [{i}/{total_packages}] Installing {pkg_name}...", end='', flush=True)
+            
+            # Use cache (no --no-cache-dir) for faster installs
+            if pip_install_with_retry(pip_exe, req, max_retries=10, initial_delay=5.0):
+                print(f" OK")
             else:
-                print_status("Visual C++ Redistributable already installed")
+                print(f" FAILED")
+                print_status(f"Failed to install {pkg_name} after 10 retries", False)
+                return False
         
-        # Use the correct BASE_REQ from top of script (includes fastembed)
-        requirements = "\n".join(BASE_REQ)
+        print_status("Base packages installed")
         
-        req_file = TEMP_DIR / "requirements.txt"
-        with open(req_file, 'w') as f:
-            f.write(requirements)
+        # Install embedding backend, torch + sentence-transformers
+        if not install_embedding_backend():
+            return False
         
-        subprocess.run([pip_exe, "install", "-r", str(req_file)], check=True, timeout=600)
-        print_status("Base dependencies installed")
+        # Install Qt WebEngine for custom browser
+        install_qt_webengine()  # Non-fatal if fails
         
-        # Explicit pywebview install (skip on Python 3.13+ due to pythonnet issues)
-        if PYTHON_VERSION.minor >= 13:
-            print_status("Python 3.13+ detected - skipping pywebview (pythonnet compatibility issues)", False)
-            print("  Custom browser unavailable - will fallback to system browser")
-        else:
-            print_status("Installing pywebview==5.1 for custom browser...")
-            subprocess.run([pip_exe, "install", "pywebview==5.1"], check=True, timeout=120)
-            print_status("pywebview installed successfully")
-
-        # WebView2 installation - Windows 8.1+
-        if PLATFORM == "windows":
-            win_ver = detect_windows_version()
-            print_status(f"Detected Windows {win_ver}")
-            if win_ver in ["8.1", "10", "11"]:
-                print_status("Ensuring Microsoft Edge WebView2 runtime...")
-                bootstrapper_path = Path(TEMP_DIR) / "MicrosoftEdgeWebview2Setup.exe"
-                bootstrapper_url = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"  # FIXED: removed trailing space
-                helper_code = f'''
-import requests
-import subprocess
-import sys
-from pathlib import Path
-url = "{bootstrapper_url}"
-dest = r"{str(bootstrapper_path).replace(chr(92), chr(92)*2)}"
-try:
-    r = requests.get(url, timeout=15)
-    r.raise_for_status()
-    Path(dest).write_bytes(r.content)
-    print("DOWNLOADED")
-except Exception as e:
-    print(f"ERROR_DOWNLOAD: {{e}}")
-    sys.exit(1)
-try:
-    subprocess.run([dest, "/silent", "/install"], check=True, timeout=300)
-    print("INSTALLED")
-except Exception as e:
-    print(f"ERROR_INSTALL: {{e}}")
-    sys.exit(2)
-'''
-                helper_path = Path(TEMP_DIR) / "install_webview2.py"
-                helper_path.write_text(helper_code)
-                try:
-                    result = subprocess.run(
-                        [python_exe, str(helper_path)],
-                        capture_output=True,
-                        text=True,
-                        timeout=400
-                    )
-                    if "DOWNLOADED" in result.stdout:
-                        print_status("WebView2 bootstrapper downloaded")
-                    if "INSTALLED" in result.stdout:
-                        print_status("WebView2 runtime installed/updated")
-                    elif result.returncode != 0:
-                        print_status(f"WebView2 setup failed (code {result.returncode})", False)
-                    else:
-                        print_status("WebView2 likely already installed")
-                except subprocess.TimeoutExpired:
-                    print_status("WebView2 installer timed out", False)
-                except Exception as e:
-                    print_status(f"WebView2 setup error: {e}", False)
-                finally:
-                    for p in [bootstrapper_path, helper_path]:
-                        try:
-                            if p.exists():
-                                p.unlink()
-                        except:
-                            pass
-            elif win_ver == "7":
-                print_status("Windows 7 detected - WebView2 unsupported", False)
-                print("  Custom browser will fallback to system browser")
-
         # llama-cpp-python installation
         info = BACKEND_OPTIONS[backend]
         
         if not info.get("compile_wheel"):
             print_status("Installing pre-built llama-cpp-python (CPU)...")
-            try:
-                subprocess.run([
-                    pip_exe, "install", "llama-cpp-python",
-                    "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu"  # FIXED: removed trailing space
-                ], check=True, timeout=300)
+            if pip_install_with_retry(pip_exe, "llama-cpp-python", 
+                                      ["--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu"],
+                                      max_retries=10, initial_delay=5.0):
                 print_status("Pre-built wheel installed")
-            except:
+            else:
                 print_status("Pre-built wheel failed, building from source...")
                 if not build_llama_cpp_python_with_flags({}):
                     return False
@@ -2096,21 +1527,12 @@ except Exception as e:
             
             if build_flags.get("GGML_VULKAN"):
                 print_status("Vulkan wheel build - checking Vulkan SDK...")
-                
                 if not check_vulkan_sdk_installed():
-                    print_status("Vulkan SDK not found", False)
-                    
-                    if PLATFORM == "windows":
-                        if not install_vulkan_sdk_windows():
-                            print("\n" + "!" * 80)
-                            print("Cannot build Vulkan wheel without Vulkan SDK")
-                            print("!" * 80)
-                            return False
-                    else:
-                        if not install_vulkan_sdk_linux():
-                            return False
+                    print_status("Error: Vulkan SDK not found", False)
+                    print("Please install Vulkan SDK before selecting Vulkan build options")
+                    return False
                 else:
-                    print_status("Vulkan SDK already installed")
+                    print_status("Vulkan SDK detected")
             
             if not build_llama_cpp_python_with_flags(build_flags):
                 return False
@@ -2123,82 +1545,252 @@ except Exception as e:
         return False
 
 def install_optional_file_support() -> bool:
-    """Install optional file format libraries (PDF, DOCX, etc.)"""
+    """Install optional file format libraries"""
     print_status("Installing optional file format support...")
     
     optional_packages = [
-        "PyPDF2>=3.0.0",
-        "python-docx>=0.8.11", 
-        "openpyxl>=3.0.0",
-        "python-pptx>=0.6.21"
+        "PyPDF2>=3.0.0", "python-docx>=0.8.11", 
+        "openpyxl>=3.0.0", "python-pptx>=0.6.21"
     ]
     
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
-                    ("python.exe" if PLATFORM == "windows" else "python"))
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / 
                  ("pip.exe" if PLATFORM == "windows" else "pip"))
     
-    failed_packages = []
     for package in optional_packages:
         try:
-            subprocess.run([pip_exe, "install", package], 
-                          check=True, 
-                          capture_output=True)
-            print_status(f"Installed {package.split('>=')[0]}")
+            subprocess.run([pip_exe, "install", package], check=True, capture_output=True)
+            print_status(f"  Installed {package.split('>=')[0]}")
         except subprocess.CalledProcessError:
-            failed_packages.append(package.split('>=')[0])
-            print_status(f"Optional package {package.split('>=')[0]} failed", False)
-    
-    if failed_packages:
-        print(f"\nNote: Some file formats may not be supported: {', '.join(failed_packages)}")
-        print("The program will work with text files only for these formats.\n")
-    else:
-        print_status("All file format support installed")
+            print_status(f"  Optional package {package.split('>=')[0]} failed", False)
     
     return True
 
-
-# Backend download & extraction
-def copy_linux_binaries(source_dir: Path, dest_dir: Path) -> None:
-    build_bin_dir = source_dir / "build" / "bin"
-    if not build_bin_dir.exists():
-        raise FileNotFoundError(f"Build dir not found: {build_bin_dir}")
-
-    copied = 0
-    for file in build_bin_dir.iterdir():
-        if file.is_file() and file.name.startswith("llama"):
-            dest_file = dest_dir / file.name
-            shutil.copy2(file, dest_file)
-            os.chmod(dest_file, 0o755)
-            copied += 1
-
-    if copied:
-        print_status(f"Copied {copied} binaries")
-    else:
-        raise FileNotFoundError("No llama binaries")
-
-def download_binary_from_url(backend: str, info: dict) -> bool:
-    """Download pre-built binaries (options 3, 4, 5)"""
-    # Check if already exists
-    if info["dest"] and info["cli_path"]:
-        cli_path = BASE_DIR / info["cli_path"]
-        if cli_path.exists():
-            print_status(f"Backend already exists at {info['dest']}")
-            return True
+def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
+    """Compile llama.cpp binaries from source"""
+    import traceback
     
-    print_status(f"Downloading llama.cpp binaries...")
-    TEMP_DIR.mkdir(exist_ok=True)
-    temp_zip = TEMP_DIR / "llama.zip"
-
+    global _DID_COMPILATION
+    _DID_COMPILATION = True
+    
+    snapshot_pre_existing_processes()
+    
+    print_status("Compiling llama.cpp binaries from source (15-30 minutes)...")
+    
+    dest_path = BASE_DIR / info["dest"]
+    dest_path.mkdir(parents=True, exist_ok=True)
+    
+    llamacpp_src = TEMP_DIR / "llama.cpp"
+    
+    import multiprocessing
     try:
-        import zipfile
-        url = info["url"]
-        if url is None:
-            print_status("No download URL specified", False)
+        total_threads = multiprocessing.cpu_count()
+    except:
+        total_threads = 4
+    
+    build_threads = max(1, int(total_threads * 0.85))
+    print(f"  Building with {build_threads} of {total_threads} threads (85%)")
+    
+    env = os.environ.copy()
+    env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(build_threads)
+    
+    if PLATFORM == "windows":
+        env["FORCE_CMAKE"] = "1"
+        env["CL"] = f"/MP{build_threads}"
+    else:
+        env["MAKEFLAGS"] = f"-j{build_threads}"
+    
+    try:
+        subprocess.run(["git", "config", "--global", "http.lowSpeedLimit", "200"], capture_output=True)
+        subprocess.run(["git", "config", "--global", "http.lowSpeedTime", "240"], capture_output=True)
+        
+        # Clean any existing repo directory before cloning
+        if llamacpp_src.exists():
+            print_status("Cleaning previous build artifacts...")
+            try:
+                shutil.rmtree(llamacpp_src, ignore_errors=False)
+            except PermissionError:
+                if PLATFORM == "windows":
+                    subprocess.run(["cmd", "/c", "rmdir", "/s", "/q", str(llamacpp_src)], 
+                                  capture_output=True, timeout=30)
+                time.sleep(1)
+                if llamacpp_src.exists():
+                    shutil.rmtree(llamacpp_src, ignore_errors=True)
+        
+        print_status("Cloning llama.cpp repository...")
+        
+        max_retries = 5
+        retry_delay = 15
+        
+        for attempt in range(max_retries):
+            try:
+                process = subprocess.Popen([
+                    "git", "clone", "--depth", "1", "--progress",
+                    LLAMACPP_GIT_REPO, str(llamacpp_src)
+                ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                   text=True, bufsize=1, env=env)
+                
+                for line in process.stdout:
+                    line = line.strip()
+                    if line and any(x in line for x in ["Receiving", "Resolving", "Counting", "Compressing"]):
+                        print(f"\r  {line[:70]}", end='', flush=True)
+                
+                process.wait(timeout=600)
+                print()
+                
+                if process.returncode == 0:
+                    break
+                else:
+                    raise subprocess.CalledProcessError(process.returncode, "git clone")
+                    
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                if llamacpp_src.exists():
+                    shutil.rmtree(llamacpp_src, ignore_errors=True)
+                if attempt < max_retries - 1:
+                    print(f"\n  Clone failed, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                else:
+                    print_status("Failed to clone llama.cpp after retries", False)
+                    return False
+        
+        print_status("Repository cloned")
+        
+        # Configure build
+        build_dir = llamacpp_src / "build"
+        build_dir.mkdir(exist_ok=True)
+        
+        cmake_args = [
+            "cmake", "..",
+            "-DCMAKE_BUILD_TYPE=Release",
+            f"-DCMAKE_BUILD_PARALLEL_LEVEL={build_threads}",
+            "-DLLAMA_CURL=OFF",  # Disable CURL dependency
+        ]
+        
+        build_flags = info.get("build_flags", {})
+        
+        # CPU optimization flags
+        cpu_features = detect_cpu_features()
+        if cpu_features.get("AVX"):
+            cmake_args.append("-DGGML_AVX=ON")
+        if cpu_features.get("AVX2"):
+            cmake_args.append("-DGGML_AVX2=ON")
+        if cpu_features.get("FMA"):
+            cmake_args.append("-DGGML_FMA=ON")
+        if cpu_features.get("F16C"):
+            cmake_args.append("-DGGML_F16C=ON")
+        
+        # Backend-specific flags (e.g., Vulkan)
+        if build_flags.get("GGML_VULKAN"):
+            cmake_args.append("-DGGML_VULKAN=ON")
+        
+        # Platform-specific generator
+        if PLATFORM == "windows":
+            if VS_GENERATOR:
+                cmake_args.extend(["-G", VS_GENERATOR, "-A", "x64"])
+            else:
+                # Fallback - let CMake auto-detect, just specify architecture
+                cmake_args.extend(["-A", "x64"])
+        
+        print_status("Configuring build...")
+        result = subprocess.run(cmake_args, cwd=build_dir, capture_output=True, text=True, timeout=300, env=env)
+        
+        if result.returncode != 0:
+            print_status(f"CMake configure failed: {result.stderr[:200]}", False)
             return False
-            
-        download_with_progress(url, temp_zip, f"Downloading binary")
+        
+        print_status("Building binaries...")
+        
+        if PLATFORM == "windows":
+            build_cmd = ["cmake", "--build", ".", "--config", "Release", "--parallel", str(build_threads)]
+        else:
+            build_cmd = ["cmake", "--build", ".", "--parallel", str(build_threads)]
+        
+        process = subprocess.Popen(
+            build_cmd, cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1, env=env
+        )
+        
+        track_process(process.pid)
+        
+        for line in process.stdout:
+            line = line.strip()
+            if line and any(x in line.lower() for x in ["building", "compiling", "linking"]):
+                print(f"\r  {line[:70]}", end='', flush=True)
+        
+        process.wait(timeout=3600)
+        print()
+        
+        if process.returncode != 0:
+            print_status("Build failed", False)
+            return False
+        
+        # Copy binaries
+        print_status("Copying binaries...")
+        
+        if PLATFORM == "windows":
+            bin_src = build_dir / "bin" / "Release"
+        else:
+            bin_src = build_dir / "bin"
+        
+        if not bin_src.exists():
+            bin_src = build_dir
+        
+        for item in bin_src.iterdir():
+            if item.is_file():
+                shutil.copy2(item, dest_path)
+        
+        cli_path = BASE_DIR / info["cli_path"]
+        if not cli_path.exists():
+            print_status(f"llama-cli not found at {cli_path}", False)
+            return False
+        
+        if PLATFORM == "linux":
+            os.chmod(cli_path, 0o755)
+        
+        print_status("llama.cpp binaries compiled successfully")
+        return True
+        
+    except Exception as e:
+        print_status(f"Compilation failed: {e}", False)
+        traceback.print_exc()
+        return False
+    finally:
+        if llamacpp_src.exists():
+            try:
+                shutil.rmtree(llamacpp_src, ignore_errors=True)
+            except:
+                pass
 
+def copy_linux_binaries(src_path: Path, dest_path: Path) -> None:
+    """Copy Linux binaries to destination and set permissions"""
+    for item in src_path.iterdir():
+        if item.is_file() and not item.suffix:
+            dest = dest_path / item.name
+            shutil.copy2(item, dest)
+            os.chmod(dest, 0o755)
+
+def download_extract_backend(backend: str) -> bool:
+    """Download and extract backend binaries"""
+    import zipfile
+    
+    info = BACKEND_OPTIONS[backend]
+    
+    if info.get("compile_binary"):
+        return compile_llama_cpp_binary(backend, info)
+    
+    if not info["url"]:
+        print_status("No backend download required for this option")
+        return True
+    
+    print_status("Downloading backend binaries...")
+    
+    temp_zip = TEMP_DIR / "backend.zip"
+    
+    try:
+        download_with_progress(info["url"], temp_zip, "Downloading backend")
+        
+        print_status("Extracting backend...")
+        
         dest_path = BASE_DIR / info["dest"]
         dest_path.mkdir(parents=True, exist_ok=True)
 
@@ -2228,511 +1820,259 @@ def download_binary_from_url(backend: str, info: dict) -> bool:
     finally:
         temp_zip.unlink(missing_ok=True)
 
-def check_build_tools() -> bool:
-    """Check if required build tools are available for compilation"""
+def clean_compile_temp() -> None:
+    """Clean up Windows compilation temp folder"""
+    if PLATFORM == "windows" and WIN_COMPILE_TEMP.exists():
+        try:
+            shutil.rmtree(WIN_COMPILE_TEMP, ignore_errors=True)
+            print_status("Cleaned up compilation temp folder")
+        except:
+            pass
+
+def detect_build_tools_available() -> dict:
+    """Detect build tools availability and add to PATH if found. Returns dict of tool: bool"""
+    global VS_GENERATOR
+    tools = {"Git": False, "CMake": False, "MSVC": False, "MSBuild": False}
     
-    # Check for git first (required for all platforms)
-    if not shutil.which("git"):
-        print_status("Git not found", False)
-        print("\n" + "!" * 80)
-        print("Git is required to clone repositories for compilation")
-        if PLATFORM == "windows":
-            print("Download from: https://git-scm.com/download/win")
-        else:
-            print("Install with: sudo apt install git")
-        print("!" * 80 + "\n")
-        return False
+    # Check Git (required for all platforms)
+    if shutil.which("git"):
+        tools["Git"] = True
     
     if PLATFORM == "windows":
-        # Check for CMake - multiple methods
-        cmake_found = False
-        cmake_path = None
-        
-        # Method 1: Check PATH
+        # Check CMake
         if shutil.which("cmake"):
-            cmake_found = True
-            cmake_path = "PATH"
-        
-        # Method 2: Check common Visual Studio installations
-        if not cmake_found:
+            tools["CMake"] = True
+        else:
             vs_base = Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "Microsoft Visual Studio"
             if vs_base.exists():
-                # Check for VS 2022, 2019, 2017
                 for year in ["2022", "2019", "2017"]:
-                    for edition in ["Community", "Professional", "Enterprise"]:
+                    for edition in ["Community", "Professional", "Enterprise", "BuildTools"]:
                         cmake_candidate = vs_base / year / edition / "Common7" / "IDE" / "CommonExtensions" / "Microsoft" / "CMake" / "CMake" / "bin" / "cmake.exe"
                         if cmake_candidate.exists():
-                            cmake_found = True
-                            cmake_path = str(cmake_candidate)
-                            # Add to PATH for this session
+                            tools["CMake"] = True
                             bin_dir = str(cmake_candidate.parent)
                             if bin_dir not in os.environ["PATH"]:
                                 os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
                             break
-                    if cmake_found:
+                    if tools["CMake"]:
                         break
+            if not tools["CMake"]:
+                cmake_pf = Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "CMake" / "bin" / "cmake.exe"
+                if cmake_pf.exists():
+                    tools["CMake"] = True
+                    bin_dir = str(cmake_pf.parent)
+                    if bin_dir not in os.environ["PATH"]:
+                        os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
         
-        # Method 3: Check standalone CMake installation
-        if not cmake_found:
-            cmake_program_files = Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "CMake" / "bin" / "cmake.exe"
-            if cmake_program_files.exists():
-                cmake_found = True
-                cmake_path = str(cmake_program_files)
-                bin_dir = str(cmake_program_files.parent)
-                if bin_dir not in os.environ["PATH"]:
-                    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+        # Check MSVC and detect version - map year to generator
+        vs_generators = {
+            "2022": "Visual Studio 17 2022",
+            "2019": "Visual Studio 16 2019",
+            "2017": "Visual Studio 15 2017",
+        }
         
-        if not cmake_found:
-            print_status("CMake not found", False)
-            print("\n" + "!" * 80)
-            print("CMake is required for building llama.cpp")
-            print("Download from: https://cmake.org/download/")
-            print("Or install via: winget install Kitware.CMake")
-            print("!" * 80 + "\n")
-            return False
+        vs_base = Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "Microsoft Visual Studio"
+        if vs_base.exists():
+            # Check each year in preference order (newest first)
+            for year in ["2022", "2019", "2017"]:
+                for edition in ["Community", "Professional", "Enterprise", "BuildTools"]:
+                    vc_path = vs_base / year / edition / "VC"
+                    if vc_path.exists():
+                        tools["MSVC"] = True
+                        if VS_GENERATOR is None:
+                            VS_GENERATOR = vs_generators[year]
+                        break
+                if tools["MSVC"]:
+                    break
         
-        print_status(f"Found CMake ({cmake_path})")
-        
-        # Check for Visual Studio or MinGW
-        has_mingw = shutil.which("gcc") is not None
-        has_msvc = False
-        
-        if not has_mingw:
-            # Check for Visual Studio via vswhere
+        # Fallback: try vswhere
+        if not tools["MSVC"]:
             try:
                 vswhere = Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
                 if vswhere.exists():
-                    result = subprocess.run([str(vswhere), "-latest", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"], 
-                                          capture_output=True, timeout=5)
-                    has_msvc = result.returncode == 0
+                    result = subprocess.run(
+                        [str(vswhere), "-latest", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationVersion"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        tools["MSVC"] = True
+                        version = result.stdout.strip()
+                        # Map major version to generator
+                        if version.startswith("17"):
+                            VS_GENERATOR = "Visual Studio 17 2022"
+                        elif version.startswith("16"):
+                            VS_GENERATOR = "Visual Studio 16 2019"
+                        elif version.startswith("15"):
+                            VS_GENERATOR = "Visual Studio 15 2017"
             except:
                 pass
         
-        if not (has_msvc or has_mingw):
-            print_status("C++ compiler not found", False)
-            print("\n" + "!" * 80)
-            print("A C++ compiler is required for building llama.cpp")
-            print("\nOptions:")
-            print("  1. Visual Studio 2019+ with 'Desktop development with C++'")
-            print("     Download: https://visualstudio.microsoft.com/downloads/")
-            print("  2. MinGW-w64")
-            print("     Download: https://winlibs.com/")
-            print("!" * 80 + "\n")
-            return False
-        
-        # Report which compiler was found
-        if has_msvc:
-            print_status("Found Visual Studio C++ compiler")
-        elif has_mingw:
-            print_status("Found MinGW GCC compiler")
-        
+        # Check MSBuild
+        if shutil.which("MSBuild"):
+            tools["MSBuild"] = True
+        else:
+            if vs_base.exists():
+                for year in ["2022", "2019", "2017"]:
+                    for edition in ["Community", "Professional", "Enterprise", "BuildTools"]:
+                        msbuild_candidate = vs_base / year / edition / "MSBuild" / "Current" / "Bin" / "MSBuild.exe"
+                        if msbuild_candidate.exists():
+                            tools["MSBuild"] = True
+                            bin_dir = str(msbuild_candidate.parent)
+                            if bin_dir not in os.environ["PATH"]:
+                                os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+                            break
+                    if tools["MSBuild"]:
+                        break
+    
     else:  # Linux
-        required = ["cmake", "gcc", "g++", "make"]
-        missing = [tool for tool in required if not shutil.which(tool)]
-        
-        if missing:
-            print_status(f"Missing build tools: {', '.join(missing)}", False)
-            print("\n" + "!" * 80)
-            print("Required build tools are missing")
-            print("Install with: sudo apt install build-essential cmake")
-            print("!" * 80 + "\n")
-            return False
+        tools["CMake"] = shutil.which("cmake") is not None
+        tools["MSVC"] = shutil.which("gcc") is not None  # GCC on Linux
+        tools["MSBuild"] = shutil.which("make") is not None
     
-    print_status("All build tools available")
-    return True
+    return tools
 
-def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
-    """
-    Compile llama.cpp binaries from source with optimal CPU flags and aggressive multi-threading.
-    Auto-detects AVX2, FMA, F16C for maximum performance.
-    """
-    import traceback
+def select_backend_and_embedding():
+    """Combined selection of backend and embedding model on one page"""
+    width = shutil.get_terminal_size().columns - 1
+    print_header("Configure Installation")
     
-    global _DID_COMPILATION
-    _DID_COMPILATION = True
+    all_backend_opts = list(BACKEND_OPTIONS.keys())
+    embed_opts = EMBEDDING_MODELS
     
-    # Snapshot processes before build starts
-    snapshot_pre_existing_processes()
+    # System Detections
+    print("System Detections...")
     
-    print_status(f"Compiling llama.cpp binaries from source (15-30 minutes)...")
-    
-    dest_path = BASE_DIR / info["dest"]
-    dest_path.mkdir(parents=True, exist_ok=True)
-    
-    llamacpp_src = TEMP_DIR / "llama.cpp"
-    
-    # Get optimal build threads - 85% as requested
-    import multiprocessing
-    try:
-        total_threads = multiprocessing.cpu_count()
-    except:
-        total_threads = 4
-    
-    build_threads = max(1, int(total_threads * 0.85))
-    print(f"  Building with {build_threads} of {total_threads} threads (85%)")
-    
-    # Set up environment for parallel compilation - FORCE 85% usage
-    env = os.environ.copy()
-    env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(build_threads)
+    cpu_features = detect_cpu_features()
+    features_list = [feat for feat, supported in cpu_features.items() if supported]
+    if features_list:
+        print(f"    CPU Features: {', '.join(features_list)}")
+    else:
+        print("    CPU Features: Baseline")
     
     if PLATFORM == "windows":
-        env["FORCE_CMAKE"] = "1"
-        # Override any existing CL flags to ensure /MP is used
-        existing_cl = env.get("CL", "")
-        if f"/MP" not in existing_cl:
-            env["CL"] = f"/MP{build_threads}"
-        else:
-            # Replace existing /MP setting
-            import re
-            env["CL"] = re.sub(r'/MP\d*', f"/MP{build_threads}", existing_cl)
+        win_ver = WINDOWS_VERSION or "unknown"
+        print(f"    Operating System: Windows {win_ver}")
     else:
-        # Force override any existing MAKEFLAGS/NINJAFLAGS
-        env["MAKEFLAGS"] = f"-j{build_threads}"
-        env["NINJAFLAGS"] = f"-j{build_threads}"
-        # Also set for make-based builds
-        env["CMAKE_MAKE_PROGRAM"] = f"make -j{build_threads}"
+        ubuntu_ver = OS_VERSION or "unknown"
+        print(f"    Operating System: Ubuntu {ubuntu_ver}")
     
-    try:
-        # Configure git for unreliable connections before cloning
-        subprocess.run(["git", "config", "--global", "http.lowSpeedLimit", "200"], 
-                       capture_output=True)
-        subprocess.run(["git", "config", "--global", "http.lowSpeedTime", "240"], 
-                       capture_output=True)
-        subprocess.run(["git", "config", "--global", "http.postBuffer", "524288000"], 
-                       capture_output=True)
-        
-        # Clone llama.cpp if not exists
-        if not llamacpp_src.exists():
-            print_status("Cloning llama.cpp repository...")
-            
-            max_retries = 5
-            retry_delay = 15
-            
-            for attempt in range(max_retries):
-                try:
-                    process = subprocess.Popen([
-                        "git", "clone", "--depth", "1", "--progress",
-                        LLAMACPP_GIT_REPO,
-                        str(llamacpp_src)
-                    ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                       text=True, bufsize=1, universal_newlines=True, env=env)
-                    
-                    last_progress_line = ""
-                    for line in process.stdout:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        
-                        # Progress lines that should overwrite
-                        if any(x in line for x in ["Receiving objects:", "Resolving deltas:", 
-                                                     "Counting objects:", "Compressing objects:", 
-                                                     "Updating files:"]):
-                            # Clear previous line and print new one
-                            if last_progress_line:
-                                print(f"\r{' ' * len(last_progress_line)}\r", end='', flush=True)
-                            print(f"\r  {line}", end='', flush=True)
-                            last_progress_line = line
-                        else:
-                            # Non-progress lines - print normally
-                            if last_progress_line:
-                                print()  # Newline after progress
-                                last_progress_line = ""
-                            print(f"  {line}")
-                    
-                    process.wait(timeout=600)
-                    
-                    if last_progress_line:
-                        print()  # Final newline after progress
-                    
-                    if process.returncode == 0:
-                        break
-                    else:
-                        raise subprocess.CalledProcessError(process.returncode, "git clone")
-                        
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                    if last_progress_line:
-                        print()
-                    if llamacpp_src.exists():
-                        try:
-                            shutil.rmtree(llamacpp_src)
-                        except:
-                            pass
-                    
-                    if attempt < max_retries - 1:
-                        print(f"\n{'=' * 80}")
-                        print(f"Clone attempt {attempt + 1}/{max_retries} failed")
-                        print(f"Retrying in {retry_delay} seconds...")
-                        print(f"{'=' * 80}")
-                        
-                        for remaining in range(retry_delay, 0, -1):
-                            print(f"\rRetrying in {remaining} seconds...  ", end='', flush=True)
-                            time.sleep(1)
-                        print("\r" + " " * 40 + "\r", end='', flush=True)
-                        
-                        retry_delay = min(retry_delay + 15, 60)
-                    else:
-                        print_status("Clone failed after all retries", False)
-                        return False
-        
-        # Detect CPU features
-        print_status("Detecting CPU features...")
-        cpu_features = detect_cpu_features()
-        
-        print("CPU Features detected:")
-        for feature, supported in cpu_features.items():
-            status = "✓" if supported else "✗"
-            print(f"  {status} {feature}")
-        
-        # Build with CMake
-        build_dir = llamacpp_src / "build"
-        build_dir.mkdir(exist_ok=True)
-        
-        # Prepare CMake args with CPU optimizations and parallel build flags
-        cmake_args = [
-            "-DLLAMA_BUILD_TESTS=OFF",
-            "-DLLAMA_BUILD_EXAMPLES=ON",
-            "-DBUILD_SHARED_LIBS=OFF",
-            "-DLLAMA_CURL=OFF",
-            f"-DCMAKE_BUILD_PARALLEL_LEVEL={build_threads}",
-        ]
-        
-        # Detect compiler and set appropriate flags
-        has_msvc = False
-        has_mingw = False
-        has_ninja = False
-        
-        if PLATFORM == "windows":
-            # Check for MSVC (Visual Studio) using vswhere
-            try:
-                vswhere = Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
-                if vswhere.exists():
-                    result = subprocess.run(
-                        [str(vswhere), "-latest", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"],
-                        capture_output=True,
-                        timeout=5
-                    )
-                    has_msvc = result.returncode == 0
-            except:
-                pass
-            
-            # Check for MinGW
-            if not has_msvc:
-                has_mingw = shutil.which("gcc") is not None
-            
-            # Check for Ninja
-            has_ninja = shutil.which("ninja") is not None
-            
-            # Set compiler-specific flags
-            if has_msvc:
-                cmake_args.extend([
-                    f"-DCMAKE_CXX_FLAGS=/MP{build_threads}",
-                    f"-DCMAKE_C_FLAGS=/MP{build_threads}",
-                ])
-            elif has_mingw:
-                # MinGW uses Unix-style parallel flags
-                env["MAKEFLAGS"] = f"-j{build_threads}"
-        else:  # Linux
-            # Linux always uses Unix-style flags
-            env["MAKEFLAGS"] = f"-j{build_threads}"
-        
-        # Add CPU optimization flags (CRITICAL for performance)
-        cmake_args.append(f"-DGGML_AVX={'ON' if cpu_features['AVX'] else 'OFF'}")
-        cmake_args.append(f"-DGGML_AVX2={'ON' if cpu_features['AVX2'] else 'OFF'}")
-        cmake_args.append(f"-DGGML_AVX512={'ON' if cpu_features['AVX512'] else 'OFF'}")
-        cmake_args.append(f"-DGGML_FMA={'ON' if cpu_features['FMA'] else 'OFF'}")
-        cmake_args.append(f"-DGGML_F16C={'ON' if cpu_features['F16C'] else 'OFF'}")
-        
-        # OpenMP for multi-threading
-        cmake_args.append("-DGGML_OPENMP=ON")
-        
-        # Add Vulkan support if requested
-        if info.get("build_flags", {}).get("GGML_VULKAN"):
-            if not check_vulkan_sdk_installed():
-                print_status("Vulkan SDK required for Vulkan binary compilation", False)
-                if PLATFORM == "windows":
-                    if not install_vulkan_sdk_windows():
-                        return False
-                else:
-                    if not install_vulkan_sdk_linux():
-                        return False
-            
-            cmake_args.append("-DGGML_VULKAN=ON")
-            print("  Compiling with Vulkan GPU support")
-        
-        print("\nCompilation flags:")
-        for arg in cmake_args:
-            if arg.startswith("-DGGML_") or arg.startswith("-DCMAKE_") or arg.startswith("-DLLAMA_"):
-                print(f"  {arg}")
-        
-        # CMake configure
-        print_status("Configuring CMake...")
-        if PLATFORM == "windows":
-            if has_msvc:
-                # Use vswhere to get the actual Visual Studio version
-                try:
-                    vswhere = Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
-                    result = subprocess.run(
-                        [str(vswhere), "-latest", "-property", "installationVersion"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
-                    
-                    if result.returncode == 0:
-                        version_str = result.stdout.strip()
-                        major_version = int(version_str.split('.')[0])
-                        
-                        # Map major version to generator name
-                        if major_version >= 17:
-                            generator = "Visual Studio 17 2022"
-                            print("  Using Visual Studio 2022 generator")
-                        elif major_version == 16:
-                            generator = "Visual Studio 16 2019"
-                            print("  Using Visual Studio 2019 generator")
-                        elif major_version == 15:
-                            generator = "Visual Studio 15 2017"
-                            print("  Using Visual Studio 2017 generator")
-                        else:
-                            print_status(f"Unsupported Visual Studio version: {major_version}", False)
-                            return False
-                        
-                        cmake_cmd = ["cmake", "..", *cmake_args, "-G", generator, "-A", "x64"]
-                    else:
-                        print_status("Could not determine Visual Studio version", False)
-                        return False
-                        
-                except Exception as e:
-                    print_status(f"Failed to detect VS version: {e}", False)
-                    return False
-                    
-            elif has_ninja:
-                print("  Using Ninja generator")
-                cmake_cmd = ["cmake", "..", *cmake_args, "-G", "Ninja"]
-            elif has_mingw:
-                print("  Using MinGW Makefiles generator")
-                cmake_cmd = ["cmake", "..", *cmake_args, "-G", "MinGW Makefiles"]
-            else:
-                print_status("No suitable compiler found (need MSVC, Ninja, or MinGW)", False)
-                return False
-            
-            subprocess.run(cmake_cmd, cwd=build_dir, check=True, timeout=300, env=env)
-        else:  # Linux
-            subprocess.run([
-                "cmake", "..",
-                *cmake_args
-            ], cwd=build_dir, check=True, timeout=300, env=env)
-        
-        # CMake build with explicit parallel flags
-        print_status(f"Building binaries with {build_threads} threads...")
-        
-        build_cmd = [
-            "cmake", "--build", ".",
-            "--config", "Release",
-            "--parallel", str(build_threads)
-        ]
-        
-        process = subprocess.Popen(build_cmd, cwd=build_dir, env=env)
-        track_process(process.pid)
-        returncode = process.wait(timeout=2400)
-        if returncode != 0:
-            raise subprocess.CalledProcessError(returncode, build_cmd)
-        
-        # Copy binaries to destination
-        print_status("Installing binaries...")
-        if PLATFORM == "windows":
-            bin_dir = build_dir / "bin" / "Release"
-            for exe in bin_dir.glob("*.exe"):
-                if exe.name.startswith("llama"):
-                    shutil.copy2(exe, dest_path / exe.name)
-                    print(f"  Installed {exe.name}")
-        else:  # Linux
-            bin_dir = build_dir / "bin"
-            for exe in bin_dir.iterdir():
-                if exe.is_file() and exe.name.startswith("llama"):
-                    dest_file = dest_path / exe.name
-                    shutil.copy2(exe, dest_file)
-                    os.chmod(dest_file, 0o755)
-                    print(f"  Installed {exe.name}")
-        
-        # Verify CLI exists
-        cli_path = BASE_DIR / info["cli_path"]
-        if not cli_path.exists():
-            raise FileNotFoundError(f"llama-cli not found after build: {cli_path}")
-        
-        # Print optimization summary
-        optimizations = []
-        if cpu_features['AVX2']:
-            optimizations.append("AVX2")
-        if cpu_features['FMA']:
-            optimizations.append("FMA")
-        if cpu_features['F16C']:
-            optimizations.append("F16C (50% less RAM)")
-        if cpu_features['AVX512']:
-            optimizations.append("AVX512")
-        
-        print_status("Binary compilation complete")
-        print(f"Optimizations enabled: {', '.join(optimizations) if optimizations else 'baseline'}")
-        
-        return True
-        
-    except subprocess.TimeoutExpired:
-        print_status("Compilation timed out", False)
-        if llamacpp_src.exists():
-            try:
-                shutil.rmtree(llamacpp_src)
-            except:
-                pass
-        return False
-    except Exception as e:
-        print_status(f"Compilation failed: {e}", False)
-        print(traceback.format_exc())
-        if llamacpp_src.exists():
-            try:
-                shutil.rmtree(llamacpp_src)
-            except:
-                pass
-        return False
-
-def download_extract_backend(backend: str) -> bool:
-    """Handle backend download OR compilation"""
-    info = BACKEND_OPTIONS[backend]
+    optimal_py = DETECTED_PYTHON_INFO.get("optimal_version", "None") if DETECTED_PYTHON_INFO else "None"
+    vulkan_present = is_vulkan_installed()
+    print(f"    Optimal Python: {optimal_py}; Vulkan Present: {'Yes' if vulkan_present else 'No'}")
     
-    # Option 1: No binaries needed
-    if backend == "Download CPU Binaries / Download CPU Wheel":
-        print_status("CPU-Only mode: No binary download needed")
-        return True
+    build_tools = detect_build_tools_available()
+    available_tools = [tool for tool, present in build_tools.items() if present]
+    missing_tools = [tool for tool, present in build_tools.items() if not present]
+    tools_str = ", ".join(available_tools) if available_tools else "None"
+    print(f"    Build Tools: {tools_str}")
     
-    # Options 2 & 6: Compile binaries
-    if info.get("compile_binary"):
-        return compile_llama_cpp_binary(backend, info)
+    print()
     
-    # Options 3, 4, 5: Download binaries
-    if info.get("url"):
-        return download_binary_from_url(backend, info)
+    # Filter backend options based on build tools availability
+    build_possible = len(missing_tools) == 0
+    backend_opts = []
+    for backend in all_backend_opts:
+        info = BACKEND_OPTIONS[backend]
+        requires_compile = info.get("compile_binary", False) or info.get("compile_wheel", False)
+        if requires_compile and not build_possible:
+            # Skip compile options if build tools missing
+            continue
+        backend_opts.append(backend)
     
-    print_status("No backend action required", False)
-    return False
+    # Backend options
+    print("Backend Options...")
+    for i, backend in enumerate(backend_opts, 1):
+        print(f"   {i}) {backend}")
+    
+    # Show disabled compile options with missing tools
+    if not build_possible:
+        print(f"   ---")
+        for backend in all_backend_opts:
+            if backend not in backend_opts:
+                print(f"   -) {backend} (Missing: {', '.join(missing_tools)})")
+    
+    print()
+    
+    # Embedding Model
+    print("Embedding Model...")
+    embed_letters = ['a', 'b', 'c']
+    for i, key in enumerate(sorted(embed_opts.keys())):
+        letter = embed_letters[i]
+        model = embed_opts[key]
+        print(f"   {letter}) {model['display']}")
+    
+    print()
+    print("=" * width)
+    
+    max_backend = len(backend_opts)
+    prompt = f"Selection; Backend = 1-{max_backend} + Embeddings = a-c (e.g. 2b), Abandon = A: "
+    choice = input(prompt).strip().lower()
+    
+    if choice == "a":
+        print("Abandoning installation...")
+        sys.exit(0)
         
-# Backend selection
-def select_backend_type() -> str:
-    """Show 5-option menu"""
-    opts = list(BACKEND_OPTIONS.keys())
-    choice = get_user_choice("Select backend:", opts)
-    return choice
-
+    choice = choice.replace(" ", "").replace("-", "")
+    
+    while True:
+        if len(choice) == 2 and choice[0].isdigit() and choice[1] in "abc":
+            backend_num = int(choice[0])
+            embed_letter = choice[1]
+            
+            if 1 <= backend_num <= len(backend_opts):
+                embed_key = str(ord(embed_letter) - 96)
+                if embed_key in embed_opts:
+                    selected_backend = backend_opts[backend_num - 1]
+                    selected_model = embed_opts[embed_key]["name"]
+                    
+                    time.sleep(1)
+                    return selected_backend, selected_model
+        
+        print("Invalid selection. Please enter a valid combination (e.g. 2b).")
+        choice = input(prompt).strip().lower()
+        if choice == "a":
+            print("\nAbandoning installation...")
+            sys.exit(0)
+        choice = choice.replace(" ", "").replace("-", "")
 
 # Main install flow
 def install():
+    global WINDOWS_VERSION, OS_VERSION
+    
     # Version compatibility check FIRST
     if not check_version_compatibility():
         sys.exit(1)
-        
-    backend = select_backend_type()
-    embedding_model = select_embedding_model()
+
+    # Detect Python/Gradio/Qt versions for display
+    detect_version_selections()
     
-    print_header("Installation")
-    print(f"Installing {APP_NAME} on {PLATFORM} using {backend}")
-    print(f"Embedding model: {embedding_model}")
+    # Clean temp directories at start (handles leftover from failed builds)
+    if TEMP_DIR.exists():
+        try:
+            shutil.rmtree(TEMP_DIR, ignore_errors=True)
+        except:
+            pass
+    if PLATFORM == "windows" and WIN_COMPILE_TEMP.exists():
+        try:
+            shutil.rmtree(WIN_COMPILE_TEMP, ignore_errors=True)
+        except:
+            pass
+    
+    # Create temp dir
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Create venv and install py-cpuinfo early for CPU detection
+    if not create_venv():
+        print_status("Virtual environment failed", False)
+        sys.exit(1)
+    
+    print_status("Installing py-cpuinfo for CPU detection...")
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("pip.exe" if PLATFORM == "windows" else "pip"))
+    subprocess.run([pip_exe, "install", "py-cpuinfo"], check=True)
+    print_status("py-cpuinfo installed")
+    
+    if PLATFORM == "windows" and WINDOWS_VERSION == "8.1":
+        print("Detected Windows 8.1 - Using Qt5 WebEngine")
     
     # Get system info before creating config
     os_version = "unknown"
@@ -2740,11 +2080,32 @@ def install():
     windows_version = None
     vulkan_available = False
     
-    # Determine backend_type based on selection
-    if backend in ["Download CPU Binaries / Download CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
+    if PLATFORM == "windows":
+        WINDOWS_VERSION = detect_windows_version() or "unknown"
+        os_version = WINDOWS_VERSION
+        windows_version = WINDOWS_VERSION
+        vulkan_available = is_vulkan_installed()
+    elif PLATFORM == "linux":
+        OS_VERSION = detect_linux_version() or "unknown"
+        os_version = OS_VERSION
+        vulkan_available = is_vulkan_installed()
+
+    backend, embedding_model = select_backend_and_embedding()
+    
+    print_header("Installation")
+    if PLATFORM == "windows":
+        os_display = f"Windows {WINDOWS_VERSION}" if WINDOWS_VERSION else "Windows"
+    else:
+        os_display = f"Ubuntu {OS_VERSION}" if OS_VERSION else "Ubuntu"
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+    print(f"Installing {APP_NAME} on {os_display} with Python {py_ver} using install route {backend} with, Llama.Cpp {LLAMACPP_TARGET_VERSION} and Gradio {SELECTED_GRADIO} and Qt-Web {SELECTED_QTWEB}")
+    print(f"Embedding model: {embedding_model}")
+    
+    # Determine backend_type
+    if backend in ["Download CPU Wheel / Default CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
         backend_type = "CPU_CPU"
         vulkan_available = False
-    elif backend in ["Download Vulkan Bin / Download CPU Wheel", "Download Vulkan Bin / Download CPU Wheel (Forced)"]:
+    elif backend in ["Download Vulkan Bin / Default CPU Wheel"]:
         backend_type = "VULKAN_CPU"
         vulkan_available = True
     elif backend in ["Download Vulkan Bin / Compile Vulkan Wheel", "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
@@ -2753,26 +2114,13 @@ def install():
     else:
         backend_type = "CPU_CPU"
         vulkan_available = False
-    
-    if PLATFORM == "windows":
-        windows_version = detect_windows_version() or "unknown"
-        os_version = windows_version
-        vulkan_available = is_vulkan_installed()
-    elif PLATFORM == "linux":
-        try:
-            with open("/etc/os-release") as f:
-                for line in f:
-                    if line.startswith("VERSION_ID="):
-                        os_version = line.strip().split("=")[1].strip('"')
-                        break
-        except:
-            os_version = "unknown"
-        vulkan_available = is_vulkan_installed()
-    
-    # Create directories first
+
+    # Create directories
     create_directories(backend)
     
-    # Create system.ini early
+    info = BACKEND_OPTIONS[backend]
+    
+    # Create constants.ini early
     create_system_ini(
         platform=PLATFORM,
         os_version=os_version,
@@ -2780,7 +2128,9 @@ def install():
         backend_type=backend_type,
         embedding_model=embedding_model,
         windows_version=windows_version,
-        vulkan_available=vulkan_available
+        vulkan_available=vulkan_available,
+        llama_cli_path=info["cli_path"],
+        llama_bin_path=info["dest"]
     )
     
     # Install system dependencies BEFORE checking build tools
@@ -2789,43 +2139,21 @@ def install():
             print_status("System dependencies installation failed", False)
             sys.exit(1)
     
-    info = BACKEND_OPTIONS[backend]
-    
-    # Check build tools (dependencies should be installed)
-    if info.get("compile_binary") or info.get("compile_wheel"):
-        if not check_build_tools():
-            print_status("Missing required build tools", False)
-            sys.exit(1)
-    
-    if not verify_backend_dependencies(backend):
-        print_status("Missing system dependencies", False)
-        sys.exit(1)
-    
-    if not create_venv():
-        print_status("Virtual environment failed", False)
-        sys.exit(1)
-
-    # Install Python dependencies FIRST (includes fastembed)
+    # Install Python dependencies
     if not install_python_deps(backend):
         print_status("Python dependencies failed", False)
         sys.exit(1)
 
     install_optional_file_support()
 
-    # Initialize FastEmbed cache (replaces manual download)
-    if not initialize_fastembed_cache(embedding_model):
-        print("\n" + "!" * 80)
-        print("CRITICAL ERROR: Embedding model initialization failed!")
-        print("!" * 80)
-        print("\nRAG features require this model to function.")
-        print("Installation cannot continue.\n")
+    # Initialize embedding cache
+    if not initialize_embedding_cache(embedding_model):
+        print_status("CRITICAL: Embedding model required by RAG", False)
         sys.exit(1)
 
     spacy_ok = download_spacy_model()
     if not spacy_ok:
-        print_status("WARNING: spaCy model download failed", False)
-        print("Session labeling may not work properly")
-        # Non-critical, can continue
+        print_status("WARNING: spaCy model download failed - session labeling may not work", False)
 
     # Download/compile backend
     if not download_extract_backend(backend):
@@ -2837,10 +2165,7 @@ def install():
     print_status("Installation complete!")
     print("\nRun the launcher to start Chat-Gradio-Gguf\n")
 
-
-# ------------------------------------------------------------------
 #  Protected main block
-# ------------------------------------------------------------------
 if __name__ == "__main__":
     try:
         if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
@@ -2855,8 +2180,7 @@ if __name__ == "__main__":
         print(f"\nInstallation failed: {e}")
         sys.exit(1)
     finally:
-        # Ensure cleanup runs AFTER all file operations (including rmtree)
-        time.sleep(2)  # Let file handles release
+        time.sleep(2)
         cleanup_build_processes()
         if PLATFORM == "windows":
             clean_compile_temp()

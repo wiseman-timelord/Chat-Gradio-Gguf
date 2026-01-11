@@ -1,12 +1,16 @@
-# launcher.py
-
-# Set FastEmbed env vars FIRST before ANY imports
+# launcher.py - The entry point of the scripts of the main program.
+# Set embedding cache env vars FIRST before ANY imports
 import os
 from pathlib import Path
-cache_dir = Path(__file__).parent / "data" / "fastembed_cache"
+cache_dir = Path(__file__).parent / "data" / "embedding_cache"
 cache_dir.mkdir(parents=True, exist_ok=True)
-os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-os.environ["FASTEMBED_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_CACHE"] = str(cache_dir.absolute())
+os.environ["HF_HOME"] = str(cache_dir.parent.absolute())
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(cache_dir.absolute())
+os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU mode
+# CRITICAL: Force fully offline mode - prevents hanging when no network
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 # Disable Logging
 import logging, logging.config
@@ -85,15 +89,28 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
             print(f"Error unloading model: {str(e)}")
     
     # Graceful shutdown sequence
-    for i in range(3, -1, -1):
-        print(f"Closing in...{i}", end="\r")
-        time.sleep(1)
-    print()
-    
-    print("Shutdown complete. Goodbye!")
+    print(f"Closing Program...")
     shutdown_platform()
-    if temporary.demo is not None:
-        temporary.demo.close()
+    
+    # Force terminate in a separate thread to ensure it happens
+    def force_exit():
+        time.sleep(1)
+        print("[SHUTDOWN] Force terminating...")
+        os._exit(0)
+    
+    import threading
+    exit_thread = threading.Thread(target=force_exit, daemon=True)
+    exit_thread.start()
+    
+    # Also try to close browser (may or may not work)
+    try:
+        from scripts.browser import close_browser
+        close_browser()
+    except:
+        pass
+    
+    # If we get here, force exit anyway
+    time.sleep(1)
     os._exit(0)
 
 def shutdown_platform():
@@ -140,40 +157,46 @@ def print_configuration():
     print(f"  GPU Layers: {getattr(temporary, 'GPU_LAYERS', 'Auto')}")
 
 def preload_auxiliary_models():
-    """Pre-load spaCy and FastEmbed before main model to avoid memory conflicts."""
+    """Pre-load spaCy and sentence-transformers before main model to avoid memory conflicts."""
     
     # 1. Pre-load spaCy (pip package, no special path needed)
     try:
         from scripts.utility import get_nlp_model
         nlp = get_nlp_model()
         if nlp:
-            print("[INIT] ✓ spaCy model pre-loaded")
+            print("[INIT] OK spaCy model pre-loaded")
         else:
-            print("[INIT] ⚠ spaCy model not available (will use fallback)")
+            print("[INIT] WARN spaCy model not available (will use fallback)")
     except Exception as e:
-        print(f"[INIT] ⚠ spaCy pre-load failed: {e}")
+        print(f"[INIT] WARN spaCy pre-load failed: {e}")
     
-    # 2. Pre-load FastEmbed with correct cache path
+    # 2. Pre-load sentence-transformers embedding model
     try:
         import os
         from pathlib import Path
         
-        # Set cache path to match installer location BEFORE importing
-        cache_dir = Path(__file__).parent / "data" / "fastembed_cache"
+        # Set cache path to match installer location
+        cache_dir = Path(__file__).parent / "data" / "embedding_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         
-        os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-        os.environ["FASTEMBED_OFFLINE"] = "1"  # Prefer local cache
+        # CRITICAL: Set offline mode BEFORE any huggingface imports
+        # This prevents hanging when offline
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_CACHE"] = str(cache_dir.absolute())
+        os.environ["HF_HOME"] = str(cache_dir.parent.absolute())
+        os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(cache_dir.absolute())
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU mode
         
         # Now trigger the lazy load
         temporary.context_injector._ensure_embedding_model()
         
         if temporary.context_injector.embedding:
-            print("[INIT] ✓ FastEmbed model pre-loaded from cache")
+            print("[INIT] OK Embedding model pre-loaded from cache")
         else:
-            print("[INIT] ⚠ FastEmbed model not available (RAG disabled)")
+            print("[INIT] WARN Embedding model not available (RAG disabled)")
     except Exception as e:
-        print(f"[INIT] ⚠ FastEmbed pre-load failed: {e}")
+        print(f"[INIT] WARN Embedding pre-load failed: {e}")
         print("[INIT]   RAG features will be unavailable")
 
 def main():
