@@ -381,7 +381,7 @@ project_root/
 project_root/
 ├── data/
 │ └── persistent.json
-│ └── settings.ini
+│ └── constants.ini
 ├── data/vectors/
 └─────── *
 ├── data/temp/
