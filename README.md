@@ -105,8 +105,9 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
         Chat-Gradio-Gguf - Installation
     ===============================================================================
     
-    Installing Chat-Gradio-Gguf on windows using Download CPU Wheel / Download CPU W
-    heel
+    Installing Chat-Gradio-Gguf on Windows 8.1 with Python 3.11 using install route
+    Download Vulkan Bin / Default CPU Wheel with, Llama.Cpp b7688 and Gradio 3.50.2
+    and Qt-Web v5
     Embedding model: BAAI/bge-small-en-v1.5
     [V] Verified directory: data
     [V] Verified directory: scripts
@@ -120,24 +121,25 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     [V] System information file created
     [V] Installing Python dependencies...
     [V] Installing base packages...
-      [1/18] Installing numpy<2... OK
-      [2/18] Installing requests... OK
-      [3/18] Installing gradio... OK
-      [4/18] Installing pyperclip... OK
-      [5/18] Installing spacy... OK
-      [6/18] Installing psutil... OK
-      [7/18] Installing ddgs... OK
-      [8/18] Installing newspaper3k... OK
-      [9/18] Installing langchain-community... OK
-      [10/18] Installing faiss-cpu... OK
-      [11/18] Installing langchain... OK
-      [12/18] Installing pygments... OK
-      [13/18] Installing lxml... OK
-      [14/18] Installing pyttsx3... OK
-      [15/18] Installing tokenizers... OK
-      [16/18] Installing pywin32... OK
-      [17/18] Installing tk... OK
-      [18/18] Installing pythonnet... OK
+      [1/19] Installing numpy<2... OK
+      [2/19] Installing requests... OK
+      [3/19] Installing gradio... OK
+      [4/19] Installing pyperclip... OK
+      [5/19] Installing spacy... OK
+      [6/19] Installing psutil... OK
+      [7/19] Installing ddgs... OK
+      [8/19] Installing newspaper3k... OK
+      [9/19] Installing langchain-community... OK
+      [10/19] Installing faiss-cpu... OK
+      [11/19] Installing langchain... OK
+      [12/19] Installing pygments... OK
+      [13/19] Installing lxml... OK
+      [14/19] Installing lxml_html_clean... OK
+      [15/19] Installing pyttsx3... OK
+      [16/19] Installing tokenizers... OK
+      [17/19] Installing pywin32... OK
+      [18/19] Installing tk... OK
+      [19/19] Installing pythonnet... OK
     [V] Base packages installed
     [V] Installing embedding backend (torch + sentence-transformers)...
     [V] Installing PyTorch 2.2.2 (CPU-only)...
@@ -148,7 +150,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     [V] sentence-transformers installed
     [V] Embedding backend verified
     [V] Installing Qt WebEngine for custom browser...
-    [V] Windows 8.1 - installing PyQt5 + Qt5 WebEngine...
+    [V] Windows 7-8.1 - installing PyQt5 + Qt5 WebEngine...
     [V] Qt WebEngine installed
     [V] Installing pre-built llama-cpp-python (CPU)...
     [V] Pre-built wheel installed
@@ -159,36 +161,26 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     [V]   Installed openpyxl
     [V]   Installed python-pptx
     [V] Initializing embedding cache for BAAI/bge-small-en-v1.5...
-    ============================================================
-    Embedding Initialization Output:
-    ============================================================
-    Importing torch...
-    torch version: 2.2.2+cpu
-    CUDA available: False (should be False)
-    Importing sentence_transformers...
-    Loading model: BAAI/bge-small-en-v1.5
-    Testing embedding...
-    SUCCESS: Model loaded, dimension: 384
-    
-    STDERR: C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.97.3\.venv\Lib\site
-    -packages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACH
-    E` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instea
-    d.
-      warnings.warn(
-    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.97.3\.venv\Lib\site-package
-    s\huggingface_hub\file_download.py:942: FutureWarning: `resume_download` is depr
-    ecated and will be removed in version 1.0.0. Downloads always resume when possib
-    le. If you want to force a new download, use `force_download=True`.
-      warnings.warn(
-    
-    ============================================================
+    Embedding Initialization Output...
+        Importing torch...
+        torch version: 2.2.2+cpu
+        CUDA available: False (should be False)
+        Importing sentence_transformers...
+        Loading model: BAAI/bge-small-en-v1.5
+        Testing embedding...
+        SUCCESS: Model loaded, dimension: 384
     [V] Embedding cache initialized
     [V] Downloading spaCy language model...
     Downloading spaCy model: [==============================] 100% (12.2MB/12.2MB) -
      Complete
     [V] Installing spaCy model...
     [V] spaCy model installed
-    [V] No backend download required for this option
+    [V] Downloading backend binaries...
+    Downloading backend: [==============================] 100% (36.4MB/36.4MB) - Com
+    plete
+    [V] Extracting backend...
+    Extracting: [=========================] 100% (43.0B/43.0B)
+    [V] Backend ready
     [V] Configuration file created
     [V] Installation complete!
     
@@ -209,23 +201,42 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     Running Library Validation...
     Activated: `.venv`
-    === Chat-Gradio-Gguf Validator (WINDOWS) ===
+    ==================================================
+      Chat-Gradio-Gguf Validator (WINDOWS)
+    ==================================================
+    
+    System: windows 8.1
+    Python: 3.11.0
+    Backend: CPU_CPU
+    Embedding: BAAI/bge-small-en-v1.5
     
     === Directory Validation ===
       V data
       V scripts
       V models
-      V history
-      V temp
-      V vectors
-      V fastembed_cache
+      V data/history
+      V data/temp
+      V data/vectors
+      V data/embedding_cache
+    
+    === Script Files Validation ===
+      V browser.py
+      V interface.py
+      V models.py
+      V prompts.py
+      V settings.py
+      V temporary.py
+      V utility.py
     
     === Configuration Validation ===
-      V Config valid (Backend: Vulkan)
-      V llama-cli configured: llama-cli.exe
+      V constants.ini valid (Backend: CPU_CPU)
+      V persistent.json valid
+    
+    === Virtual Environment Validation ===
+      V Virtual environment OK
     
     === Backend Binary Validation ===
-      V llama-cli found: llama-cli.exe
+      V Python bindings mode: No binary needed
     
     === Core Library Validation ===
       V gradio
@@ -233,41 +244,50 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
       V pyperclip
       V spacy
       V psutil
-      V ddgs
       V newspaper3k
-      V langchain-community
-      V faiss-cpu
       V langchain
-      V pygments
-      V lxml
+      V faiss-cpu
+      V sentence-transformers
+      V torch
+      V llama-cpp-python
       V pyttsx3
-      V onnxruntime
-      V fastembed
-      V tokenizers
-      V xllamacpp
       V pywin32
       V tk
+      V pythonnet
     
     === Optional Library Validation ===
       V PyPDF2 (optional)
-      ? python-docx (not installed - optional)
+      V python-docx (optional)
       V openpyxl (optional)
-      ? python-pptx (not installed - optional)
-    
-    Note: 2 optional packages missing (text-only fallback will be used)
+      V python-pptx (optional)
     
     === spaCy Model Validation ===
       V en_core_web_sm model available
     
-    === FastEmbed Model Validation ===
-      V FastEmbed model verified
+    === Embedding Model Validation ===
+      V Embedding model verified (BAAI/bge-small-en-v1.5)
     
-    === Validation Summary ===
-      V All validations passed successfully!
+    === Browser Validation ===
+      V PyQt5-WebEngine installed (Win 8.1)
     
-    Your installation is ready to use.
-    DeActivated: `.venv`
-    Press any key to continue . . .
+    ==================================================
+      Validation Summary
+    ==================================================
+      directories: V PASS
+      scripts: V PASS
+      config: V PASS
+      venv: V PASS
+      llama_cli: V PASS
+      core_libs: V PASS
+      spacy: V PASS
+      embedding: V PASS
+      browser: V PASS
+    
+      Result: 9/9 checks passed
+      V
+    All validations passed!
+    
+    Press Enter to exit...
     
 </details>
 
