@@ -2,18 +2,20 @@
 
 # Imports
 import time
-from fastembed import TextEmbedding
 import faiss
 import numpy as np
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
 from pathlib import Path
 
-# System constants (platform, backend, etc.) loaded from data/system.ini
+# System constants (platform, backend, etc.) loaded from data/constants.ini
 PLATFORM = None
 BACKEND_TYPE = "CPU_CPU"
 VULKAN_AVAILABLE = False
 LAYER_ALLOCATION_MODE = "SRAM_ONLY"
+OS_VERSION = None  # Ubuntu version or Windows version string
+WINDOWS_VERSION = None  # Windows-specific version (8.1, 10, 11)
+EMBEDDING_BACKEND = "sentence_transformers"  # Always sentence_transformers now
 
 # Configuration variables with defaults
 MODEL_FOLDER = "path/to/your/models"
@@ -55,7 +57,8 @@ USE_PYTHON_BINDINGS = True
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
 SPEECH_ENABLED = False
-LLAMA_CLI_PATH = None  # will be set by launcher.py
+LLAMA_CLI_PATH = None  # will be set from constants.ini
+LLAMA_BIN_PATH = None  # will be set from constants.ini
 global_status = None
 _status_lock = None  # Tracks which operation has status priority
 _status_lock_message = ""  # Message to restore when lock releases 
@@ -138,11 +141,11 @@ handling_keywords = {
 }
 
 # Classes...
-# Classes are NOT allowed in temporary script, unless critical to be here.
 class ContextInjector:
     """
     Universal RAG with support for both file attachments AND large pasted inputs.
     Provides unlimited context through intelligent chunking and retrieval.
+    Uses sentence-transformers for embeddings (cross-platform Win 7-11, Ubuntu 22-25).
     """
     def __init__(self):
         self.embedding = None
@@ -153,7 +156,7 @@ class ContextInjector:
         self._model_load_attempted = False
     
     def _ensure_embedding_model(self):
-        """Initialize embedding model on first use with proper cache path."""
+        """Initialize embedding model on first use with proper cache path (fully offline)."""
         if self._model_load_attempted:
             return
         
@@ -162,41 +165,74 @@ class ContextInjector:
         import os
         from pathlib import Path
         
-        # FIXED: Use the value from config (loaded by settings.py)
+        # Use the value from config (loaded by settings.py)
         model_to_load = EMBEDDING_MODEL_NAME
         
-        # Use the SAME cache path as the installer
-        cache_dir = Path(__file__).parent.parent / "data" / "fastembed_cache"
+        # Use the cache path matching the installer
+        cache_dir = Path(__file__).parent.parent / "data" / "embedding_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # Set environment variables BEFORE importing fastembed
-        os.environ["FASTEMBED_CACHE_PATH"] = str(cache_dir.absolute())
-        os.environ["FASTEMBED_OFFLINE"] = "1"  # Force offline mode to use cache
+        # CRITICAL: Set HF_HUB_OFFLINE=1 BEFORE importing sentence_transformers
+        # This prevents ANY network requests to HuggingFace
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_CACHE"] = str(cache_dir.absolute())
+        os.environ["HF_HOME"] = str(cache_dir.parent.absolute())
+        os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(cache_dir.absolute())
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU mode
         
         try:
-            from fastembed import TextEmbedding
+            import torch
+            torch.set_grad_enabled(False)  # Disable gradients for inference
+            
+            from sentence_transformers import SentenceTransformer
             
             print(f"[RAG] Cache directory: {cache_dir}")
-            if cache_dir.exists():
-                cached_models = list(cache_dir.glob("**/model.onnx"))
-                print(f"[RAG] Found {len(cached_models)} cached model files:")
-                for model_file in cached_models:
-                    print(f"  - {model_file}")
+            print(f"[RAG] Attempting to load (offline): {model_to_load}")
             
-            print(f"[RAG] Attempting to load: {model_to_load}")
-            
-            # Try to load with offline mode first
-            self.embedding = TextEmbedding(
-                model_name=model_to_load,
-                cache_dir=str(cache_dir),
-                providers=["CPUExecutionProvider"]
+            # Load the model with CPU-only mode and local_files_only
+            # HF_HUB_OFFLINE=1 ensures no network requests at all
+            self.embedding = SentenceTransformer(
+                model_to_load, 
+                device="cpu",
+                local_files_only=True,
+                cache_folder=str(cache_dir)  # Explicit cache folder
             )
+            self.embedding.eval()  # Set to evaluation mode
+            
             print(f"[RAG] Successfully loaded: {model_to_load}")
             
+        except OSError as e:
+            # OSError typically means model files not found in cache
+            print(f"[RAG] Model not found in cache: {e}")
+            print(f"[RAG] Expected cache location: {cache_dir}")
+            print("[RAG] RAG features will be disabled. Re-run installer to download model.")
+            self.embedding = None
         except Exception as e:
-            print(f"[RAG] Failed to load cached model: {e}")
+            print(f"[RAG] Failed to load embedding model: {e}")
             print("[RAG] RAG features will be disabled.")
             self.embedding = None
+
+    def _embed_texts(self, texts):
+        """Embed a list of texts using sentence-transformers (CPU-only)."""
+        if self.embedding is None:
+            return None
+        
+        try:
+            # Use convert_to_tensor=True then convert to numpy to avoid numpy 2.x issues
+            embeddings = self.embedding.encode(
+                texts, 
+                batch_size=32, 
+                normalize_embeddings=True,
+                show_progress_bar=False,
+                convert_to_tensor=True,
+                device="cpu"
+            )
+            # Convert tensor to numpy array
+            return embeddings.cpu().numpy().astype('float32')
+        except Exception as e:
+            print(f"[RAG] Embedding error: {e}")
+            return None
 
     def set_session_vectorstore(self, file_paths):
         """Create/refresh vector store from list of file paths with improved chunking."""
@@ -213,22 +249,9 @@ class ContextInjector:
 
         all_docs = []
         
-        # Dynamic chunk sizing based on context size
-        from scripts.temporary import CONTEXT_SIZE
-        base_chunk_size = CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER
-        base_chunk_overlap = CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
-        
-        # Adjust chunk size based on file count and size
-        total_files = len(file_paths)
-        avg_file_size = sum(Path(fp).stat().st_size for fp in file_paths if Path(fp).exists()) / total_files if total_files > 0 else 0
-        
-        # Smaller chunks for larger files to improve retrieval
-        if avg_file_size > 100000:  # Files larger than 100KB
-            chunk_size = min(base_chunk_size, 1000)
-            chunk_overlap = min(base_chunk_overlap, 100)
-        else:
-            chunk_size = base_chunk_size
-            chunk_overlap = base_chunk_overlap
+        # Dynamic chunk sizing based on context window
+        chunk_size = CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER
+        chunk_overlap = CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
         
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
@@ -237,35 +260,31 @@ class ContextInjector:
             separators=["\n\n", "\n", ". ", " ", ""]
         )
         
-        for fp in file_paths:
-            if Path(fp).suffix[1:].lower() not in ALLOWED_EXTENSIONS:
-                continue
+        for path in file_paths:
             try:
-                docs = TextLoader(fp).load()
-                # Split into smaller chunks for better retrieval
-                chunks = splitter.split_documents(docs)
-                all_docs.extend(chunks)
-                print(f"[RAG] Split {fp} into {len(chunks)} chunks")
+                if path.suffix.lower() in ['.txt', '.md', '.py', '.json', '.yaml', '.yml']:
+                    loader = TextLoader(str(path), encoding='utf-8')
+                    documents = loader.load()
+                    for doc in documents:
+                        chunks = splitter.split_text(doc.page_content)
+                        for chunk in chunks:
+                            all_docs.append(type('Doc', (), {'page_content': chunk, 'metadata': {'source': str(path)}})())
             except Exception as e:
-                print(f"[RAG] Skip {fp}: {e}")
-
+                print(f"[RAG] Error loading {path}: {e}")
+                continue
+        
         if not all_docs:
-            self.file_index = None
-            self.file_chunks = []
+            print("[RAG] No documents could be loaded")
             return
 
         texts = [d.page_content for d in all_docs]
         
-        # Create embeddings in batches to avoid memory issues
-        batch_size = 32
-        all_embeddings = []
+        # Create embeddings using sentence-transformers
+        embeddings = self._embed_texts(texts)
         
-        for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i:i+batch_size]
-            batch_embeddings = self.embedding.embed(batch_texts)
-            all_embeddings.extend(batch_embeddings)
-        
-        embeddings = np.array(all_embeddings).astype('float32')
+        if embeddings is None:
+            print("[RAG] Failed to create embeddings")
+            return
 
         self.file_index = faiss.IndexFlatIP(embeddings.shape[1])
         faiss.normalize_L2(embeddings)
@@ -275,7 +294,7 @@ class ContextInjector:
 
     def add_temporary_input(self, large_input_text):
         """
-        NEW: Chunk and index large pasted user input for RAG retrieval.
+        Chunk and index large pasted user input for RAG retrieval.
         This enables unlimited context for direct text input.
         
         Args:
@@ -291,7 +310,6 @@ class ContextInjector:
             return
         
         # Dynamic chunk sizing
-        from scripts.temporary import CONTEXT_SIZE
         chunk_size = CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER
         chunk_overlap = CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
         
@@ -311,16 +329,12 @@ class ContextInjector:
         
         print(f"[RAG-TEMP] Split large input into {len(chunks)} chunks ({len(large_input_text)} chars)")
         
-        # Create embeddings in batches
-        batch_size = 32
-        all_embeddings = []
+        # Create embeddings using sentence-transformers
+        embeddings = self._embed_texts(chunks)
         
-        for i in range(0, len(chunks), batch_size):
-            batch_texts = chunks[i:i+batch_size]
-            batch_embeddings = self.embedding.embed(batch_texts)
-            all_embeddings.extend(batch_embeddings)
-        
-        embeddings = np.array(all_embeddings).astype('float32')
+        if embeddings is None:
+            print("[RAG-TEMP] Failed to create embeddings")
+            return
         
         # Create new temporary index
         self.temp_index = faiss.IndexFlatIP(embeddings.shape[1])
@@ -338,7 +352,7 @@ class ContextInjector:
 
     def get_relevant_context(self, query, k=4, include_temp=True):
         """
-        UPDATED: Return top-k most relevant chunks from BOTH file attachments AND temporary input.
+        Return top-k most relevant chunks from BOTH file attachments AND temporary input.
         
         Args:
             query: The search query (typically current user input)
@@ -363,9 +377,11 @@ class ContextInjector:
         if not has_files and not has_temp:
             return None
         
-        # Embed the query
-        q_vec = self.embedding.embed([query])
-        q_vec = np.array(q_vec).astype('float32')
+        # Embed the query using sentence-transformers
+        q_vec = self._embed_texts([query])
+        if q_vec is None:
+            return None
+        
         faiss.normalize_L2(q_vec)
         
         all_results = []
@@ -426,7 +442,6 @@ class ContextInjector:
 context_injector = ContextInjector()
 
 # Functions...
-# Functions are NOT allowed in temporary script, unless critical to be here.
 def validate_backend_type(backend):
     """Validate and normalize backend type."""
     if backend not in ["CPU_CPU", "VULKAN_CPU", "VULKAN_VULKAN"]:

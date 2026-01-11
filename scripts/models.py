@@ -30,12 +30,29 @@ def get_model_size(model_path: str) -> float:
     return Path(model_path).stat().st_size / (1024 * 1024)
 
 def clean_content(role, content):
-    """Remove prefixes from session_log content for model input."""
-    if role == 'user':
-        # Handle both "User:\n" prefix and structured "User Query:\n" format
-        content = content.replace("User:\n", "", 1)
-        # Don't strip "User Query:" header as it's part of structured context
-        return content.strip()
+    """
+    Clean message content before sending to the model.
+    Remove any display prefixes that might have leaked in.
+    """
+    content = (content or "").strip()
+    
+    if not content:
+        return ""
+    
+    # Common prefix patterns we want to remove completely
+    prefixes_to_remove = [
+        r'^User:\s*',
+        r'^User Query:\s*',
+        r'^Human:\s*',
+        r'^AI-Chat:\s*',
+        r'^Assistant:\s*',
+        r'^Bot:\s*'
+    ]
+    
+    for pattern in prefixes_to_remove:
+        content = re.sub(pattern, '', content, flags=re.IGNORECASE | re.MULTILINE)
+    
+    # Also remove any leading newlines/spaces that remain
     return content.strip()
 
 def get_available_models():
@@ -903,8 +920,9 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         raw_output += token
         output_buffer += token
 
-        output_buffer = re.sub(r'(^|\n)\s*AI-Chat:\s*(\n|$)', r'\1', output_buffer)
-        output_buffer = re.sub(r'\bAI-Chat:\s*\n\s*', '', output_buffer)
+        output_buffer = re.sub(r'^AI-Chat:\s*\n?', '', output_buffer)
+        output_buffer = re.sub(r'\nAI-Chat:\s*\n?', '\n', output_buffer)
+        output_buffer = re.sub(r'\bAI-Chat:\s+', '', output_buffer)
 
         if "[INST]" in output_buffer or "<<USER>>" in output_buffer:
             if temporary.PRINT_RAW_OUTPUT:

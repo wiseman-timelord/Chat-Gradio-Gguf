@@ -49,7 +49,7 @@ DEFAULT_CONFIG = {
         "llama_cli_path": None,
         "llama_bin_path": None,
         "selected_gpu": None,
-        "selected_cpu": None,  # Should be None or string label, NEVER a number
+        "selected_cpu": None,
         "mmap": True,
         "mlock": True,
         "n_batch": 1024,
@@ -67,14 +67,14 @@ DEFAULT_CONFIG = {
 
 # Functions...
 def load_system_ini():
-    """Load system constants from system.ini (created by installer)."""
+    """Load system constants from constants.ini (created by installer)."""
     import configparser
     
-    ini_path = Path("data/system.ini")
+    ini_path = Path("data/constants.ini")
     if not ini_path.exists():
         raise RuntimeError(
             f"System configuration file not found: {ini_path}\n"
-            "Re-run the installer to generate system.ini."
+            "Re-run the installer to generate constants.ini."
         )
     
     try:
@@ -82,7 +82,7 @@ def load_system_ini():
         config.read(ini_path, encoding='utf-8')
         
         if 'system' not in config:
-            raise RuntimeError("system.ini missing [system] section")
+            raise RuntimeError("constants.ini missing [system] section")
         
         system = config['system']
         
@@ -91,26 +91,35 @@ def load_system_ini():
         temporary.BACKEND_TYPE = system.get('backend_type', 'CPU_CPU')
         temporary.VULKAN_AVAILABLE = system.getboolean('vulkan_available', False)
         temporary.EMBEDDING_MODEL_NAME = system.get('embedding_model', 'BAAI/bge-small-en-v1.5')
+        temporary.EMBEDDING_BACKEND = system.get('embedding_backend', 'sentence_transformers')
+        
+        # Load llama paths (constants from installer)
+        temporary.LLAMA_CLI_PATH = system.get('llama_cli_path', None)
+        temporary.LLAMA_BIN_PATH = system.get('llama_bin_path', None)
         
         print(f"[INI] Platform: {temporary.PLATFORM}")
         print(f"[INI] Backend: {temporary.BACKEND_TYPE}")
         print(f"[INI] Vulkan: {temporary.VULKAN_AVAILABLE}")
-        print(f"[INI] Embedding: {temporary.EMBEDDING_MODEL_NAME}")
+        print(f"[INI] Embedding Model: {temporary.EMBEDDING_MODEL_NAME}")
+        print(f"[INI] Embedding Backend: {temporary.EMBEDDING_BACKEND}")
+        print(f"[INI] Llama CLI Path: {temporary.LLAMA_CLI_PATH}")
+        print(f"[INI] Llama Bin Path: {temporary.LLAMA_BIN_PATH}")
         
-        # Windows-specific
         # OS version (generic)
         temporary.OS_VERSION = system.get('os_version', 'unknown')
         print(f"[INI] OS Version: {temporary.OS_VERSION}")
 
-        # Windows-specific (legacy compatibility)
+        # Windows-specific version
         if temporary.PLATFORM == "windows":
             temporary.WINDOWS_VERSION = system.get('windows_version', temporary.OS_VERSION)
             print(f"[INI] Windows Version: {temporary.WINDOWS_VERSION}")
+        else:
+            temporary.WINDOWS_VERSION = None
         
         return True
         
     except Exception as e:
-        raise RuntimeError(f"Cannot read system.ini: {e}") from e
+        raise RuntimeError(f"Cannot read constants.ini: {e}") from e
 
 def load_config():
     """Load configuration with validation and error handling."""
@@ -126,20 +135,59 @@ def load_config():
     except Exception as e:
         raise RuntimeError(f"Cannot read configuration file {CONFIG_PATH}: {e}") from e
 
-    model_settings = config.get("model_settings", {})
+    # Handle both old format (nested) and new format (flat) from installer
+    if "model_settings" in config:
+        model_settings = config.get("model_settings", {})
+    else:
+        # New installer format - flat structure
+        model_settings = {
+            "model_dir": config.get("model_folder", "models"),
+            "model_name": config.get("model_name", "Select_a_model..."),
+            "context_size": config.get("context_size", 4096),
+            "vram_size": config.get("vram_size", 0),
+            "temperature": config.get("temperature", 0.7),
+            "repeat_penalty": config.get("repeat_penalty", 1.1),
+            "llama_cli_path": config.get("llama_cli_path"),
+            "llama_bin_path": config.get("llama_bin_path"),
+            "selected_gpu": config.get("selected_gpu", "Auto"),
+            "selected_cpu": config.get("selected_cpu", "Auto"),
+            "mmap": config.get("mmap", True),
+            "mlock": config.get("mlock", False),
+            "n_batch": config.get("batch_size", 512),
+            "dynamic_gpu_layers": config.get("dynamic_gpu_layers", True),
+            "max_history_slots": config.get("max_history_slots", 12),
+            "max_attach_slots": config.get("max_attach_slots", 6),
+            "session_log_height": config.get("session_log_height", 650),
+            "show_think_phase": config.get("show_think_phase", False),
+            "print_raw_output": config.get("print_raw_output", False),
+            "cpu_threads": config.get("cpu_threads"),
+            "bleep_on_events": config.get("bleep_on_events", False),
+            "use_python_bindings": config.get("use_python_bindings", True),
+            "layer_allocation_mode": config.get("layer_allocation_mode", "SRAM_ONLY"),
+        }
 
-    # Validate required keys
-    required_keys = {
-        "model_dir", "context_size",
-        "vram_size", "temperature", "repeat_penalty", "max_history_slots",
-        "max_attach_slots", "session_log_height", "show_think_phase",
-        "print_raw_output", "cpu_threads", "bleep_on_events", "use_python_bindings",
-        "layer_allocation_mode"
+    # Validate required keys with defaults
+    required_defaults = {
+        "model_dir": "models",
+        "context_size": 4096,
+        "vram_size": 0,
+        "temperature": 0.7,
+        "repeat_penalty": 1.1,
+        "max_history_slots": 12,
+        "max_attach_slots": 6,
+        "session_log_height": 650,
+        "show_think_phase": False,
+        "print_raw_output": False,
+        "cpu_threads": None,
+        "bleep_on_events": False,
+        "use_python_bindings": True,
+        "layer_allocation_mode": "SRAM_ONLY"
     }
     
-    missing = required_keys - model_settings.keys()
-    if missing:
-        raise RuntimeError(f"Configuration corrupted: missing keys {', '.join(missing)}")
+    for key, default in required_defaults.items():
+        if key not in model_settings:
+            model_settings[key] = default
+            print(f"[CONFIG] Missing key '{key}', using default: {default}")
 
     # Load MODEL_FOLDER first (critical for model discovery)
     temporary.MODEL_FOLDER = model_settings["model_dir"]
@@ -161,7 +209,6 @@ def load_config():
         if temporary.LAYER_ALLOCATION_MODE != "SRAM_ONLY":
             print(f"[CONFIG] CPU_CPU backend requires SRAM_ONLY (was {temporary.LAYER_ALLOCATION_MODE})")
             temporary.LAYER_ALLOCATION_MODE = "SRAM_ONLY"
-            # Save corrected value back to JSON
             model_settings["layer_allocation_mode"] = "SRAM_ONLY"
     
     print(f"[CONFIG] Layer allocation: {temporary.LAYER_ALLOCATION_MODE}")
@@ -178,8 +225,6 @@ def load_config():
 
     # Load optional settings with fallback
     optional_map = {
-        "llama_cli_path": "LLAMA_CLI_PATH",
-        "llama_bin_path": "LLAMA_BIN_PATH", 
         "selected_gpu": "SELECTED_GPU",
         "selected_cpu": "SELECTED_CPU",
         "mmap": "MMAP",
@@ -191,17 +236,17 @@ def load_config():
     for json_key, tmp_attr in optional_map.items():
         if json_key in model_settings:
             value = model_settings[json_key]
-            # --- MIGRATION: ensure selected_cpu is always a label string ---
+            # Ensure selected_cpu is always a label string
             if json_key == "selected_cpu":
                 if isinstance(value, (int, float)):
-                    print(f"[CONFIG] ⚠ SELECTED_CPU is numeric ({value}) - migrating to 'Auto-Select'")
+                    print(f"[CONFIG] SELECTED_CPU is numeric ({value}) - migrating to 'Auto-Select'")
                     value = "Auto-Select"
                 elif not isinstance(value, str):
                     value = "Auto-Select"
             setattr(temporary, tmp_attr, value)
             print(f"[CONFIG] {tmp_attr}: {getattr(temporary, tmp_attr)}")
     
-    # CRITICAL: Load model list from the configured folder
+    # Load model list from the configured folder
     temporary.AVAILABLE_MODELS = get_available_models()
     print(f"[CONFIG] Found {len(temporary.AVAILABLE_MODELS)} models in {temporary.MODEL_FOLDER}")
     
@@ -211,43 +256,41 @@ def load_config():
     
     if saved_model and saved_model in temporary.AVAILABLE_MODELS:
         temporary.MODEL_NAME = saved_model
-        print(f"[CONFIG] ✓ Model '{saved_model}' found and selected")
+        print(f"[CONFIG] Model '{saved_model}' found and selected")
     elif temporary.AVAILABLE_MODELS and len(temporary.AVAILABLE_MODELS) > 0:
-        # Filter out placeholder
         real_models = [m for m in temporary.AVAILABLE_MODELS if m != "Select_a_model..."]
         if real_models:
             temporary.MODEL_NAME = real_models[0]
-            print(f"[CONFIG] ⚠ Saved model not found, defaulting to '{temporary.MODEL_NAME}'")
+            print(f"[CONFIG] Saved model not found, defaulting to '{temporary.MODEL_NAME}'")
         else:
             temporary.MODEL_NAME = "Select_a_model..."
-            print(f"[CONFIG] ⚠ No models found in folder")
+            print(f"[CONFIG] No models found in folder")
     else:
         temporary.MODEL_NAME = "Select_a_model..."
-        print(f"[CONFIG] ⚠ No models available")
+        print(f"[CONFIG] No models available")
 
     if temporary.SELECTED_CPU and isinstance(temporary.SELECTED_CPU, str):
-        # Check if the saved CPU label is actually valid for current system
         import scripts.utility as utility
         cpu_info = utility.get_cpu_info()
         cpu_labels = [c["label"] for c in cpu_info]
         
-        # If we only have one CPU and saved value is "Auto-Select", use the actual CPU label
         if len(cpu_info) == 1 and temporary.SELECTED_CPU == "Auto-Select":
             temporary.SELECTED_CPU = cpu_labels[0] if cpu_labels else "Default CPU"
             print(f"[CONFIG] Adjusted SELECTED_CPU to: {temporary.SELECTED_CPU}")
     
-    # ← UNINDENT THESE (outside the if block)
     temporary.set_status("Configuration loaded", console=True)
     print(f"[CONFIG] ==================== Load Complete ====================")
     return "Configuration loaded."
 
 def save_config():
     """Save current configuration to persistent storage."""
-    # Guarantee that SELECTED_CPU is always a string label (never a number)
+    # Guarantee that SELECTED_CPU is always a string label
     cpu_label = getattr(temporary, 'SELECTED_CPU', None)
     if isinstance(cpu_label, (int, float)):
         cpu_label = "Auto-Select"
 
+    # Note: llama_cli_path, llama_bin_path, embedding_model, embedding_backend
+    # are stored in constants.ini (constants), not in persistent.json (variables)
     config = {
         "model_settings": {
             "model_dir": temporary.MODEL_FOLDER,
@@ -255,11 +298,9 @@ def save_config():
             "context_size": temporary.CONTEXT_SIZE,
             "temperature": temporary.TEMPERATURE,
             "repeat_penalty": temporary.REPEAT_PENALTY,
-            "llama_cli_path": getattr(temporary, 'LLAMA_CLI_PATH', None),
-            "llama_bin_path": getattr(temporary, 'LLAMA_BIN_PATH', None),
             "vram_size": temporary.VRAM_SIZE,
             "selected_gpu": temporary.SELECTED_GPU,
-            "selected_cpu": cpu_label,  # <-- always a string
+            "selected_cpu": cpu_label,
             "mmap": temporary.MMAP,
             "mlock": temporary.MLOCK,
             "n_batch": temporary.BATCH_SIZE,
@@ -273,12 +314,12 @@ def save_config():
             "bleep_on_events": temporary.BLEEP_ON_EVENTS,
             "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "layer_allocation_mode": getattr(temporary, 'LAYER_ALLOCATION_MODE', 'SRAM_ONLY'),
+            "vulkan_enabled": getattr(temporary, 'VULKAN_AVAILABLE', False),
         }
     }
 
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     
-    # Add validation logging
     print(f"[SAVE] Saving configuration:")
     print(f"[SAVE]   Model folder: {config['model_settings']['model_dir']}")
     print(f"[SAVE]   Model name: {config['model_settings']['model_name']}")
