@@ -480,17 +480,21 @@ def copy_last_response(session_messages):
 def update_file_slot_ui(file_list, is_attach=True):
     """Update file slot UI components."""
     max_slots = temporary.MAX_POSSIBLE_ATTACH_SLOTS
+    current_max = temporary.MAX_ATTACH_SLOTS
     button_updates = []
     
     for i in range(max_slots):
-        if i < len(file_list):
+        # Hide slots beyond current MAX_ATTACH_SLOTS setting
+        if i >= current_max:
+            button_updates.append(gr.update(value="", visible=False, variant="primary"))
+        elif i < len(file_list):
             filename = Path(file_list[i]).name
             short_name = filename[:36] + ".." if len(filename) > 38 else filename
             button_updates.append(gr.update(value=short_name, visible=True, variant="primary"))
         else:
             button_updates.append(gr.update(value="", visible=False, variant="primary"))
     
-    show_upload = len(file_list) < temporary.MAX_ATTACH_SLOTS if is_attach else True
+    show_upload = len(file_list) < current_max if is_attach else True
     button_updates.append(gr.update(visible=show_upload))
     
     return button_updates
@@ -501,7 +505,10 @@ def update_session_buttons():
     button_updates = []
     
     for i in range(temporary.MAX_POSSIBLE_HISTORY_SLOTS):
-        if i < len(sessions):
+        # Hide buttons beyond current MAX_HISTORY_SLOTS setting
+        if i >= temporary.MAX_HISTORY_SLOTS:
+            button_updates.append(gr.update(value="", visible=False))
+        elif i < len(sessions):
             session_path = Path(temporary.HISTORY_DIR) / sessions[i]
             try:
                 stat = session_path.stat()
@@ -513,12 +520,9 @@ def update_session_buttons():
             except Exception as e:
                 print(f"Error loading session {session_path}: {e}")
                 btn_label = f"Session {i+1}"
-            visible = True
+            button_updates.append(gr.update(value=btn_label, visible=True))
         else:
-            btn_label = ""
-            visible = False
-        
-        button_updates.append(gr.update(value=btn_label, visible=visible))
+            button_updates.append(gr.update(value="", visible=False))
     
     return button_updates
 
@@ -531,39 +535,70 @@ def format_session_id(session_id):
         return session_id
 
 def update_action_buttons(phase, has_ai_response=False):
-    """Update action buttons based on interaction phase."""
-    configs = {
-        "waiting_for_input": {
-            "no_history": ("Send Input", "secondary", ["send-button-green"], True, False, False, False, False),
-            "has_history": ("Send Input", "secondary", ["send-button-green"], True, True, True, False, False)
-        },
-        "input_submitted": (None, None, None, False, False, False, True, False),
-        "generating_response": (None, None, None, False, False, False, False, True),
-        "speaking": (None, None, None, False, False, False, False, True)
-    }
+    """Update action buttons based on interaction phase.
     
+    Returns 5 gr.update() objects for:
+    - action: Main action button (Send Input when waiting, hidden during generation)
+    - edit_previous: Edit previous message button
+    - copy_response: Copy last AI response button  
+    - cancel_input: Hidden placeholder (never visible)
+    - cancel_response: Wait indicator shown during generation
+    """
+    # Config tuple format: (action_visible, edit_visible, copy_visible, wait_visible)
     if phase == "waiting_for_input":
-        config = configs[phase]["has_history" if has_ai_response else "no_history"]
-    else:
-        config = configs.get(phase, configs["waiting_for_input"]["no_history"])
-    
-    updates = []
-    for i, (value, variant, classes, interactive, visible) in enumerate([
-        (config[0], config[1], config[2], True, config[3]),
-        (None, "primary", [], True, config[4]),
-        (None, "primary", [], True, config[5]),
-        ("Cancel Input", "primary", [], True, config[6]),
-        ("Cancel Response", "stop", ["send-button-red"], True, config[7])
-    ]):
-        if i == 0:
-            updates.append(gr.update(
-                value=value if value else gr.update(),
-                variant=variant if variant else "secondary",
-                elem_classes=classes,
-                visible=visible
-            ))
+        if has_ai_response:
+            # Has history: show Send, Edit, Copy; hide Wait
+            action_visible, edit_visible, copy_visible, wait_visible = True, True, True, False
         else:
-            updates.append(gr.update(visible=visible))
+            # No history: show Send only; hide Edit, Copy, Wait
+            action_visible, edit_visible, copy_visible, wait_visible = True, False, False, False
+    elif phase in ("input_submitted", "generating_response", "speaking"):
+        # During generation: hide Send, Edit, Copy; show Wait
+        action_visible, edit_visible, copy_visible, wait_visible = False, False, False, True
+    else:
+        # Default fallback
+        action_visible, edit_visible, copy_visible, wait_visible = True, False, False, False
+    
+    # Determine action button appearance
+    if phase == "waiting_for_input":
+        action_value = "Send Input"
+        action_variant = "secondary"
+        action_classes = ["send-button-green"]
+        action_interactive = True
+    else:
+        action_value = "Send Input"
+        action_variant = "secondary"
+        action_classes = ["send-button-green"]
+        action_interactive = False
+    
+    # Determine wait indicator appearance
+    wait_variant = "primary"
+    wait_classes = []
+    
+    updates = [
+        # 0: action button
+        gr.update(
+            value=action_value,
+            variant=action_variant,
+            elem_classes=action_classes,
+            interactive=action_interactive,
+            visible=action_visible
+        ),
+        # 1: edit_previous
+        gr.update(visible=edit_visible),
+        # 2: copy_response
+        gr.update(visible=copy_visible),
+        # 3: cancel_input - always hidden placeholder
+        gr.update(visible=False),
+        # 4: cancel_response (wait indicator)
+        gr.update(
+            value="..Wait For Response..",
+            variant=wait_variant,
+            elem_classes=wait_classes,
+            interactive=False,
+            visible=wait_visible
+        )
+    ]
     
     return updates
 
@@ -834,22 +869,34 @@ def conversation_interface(
         )
         return
 
-    # RAG processing for large inputs
-    context_threshold = temporary.LARGE_INPUT_THRESHOLD
-    max_input_chars = int(temporary.CONTEXT_SIZE * 3 * context_threshold)
+    # Determine if there's existing AI response history (before we add new message)
+    has_ai_response = len([m for m in session_messages if m.get('role') == 'assistant']) > 0
+    interaction_phase = "input_submitted"
+    
+    # Initialize variables that will be built in phases
+    processed_input = user_input
+    file_contents_section = ""
+    complete_user_message = ""
+    search_results = None
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PHASE 0: Handle Input - Validate and prepare input
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    yield (
+        session_tuples, session_messages, "",
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0, web_search_enabled, speech_enabled)),
+        *update_action_buttons("input_submitted", has_ai_response),
+        cancel_flag, loaded_files, "input_submitted",
+        gr.update(), gr.update(), gr.update()
+    )
+
+    
+    # PHASE 1: Build Prompt - Process user input and attached files
     
     processed_input = user_input
-    if len(user_input) > max_input_chars:
-        try:
-            context_injector.add_temporary_input(user_input)
-            processed_input = user_input[:1000] + "\n\n[Large input processed with RAG]"
-        except Exception as e:
-            print(f"[RAG-TEMP] Error: {e}")
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # NEW: Read and append attached file contents to the prompt
-    # ─────────────────────────────────────────────────────────────────────────
     file_contents_section = ""
+    
     if loaded_files:
         file_parts = []
         for file_path in loaded_files:
@@ -858,11 +905,9 @@ def conversation_interface(
                 filename = Path(file_path).name
                 
                 if success and file_type == "text":
-                    # Truncate very large files for display (keep full in RAG)
                     display_content = content[:8000] + "\n[...truncated...]" if len(content) > 8000 else content
                     file_parts.append(f"\n\n--- Attached File: {filename} ---\n{display_content}")
                 elif success and file_type == "image":
-                    # Images handled separately for vision models
                     file_parts.append(f"\n\n--- Attached Image: {filename} ---\n[Image attached for vision processing]")
                 else:
                     file_parts.append(f"\n\n--- Attached File: {filename} ---\n[Error reading file: {error}]")
@@ -872,8 +917,77 @@ def conversation_interface(
         
         if file_parts:
             file_contents_section = "\n".join(file_parts)
-    # ─────────────────────────────────────────────────────────────────────────
+    
+    yield (
+        session_tuples, session_messages, "",
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, web_search_enabled, speech_enabled)),
+        *update_action_buttons("input_submitted", has_ai_response),
+        cancel_flag, loaded_files, "input_submitted",
+        gr.update(), gr.update(), gr.update()
+    )
 
+    
+    # PHASE 2: Inject RAG - Process large inputs through RAG system
+    
+    context_threshold = temporary.LARGE_INPUT_THRESHOLD
+    max_input_chars = int(temporary.CONTEXT_SIZE * 3 * context_threshold)
+    
+    if len(user_input) > max_input_chars:
+        try:
+            context_injector.add_temporary_input(user_input)
+            processed_input = user_input[:1000] + "\n\n[Large input processed with RAG]"
+        except Exception as e:
+            print(f"[RAG-TEMP] Error: {e}")
+    
+    yield (
+        session_tuples, session_messages, "",
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, web_search_enabled, speech_enabled)),
+        *update_action_buttons("input_submitted", has_ai_response),
+        cancel_flag, loaded_files, "input_submitted",
+        gr.update(), gr.update(), gr.update()
+    )
+
+    
+    # PHASE 3: Add System - Build complete user message with file contents
+    
+    complete_user_message = processed_input
+    if file_contents_section:
+        complete_user_message = processed_input + file_contents_section
+    
+    yield (
+        session_tuples, session_messages, "",
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, web_search_enabled, speech_enabled)),
+        *update_action_buttons("input_submitted", has_ai_response),
+        cancel_flag, loaded_files, "input_submitted",
+        gr.update(), gr.update(), gr.update()
+    )
+
+    
+    # PHASE 4: Assemble History - Add message to session and update display
+    
+    session_messages = list(session_messages) if session_messages else []
+    session_messages.append({'role': 'user', 'content': complete_user_message})
+    
+    session_tuples = list(session_tuples) if session_tuples else []
+    user_display = f"User:\n{complete_user_message}"
+    session_tuples.append((user_display, None))
+    
+    has_ai_response = len([m for m in session_messages[:-1] if m.get('role') == 'assistant']) > 0
+    interaction_phase = "input_submitted"
+    
+    yield (
+        session_tuples, session_messages, "",
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(4, web_search_enabled, speech_enabled)),
+        *update_action_buttons("input_submitted", has_ai_response),
+        cancel_flag, loaded_files, "input_submitted",
+        gr.update(), gr.update(), gr.update()
+    )
+
+    
+    # PHASE 5: Check Model - Get model settings and prepare for generation
+    
+    model_settings = get_model_settings(temporary.MODEL_NAME)
+    
     # Web search if enabled
     search_results = None
     if web_search_enabled and user_input.strip():
@@ -891,43 +1005,14 @@ def conversation_interface(
         except Exception as e:
             print(f"[WEB-SEARCH] Error: {e}")
             search_results = f"Web search error: {str(e)}"
-
-    # Build the complete user message (prompt + file contents)
-    complete_user_message = processed_input
-    if file_contents_section:
-        complete_user_message = processed_input + file_contents_section
-
-    # Add user message to internal state (includes file contents)
-    session_messages = list(session_messages) if session_messages else []
-    session_messages.append({'role': 'user', 'content': complete_user_message})
     
-    # Update tuples for display WITH "User:" label (show file attachments in display)
-    session_tuples = list(session_tuples) if session_tuples else []
-    user_display = f"User:\n{complete_user_message}"
-    session_tuples.append((user_display, None))
-    
-    has_ai_response = len([m for m in session_messages[:-1] if m.get('role') == 'assistant']) > 0
-    interaction_phase = "input_submitted"
-
-    # YIELD 1: Show user message + progress
     yield (
         session_tuples, session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0, web_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, web_search_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
     )
-
-    # Fast progression through phases 1-5 (Handle Input through Check Model)
-    for current_phase in range(1, 6):
-        yield (
-            session_tuples, session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(current_phase, web_search_enabled, speech_enabled)),
-            *update_action_buttons("input_submitted", has_ai_response),
-            cancel_flag, loaded_files, "input_submitted",
-            gr.update(), gr.update(), gr.update()
-        )
-        time.sleep(0.05)
 
     # Web search phases (if enabled) - phases 6 and 7
     if web_search_enabled:
@@ -1024,7 +1109,7 @@ def conversation_interface(
     # Add label for display
     session_tuples[-1] = (session_tuples[-1][0], f"AI-Chat:\n{formatted_response}")
 
-    # ────────────────────────────── NEW SESSION CREATION + AUTO-SAVE ──────────────────────────────
+    #  NEW SESSION CREATION + AUTO-SAVE 
     if accumulated_response.strip():  # Only save if we actually got a meaningful response
         if not temporary.SESSION_ACTIVE:
             # This is the very first response → create new session
@@ -1039,7 +1124,7 @@ def conversation_interface(
             print("[SESSION] Auto-saved after complete response")
         except Exception as e:
             print(f"[SESSION] Save error: {e}")
-    # ──────────────────────────────────────────────────────────────────────────────────────────────
+    
 
     # Clear temporary RAG
     try:
@@ -1074,9 +1159,9 @@ def conversation_interface(
         except Exception as e:
             print(f"[TTS] Error: {e}")
 
-    # ─────────────────────────────────────────────────────────────────────────
+    
     # FIXED: Clear attached files after successful response
-    # ─────────────────────────────────────────────────────────────────────────
+    
     cleared_files = []  # Empty the attached files list
     temporary.session_attached_files = []  # Also clear the global tracker
     
@@ -1255,8 +1340,8 @@ def launch_interface():
                             action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=10)
                             action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", scale=1, visible=False)
                             action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1, visible=False)
-                            action_buttons["cancel_input"] = gr.Button("Cancel Input", variant="primary", scale=1, visible=False)
-                            action_buttons["cancel_response"] = gr.Button("Cancel Response", variant="stop", scale=1, visible=False)
+                            action_buttons["cancel_input"] = gr.Button("", variant="primary", scale=1, visible=False)  # Hidden placeholder for output compatibility
+                            action_buttons["cancel_response"] = gr.Button("..Wait For Response..", variant="primary", scale=1, visible=False)
 
                     # RIGHT PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as right_column_expanded:
@@ -1662,7 +1747,7 @@ def launch_interface():
             outputs=[interaction_global_status, config_global_status]
         )
 
-        # Save settings
+        # Save settings - with dynamic UI update
         def handle_save_wrapper(
             max_hist, height, max_att, show_think, print_raw, bleep,
             ctx, batch, temp, repeat, vram, gpu, cpu, cpu_threads, model, model_path,
@@ -1674,6 +1759,26 @@ def launch_interface():
                 layer_mode
             )
             return result, result
+        
+        def update_ui_after_save():
+            """Update UI components to reflect new settings."""
+            # Update session log height
+            session_log_update = gr.update(height=temporary.SESSION_LOG_HEIGHT)
+            
+            # Update history slot visibility
+            history_updates = update_session_buttons()
+            
+            # Update attach slot visibility based on new MAX_ATTACH_SLOTS
+            attach_updates = []
+            for i in range(temporary.MAX_POSSIBLE_ATTACH_SLOTS):
+                # Slots beyond the new max should be hidden
+                if i >= temporary.MAX_ATTACH_SLOTS:
+                    attach_updates.append(gr.update(visible=False))
+                else:
+                    attach_updates.append(gr.update())  # Keep current state
+            attach_updates.append(gr.update())  # Upload button stays as-is
+            
+            return [session_log_update] + history_updates + attach_updates
         
         config_components["save_settings"].click(
             fn=handle_save_wrapper,
@@ -1699,6 +1804,10 @@ def launch_interface():
                 layer_allocation_radio
             ],
             outputs=[interaction_global_status, config_global_status]
+        ).then(
+            fn=update_ui_after_save,
+            inputs=[],
+            outputs=[conversation_components["session_log"]] + buttons["session"] + attach_slots + [attach_files]
         )
 
         # Delete all history
