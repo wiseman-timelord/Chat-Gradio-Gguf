@@ -299,11 +299,11 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - Suitable GPU - Gpu may be, Main or Compute, with VRam selection 756MB-64GB. It must have Vulkan capability/drivers (if the installer contains files referring to Vulkan).  
 - System Ram - Your system should cover the size of the model not able to be covered by the GPU (ie, 4GB card for 4B model in Q6_K, 16GB card for 16b model in Q6_K).
 
-## Graphics Requirements
+### Graphics Requirements
 GPU interference is done through (have a guess) Vulkan...
 - Vulkan - For vulkan install options you must install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
 
-## Building Requirements 
+### Building Requirements 
 For compile options; If on PATH, ask AI how to check its on path, and as applicable fix...
 - MSVC 2017-2019 - MSVC with option Desktop Development enabled during install.
 - MS Build Tools - Also for building, ensure its on PATH.
