@@ -243,9 +243,12 @@ def format_response(output: str) -> str:
             except:
                 pass
     
-    # Clean up whitespace
+    # Clean up whitespace - AGGRESSIVE fix for Qt WebEngine double-spacing
     clean_output = clean_output.replace('\r\n', '\n')
-    clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)
+    clean_output = clean_output.replace('\r', '\n')
+    # Collapse any run of 2+ blank lines to exactly 1 blank line
+    clean_output = re.sub(r'\n\s*\n', '\n\n', clean_output)  # Normalize blank lines first
+    clean_output = re.sub(r'\n{2,}', '\n\n', clean_output)   # Then collapse to max 2 newlines
     clean_output = clean_output.strip()
     
     if formatted:
@@ -1234,6 +1237,11 @@ def launch_interface():
         .send-button-red { background-color: red !important; color: white !important }
         .scrollable .message { white-space: pre-wrap; word-break: break-word; }
         .hide-label { display:none !important; }
+        /* FIX: Reduce extra blank lines in Qt WebEngine rendering */
+        .message p { margin-top: 0.3em !important; margin-bottom: 0.3em !important; }
+        .message br + br { display: none !important; }
+        /* Alternative fix for pre-formatted text appearance */
+        .message { line-height: 1.4 !important; }
         .progress-indicator { 
             font-family: monospace; 
             font-size: 14px; 
