@@ -388,19 +388,13 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 1.W. Download a "Release" version, when its available, and unpack to a sensible directory, such as, `C:\Programs\Chat-Windows-Gguf` or `C:\Program_Files\Chat-Windows-Gguf`, (try not to use spaces). 
 1.U. Download a "Release" version, when its available, and unpack to a sensible directory, such as, `/media/**UserName**/Programs_250/Chat-Gradio-Gguf`, (try not to use spaces).
 2.W. Right click the file `Chat-Windows-Gguf.bat`, and `Run as Admin`, the Batch Menu will then load, then select `2` from the Batch Menu, to begin installation. You will be prompted to select a Llama.Cpp version to install, which should be done based on your hardware. After which, the install will begin, wherein Python requirements will install to a `.\venv` folder. After the install completes, check for any install issues, you may need to install again if there are.
-2.U. open a terminal in the created folder location, then make "Chat-Gradio-Gguf.sh" executable via `Right Mouse>Properties>Make Executable`. Then run `sudo bash ./Chat-Linux-Gguf.sh`, then select option `2. Run Installation` from the menu, this may take some time (hopefully work for you, or try it again best advice for now.).
-- There are now 6 install options for download/compile...
-1) Download CPU Binaries + Download  CPU Wheel (CPU_CPU)
-2) Compile CPU Binaries + Compile CPU Wheel (CPU_CPU)
-3) Download Vulkan Binaries + Download Cpu Wheel (VULKAN_CPU)
-4) Download Vulkan Binaries + Download Cpu Wheel  (Forced) (VULKAN_CPU) 
-5) Download Vulkan Binaries + Compile Vulkan Wheel (VULKAN_VULKAN)
-6) Compile Vulkan Binaries + Compile Vulkan Wheel   (VULKAN_VULKAN)
-3.W. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Windows-Gguf`. 
-3.U. Having returned to the bash menu after successful install, one would use option `1. Run Main Program`, to load the gradio interface in the popup browser window.
-4. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
-5. Go back to the `Interaction` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
-6. When all is finished, click `Exit` on the bottom right then close browser-tabs/terminals.
+2.U. open a terminal in the created folder location, then make "Chat-Gradio-Gguf.sh" executable via `Right Mouse>Properties>Make Executable`. Then run `sudo bash ./Chat-Linux-Gguf.sh`, then select option `2. Run Installation` from the menu.
+3 There are now 4 install options, download only or compile, cpu or gpu; If you do not have build apps installed then select 1/2, if you have build apps installed select 3/4, building for your hardware will provide 25-50% speed improvement.
+4.W. You will then be returned to the Batch Menu, where you, now and in future, select `1` to run to run `Chat-Windows-Gguf`. 
+4.U. Having returned to the bash menu after successful install, one would use option `1. Run Main Program`, to load the gradio interface in the popup browser window.
+5. You will then be greeted with the `Interaction` page, but you will first be going to the `Configuration` page. On the `Configuration` page you would configure appropriately, its all straight forwards, but remember to save settings and load model. If the model loads correctly it will say so in the `Status Bar` on the bottom od the display.
+6. Go back to the `Interaction` page and begin interactions, ensuring to notice features available, and select appropriately for your, specific model and use cases.
+7. When all is finished, click `Exit` on the bottom right, then `x` to exit terminals.
 ```
 
 ### Notation 
