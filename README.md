@@ -192,9 +192,6 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Validation of Install (v0.98.0)..
-<details>
-    
     ===============================================================================
         Chat-Gradio-Gguf: Library Validation
     ===============================================================================
@@ -207,7 +204,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     System: windows 8.1
     Python: 3.11.0
-    Backend: CPU_CPU
+    Backend: VULKAN_CPU
     Embedding: BAAI/bge-small-en-v1.5
     
     === Directory Validation ===
@@ -229,14 +226,14 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
       V utility.py
     
     === Configuration Validation ===
-      V constants.ini valid (Backend: CPU_CPU)
+      V constants.ini valid (Backend: VULKAN_CPU)
       V persistent.json valid
     
     === Virtual Environment Validation ===
       V Virtual environment OK
     
     === Backend Binary Validation ===
-      V Python bindings mode: No binary needed
+      V llama-cli found: llama-cli.exe
     
     === Core Library Validation ===
       V gradio
@@ -267,8 +264,10 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     === Embedding Model Validation ===
       V Embedding model verified (BAAI/bge-small-en-v1.5)
     
-    === Browser Validation ===
-      V PyQt5-WebEngine installed (Win 8.1)
+    === Gradio & Custom Browser Check ===
+      Installer path: PyQt5 WebEngine
+      V Gradio import OK
+      V PyQt5 WebEngine import OK
     
     ==================================================
       Validation Summary
@@ -288,7 +287,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     All validations passed!
     
     Press Enter to exit...
-    
+        
 </details>
 
 ## Hard Requirements
