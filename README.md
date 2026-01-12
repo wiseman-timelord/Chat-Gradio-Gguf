@@ -23,10 +23,10 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
 
 ### Preview
-- The Interaction page (Qt-Web v5 shown), with Command Prompt in the background...
+- The Interaction page (Qt-Web v5 GUI and Qwen 3 model), with Command Prompt in the background...
 ![preview_image](media/conversation_page.jpg)
 
-- The collapseable Left/Right Panel on the Interaction page (click the C-G-G button)...
+- The collapseable Left/Right Panel on the Interaction page (click the `<->` button)...
 ![preview_image](media/conversation_expand.jpg)
 
 - The dynamic progress indication replaces the user input box upon submission...
@@ -35,37 +35,104 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The Configuration page, for configuration of, models, hardware, GUI, and other settings...
 ![preview_image](media/configuration_page.jpg)
 
-- Startup looks like this in the terminal/console (outdated)...
+- Startup looks like this in the terminal/console (ignore warnings) (v0.98.2)...
 <details>
     
     ===============================================================================
         Chat-Gradio-Gguf: Launcher
     ===============================================================================
     
-    Starting Chat-Gradio-Gguf..
-    Activated: .venv
+    Starting Chat-Gradio-Gguf...
+    Activated: `.venv`
+    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1_r2\.venv\Lib\site-pack
+    ages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is
+     deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+      warnings.warn(
     `main` Function Started.
-    Config loaded
-    Finding Models: ...2.5-Dyanka-7B-Preview-Uncensored-DeLMAT-GGUF
-    Models Found: ['Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT.Q6_K.gguf']
-    Script mode `linux` with backend `Vulkan`
-    Working directory: ...s_250/Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069
-    Data Directory: .../Chat-Gradio-Gguf/Chat-Gradio-Gguf-A069/data
-    Session History: ...adio-Gguf/Chat-Gradio-Gguf-A069/data/history
-    Temp Directory: ...-Gradio-Gguf/Chat-Gradio-Gguf-A069/data/temp
+    [INI] Platform: windows
+    [INI] Backend: VULKAN_CPU
+    [INI] Vulkan: True
+    [INI] Embedding Model: BAAI/bge-small-en-v1.5
+    [INI] Embedding Backend: sentence_transformers
+    [INI] Llama CLI Path: data/llama-vulkan-bin/llama-cli.exe
+    [INI] Llama Bin Path: data/llama-vulkan-bin
+    [INI] OS Version: 8.1
+    [INI] Windows Version: 8.1
+    [CONFIG] Model folder: F:/LargeModels/Size_Little_3b-4b/Qwen3-4B-abliterated-GGU
+    F
+    [CONFIG] Context: 8192, VRAM: 8192MB, Temp: 0.66
+    [CONFIG] Layer allocation: VRAM_SRAM
+    [CONFIG] UI: History=12, Attach=6, Height=1000
+    [CONFIG] SELECTED_GPU: Radeon (TM) RX 470 Graphics
+    [CONFIG] SELECTED_CPU: AMD Ryzen 9 3900X 12-Core Processor (12 cores, 24 threads
+    )
+    [CONFIG] MMAP: True
+    [CONFIG] MLOCK: False
+    [CONFIG] BATCH_SIZE: 1024
+    [CONFIG] DYNAMIC_GPU_LAYERS: True
+    [MODELS] Scanning directory: ...\Size_Little_3b-4b\Qwen3-4B-abliterated-GGUF
+    [MODELS] V Found 1 models:
+    [MODELS]   - Qwen3-4B-abliterated-q6_k_m.gguf
+    [CONFIG] Found 1 models in F:/LargeModels/Size_Little_3b-4b/Qwen3-4B-abliterated
+    -GGUF
+    [CONFIG] Saved model name: Qwen3-4B-abliterated-q6_k_m.gguf
+    [CONFIG] Model 'Qwen3-4B-abliterated-q6_k_m.gguf' found and selected
+    Configuration loaded
+    [CONFIG] ==================== Load Complete ====================
+    [Vulkan] GGML_CUDA_NO_PINNED=1   (frees ~300 MB VRAM)
+    [Vulkan] GGML_VK_NO_PIPELINE_CACHE=0  (cached SPIR-V pipelines)
+    Script mode `windows` with backend `VULKAN_CPU`
+    Working directory: ...\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1_r2
+    Data Directory: ...-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1_r2\data
+    Session History: ...Gguf\Chat-Gradio-Gguf-0.98.1_r2\data\history
+    Temp Directory: ...io-Gguf\Chat-Gradio-Gguf-0.98.1_r2\data\temp
+    [CPU] Detected: 12 cores, 24 threads
+    [CPU] Current: 20
     CPU Configuration: 12 physical cores, 24 logical cores
     
     Configuration:
-      Backend: Vulkan
-      Model: Qwen2.5-Dyanka-7B-Preview-Uncensored-DeLMAT.Q6_K.gguf
-      Context Size: 49152
+      Backend: VULKAN_CPU
+      Model: Qwen3-4B-abliterated-q6_k_m.gguf
+      Context Size: 8192
       VRAM Allocation: 8192 MB
       CPU Threads: 20
       GPU Layers: 0
     
+    [INIT] Pre-loading auxiliary models...
+    [INIT] OK spaCy model pre-loaded
+    [RAG] Cache directory: C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1
+    _r2\data\embedding_cache
+    [RAG] Attempting to load (offline): BAAI/bge-small-en-v1.5
+    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1_r2\.venv\Lib\site-pack
+    ages\huggingface_hub\file_download.py:942: FutureWarning: `resume_download` is d
+    eprecated and will be removed in version 1.0.0. Downloads always resume when pos
+    sible. If you want to force a new download, use `force_download=True`.
+      warnings.warn(
+    [RAG] Successfully loaded: BAAI/bge-small-en-v1.5
+    [INIT] OK Embedding model pre-loaded from cache
+    
     Launching Gradio Interface...
-    * Running on local URL:  http://127.0.0.1:7860
-    * To create a public link, set `share=True` in `launch()`.
+    [BROWSER] Starting Gradio server in background...
+    [BROWSER] Waiting for Gradio server at http://localhost:7860...
+    Running on local URL:  http://localhost:7860
+    
+    To create a public link, set `share=True` in `launch()`.
+    IMPORTANT: You are using gradio version 3.50.2, however version 4.44.1 is availa
+    ble, please upgrade.
+    --------
+    [BROWSER] Gradio server is ready
+    [BROWSER] Launching at http://localhost:7860/?__theme=dark
+    [BROWSER] Platform: windows, Windows Version: 8.1
+    [BROWSER] Windows 8.1 detected - using Qt5 WebEngine
+    [BROWSER] Loading URL: http://localhost:7860/?__theme=dark
+    [BROWSER] Qt5 WebEngine window created
+    Updating model list with new_dir: F:/LargeModels/Size_Little_3b-4b/Qwen3-4B-abli
+    terated-GGUF
+    [MODELS] Scanning directory: ...\Size_Little_3b-4b\Qwen3-4B-abliterated-GGUF
+    [MODELS] V Found 1 models:
+    [MODELS]   - Qwen3-4B-abliterated-q6_k_m.gguf
+    Choices returned: ['Qwen3-4B-abliterated-q6_k_m.gguf'], Setting value to: Qwen3-
+    4B-abliterated-q6_k_m.gguf
 
 </details>
 
