@@ -1,7 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
 ### Status
-Beta - Working fine on v0.98.1 on Windows 8.1; major work has been done since 0.97.x, attending to all remaining issues AND significantly enhance operation, its an Opus of an overhaul, and its not over yet!
+Beta - Working fine on v0.98.1 on my Windows 8.1 system; major work has been done since 0.97.x, attending to all remaining issues AND significantly enhance operation, its an Opus of an overhaul, and its not over yet!
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13 (3.14+ is unknown). An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models. The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration. 
