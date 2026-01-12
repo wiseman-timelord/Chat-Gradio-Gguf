@@ -291,7 +291,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
 </details>
 
-## Requirements
+## Hard Requirements
 - Windows 7-11 and/or ~Ubuntu 22-25, Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
 - Llama.Cpp - Options here for, Vulkan or X64. This has been limited to what I can test (though its possible to replace llama.cpp with for eg Cuda12).
 - Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
@@ -299,7 +299,11 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - Suitable GPU - Gpu may be, Main or Compute, with VRam selection 756MB-64GB. It must have Vulkan capability/drivers (if the installer contains files referring to Vulkan).  
 - System Ram - Your system should cover the size of the model not able to be covered by the GPU (ie, 4GB card for 4B model in Q6_K, 16GB card for 16b model in Q6_K).
 
-## Additional Requirements 
+## Graphics Requirements
+GPU interference is done through (have a guess) Vulkan...
+- Vulkan - For vulkan install options you must install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
+
+## Building Requirements 
 For compile options; If on PATH, ask AI how to check its on path, and as applicable fix...
 - MSVC 2017-2019 - MSVC with option Desktop Development enabled during install.
 - MS Build Tools - Also for building, ensure its on PATH.
@@ -335,7 +339,6 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 - Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
 - The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know.
-- For Vulkan installations, you must install the Vulkan SDK, it may come with your graphics card, otherwise you must go here [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
 - VRAM dropdown, 1GB to 64GB in steps, this should be your FREE ram available on the selected card, if you are using the card at the time then this is why we have for example, 6GB for a 8GB GPU in use, safely allowing 2GB for the system, while in compute more one would use for example, the full 8GB on the 8GB GPU.
 - I advise GPU can cover the Q6_K version, the Q6_K useually has negligable quality loss, while allowing good estimation of if the model will fit on a card, ie 8GB card will typically be mostly/completely cover a 7B/8B model in Q6_K compression, with a little extra to display the gradio interface, so the numbers somewhat relate with Q6_K when using same card as display.
 - We use a `1.125` additional to model size for layers to fit on VRAM,  the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
