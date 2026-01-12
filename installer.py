@@ -225,28 +225,36 @@ else:  # Linux
         }
     }
 
-# Python requirements using sentence-transformers for cross-platform compatibility
+# Python requirements - gradio/qt-web/torch/sentence_transformers are dynamically added based on OS/Python version
 BASE_REQ = [
-    "numpy<2",  # Required: torch 2.2.2 incompatible with numpy 2.x
+    "numpy<2",                      # Required: torch 2.2.2 incompatible with numpy 2.x
     "requests==2.31.0",
-    "gradio==3.50.2",
-    "pyperclip",
+    "pyperclip==1.11.0",
     "spacy>=3.7.0",
-    "psutil",
-    "ddgs",
-    "newspaper3k",
-    "langchain-community>=0.3.18",
+    "psutil==7.2.1",
+    "ddgs==9.10.0",
+    "langchain-community>=0.3.18", 
     "faiss-cpu>=1.8.0",
-    "langchain>=0.3.18",
+    "langchain>=0.3.18",            
     "pygments==2.17.2",
-    "lxml[html_clean]",
-    "lxml_html_clean",
-    "pyttsx3",
-    "tokenizers",
+    "lxml[html_clean]==6.0.2",
+    "lxml_html_clean==0.4.3",
+    "pyttsx3==2.99",
+    "tokenizers==0.22.2",
 ]
 
 if PLATFORM == "windows":
-    BASE_REQ.extend(["pywin32", "tk", "pythonnet"])
+    BASE_REQ.extend([
+        "pywin32==311",
+        "tk==0.1.0",
+        "pythonnet==3.0.5",
+    ])
+
+# newspaper4k requires Python 3.10+, 3.9 → must fallback
+if sys.version_info >= (3, 10):
+    BASE_REQ.append("newspaper4k==0.9.4.1")     # latest stable as of Jan 2026
+else:
+    BASE_REQ.append("newspaper3k==0.2.8")  
 
 # Functions...
 def backend_requires_compilation(backend: str) -> bool:
@@ -344,6 +352,79 @@ def detect_version_selections() -> None:
         except:
             SELECTED_GRADIO = "5.49.1"
             SELECTED_QTWEB = "v6"
+
+def get_dynamic_requirements() -> list:
+    """
+    Build requirements list with dynamic gradio version based on OS.
+    
+    Version Matrix:
+    - Windows 7/8/8.1 + Ubuntu 22/23: Gradio 3.50.2, Qt5, Python 3.9-3.11
+    - Windows 10/11 + Ubuntu 24/25: Gradio 5.49.1, Qt6, Python 3.10-3.14
+    """
+    global SELECTED_GRADIO, SELECTED_QTWEB
+    
+    # Ensure version selections are populated
+    if not SELECTED_GRADIO:
+        detect_version_selections()
+    
+    requirements = BASE_REQ.copy()
+    
+    # Add gradio with correct version
+    if SELECTED_GRADIO == "3.50.2":
+        requirements.append("gradio==3.50.2")
+    else:
+        requirements.append("gradio>=5.49.1")
+    
+    return requirements
+
+def get_qt_version_for_os() -> tuple:
+    """
+    Determine Qt version based on OS.
+    
+    Returns:
+        tuple: (qt_major_version, use_qt5: bool)
+        
+    Version Matrix:
+    - Windows 7/8/8.1: Qt5 (PyQt5 + PyQtWebEngine)
+    - Windows 10/11: Qt6 (PyQt6 + PyQt6-WebEngine)
+    - Ubuntu 22/23: Qt5 (PyQt5 + PyQtWebEngine)
+    - Ubuntu 24/25: Qt6 (PyQt6 + PyQt6-WebEngine)
+    """
+    if PLATFORM == "windows":
+        win_ver = detect_windows_version()
+        if win_ver in ["7", "8", "8.1"]:
+            return (5, True)
+        else:
+            return (6, False)
+    else:  # Linux
+        linux_ver = detect_linux_version()
+        try:
+            major_ver = int(linux_ver.split('.')[0]) if linux_ver != "unknown" else 24
+            if major_ver < 24:
+                return (5, True)
+            else:
+                return (6, False)
+        except (ValueError, AttributeError):
+            return (6, False)
+
+def get_torch_version_for_python() -> str:
+    """
+    Get appropriate torch version for the Python version.
+    
+    Returns:
+        str: torch version specifier with index URL
+        
+    Compatibility:
+    - Python 3.9-3.11: torch==2.2.2+cpu (stable, wide compatibility)
+    - Python 3.12+: torch>=2.4.0+cpu (required for 3.12+ support)
+    """
+    py_minor = sys.version_info.minor
+    
+    if py_minor <= 11:
+        return "torch==2.2.2+cpu"
+    else:
+        # Python 3.12+ requires torch 2.4.0+
+        return "torch>=2.4.0"
 
 def detect_all_pythons() -> dict:
     """Detect all Python installations and select optimal version for OS compatibility."""
@@ -909,7 +990,15 @@ def create_system_ini(platform: str, os_version: str, python_version: str,
                      backend_type: str, embedding_model: str,
                      windows_version: str = None, vulkan_available: bool = False,
                      llama_cli_path: str = None, llama_bin_path: str = None):
-    """Create constants.ini with platform and version information"""
+    """Create constants.ini with platform, version, and compatibility information."""
+    global SELECTED_GRADIO, SELECTED_QTWEB
+    
+    # Ensure version selections are populated
+    if not SELECTED_GRADIO:
+        detect_version_selections()
+    
+    qt_version, _ = get_qt_version_for_os()
+    
     system_ini_path = BASE_DIR / "data" / "constants.ini"
     try:
         with open(system_ini_path, "w") as f:
@@ -921,6 +1010,9 @@ def create_system_ini(platform: str, os_version: str, python_version: str,
             f.write(f"embedding_model = {embedding_model}\n")
             f.write(f"embedding_backend = sentence_transformers\n")
             f.write(f"vulkan_available = {str(vulkan_available).lower()}\n")
+            # Add version compatibility info for main program
+            f.write(f"gradio_version = {SELECTED_GRADIO}\n")
+            f.write(f"qt_version = {qt_version}\n")
             if llama_cli_path:
                 f.write(f"llama_cli_path = {llama_cli_path}\n")
             if llama_bin_path:
@@ -1055,16 +1147,36 @@ def verify_backend_dependencies(backend: str) -> bool:
     return True
 
 def install_linux_system_dependencies(backend: str) -> bool:
+    """Install Linux system dependencies including Qt5/Qt6 based on Ubuntu version."""
     if PLATFORM != "linux":
         return True
+    
     print_status("Installing Linux system dependencies...")
+    
+    qt_version, use_qt5 = get_qt_version_for_os()
+    
     base_packages = [
         "build-essential", "cmake", "python3-venv", "python3-dev",
         "portaudio19-dev", "libasound2-dev", "python3-tk",
-        "espeak", "libespeak-dev", "ffmpeg", "xclip",
-        # Qt6 WebEngine dependencies for Linux
-        "libxcb-cursor0", "libxkbcommon0", "libegl1", "libgl1",
+        "espeak", "libespeak-dev", "ffmpeg", "xclip", "beep",
     ]
+    
+    # Qt dependencies based on version
+    if use_qt5:
+        qt_packages = [
+            "libxcb-xinerama0", "libxkbcommon0", "libegl1", "libgl1",
+            "qt5-default", "libqt5webengine5", "libqt5webenginewidgets5",
+        ]
+        # Fallback packages for systems without qt5-default metapackage
+        qt_fallback = [
+            "qtbase5-dev", "qtwebengine5-dev",
+        ]
+    else:
+        qt_packages = [
+            "libxcb-cursor0", "libxkbcommon0", "libegl1", "libgl1",
+            "qt6-base-dev", "libqt6webenginecore6", "libqt6webenginewidgets6",
+        ]
+        qt_fallback = []
     
     info = BACKEND_OPTIONS[backend]
     vulkan_packages = []
@@ -1080,6 +1192,24 @@ def install_linux_system_dependencies(backend: str) -> bool:
         subprocess.run(["sudo", "apt-get", "update"], check=True)
         subprocess.run(["sudo", "apt-get", "install", "-y"] + list(set(base_packages)), check=True)
         print_status("Base dependencies installed")
+        
+        # Install Qt dependencies
+        print_status(f"Installing Qt{qt_version} dependencies...")
+        for package in qt_packages:
+            try:
+                subprocess.run(["sudo", "apt-get", "install", "-y", package], 
+                              check=True, capture_output=True)
+                print_status(f"  Installed {package}")
+            except subprocess.CalledProcessError:
+                print_status(f"  Package {package} not available, trying alternatives...", False)
+        
+        # Try fallback packages if needed
+        for package in qt_fallback:
+            try:
+                subprocess.run(["sudo", "apt-get", "install", "-y", package], 
+                              check=True, capture_output=True)
+            except subprocess.CalledProcessError:
+                pass  # Fallbacks are optional
         
         if vulkan_packages:
             print_status("Installing Vulkan development packages...")
@@ -1104,7 +1234,13 @@ def install_linux_system_dependencies(backend: str) -> bool:
         return False
 
 def install_embedding_backend() -> bool:
-    """Install torch + sentence-transformers for all platforms"""
+    """
+    Install torch + sentence-transformers for all platforms.
+    
+    Torch Version Matrix:
+    - Python 3.9-3.11: torch==2.2.2+cpu (stable, wide compatibility)
+    - Python 3.12+: torch>=2.4.0+cpu (required for 3.12+ support)
+    """
     print_status("Installing embedding backend (torch + sentence-transformers)...")
     
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
@@ -1112,26 +1248,45 @@ def install_embedding_backend() -> bool:
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                 ("pip.exe" if PLATFORM == "windows" else "pip"))
     
-    # Install PyTorch CPU-only pinned for Win 8.1+ / Ubuntu 22+ compatibility
-    print_status("Installing PyTorch 2.2.2 (CPU-only)...")
-    if not pip_install_with_retry(pip_exe, "torch==2.2.2+cpu", 
-                                   ["--index-url", "https://download.pytorch.org/whl/cpu"],
-                                   max_retries=10, initial_delay=5.0):
-        print_status("PyTorch installation failed after retries", False)
-        return False
-    print_status("PyTorch 2.2.2 (CPU) installed")
+    # Determine torch version based on Python version
+    torch_spec = get_torch_version_for_python()
+    py_minor = sys.version_info.minor
     
-    # Install transformers (pinned)
-    print_status("Installing transformers 4.41.2...")
-    if not pip_install_with_retry(pip_exe, "transformers==4.41.2", 
+    # Install PyTorch with correct version for Python
+    if py_minor <= 11:
+        print_status(f"Installing PyTorch 2.2.2 (CPU-only) for Python 3.{py_minor}...")
+        if not pip_install_with_retry(pip_exe, "torch==2.2.2+cpu", 
+                                       ["--index-url", "https://download.pytorch.org/whl/cpu"],
+                                       max_retries=10, initial_delay=5.0):
+            print_status("PyTorch installation failed after retries", False)
+            return False
+        print_status("PyTorch 2.2.2 (CPU) installed")
+        transformers_version = "transformers==4.41.2"
+        sentence_transformers_version = "sentence-transformers==3.0.1"
+    else:
+        # Python 3.12+ needs newer torch
+        print_status(f"Installing PyTorch 2.4+ (CPU-only) for Python 3.{py_minor}...")
+        if not pip_install_with_retry(pip_exe, "torch>=2.4.0", 
+                                       ["--index-url", "https://download.pytorch.org/whl/cpu"],
+                                       max_retries=10, initial_delay=5.0):
+            print_status("PyTorch installation failed after retries", False)
+            return False
+        print_status("PyTorch 2.4+ (CPU) installed")
+        # Newer torch needs newer transformers/sentence-transformers
+        transformers_version = "transformers>=4.42.0"
+        sentence_transformers_version = "sentence-transformers>=3.0.0"
+    
+    # Install transformers
+    print_status(f"Installing {transformers_version}...")
+    if not pip_install_with_retry(pip_exe, transformers_version, 
                                    max_retries=10, initial_delay=5.0):
         print_status("transformers installation failed", False)
         return False
     print_status("transformers installed")
     
     # Install sentence-transformers
-    print_status("Installing sentence-transformers 3.0.1...")
-    if not pip_install_with_retry(pip_exe, "sentence-transformers==3.0.1",
+    print_status(f"Installing {sentence_transformers_version}...")
+    if not pip_install_with_retry(pip_exe, sentence_transformers_version,
                                    max_retries=10, initial_delay=5.0):
         print_status("sentence-transformers installation failed", False)
         return False
@@ -1158,7 +1313,7 @@ except Exception as e:
             f.write(verify_script)
             
         verify_result = subprocess.run(
-            [python_exe, str(verify_path)], capture_output=True, text=True, timeout=120  # Embeddings verification Timer
+            [python_exe, str(verify_path)], capture_output=True, text=True, timeout=120
         )
         verify_path.unlink(missing_ok=True)
         
@@ -1174,34 +1329,37 @@ except Exception as e:
         return False
 
 def install_qt_webengine() -> bool:
-    """Install Qt WebEngine for custom browser Qt5 for Win 7-8.1, Qt6 for 10/11"""
+    """
+    Install Qt WebEngine for custom browser.
+    
+    Version Matrix:
+    - Windows 7/8/8.1: PyQt5 + PyQtWebEngine (Qt5)
+    - Windows 10/11: PyQt6 + PyQt6-WebEngine (Qt6)
+    - Ubuntu 22/23: PyQt5 + PyQtWebEngine (Qt5)
+    - Ubuntu 24/25: PyQt6 + PyQt6-WebEngine (Qt6)
+    """
     print_status("Installing Qt WebEngine for custom browser...")
     
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                 ("pip.exe" if PLATFORM == "windows" else "pip"))
     
+    qt_version, use_qt5 = get_qt_version_for_os()
+    
     try:
-        if PLATFORM == "windows":
-            win_ver = detect_windows_version()
-            if win_ver in ["7", "8", "8.1"]:
-                print_status("Windows 7-8.1 - installing PyQt5 + Qt5 WebEngine...")
-                # Install PyQt5 and PyQtWebEngine separately with retry
-                if not pip_install_with_retry(pip_exe, "PyQt5>=5.15.0", max_retries=3, initial_delay=5.0):
-                    print_status("PyQt5 installation failed - will use system browser", False)
-                    return False
-                if not pip_install_with_retry(pip_exe, "PyQtWebEngine", max_retries=3, initial_delay=5.0):
-                    print_status("PyQtWebEngine installation failed - will use system browser", False)
-                    return False
-            else:
-                print_status(f"Windows {win_ver} - installing PyQt6 + Qt6 WebEngine...")
-                if not pip_install_with_retry(pip_exe, "PyQt6>=6.5.0", max_retries=3, initial_delay=5.0):
-                    print_status("PyQt6 installation failed - will use system browser", False)
-                    return False
-                if not pip_install_with_retry(pip_exe, "PyQt6-WebEngine>=6.5.0", max_retries=3, initial_delay=5.0):
-                    print_status("PyQt6-WebEngine installation failed - will use system browser", False)
-                    return False
+        if use_qt5:
+            os_name = f"Windows {detect_windows_version()}" if PLATFORM == "windows" else f"Ubuntu {detect_linux_version()}"
+            print_status(f"{os_name} - installing PyQt5 + Qt5 WebEngine...")
+            
+            if not pip_install_with_retry(pip_exe, "PyQt5>=5.15.0,<5.16.0", max_retries=3, initial_delay=5.0):
+                print_status("PyQt5 installation failed - will use system browser", False)
+                return False
+            if not pip_install_with_retry(pip_exe, "PyQtWebEngine>=5.15.0,<5.16.0", max_retries=3, initial_delay=5.0):
+                print_status("PyQtWebEngine installation failed - will use system browser", False)
+                return False
         else:
-            print_status("Linux - installing PyQt6 + Qt6 WebEngine...")
+            os_name = f"Windows {detect_windows_version()}" if PLATFORM == "windows" else f"Ubuntu {detect_linux_version()}"
+            print_status(f"{os_name} - installing PyQt6 + Qt6 WebEngine...")
+            
             if not pip_install_with_retry(pip_exe, "PyQt6>=6.5.0", max_retries=3, initial_delay=5.0):
                 print_status("PyQt6 installation failed - will use system browser", False)
                 return False
@@ -1209,7 +1367,7 @@ def install_qt_webengine() -> bool:
                 print_status("PyQt6-WebEngine installation failed - will use system browser", False)
                 return False
         
-        print_status("Qt WebEngine installed")
+        print_status(f"Qt{qt_version} WebEngine installed")
         return True
             
     except Exception as e:
@@ -1478,6 +1636,7 @@ def pip_install_with_retry(pip_exe: str, package: str, extra_args: list = None,
     return False
 
 def install_python_deps(backend: str) -> bool:
+    """Install Python dependencies with dynamic version selection."""
     print_status("Installing Python dependencies...")
     try:
         python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
@@ -1485,14 +1644,16 @@ def install_python_deps(backend: str) -> bool:
         pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                      ("pip.exe" if PLATFORM == "windows" else "pip"))
         
-        # Install base requirements, use system cache for speed
-        print_status("Installing base packages...")
-        total_packages = len(BASE_REQ)
-        for i, req in enumerate(BASE_REQ, 1):
+        # Get dynamic requirements with correct gradio version
+        requirements = get_dynamic_requirements()
+        
+        # Install base requirements
+        print_status(f"Installing base packages (Gradio {SELECTED_GRADIO})...")
+        total_packages = len(requirements)
+        for i, req in enumerate(requirements, 1):
             pkg_name = req.split('>=')[0].split('==')[0].split('[')[0]
             print(f"  [{i}/{total_packages}] Installing {pkg_name}...", end='', flush=True)
             
-            # Use cache (no --no-cache-dir) for faster installs
             if pip_install_with_retry(pip_exe, req, max_retries=10, initial_delay=5.0):
                 print(f" OK")
             else:
@@ -1502,7 +1663,7 @@ def install_python_deps(backend: str) -> bool:
         
         print_status("Base packages installed")
         
-        # Install embedding backend, torch + sentence-transformers
+        # Install embedding backend (torch + sentence-transformers)
         if not install_embedding_backend():
             return False
         
