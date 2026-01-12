@@ -598,6 +598,8 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         import scripts.temporary as tmp
         temporary.GPU_LAYERS = gpu_layers
         temporary.MODEL_NAME = model
+        temporary.LOADED_CONTEXT_SIZE = effective_ctx
+        print(f"[LOAD] Model context locked at {effective_ctx}")
         
         # Enhanced status for vision+thinking models
         status_parts = ["Model ready"]
@@ -676,11 +678,11 @@ def unload_models(llm_state, models_loaded_state):
     """Enhanced unload with aggressive Vulkan cleanup."""
     import gc
     import time
-    
+
     if not models_loaded_state or llm_state is None:
         temporary.set_status("Model off", console=True)
         return "Model off", None, False
-    
+
     try:
         # Explicit context cleanup
         if hasattr(llm_state, '_ctx') and llm_state._ctx is not None:
@@ -709,6 +711,7 @@ def unload_models(llm_state, models_loaded_state):
             time.sleep(0.3)
         
         temporary.set_status("Unloaded", console=True)
+        temporary.LOADED_CONTEXT_SIZE = None
         return "Model unloaded successfully.", None, False
         
     except Exception as e:
@@ -780,17 +783,18 @@ def update_thinking_phase_constants():
 
 def build_messages_with_context_management(session_log, system_message, context_size):
     """
-    Build the message list for the LLM.
-    The system message is injected **once**, at the very first turn, UNLESS:
-    - Model is Harmony/MOE (is_harmony=True) - these models don't use system prompts
-    - Model is code-focused (is_code=True) - these use instruct format only
-    System message is never shown in the Gradio chat log.
+    Build the message list for the LLM with proper context budget.
+    Uses LOADED_CONTEXT_SIZE if available, falls back to parameter.
     """
-    max_tokens   = context_size
-    system_tokens= len(system_message) // 4
-
-    available_for_history = int((max_tokens - system_tokens) * 0.30)
-    available_for_input   = int((max_tokens - system_tokens) * 0.60)
+    # Use actual loaded context, not UI setting
+    effective_ctx = temporary.LOADED_CONTEXT_SIZE or context_size
+    max_tokens = effective_ctx
+    system_tokens = len(system_message) // 4
+    
+    # More conservative allocation to leave room for response
+    available_for_history = int((max_tokens - system_tokens) * 0.25)
+    available_for_input = int((max_tokens - system_tokens) * 0.50)
+    # Reserve 25% for model response
 
     messages = []
 

@@ -243,12 +243,15 @@ def format_response(output: str) -> str:
             except:
                 pass
     
-    # Clean up whitespace - AGGRESSIVE fix for Qt WebEngine double-spacing
+    # Clean up whitespace
     clean_output = clean_output.replace('\r\n', '\n')
     clean_output = clean_output.replace('\r', '\n')
-    # Collapse any run of 2+ blank lines to exactly 1 blank line
-    clean_output = re.sub(r'\n\s*\n', '\n\n', clean_output)  # Normalize blank lines first
-    clean_output = re.sub(r'\n{2,}', '\n\n', clean_output)   # Then collapse to max 2 newlines
+    
+    # Convert \n\n to \n, then <p> to \n\n (intentional paragraph breaks)
+    clean_output = clean_output.replace('\n\n', '\n')
+    clean_output = clean_output.replace('<p>', '\n\n')
+    clean_output = clean_output.replace('</p>', '')
+    
     clean_output = clean_output.strip()
     
     if formatted:
