@@ -967,7 +967,7 @@ def create_config(backend: str, embedding_model: str) -> None:
             "mlock": False,
             "n_batch": 1024,
             "dynamic_gpu_layers": True,
-            "max_history_slots": 12,
+            "max_history_slots": 10,
             "max_attach_slots": 6,
             "session_log_height": 650,
             "show_think_phase": False,
