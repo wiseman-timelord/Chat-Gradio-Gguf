@@ -331,6 +331,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 ```
 
 ### Notation 
+- The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~50k+, and required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Total script weight made Grok/Claude go bonkers. 
 - Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
 - The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know.
