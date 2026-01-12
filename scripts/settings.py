@@ -33,7 +33,7 @@ DEFAULTS = {
     "REPEAT_OPTIONS": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
     "HISTORY_SLOT_OPTIONS": [4, 8, 10, 12, 16],
     "ATTACH_SLOT_OPTIONS": [2, 4, 6, 8, 10],
-    "SESSION_LOG_HEIGHT_OPTIONS": [450, 475, 500, 550, 650, 800, 1050, 1300],
+    "SESSION_LOG_HEIGHT_OPTIONS": [250, 450, 550, 600, 625, 650, 700, 800, 1000, 1400],
 }
 
 # Default configuration template
@@ -56,7 +56,7 @@ DEFAULT_CONFIG = {
         "dynamic_gpu_layers": True,
         "max_history_slots": 12,
         "max_attach_slots": 6,
-        "session_log_height": 500,
+        "session_log_height": 650,
         "show_think_phase": False,
         "print_raw_output": False,
         "cpu_threads": None,

@@ -82,38 +82,110 @@ def filter_operational_content(text):
     return text.strip()
 
 def beep():
-    """PC speaker beep if enabled."""
+    """
+    PC speaker beep if enabled.
+    Compatible with Windows 7-11 and Ubuntu 22-25.
+    Uses multiple fallback methods for maximum compatibility.
+    """
     if not getattr(temporary, "BLEEP_ON_EVENTS", False):
         return
     
     if temporary.PLATFORM == "windows":
+        # Windows: Try winsound.Beep first (direct PC speaker), then MessageBeep
         try:
             import winsound
-            winsound.Beep(1000, 120)
+            # winsound.Beep(frequency, duration_ms) - uses PC speaker
+            winsound.Beep(1000, 150)
             return
         except RuntimeError:
+            # RuntimeError occurs when no sound device - try MessageBeep
             try:
                 winsound.MessageBeep(winsound.MB_OK)
-            except Exception as e:
-                print(f"[BEEP] Sound unavailable: {e}")
+                return
+            except Exception:
+                pass
         except Exception as e:
-            print(f"[BEEP] Windows beep failed: {e}")
+            # Beep failed, try MessageBeep as fallback
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_OK)
+                return
+            except Exception:
+                pass
+            print(f"[BEEP] Windows beep unavailable: {e}")
     
     elif temporary.PLATFORM == "linux":
+        # Linux: Try multiple methods in order of preference
+        
+        # Method 1: beep utility (requires 'beep' package installed)
         try:
-            subprocess.run(
-                ['beep', '-f', '1000', '-l', '120'],
-                timeout=1, check=False,
+            result = subprocess.run(
+                ['beep', '-f', '1000', '-l', '150'],
+                timeout=2, check=False,
                 stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL
             )
-            return
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+            if result.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
+        
+        # Method 2: paplay with system sound (Ubuntu)
+        try:
+            sound_files = [
+                "/usr/share/sounds/freedesktop/stereo/complete.oga",
+                "/usr/share/sounds/freedesktop/stereo/message.oga",
+                "/usr/share/sounds/gnome/default/alerts/drip.ogg",
+                "/usr/share/sounds/sound-icons/prompt.wav",
+            ]
+            for sound_file in sound_files:
+                if os.path.exists(sound_file):
+                    result = subprocess.run(
+                        ['paplay', sound_file],
+                        timeout=2, check=False,
+                        stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL
+                    )
+                    if result.returncode == 0:
+                        return
+                    break
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
+        
+        # Method 3: sox play command for generated beep
+        try:
+            result = subprocess.run(
+                ['play', '-n', 'synth', '0.15', 'sin', '1000'],
+                timeout=2, check=False,
+                stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL
+            )
+            if result.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
+        
+        # Method 4: Terminal bell (works if terminal has audio bell enabled)
+        try:
+            print("\a", end="", flush=True)
             try:
-                print("\a", end="", flush=True)
-            except Exception as e:
-                print(f"[BEEP] Linux beep failed: {e}")
-        except Exception as e:
-            print(f"[BEEP] Linux beep error: {e}")
+                with open('/dev/tty', 'w') as tty:
+                    tty.write('\a')
+                    tty.flush()
+            except (PermissionError, FileNotFoundError, IOError):
+                pass
+            return
+        except Exception:
+            pass
+        
+        # Method 5: espeak can make a short sound
+        try:
+            result = subprocess.run(
+                ['espeak', '-s', '300', '-p', '99', 'beep'],
+                timeout=2, check=False,
+                stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL
+            )
+            if result.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
 
 def detect_cpu_config():
     """Detect CPU configuration and set thread options."""

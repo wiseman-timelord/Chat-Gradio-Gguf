@@ -29,7 +29,7 @@ from scripts.utility import (
     web_search, get_saved_sessions, get_cpu_info,
     load_session_history, save_session_history,
     get_available_gpus, filter_operational_content, speak_text, process_files,
-    summarize_session
+    summarize_session, beep
 )
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings, inspect_model, load_models
@@ -601,6 +601,8 @@ def handle_model_load(model_name, ctx, batch, vram, gpu, cpu, threads, llm_state
         
         if models_loaded:
             model_settings = get_model_settings(model_name)
+            # Beep to notify user model is ready
+            beep()
             return (
                 new_llm, 
                 True, 
@@ -664,25 +666,25 @@ def handle_customization_save(
 ):
     """Save ALL configuration settings to both temporary globals and persistent.json."""
     try:
-        # Program settings (customization)
-        temporary.MAX_HISTORY_SLOTS = int(max_hist)
-        temporary.SESSION_LOG_HEIGHT = int(height)
-        temporary.MAX_ATTACH_SLOTS = int(max_att)
-        temporary.SHOW_THINK_PHASE = bool(show_think)
-        temporary.PRINT_RAW_OUTPUT = bool(print_raw)
-        temporary.BLEEP_ON_EVENTS = bool(bleep)
+        # Program settings (customization) - with None checks and defaults
+        temporary.MAX_HISTORY_SLOTS = int(max_hist) if max_hist is not None else temporary.MAX_HISTORY_SLOTS
+        temporary.SESSION_LOG_HEIGHT = int(height) if height is not None else temporary.SESSION_LOG_HEIGHT
+        temporary.MAX_ATTACH_SLOTS = int(max_att) if max_att is not None else temporary.MAX_ATTACH_SLOTS
+        temporary.SHOW_THINK_PHASE = bool(show_think) if show_think is not None else temporary.SHOW_THINK_PHASE
+        temporary.PRINT_RAW_OUTPUT = bool(print_raw) if print_raw is not None else temporary.PRINT_RAW_OUTPUT
+        temporary.BLEEP_ON_EVENTS = bool(bleep) if bleep is not None else temporary.BLEEP_ON_EVENTS
         
-        # Model/Hardware settings
-        temporary.CONTEXT_SIZE = int(ctx)
-        temporary.BATCH_SIZE = int(batch)
-        temporary.TEMPERATURE = float(temp)
-        temporary.REPEAT_PENALTY = float(repeat)
-        temporary.VRAM_SIZE = int(vram)
-        temporary.SELECTED_GPU = gpu
-        temporary.SELECTED_CPU = cpu
+        # Model/Hardware settings - with None checks
+        temporary.CONTEXT_SIZE = int(ctx) if ctx is not None else temporary.CONTEXT_SIZE
+        temporary.BATCH_SIZE = int(batch) if batch is not None else temporary.BATCH_SIZE
+        temporary.TEMPERATURE = float(temp) if temp is not None else temporary.TEMPERATURE
+        temporary.REPEAT_PENALTY = float(repeat) if repeat is not None else temporary.REPEAT_PENALTY
+        temporary.VRAM_SIZE = int(vram) if vram is not None else temporary.VRAM_SIZE
+        temporary.SELECTED_GPU = gpu if gpu is not None else temporary.SELECTED_GPU
+        temporary.SELECTED_CPU = cpu if cpu is not None else temporary.SELECTED_CPU
         temporary.CPU_THREADS = int(cpu_threads) if cpu_threads is not None else temporary.CPU_THREADS
-        temporary.MODEL_NAME = model
-        temporary.MODEL_FOLDER = model_path
+        temporary.MODEL_NAME = model if model is not None else temporary.MODEL_NAME
+        temporary.MODEL_FOLDER = model_path if model_path is not None else temporary.MODEL_FOLDER
         
         # Layer allocation mode (only if Vulkan available)
         if layer_allocation_mode is not None and temporary.VULKAN_AVAILABLE:
@@ -692,8 +694,9 @@ def handle_customization_save(
         from scripts.settings import save_config
         save_config()
         
-        print(f"[SAVE] Settings saved: CTX={ctx}, Batch={batch}, Temp={temp}, "
-              f"VRAM={vram}, GPU={gpu}, CPU={cpu}, Threads={cpu_threads}")
+        print(f"[SAVE] Settings saved: CTX={temporary.CONTEXT_SIZE}, Batch={temporary.BATCH_SIZE}, "
+              f"Temp={temporary.TEMPERATURE}, VRAM={temporary.VRAM_SIZE}, GPU={temporary.SELECTED_GPU}, "
+              f"CPU={temporary.SELECTED_CPU}, Threads={temporary.CPU_THREADS}")
         
         return "Settings saved successfully."
     except Exception as e:
@@ -724,21 +727,55 @@ def update_backend_ui():
         gr.update()
     ]
 
-def build_progress_html(step: int):
-    phases = [
-        "Handle Input", "Build Prompt", "Inject RAG", "Add System",
-        "Assemble History", "Check Model", "Generate Stream",
-        "Split Thinking", "Format Response"
+def build_progress_html(step: int, web_search_enabled: bool = False, speech_enabled: bool = False):
+    """
+    Build dynamic progress indicator HTML based on enabled features.
+    
+    Cases:
+    1. Vanilla (no web search, no speech): 9 steps
+    2. Web search only: 11 steps (adds "Producing Research", "Assessing Research")
+    3. Speech only: 10 steps (adds "Generating TTS")
+    4. Both enabled: 12 steps (all additional steps)
+    """
+    # Base phases (always present)
+    base_phases = [
+        "Handle Input",      # 0
+        "Build Prompt",      # 1
+        "Inject RAG",        # 2
+        "Add System",        # 3
+        "Assemble History",  # 4
+        "Check Model",       # 5
+        "Generate Stream",   # 6
+        "Split Thinking",    # 7
+        "Format Response"    # 8
     ]
     
+    # Build dynamic phase list based on enabled features
+    phases = base_phases[:6]  # Handle Input through Check Model
+    
+    # Insert web search phases after "Check Model" (before Generate Stream)
+    if web_search_enabled:
+        phases.append("Producing Research")
+        phases.append("Assessing Research")
+    
+    # Add generation and processing phases
+    phases.append("Generate Stream")
+    phases.append("Split Thinking")
+    phases.append("Format Response")
+    
+    # Add TTS phase at the end if speech is enabled
+    if speech_enabled:
+        phases.append("Generating TTS")
+    
+    # Build HTML segments
     segments = []
     for i, phase in enumerate(phases):
         if i < step:
-            color = "#00ff00"
+            color = "#00ff00"  # Completed - green
         elif i == step:
-            color = "#4488ff"
+            color = "#4488ff"  # Current - blue
         else:
-            color = "#666666"
+            color = "#666666"  # Pending - gray
         segments.append(f'<span style="color:{color}; font-weight:bold;">{phase}</span>')
     
     return " → ".join(segments)
@@ -875,27 +912,52 @@ def conversation_interface(
     # YIELD 1: Show user message + progress
     yield (
         session_tuples, session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0, web_search_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
     )
 
-    # Fast progression through phases 1-5
+    # Fast progression through phases 1-5 (Handle Input through Check Model)
     for current_phase in range(1, 6):
         yield (
             session_tuples, session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(current_phase)),
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(current_phase, web_search_enabled, speech_enabled)),
             *update_action_buttons("input_submitted", has_ai_response),
             cancel_flag, loaded_files, "input_submitted",
             gr.update(), gr.update(), gr.update()
         )
         time.sleep(0.05)
 
+    # Web search phases (if enabled) - phases 6 and 7
+    if web_search_enabled:
+        # Phase: Producing Research
+        yield (
+            session_tuples, session_messages, "",
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(6, web_search_enabled, speech_enabled)),
+            *update_action_buttons("input_submitted", has_ai_response),
+            cancel_flag, loaded_files, "input_submitted",
+            gr.update(), gr.update(), gr.update()
+        )
+        time.sleep(0.1)
+        
+        # Phase: Assessing Research
+        yield (
+            session_tuples, session_messages, "",
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(7, web_search_enabled, speech_enabled)),
+            *update_action_buttons("input_submitted", has_ai_response),
+            cancel_flag, loaded_files, "input_submitted",
+            gr.update(), gr.update(), gr.update()
+        )
+        time.sleep(0.1)
+
     # Get model settings
     model_settings = get_model_settings(temporary.MODEL_NAME)
 
-    # Phase 6: Generating response
+    # Calculate Generate Stream phase index (shifts by 2 if web search enabled)
+    generate_phase = 8 if web_search_enabled else 6
+
+    # Phase 6 (or 8 with web search): Generating response
     interaction_phase = "generating_response"
     _cancel_event.clear()
 
@@ -907,7 +969,7 @@ def conversation_interface(
     try:
         yield (
             session_tuples, session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(6)),
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, web_search_enabled, speech_enabled)),
             *update_action_buttons("generating_response", has_ai_response),
             cancel_flag, loaded_files, "generating_response",
             gr.update(), gr.update(), gr.update()
@@ -942,7 +1004,7 @@ def conversation_interface(
             
             yield (
                 session_tuples, session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(6)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, web_search_enabled, speech_enabled)),
                 *update_action_buttons("generating_response", has_ai_response),
                 cancel_flag, loaded_files, "generating_response",
                 gr.update(), gr.update(), gr.update()
@@ -987,6 +1049,18 @@ def conversation_interface(
 
     # TTS: Speak response if enabled
     if speech_enabled and accumulated_response:
+        # Calculate TTS phase index: base 9 + 2 if web search enabled
+        tts_phase = 11 if web_search_enabled else 9
+        
+        # Show "Generating TTS" phase in progress
+        yield (
+            session_tuples, session_messages, "",
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(tts_phase, web_search_enabled, speech_enabled)),
+            *update_action_buttons("speaking", True),
+            cancel_flag, loaded_files, "speaking",
+            gr.update(), gr.update(), gr.update()
+        )
+        
         try:
             # Clean response for TTS - remove thinking phases and special chars
             tts_text = filter_operational_content(accumulated_response)
@@ -1005,6 +1079,10 @@ def conversation_interface(
     # ─────────────────────────────────────────────────────────────────────────
     cleared_files = []  # Empty the attached files list
     temporary.session_attached_files = []  # Also clear the global tracker
+    
+    # Beep to notify user response is complete (unless TTS is active)
+    if not speech_enabled:
+        beep()
     
     # Final yield - with cleared attached_files
     yield (
@@ -1318,13 +1396,13 @@ def launch_interface():
                     gr.Markdown("**Program**")
                     with gr.Row(elem_classes=["clean-elements"]):
                         custom_components["max_hist"] = gr.Dropdown(
-                            temporary.HISTORY_SLOT_OPTIONS, label="Sessions History", value=temporary.MAX_HISTORY_SLOTS, scale=5
+                            temporary.HISTORY_SLOT_OPTIONS, label="History Slots", value=temporary.MAX_HISTORY_SLOTS, scale=5
                         )
                         custom_components["height"] = gr.Dropdown(
-                            temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Main Height", value=temporary.SESSION_LOG_HEIGHT, scale=5
+                            temporary.SESSION_LOG_HEIGHT_OPTIONS, label="Log Height", value=temporary.SESSION_LOG_HEIGHT, scale=5
                         )
                         custom_components["max_att"] = gr.Dropdown(
-                            temporary.ATTACH_SLOT_OPTIONS, label="Attachments", value=temporary.MAX_ATTACH_SLOTS, scale=5
+                            temporary.ATTACH_SLOT_OPTIONS, label="Attach Slots", value=temporary.MAX_ATTACH_SLOTS, scale=5
                         )
                         with gr.Column(scale=5):
                             config_components["show_think_phase"] = gr.Checkbox(
