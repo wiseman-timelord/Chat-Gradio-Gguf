@@ -192,6 +192,9 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
+- Validation of Installation (v0.98.2)..
+<details>
+    
     ===============================================================================
         Chat-Gradio-Gguf: Library Validation
     ===============================================================================
