@@ -337,6 +337,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 ```
 
 ### Notation 
+- Core Principle - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to be basic, in order for people to be able to use it as a framework for their own AI systems.
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
 - Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
@@ -426,11 +427,10 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development
-- Remember: This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to be basic, in order for people to be able to use it as a framework for more complicated AI systems, or even my other projects.
-1. (issues with truncation of input) If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model.
-1. Still additional blank line to each line it prints for "AI-Chat" responses under windows but not linux, and not certain browsers, its not the raw output, its the actual interface, it seemed fine on laptop though, so possibly this is a browser issue or my desktop pc setup, or a driver issue.
+Now that the program is 99% made, there are some rolling issues to investigate/correct...
+1. (issues with truncation of input) If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model. This possibly is fixed now, but large context needs testing again.
+1. Still additional blank line to each line it prints for "AI-Chat" responses under windows but not linux, and not certain browsers, and not on certain models. its not the raw output, possibly that was having additional lines removed, I think its the actual interface, it seemed fine on laptop though but that was using smaller models, but the laptop also has older Intel gpu, so possibly this is a browser issue or my desktop pc setup, or a driver issue. It needs investigation.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-4. Web-searching is ok, but it needs to have the current date inputted into the prompt sent to the model in order to understand context of dates, ie current/latest, or it will assume some date in its training data.
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
