@@ -361,7 +361,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 </details>
 
 ## Hard Requirements
-- Windows 7-11 and/or ~Ubuntu 22-25, Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
+- Windows 7-11 and/or ~Ubuntu 22-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
 - Llama.Cpp - Options here for, Vulkan or X64. This has been limited to what I can test (though its possible to replace llama.cpp with for eg Cuda12).
 - Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [Qwen1.5-0.5B-Chat-GGUF](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GGUF), as this will be super-fast and confirm basic operation, otherwise see models section.
