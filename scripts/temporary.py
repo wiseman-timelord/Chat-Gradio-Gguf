@@ -16,6 +16,7 @@ LAYER_ALLOCATION_MODE = "SRAM_ONLY"
 OS_VERSION = None  # Ubuntu version or Windows version string
 WINDOWS_VERSION = None  # Windows-specific version (8.1, 10, 11)
 EMBEDDING_BACKEND = "sentence_transformers"  # Always sentence_transformers now
+GRADIO_VERSION = None
 
 # Configuration variables with defaults
 MODEL_FOLDER = "path/to/your/models"

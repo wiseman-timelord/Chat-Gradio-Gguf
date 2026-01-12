@@ -201,7 +201,7 @@ def format_response(output: str) -> str:
     from pygments import highlight
     from pygments.lexers import get_lexer_by_name
     from pygments.formatters import HtmlFormatter
-    from scripts.temporary import THINK_COLOR
+    from scripts.temporary import THINK_COLOR, GRADIO_VERSION
     
     formatted = []
     
@@ -243,14 +243,20 @@ def format_response(output: str) -> str:
             except:
                 pass
     
-    # Clean up whitespace
+    # Clean up whitespace conditionally based on Gradio version
+    is_old_gradio = GRADIO_VERSION.startswith('3.')
+    clean_output = clean_output.replace('<p>', '\n\n')
+    clean_output = clean_output.replace('</p>', '\n\n')
     clean_output = clean_output.replace('\r\n', '\n')
     clean_output = clean_output.replace('\r', '\n')
+    clean_output = re.sub(r'\n\s*\n', '\n\n', clean_output)  # Normalize blank lines
     
-    # Convert \n\n to \n, then <p> to \n\n (intentional paragraph breaks)
-    clean_output = clean_output.replace('\n\n', '\n')
-    clean_output = clean_output.replace('<p>', '\n\n')
-    clean_output = clean_output.replace('</p>', '')
+    if is_old_gradio:
+        # Aggressive fix for Qt WebEngine double-spacing in Gradio v3
+        clean_output = re.sub(r'\n{2,}', '\n', clean_output)  # Collapse to single newlines to prevent extra blanks
+    else:
+        # Milder cleanup for Gradio v5 and modern models (qwen3, deepseek3, llama3, etc.) to preserve intended blanks
+        clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)  # Collapse 3+ to double newlines
     
     clean_output = clean_output.strip()
     
@@ -1207,7 +1213,7 @@ def toggle_speech(current_state):
 # ============================================================================
 
 def launch_interface():
-    """Launch the Gradio interface - Gradio 3.50.2 compatible."""
+    """Launch the Gradio interface – supports Gradio 3.50.2 (Qt5 WebEngine) and newer versions."""
     global demo
     import tkinter as tk
     from tkinter import filedialog
@@ -1226,10 +1232,11 @@ def launch_interface():
         ATTACH_SLOT_OPTIONS
     )
 
-    # Gradio 3.x compatible Blocks
-    with gr.Blocks(
-        title="Conversation-Gradio-Gguf",
-        css="""
+    # ── Determine Gradio major version ──────────────────────────────────────
+    is_gradio_3 = temporary.GRADIO_VERSION.startswith('3.')
+
+    # Common CSS rules (used by all versions)
+    css_common = """
         .scrollable { overflow-y: auto }
         .half-width { width: 80px !important }
         .double-height { height: 80px !important }
@@ -1240,10 +1247,6 @@ def launch_interface():
         .send-button-red { background-color: red !important; color: white !important }
         .scrollable .message { white-space: pre-wrap; word-break: break-word; }
         .hide-label { display:none !important; }
-        /* FIX: Reduce extra blank lines in Qt WebEngine rendering */
-        .message p { margin-top: 0.3em !important; margin-bottom: 0.3em !important; }
-        .message br + br { display: none !important; }
-        /* Alternative fix for pre-formatted text appearance */
         .message { line-height: 1.4 !important; }
         .progress-indicator { 
             font-family: monospace; 
@@ -1254,7 +1257,24 @@ def launch_interface():
             min-height: 100px;
             line-height: 1.6;
         }
-        """
+    """
+
+    # Aggressive spacing fixes — mostly needed for Gradio 3 + old Qt WebEngine
+    css_gradio3_fixes = """
+        /* Reduce extra blank lines and tight spacing issues in Qt WebEngine */
+        .message p { margin-top: 0.3em !important; margin-bottom: 0.3em !important; }
+        .message br + br { display: none !important; }
+    """
+
+    # Final CSS: common + version-specific fixes
+    final_css = css_common
+    if is_gradio_3:
+        final_css += css_gradio3_fixes
+
+    # ── Main interface ──────────────────────────────────────────────────────
+    with gr.Blocks(
+        title="Conversation-Gradio-Gguf",
+        css=final_css.strip()
     ) as demo:
         temporary.demo = demo
         model_folder_state = gr.State(temporary.MODEL_FOLDER)

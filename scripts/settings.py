@@ -92,6 +92,7 @@ def load_system_ini():
         temporary.VULKAN_AVAILABLE = system.getboolean('vulkan_available', False)
         temporary.EMBEDDING_MODEL_NAME = system.get('embedding_model', 'BAAI/bge-small-en-v1.5')
         temporary.EMBEDDING_BACKEND = system.get('embedding_backend', 'sentence_transformers')
+        temporary.GRADIO_VERSION = system.get('gradio_version', '3.50.2')
         
         # Load llama paths (constants from installer)
         temporary.LLAMA_CLI_PATH = system.get('llama_cli_path', None)
@@ -102,6 +103,7 @@ def load_system_ini():
         print(f"[INI] Vulkan: {temporary.VULKAN_AVAILABLE}")
         print(f"[INI] Embedding Model: {temporary.EMBEDDING_MODEL_NAME}")
         print(f"[INI] Embedding Backend: {temporary.EMBEDDING_BACKEND}")
+        print(f"[INI] Gradio Version: {temporary.GRADIO_VERSION}")
         print(f"[INI] Llama CLI Path: {temporary.LLAMA_CLI_PATH}")
         print(f"[INI] Llama Bin Path: {temporary.LLAMA_BIN_PATH}")
         
