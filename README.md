@@ -98,7 +98,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Installation processes, for option 2 (v0.98.0)..
+- Installation processes, for option 2a (v0.98.0)..
 <details>
     
     ===============================================================================
