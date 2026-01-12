@@ -69,7 +69,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The combined Detection/Install Options menu  (v0.98.0)...
+- The combined Info/Install menu  (v0.98.0)...
 <details>
     
     ===============================================================================
@@ -98,7 +98,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Installation processes, for option 2a (v0.98.0)..
+- Installation for option 2a (v0.98.0)..
 <details>
     
     ===============================================================================
@@ -307,7 +307,7 @@ GPU interference is done through (have a guess) Vulkan...
 
 ### Building Requirements 
 For compile options; If on PATH, ask AI how to check its on path, and as applicable fix...
-- MSVC 2017-2019 - MSVC with option Desktop Development enabled during install.
+- MSVC 2017-2019 - MSVC with option, Desktop Development and CMake, enabled during install.
 - MS Build Tools - Also for building, ensure its on PATH.
 - Git - Github Program for cloning the sources from github, ensure its on PATH. 
 
