@@ -298,63 +298,48 @@ def test_optional_libs() -> None:
         print(f"\n  Note: {optional_missing} optional packages missing (text-only fallback will be used)")
 
 def test_browser_setup() -> bool:
-    """Check Qt WebEngine browser components based on OS version"""
-    print("\n=== Browser Validation ===")
+    """Minimal check: gradio + the Qt WebEngine the installer should have put in"""
+    print("\n=== Gradio & Custom Browser Check ===")
     
     venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
-    if PLATFORM == "linux":
-        # Linux uses PyQt6
-        try:
-            result = subprocess.run(
-                [str(venv_py), "-c", "from PyQt6.QtWebEngineWidgets import QWebEngineView; print('OK')"],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode == 0 and "OK" in result.stdout:
-                print_status("PyQt6-WebEngine installed")
-                return True
-            else:
-                print_status("PyQt6-WebEngine not found - will use system browser", False)
-                return True  # Non-fatal, fallback to system browser
-        except Exception:
-            print_status("PyQt6-WebEngine check failed - will use system browser", False)
-            return True
-    
-    # Windows
-    win_ver = SYSTEM_INFO.get('windows_version', 'unknown')
-    
-    if win_ver in ["7", "8", "8.1"]:
-        # Windows 7-8.1 use PyQt5
-        try:
-            result = subprocess.run(
-                [str(venv_py), "-c", "from PyQt5.QtWebEngineWidgets import QWebEngineView; print('OK')"],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode == 0 and "OK" in result.stdout:
-                print_status(f"PyQt5-WebEngine installed (Win {win_ver})")
-                return True
-            else:
-                print_status(f"PyQt5-WebEngine not found (Win {win_ver}) - will use system browser", False)
-                return True
-        except Exception:
-            print_status("PyQt5-WebEngine check failed - will use system browser", False)
-            return True
+    # Tell user what path installer took (from OS detection in constants.ini)
+    if PLATFORM == "windows":
+        win_ver = SYSTEM_INFO.get('windows_version', 'unknown')
+        qt_part = "PyQt5 WebEngine" if win_ver in ["7", "8", "8.1"] else "PyQt6 WebEngine"
     else:
-        # Windows 10/11 use PyQt6
+        os_ver = SYSTEM_INFO.get('os_version', 'unknown')
         try:
-            result = subprocess.run(
-                [str(venv_py), "-c", "from PyQt6.QtWebEngineWidgets import QWebEngineView; print('OK')"],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode == 0 and "OK" in result.stdout:
-                print_status(f"PyQt6-WebEngine installed (Win {win_ver})")
-                return True
-            else:
-                print_status(f"PyQt6-WebEngine not found (Win {win_ver}) - will use system browser", False)
-                return True
-        except Exception:
-            print_status("PyQt6-WebEngine check failed - will use system browser", False)
-            return True
+            major = int(os_ver.split('.')[0])
+        except:
+            major = 99
+        qt_part = "PyQt5 WebEngine" if major < 24 else "PyQt6 WebEngine"
+    
+    print(f"  Installer path: {qt_part}")
+    
+    # 1. Gradio exists?
+    try:
+        subprocess.run([str(venv_py), "-c", "import gradio"],
+                       capture_output=True, timeout=10, check=True)
+        print_status("Gradio import OK")
+    except:
+        print_status("Gradio import FAILED - interface will not work", False)
+        return False
+    
+    # 2. Expected WebEngine exists?
+    qt_module = "PyQt5" if "PyQt5" in qt_part else "PyQt6"
+    try:
+        code = f"from {qt_module}.QtWebEngineWidgets import QWebEngineView"
+        subprocess.run([str(venv_py), "-c", code],
+                       capture_output=True, timeout=12, check=True)
+        print_status(f"{qt_part} import OK")
+        return True
+    except:
+        print_status(f"{qt_part} NOT found → will fall back to system browser", False)
+        return False  # still non-fatal
+
+
+
 
 def test_spacy_model() -> bool:
     """Verify spaCy English model is downloaded"""
@@ -442,43 +427,32 @@ except Exception as e:
         return False
 
 def test_linux_system_packages() -> bool:
-    """Check Linux system dependencies"""
+    """Very light warning about TTS deps installer does NOT handle"""
     if PLATFORM != "linux":
         return True
         
-    print("\n=== Linux System Package Validation ===")
+    print("\n=== Linux TTS (pyttsx3) System Deps Reminder ===")
+    print("  Installer does not install these - you need them for normal TTS voice:")
     
-    required_packages = [
-        "build-essential",
-        "python3-venv",
-        "python3-dev",
-        "portaudio19-dev",
-        "espeak",
-        "ffmpeg",
-        "xclip"
-    ]
+    common = ["espeak", "libespeak1", "libportaudio2"]
+    missing = []
     
-    success = True
-    
-    for pkg in required_packages:
+    for pkg in common:
         try:
-            result = subprocess.run(
-                ["dpkg", "-s", pkg],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            
-            if result.returncode == 0:
-                print_status(f"{pkg}")
-            else:
-                print_status(f"{pkg} not installed", False)
-                success = False
-                
-        except Exception:
-            print_status(f"{pkg} check failed", False)
-            success = False
+            r = subprocess.run(["dpkg", "-s", pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if r.returncode != 0:
+                missing.append(pkg)
+        except:
+            missing.append(pkg + " (check failed)")
     
-    return success
+    if missing:
+        print_status("Missing packages detected: " + ", ".join(missing), False)
+        print("  → TTS may be silent, robotic or crash")
+        print("  Suggested fix:  sudo apt install espeak libespeak1 libportaudio2")
+        return False
+    else:
+        print_status("Common TTS packages seem present")
+        return True
 
 def main():
     """Main validation routine"""
