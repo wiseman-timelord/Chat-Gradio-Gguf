@@ -362,11 +362,11 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 ## Hard Requirements
 - Windows 7-11 and/or ~Ubuntu 22-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
-- Llama.Cpp - Options here for, Vulkan or X64. This has been limited to what I can test (though its possible to replace llama.cpp with for eg Cuda12).
-- Python => 3.9 - Requires "Python 3.9-3.13" -deepseek.
-- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. Currently you are advised to use [Qwen1.5-0.5B-Chat-GGUF](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GGUF), as this will be super-fast and confirm basic operation, otherwise see models section.
+- Llama.Cpp - Installed by installer, but there are options here for, Vulkan or X64. So you need a, good GPU, and if you want if fast then a Vulkan GPU.
+- Python 3.9-3.13 - Requires [Python](https://www.python.org); AI warns me certain libraries wont work on Python 3.14, possibly Spacy. 
+- Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. I advise [Qwen1.5-0.5B-Chat-GGUF](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GGUF) for very basic testing.
 - Suitable GPU - Gpu may be, Main or Compute, with VRam selection 756MB-64GB. It must have Vulkan capability/drivers (if the installer contains files referring to Vulkan).  
-- System Ram - Your system should cover the size of the model not able to be covered by the GPU (ie, 4GB card for 4B model in Q6_K, 16GB card for 16b model in Q6_K).
+- System Ram - Your system must cover the size of the model layers not able to be covered by the GPU. Ideally you want the GPU to cover all model layers for fast interference.
 
 ### Graphics Requirements
 GPU interference is done through (have a guess) Vulkan...
