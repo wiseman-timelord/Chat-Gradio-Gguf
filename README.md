@@ -362,11 +362,10 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 ## Hard Requirements
 - Windows 7-11 and/or ~Ubuntu 22-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
-- Llama.Cpp - Installed by installer, but there are options here for, Vulkan or X64. So you need a, good GPU, and if you want if fast then a Vulkan GPU.
 - Python 3.9-3.13 - Requires [Python](https://www.python.org); AI warns me certain libraries wont work on Python 3.14, possibly Spacy. 
 - Llm Model - You will need a Large Language Model in GGUF format, See `Models` section. I advise [Qwen1.5-0.5B-Chat-GGUF](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat-GGUF) for very basic testing.
-- Suitable GPU - Gpu may be, Main or Compute, with VRam selection 756MB-64GB. It must have Vulkan capability/drivers (if the installer contains files referring to Vulkan).  
-- System Ram - Your system must cover the size of the model layers not able to be covered by the GPU. Ideally you want the GPU to cover all model layers for fast interference.
+- Suitable GPU - Gpu may be, Main or Compute, with VRam selection 756MB-64GB. It must have Vulkan capability/drivers. Ideally you want the GPU to cover all model layers for fast interference.
+- System Ram - Your system must cover the size of the model layers not able to be covered by the GPU, plus smaller models like the embeddings model, plus the wheel if not built for Vulkan. 
 
 ### Graphics Requirements
 GPU interference is done through (have a guess) Vulkan...
@@ -376,7 +375,8 @@ GPU interference is done through (have a guess) Vulkan...
 For compile options; If on PATH, ask AI how to check its on path, and as applicable fix...
 - MSVC 2017-2019 - MSVC with option, Desktop Development and CMake, enabled during install.
 - MS Build Tools - Also for building, ensure its on PATH.
-- Git - Github Program for cloning the sources from github, ensure its on PATH. 
+- Git - Github Program for cloning the sources from github, ensure its on PATH.
+- Vulkan SDK - Cant remember but possibly need the Vulkan SDK to build for Vulkan.
 
 ### Instructions (W = Windows, U = Ubuntu)...
 - Pre-Installation...
