@@ -205,7 +205,7 @@ def format_response(output: str) -> str:
     
     formatted = []
     
-    # Extract think blocks
+    # 1. Extract thinking blocks for separate display
     think_patterns = [
         (r'<think>(.*?)</think>', '[Thinking] '),
         (r'<\|channel\|>analysis(.*?)<\|end\|>.*?<\|channel\|>final', '[Thinking] ')
@@ -218,21 +218,24 @@ def format_response(output: str) -> str:
                 clean_thought = re.sub(r'<\|[^>]+\|>', '', thought)
                 formatted.append(f'<span style="color: {THINK_COLOR}">{prefix}{clean_thought.strip()}</span>')
     
-    # Remove thinking content
+    # 2. Remove thinking content from main output
     clean_output = output
     clean_output = re.sub(r'<think>.*?</think>', '', clean_output, flags=re.DOTALL)
-    clean_output = re.sub(r'<\|channel\|>analysis.*?(?:<\|end\|>.*?<\|channel\|>final|<\|end\|><\|start\|>assistant<\|end\|><\|start\|>assistant<\|message\|>)',
-                         '', clean_output, flags=re.DOTALL)
+    clean_output = re.sub(
+        r'<\|channel\|>analysis.*?(?:<\|end\|>.*?<\|channel\|>final|<\|end\|><\|start\|>assistant<\|end\|><\|start\|>assistant<\|message\|>)',
+        '', clean_output, flags=re.DOTALL
+    )
     clean_output = re.sub(r'<\|[^>]+\|>', '', clean_output)
     
-    # Remove "Thinking...." lines
+    # 3. Remove annoying "Thinking...." filler lines
     lines = clean_output.split('\n')
-    filtered_lines = [line for line in lines 
-                     if not (line.strip().startswith("Thinking") and 
-                            all(c in '.… ' for c in line.strip()[8:]))]
+    filtered_lines = [
+        line for line in lines
+        if not (line.strip().startswith("Thinking") and all(c in '.… ' for c in line.strip()[8:]))
+    ]
     clean_output = '\n'.join(filtered_lines)
     
-    # Process code blocks
+    # 4. Highlight code blocks
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
     for lang, code in code_blocks:
         if lang:
@@ -241,27 +244,44 @@ def format_response(output: str) -> str:
                 formatted_code = highlight(code, lexer, HtmlFormatter())
                 clean_output = clean_output.replace(f'```{lang}\n{code}```', formatted_code)
             except:
-                pass
+                pass  # silently skip invalid languages
     
-    # Clean up whitespace conditionally based on Gradio version
-    is_old_gradio = GRADIO_VERSION.startswith('3.')
-    clean_output = clean_output.replace('<p>', '\n\n')
-    clean_output = clean_output.replace('</p>', '\n\n')
-    clean_output = clean_output.replace('\r\n', '\n')
-    clean_output = clean_output.replace('\r', '\n')
-    clean_output = re.sub(r'\n\s*\n', '\n\n', clean_output)  # Normalize blank lines
+   
+    # Common basic normalization
+    clean_output = re.sub(r' {2,}', ' ', clean_output)        # reduce multiple spaces to 1
     
-    if is_old_gradio:
-        # Aggressive fix for Qt WebEngine double-spacing in Gradio v3
-        clean_output = re.sub(r'\n{2,}', '\n', clean_output)  # Collapse to single newlines to prevent extra blanks
-    else:
-        # Milder cleanup for Gradio v5 and modern models (qwen3, deepseek3, llama3, etc.) to preserve intended blanks
-        clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)  # Collapse 3+ to double newlines
-    
+    if GRADIO_VERSION.startswith('3.'):
+        # Aggressive cleanup for Gradio 3 + Qt WebEngine (old Windows)
+        clean_output = clean_output.replace('<p>', '\n')          # <p> → single newline
+        clean_output = clean_output.replace('</p>', '\n')           # drop closing tag
+        clean_output = clean_output.replace('\n\r\n', '\n')
+        clean_output = clean_output.replace('\n\n\r', '\r')
+        clean_output = clean_output.replace('\n\n\t', '\t')
+        clean_output = clean_output.replace('\r\n\n', '\r')
+        clean_output = clean_output.replace('\t\n\n', '\t')
+        clean_output = clean_output.replace('\n\r', '\r')
+        clean_output = clean_output.replace('\n\t', '\t')
+        clean_output = clean_output.replace('\r\n', '\r')
+        clean_output = clean_output.replace('\t\n', '\t')
+
+    if GRADIO_VERSION.startswith('5'):
+        # Gentler cleanup for Gradio 4+ / 5+ (preserves more natural spacing)
+        clean_output = clean_output.replace('\n\n\n\r', '\n\r')
+        clean_output = clean_output.replace('\n\n\n\t', '\n\t')
+        clean_output = clean_output.replace('\r\n\n\n', '\r\n')
+        clean_output = clean_output.replace('\t\n\n\n', '\t\n')
+        clean_output = clean_output.replace('\n\n\r', '\n\r')
+        clean_output = clean_output.replace('\n\n\t', '\n\t')
+        clean_output = clean_output.replace('\r\n\n', '\r\n')
+        clean_output = clean_output.replace('\t\n\n', '\t\n')
+        clean_output = clean_output.replace('\n\n\n', '\n\n')
+        
     clean_output = clean_output.strip()
     
+    # 6. Combine thinking + final output
     if formatted:
         return '\n'.join(formatted) + '\n\n' + clean_output
+    
     return clean_output
 
 def get_initial_model_value():

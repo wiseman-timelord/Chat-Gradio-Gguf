@@ -389,7 +389,7 @@ def summarize_session(messages):
     """Generate a short label for the session based on the first user message.
     Uses spaCy to extract key noun phrases for summarization, max 60 chars.
     """
-    MAX_LABEL_LENGTH = 60
+    MAX_LABEL_LENGTH = 50
     
     if not messages:
         return "New Session"
