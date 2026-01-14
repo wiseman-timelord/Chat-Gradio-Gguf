@@ -492,11 +492,7 @@ Now that the program is 99% made, there are some rolling issues to investigate/c
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
 - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - The binaries used for interference with models.
-- [Claude.AI](https://claude.ai/chat) - It is the best, some people find the necessity for "Shift+Enter" an issue.
-- [Kimi K2](https://www.kimi.com) - For most work after its release in July 2025, like Grok4 but free.
-- [Grok3Beta](https://x.com/i/grok) - For much of the complete updated functions that I implemented.
-- [Deepseek R1/3](https://www.deepseek.com/) - For re-attempting the things Grok3Beta was having difficulty with.
-- [Perplexity](https://www.perplexity.ai) - For circumstances of extensive web research requierd.
+- AI Platforms, sometimes I pay for these, but thanks for the free stuff too; [Claude.AI](https://claude.ai/chat), [Kimi K2](https://www.kimi.com), [Grok3Beta](https://x.com/i/grok),[Deepseek R1/3](https://www.deepseek.com/), [Perplexity](https://www.perplexity.ai).
 - Python Libraries - Python libraries change, so no specific detail, but thanks to all creators of the libraries/packages currently in installer/use.
 
 ## License
