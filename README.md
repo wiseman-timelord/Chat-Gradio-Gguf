@@ -496,5 +496,5 @@ Thanks to all the following teams, for the use of their software/platforms...
 - Python Libraries - Python libraries change, so no specific details, check the installer preview if interested.
 
 ## License
-This repository features **Wiseman-Timelord's Glorified License** in the file `.\Licence.txt`, in short, `if you wish to use most of the code, then you should fork` or `if you want to use a section of the code from one of the scripts, as an example, to make something work you mostly already have implemented, then go ahead`, but `do not claim, my vanilla or =>51% of my, releases as your own work`.
+This repository features **Wiseman-Timelord's Glorified License** in the file `.\Licence.txt`, in short, `if you wish to use most of the code, then you should fork` or `if you want to use a section of the code from one of the scripts, as an example, to make something work you mostly already have implemented, then go ahead`, but `do not claim, my vanilla or =>50% of my, releases as your own work`.
 
