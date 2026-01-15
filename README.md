@@ -399,6 +399,7 @@ If installing with Vulkan option, you will need to have installed the `Vulkan SD
 
 ### Notation 
 - Core Principle - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only a few basic tools, in order for people to be able to use it as a framework/reference for their own AI programs.
+- Artifacts would require agentic AI, hence such upgrades will be in "Agent-Gradio-Gfuf".
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
 - Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
@@ -483,11 +484,12 @@ project_root/
 
 # Development
 Now that the program is 99% made, there are some rolling issues to investigate/correct...
-1. (issues with truncation of input) If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model. Restart/Continue the Claude session from Monday 12th Jan 2026.
+1. (issues with truncation of input) If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model. Restart/Continue the Claude session from Monday 12th Jan 2026. There was talk of implementing sliding windows, restart pending claude prompt.
 2. Additional blank lines in output has been investigate and improved, it now needs testing with a system capable of Gradio v5 install route, ie Windows 10/11 or ubuntu v?.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 4. Detail all possible library variances from all potential installs, and ensure that the data from the ini is being used correctly, and applicable functions are handling the operation case modes correctly.
 5. button colors scheme needs a review on Gradio v3, as the "Copy Output" button is the same color as the background?
+
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
