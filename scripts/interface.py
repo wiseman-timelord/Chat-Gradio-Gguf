@@ -1526,7 +1526,6 @@ def launch_interface():
                     with gr.Row(elem_classes=["clean-elements"]):
                         browse = gr.Button("📁 Browse Folders", variant="secondary")
                         config_components["load"] = gr.Button("💾 Load Model", variant="primary")
-                        config_components["inspect"] = gr.Button("🔍 Inspect Model")
                         config_components["unload"] = gr.Button("🗑️ Unload Model", variant="stop")
                     
                     gr.Markdown("**Program**")
@@ -1777,25 +1776,14 @@ def launch_interface():
 
         # Model unloading
         def handle_model_unload_wrapper(llm_state, models_loaded_state):
-            result = handle_model_unload(llm_state, models_loaded_state)
-            # result: (llm, loaded, status)
-            return result[0], result[1], result[2], result[2]
-        
+            from scripts.models import unload_models  # already imported at top, but safe to keep
+            status, models_loaded, llm = unload_models(llm_state, models_loaded_state)
+            return llm, models_loaded, status, status
+
         config_components["unload"].click(
             fn=handle_model_unload_wrapper,
             inputs=[states["llm"], states["models_loaded"]],
             outputs=[states["llm"], states["models_loaded"], interaction_global_status, config_global_status]
-        )
-
-        # Model inspection
-        def handle_model_inspect_wrapper(model_name):
-            result = handle_model_inspect(model_name)
-            return result, result
-        
-        config_components["inspect"].click(
-            fn=handle_model_inspect_wrapper,
-            inputs=[config_components["model"]],
-            outputs=[interaction_global_status, config_global_status]
         )
 
         # Save settings - with dynamic UI update
