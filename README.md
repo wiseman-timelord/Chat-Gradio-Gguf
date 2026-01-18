@@ -484,14 +484,15 @@ project_root/
 
 # Development
 Now that the program is 99% made, there are some rolling issues to investigate/correct, however there are no critical issues currently...
-1. Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but possibly there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
+
 1. Issues with truncation of input - Context handling was upgraded recently and needs proper testing.
 2. Additional blank lines - Improved for windows 7-8.1 install, it now needs testing with a system capable of Gradio v5 install route ie Windows 10/11 or ubuntu 24-25.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 4. Detail all possible library variances from all potential installs, and ensure that the data from the ini is being used correctly, and applicable functions are handling the operation case modes correctly.
 5. button colors scheme needs a review on Gradio v3/v5, as the "Copy Output" button is the same color as the background on v3.
-<br>Also there are some updates, that would be my next steps, but they will wait for Agent-Gradio-Gguf.
+<br>Also there are some updates, that possibly belong in Agent-Gradio-Gguf, however the program will be rubbish to a lot more people if they are not done for Chat-Gradio-Gguf...
 - Improve Web-Research, it needs to be able to read webpages.
+- Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but possibly there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
