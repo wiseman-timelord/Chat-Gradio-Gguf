@@ -484,11 +484,11 @@ project_root/
 
 # Development
 Now that the program is 99% made, there are some rolling issues to investigate/correct...
-1. (issues with truncation of input) If context size is loaded with model at 8k, then modified to 64k, then I try to input ~50k of data, it then tries to input 50k into 8k, and produces an error. Either, there is something that is not updating or when the context size is altered, at the point of "Save Settings" we need to reload the model. Restart/Continue the Claude session from Monday 12th Jan 2026. There was talk of implementing sliding windows, restart pending claude prompt.
-2. Additional blank lines in output has been investigate and improved for windows 7-8.1 install, it now needs testing with a system capable of Gradio v5 install route ie Windows 10/11 or ubuntu?.
+1. Issues with truncation of input - Context handling was upgraded recently and needs proper testing.
+2. Additional blank lines - Improved for windows 7-8.1 install, it now needs testing with a system capable of Gradio v5 install route ie Windows 10/11 or ubuntu 24-25.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 4. Detail all possible library variances from all potential installs, and ensure that the data from the ini is being used correctly, and applicable functions are handling the operation case modes correctly.
-5. button colors scheme needs a review on Gradio v3, as the "Copy Output" button is the same color as the background?
+5. button colors scheme needs a review on Gradio v3/v5, as the "Copy Output" button is the same color as the background on v3.
 
 
 ## Credits
