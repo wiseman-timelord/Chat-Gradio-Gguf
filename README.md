@@ -490,7 +490,7 @@ Now that the program is 99% made, there are some rolling issues to investigate/c
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 4. Detail all possible library variances from all potential installs, and ensure that the data from the ini is being used correctly, and applicable functions are handling the operation case modes correctly.
 5. button colors scheme needs a review on Gradio v3/v5, as the "Copy Output" button is the same color as the background on v3.
-<br>Also there are some updates, that possibly belong in Agent-Gradio-Gguf, however the program will be rubbish to a lot more people if they are not done for Chat-Gradio-Gguf...
+<br>Also there are some updates, that possibly belong in Agent-Gradio-Gguf, however Chat-Gradio-Gguf will be not so good if they are not one/both included...
 - Improve Web-Research, it needs to be able to read webpages.
 - Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but possibly there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
 
