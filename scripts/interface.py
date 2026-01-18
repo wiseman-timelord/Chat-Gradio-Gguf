@@ -733,6 +733,13 @@ def handle_customization_save(
 ):
     """Save ALL configuration settings to both temporary globals and persistent.json."""
     try:
+        # Check if context size changed while model is loaded
+        new_ctx = int(ctx) if ctx is not None else temporary.CONTEXT_SIZE
+        ctx_changed = (
+            temporary.LOADED_CONTEXT_SIZE is not None and 
+            new_ctx != temporary.LOADED_CONTEXT_SIZE
+        )
+        
         # Program settings (customization) - with None checks and defaults
         temporary.MAX_HISTORY_SLOTS = int(max_hist) if max_hist is not None else temporary.MAX_HISTORY_SLOTS
         temporary.SESSION_LOG_HEIGHT = int(height) if height is not None else temporary.SESSION_LOG_HEIGHT
@@ -764,6 +771,10 @@ def handle_customization_save(
         print(f"[SAVE] Settings saved: CTX={temporary.CONTEXT_SIZE}, Batch={temporary.BATCH_SIZE}, "
               f"Temp={temporary.TEMPERATURE}, VRAM={temporary.VRAM_SIZE}, GPU={temporary.SELECTED_GPU}, "
               f"CPU={temporary.SELECTED_CPU}, Threads={temporary.CPU_THREADS}")
+        
+        # Return appropriate message
+        if ctx_changed:
+            return f"Settings saved. NOTE: Context size changed to {new_ctx} but model loaded at {temporary.LOADED_CONTEXT_SIZE}. Reload model to apply new context size."
         
         return "Settings saved successfully."
     except Exception as e:
@@ -961,13 +972,26 @@ def conversation_interface(
     
     # PHASE 2: Inject RAG - Process large inputs through RAG system
     
+    # Use LOADED context, not UI setting (model may have been loaded at different size)
+    effective_context = temporary.LOADED_CONTEXT_SIZE or temporary.CONTEXT_SIZE
     context_threshold = temporary.LARGE_INPUT_THRESHOLD
-    max_input_chars = int(temporary.CONTEXT_SIZE * 3 * context_threshold)
+    max_input_chars = int(effective_context * 3 * context_threshold)  # ~chars, not tokens
     
-    if len(user_input) > max_input_chars:
+    # Calculate total input size (user input + attached file contents)
+    total_input_size = len(user_input) + len(file_contents_section)
+    
+    if total_input_size > max_input_chars:
         try:
-            context_injector.add_temporary_input(user_input)
-            processed_input = user_input[:1000] + "\n\n[Large input processed with RAG]"
+            # RAG the user input if it's the large part
+            if len(user_input) > max_input_chars // 2:
+                context_injector.add_temporary_input(user_input)
+                processed_input = user_input[:1000] + "\n\n[Large input processed with RAG]"
+            
+            # Also RAG attached files if they're large
+            if len(file_contents_section) > max_input_chars // 2:
+                context_injector.add_temporary_input(file_contents_section)
+                file_contents_section = file_contents_section[:2000] + "\n\n[Large attachments indexed for retrieval]"
+                
         except Exception as e:
             print(f"[RAG-TEMP] Error: {e}")
     
@@ -978,7 +1002,6 @@ def conversation_interface(
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
     )
-
     
     # PHASE 3: Add System - Build complete user message with file contents
     

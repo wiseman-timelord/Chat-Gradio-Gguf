@@ -17,6 +17,7 @@ OS_VERSION = None  # Ubuntu version or Windows version string
 WINDOWS_VERSION = None  # Windows-specific version (8.1, 10, 11)
 EMBEDDING_BACKEND = "sentence_transformers"  # Always sentence_transformers now
 GRADIO_VERSION = None
+LOADED_CONTEXT_SIZE = None
 
 # Configuration variables with defaults
 MODEL_FOLDER = "path/to/your/models"
@@ -236,114 +237,116 @@ class ContextInjector:
             return None
 
     def set_session_vectorstore(self, file_paths):
-        """Create/refresh vector store from list of file paths with improved chunking."""
-        if not file_paths:
-            self.file_index = None
-            self.file_chunks = []
-            return
-        
-        self._ensure_embedding_model()
-        
-        if self.embedding is None:
-            print("[RAG] Cannot create vectorstore - embedding model unavailable")
-            return
+            """Create/refresh vector store from list of file paths with improved chunking."""
+            if not file_paths:
+                self.file_index = None
+                self.file_chunks = []
+                return
+            
+            self._ensure_embedding_model()
+            
+            if self.embedding is None:
+                print("[RAG] Cannot create vectorstore - embedding model unavailable")
+                return
 
-        all_docs = []
-        
-        # Dynamic chunk sizing based on context window
-        chunk_size = CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER
-        chunk_overlap = CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
-        
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            length_function=len,
-            separators=["\n\n", "\n", ". ", " ", ""]
-        )
-        
-        for path in file_paths:
-            try:
-                if path.suffix.lower() in ['.txt', '.md', '.py', '.json', '.yaml', '.yml']:
-                    loader = TextLoader(str(path), encoding='utf-8')
-                    documents = loader.load()
-                    for doc in documents:
-                        chunks = splitter.split_text(doc.page_content)
-                        for chunk in chunks:
-                            all_docs.append(type('Doc', (), {'page_content': chunk, 'metadata': {'source': str(path)}})())
-            except Exception as e:
-                print(f"[RAG] Error loading {path}: {e}")
-                continue
-        
-        if not all_docs:
-            print("[RAG] No documents could be loaded")
-            return
+            all_docs = []
+            
+            # Use loaded context size for chunk sizing
+            effective_ctx = LOADED_CONTEXT_SIZE or CONTEXT_SIZE
+            chunk_size = effective_ctx // RAG_CHUNK_SIZE_DIVIDER
+            chunk_overlap = effective_ctx // RAG_CHUNK_OVERLAP_DIVIDER
+            
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                length_function=len,
+                separators=["\n\n", "\n", ". ", " ", ""]
+            )
+            
+            for path in file_paths:
+                try:
+                    if path.suffix.lower() in ['.txt', '.md', '.py', '.json', '.yaml', '.yml']:
+                        loader = TextLoader(str(path), encoding='utf-8')
+                        documents = loader.load()
+                        for doc in documents:
+                            chunks = splitter.split_text(doc.page_content)
+                            for chunk in chunks:
+                                all_docs.append(type('Doc', (), {'page_content': chunk, 'metadata': {'source': str(path)}})())
+                except Exception as e:
+                    print(f"[RAG] Error loading {path}: {e}")
+                    continue
+            
+            if not all_docs:
+                print("[RAG] No documents could be loaded")
+                return
 
-        texts = [d.page_content for d in all_docs]
-        
-        # Create embeddings using sentence-transformers
-        embeddings = self._embed_texts(texts)
-        
-        if embeddings is None:
-            print("[RAG] Failed to create embeddings")
-            return
+            texts = [d.page_content for d in all_docs]
+            
+            # Create embeddings using sentence-transformers
+            embeddings = self._embed_texts(texts)
+            
+            if embeddings is None:
+                print("[RAG] Failed to create embeddings")
+                return
 
-        self.file_index = faiss.IndexFlatIP(embeddings.shape[1])
-        faiss.normalize_L2(embeddings)
-        self.file_index.add(embeddings)
-        self.file_chunks = texts
-        print(f"[RAG] Ingested {len(texts)} chunks from {len(file_paths)} files")
+            self.file_index = faiss.IndexFlatIP(embeddings.shape[1])
+            faiss.normalize_L2(embeddings)
+            self.file_index.add(embeddings)
+            self.file_chunks = texts
+            print(f"[RAG] Ingested {len(texts)} chunks from {len(file_paths)} files")
 
     def add_temporary_input(self, large_input_text):
-        """
-        Chunk and index large pasted user input for RAG retrieval.
-        This enables unlimited context for direct text input.
-        
-        Args:
-            large_input_text: The full text that exceeds context limits
-        """
-        if not large_input_text or not large_input_text.strip():
-            return
-        
-        self._ensure_embedding_model()
-        
-        if self.embedding is None:
-            print("[RAG] Cannot chunk temporary input - embedding model unavailable")
-            return
-        
-        # Dynamic chunk sizing
-        chunk_size = CONTEXT_SIZE // RAG_CHUNK_SIZE_DIVIDER
-        chunk_overlap = CONTEXT_SIZE // RAG_CHUNK_OVERLAP_DIVIDER
-        
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            length_function=len,
-            separators=["\n\n", "\n", ". ", " ", ""]
-        )
-        
-        # Split the large input into chunks
-        chunks = splitter.split_text(large_input_text)
-        
-        if not chunks:
-            print("[RAG-TEMP] No chunks created from input")
-            return
-        
-        print(f"[RAG-TEMP] Split large input into {len(chunks)} chunks ({len(large_input_text)} chars)")
-        
-        # Create embeddings using sentence-transformers
-        embeddings = self._embed_texts(chunks)
-        
-        if embeddings is None:
-            print("[RAG-TEMP] Failed to create embeddings")
-            return
-        
-        # Create new temporary index
-        self.temp_index = faiss.IndexFlatIP(embeddings.shape[1])
-        faiss.normalize_L2(embeddings)
-        self.temp_index.add(embeddings)
-        self.temp_chunks = chunks
-        
-        print(f"[RAG-TEMP] Indexed {len(chunks)} chunks for retrieval")
+            """
+            Chunk and index large pasted user input for RAG retrieval.
+            This enables unlimited context for direct text input.
+            
+            Args:
+                large_input_text: The full text that exceeds context limits
+            """
+            if not large_input_text or not large_input_text.strip():
+                return
+            
+            self._ensure_embedding_model()
+            
+            if self.embedding is None:
+                print("[RAG] Cannot chunk temporary input - embedding model unavailable")
+                return
+            
+            # Use loaded context size for chunk sizing
+            effective_ctx = LOADED_CONTEXT_SIZE or CONTEXT_SIZE
+            chunk_size = effective_ctx // RAG_CHUNK_SIZE_DIVIDER
+            chunk_overlap = effective_ctx // RAG_CHUNK_OVERLAP_DIVIDER
+            
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                length_function=len,
+                separators=["\n\n", "\n", ". ", " ", ""]
+            )
+            
+            # Split the large input into chunks
+            chunks = splitter.split_text(large_input_text)
+            
+            if not chunks:
+                print("[RAG-TEMP] No chunks created from input")
+                return
+            
+            print(f"[RAG-TEMP] Split large input into {len(chunks)} chunks ({len(large_input_text)} chars)")
+            
+            # Create embeddings using sentence-transformers
+            embeddings = self._embed_texts(chunks)
+            
+            if embeddings is None:
+                print("[RAG-TEMP] Failed to create embeddings")
+                return
+            
+            # Create new temporary index
+            self.temp_index = faiss.IndexFlatIP(embeddings.shape[1])
+            faiss.normalize_L2(embeddings)
+            self.temp_index.add(embeddings)
+            self.temp_chunks = chunks
+            
+            print(f"[RAG-TEMP] Indexed {len(chunks)} chunks for retrieval")
 
     def clear_temporary_input(self):
         """Clear temporary input chunks (called after response generation)."""
