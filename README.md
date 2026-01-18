@@ -484,7 +484,7 @@ project_root/
 
 # Development
 Now that the program is 99% made, there are some rolling issues to investigate/correct, however there are no critical issues currently...
-1. Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but possibly there is a library that is quality and works on both windows/ubuntu, of if most of "windows 7-11 and ubuntu 22-25 is covered by the library, then use the current basic setup for fallback.
+1. Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but possibly there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
 1. Issues with truncation of input - Context handling was upgraded recently and needs proper testing.
 2. Additional blank lines - Improved for windows 7-8.1 install, it now needs testing with a system capable of Gradio v5 install route ie Windows 10/11 or ubuntu 24-25.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
