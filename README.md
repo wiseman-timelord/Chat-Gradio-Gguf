@@ -398,8 +398,7 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 ```
 
 ### Notation 
-- Core Principle - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only a few basic tools, in order for people to be able to use it as a framework/reference for their own AI programs.
-- Artifacts would require agentic AI, hence such upgrades will be in "Agent-Gradio-Gfuf".
+- Core Principle - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only 2 tools, Search and Speech, in order for people to be able to use it as a framework/reference for their own AI programs.
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
 - Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
@@ -491,6 +490,7 @@ Now that the program is 99% made, there are some rolling issues to investigate/c
 4. Detail all possible library variances from all potential installs, and assess available keys from the ini/json, and ensure that all keys/libraries are being used correctly and optimally, for best results, and applicable functions are handling the OS ranges operation/compatibility cases correctly. 
 5. Improve Web-Research, it needs to be able to read webpages. this should be able to search for results, then determine what results are appropriate, and then access sites selectively, then assess pages optimally, then compile results into an appropriate response, however that is done optimally these days. Requires research. 
 6. Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
+- Artifacts would be cool, but possibly require agentic AI to manage the files access on models that are not designed for such, hence such upgrades will be in "Agent-Gradio-Gfuf".
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
