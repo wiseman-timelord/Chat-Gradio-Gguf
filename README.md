@@ -489,7 +489,7 @@ Now that the program is 99% made, there are some rolling issues to investigate/c
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
 4. Detail all possible library variances from all potential installs, and assess available keys from the ini/json, and ensure that all keys/libraries are being used correctly and optimally, for best results, and applicable functions are handling the OS ranges operation/compatibility cases correctly. 
 5. Improve Web-Research, it needs to be able to read webpages. this should be able to search for results, then determine what results are appropriate, and then access sites selectively, then assess pages optimally, then compile results into an appropriate response, however that is done optimally these days. Requires research. 
-6. Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
+6. Improve Speak, currently it uses, built-in for wndows and some basic library for linux, both with robot voice, but there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
 - Artifacts would be cool, but possibly require agentic AI to manage the files access on models that are not designed for such, hence such upgrades will be in "Agent-Gradio-Gfuf".
 
 ## Credits
