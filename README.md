@@ -1,7 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
 ### Status
-Beta - Working fine on v0.98.x on my Windows 8.1 system, however upcoming v0.99.0 will have improved TTS for windows 8.1-11 and ubuntu 24-25, while fallback to basic tts for relevantly 7-8/22-23. Then v1.00.0 will see better websearch.
+Beta - Working fine on v0.98.x on my Windows 8.1 system, however upcoming v0.99.0 will have improved TTS for windows 8.1-11 and ubuntu 24-25, while fallback to basic tts for relevantly 7-8/22-23.
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration. One thing to mention though, is that because a goal of the project is to make a Chatbot compatible as it is, therefore compromises had to be made, and it may not have all the latest versions of things, more the most widely compatible versions of things, so some features are not as good as they could be, but also, this program serves as a valuable reference for what needs to be used on what OS, albeit it, as a personal project it could be streamlined/enhanced/customized to your own likings later.   
@@ -488,11 +488,9 @@ Now that the program is 99% made, there are some rolling issues to investigate/c
 1. Issues with truncation of input - Context handling was upgraded recently and needs proper testing.
 2. Additional blank lines - Improved for windows 7-8.1 install, it now needs testing with a system capable of Gradio v5 install route ie Windows 10/11 or ubuntu 24-25.
 3. **Safe Globals** - Standardize all global variables using safe, unique three-word labels to avoid conflicts.  
-4. Detail all possible library variances from all potential installs, and ensure that the data from the ini is being used correctly, and applicable functions are handling the operation case modes correctly.
-5. button colors scheme needs a review on Gradio v3/v5, as the "Copy Output" button is the same color as the background on v3.
-<br>Also there are some updates, that possibly belong in Agent-Gradio-Gguf, however Chat-Gradio-Gguf will be not so good if they are not one/both included...
-- Improve Web-Research, it needs to be able to read webpages.
-- Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but possibly there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
+4. Detail all possible library variances from all potential installs, and assess available keys from the ini/json, and ensure that all keys/libraries are being used correctly and optimally, for best results, and applicable functions are handling the OS ranges operation/compatibility cases correctly. 
+5. Improve Web-Research, it needs to be able to read webpages. this should be able to search for results, then determine what results are appropriate, and then access sites selectively, then assess pages optimally, then compile results into an appropriate response, however that is done optimally these days. Requires research. 
+6. Improve Speak, currently it uses PC speaker for windows, and some basic one for linux, but there is a library that is quality and works on both windows/ubuntu, but if most of "windows 7-11 and ubuntu 22-25 is covered by some good single individual library, then use the current basic setup for fallback.
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
