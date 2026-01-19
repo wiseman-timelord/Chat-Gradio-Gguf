@@ -28,9 +28,10 @@ from scripts import utility
 from scripts.utility import (
     web_search, get_saved_sessions, get_cpu_info,
     load_session_history, save_session_history,
-    get_available_gpus, filter_operational_content, speak_text, process_files,
-    summarize_session, beep
+    get_available_gpus, filter_operational_content, process_files,
+    summarize_session
 )
+from scripts.sounds import speak_text, beep
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings, inspect_model, load_models
 )
@@ -1413,7 +1414,7 @@ def launch_interface():
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=10)
                             action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", scale=1, visible=False)
-                            action_buttons["copy_response"] = gr.Button("Copy Output", variant="huggingface", scale=1, visible=False)
+                            action_buttons["copy_response"] = gr.Button("Copy Output", variant="secondary", scale=1, visible=False)
                             action_buttons["cancel_input"] = gr.Button("", variant="primary", scale=1, visible=False)  # Hidden placeholder for output compatibility
                             action_buttons["cancel_response"] = gr.Button("..Wait For Response..", variant="primary", scale=1, visible=False)
 
@@ -1513,6 +1514,31 @@ def launch_interface():
                             interactive=True,
                             scale=5
                         )
+
+                    # Sound Hardware (bottom of Hardware section, visible only for Coqui TTS)
+                    from scripts.sounds import (
+                        get_sound_device_names, get_sample_rate_options,
+                        get_voice_options_for_engine, get_tts_config_visibility, 
+                        get_tts_engine_name
+                    )
+                    
+                    tts_vis = get_tts_config_visibility()
+                    
+                    with gr.Row(elem_classes=["clean-elements"], visible=tts_vis.get("sound_device", False)) as sound_hw_row:
+                        config_components["sound_device"] = gr.Dropdown(
+                            choices=get_sound_device_names(),
+                            label="Sound Card",
+                            value="Default",
+                            interactive=True,
+                            scale=5
+                        )
+                        config_components["sample_rate"] = gr.Dropdown(
+                            choices=get_sample_rate_options(),
+                            label="Sample Rate",
+                            value=22050,
+                            interactive=True,
+                            scale=5
+                        )
                     
                     gr.Markdown("**Model**")
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -1550,6 +1576,23 @@ def launch_interface():
                         browse = gr.Button("📁 Browse Folders", variant="secondary")
                         config_components["load"] = gr.Button("💾 Load Model", variant="primary")
                         config_components["unload"] = gr.Button("🗑️ Unload Model", variant="stop")
+
+                    gr.Markdown("**Text-to-Speech**")
+                    with gr.Row(elem_classes=["clean-elements"], visible=tts_vis.get("voice_select", False)) as tts_row:
+                        tts_engine_display = gr.Textbox(
+                            label="TTS Engine",
+                            value=get_tts_engine_name(),
+                            interactive=False,
+                            scale=5
+                        )
+                        voices = get_voice_options_for_engine()
+                        config_components["tts_voice"] = gr.Dropdown(
+                            choices=voices,
+                            label="Voice Type",
+                            value=voices[0] if voices else "Default",
+                            interactive=True,
+                            scale=5
+                        )
                     
                     gr.Markdown("**Program**")
                     with gr.Row(elem_classes=["clean-elements"]):

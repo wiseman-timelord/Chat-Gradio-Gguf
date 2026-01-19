@@ -62,6 +62,10 @@ DEFAULT_CONFIG = {
         "cpu_threads": None,
         "bleep_on_events": False,
         "use_python_bindings": True,
+        # TTS user settings (3 keys only)
+        "tts_sound_device": -1,
+        "tts_sample_rate": 22050,
+        "tts_voice": None,
     }
 }
 
@@ -86,32 +90,26 @@ def load_system_ini():
         
         system = config['system']
         
-        # Load INI-only constants
         temporary.PLATFORM = system.get('platform')
         temporary.BACKEND_TYPE = system.get('backend_type', 'CPU_CPU')
         temporary.VULKAN_AVAILABLE = system.getboolean('vulkan_available', False)
         temporary.EMBEDDING_MODEL_NAME = system.get('embedding_model', 'BAAI/bge-small-en-v1.5')
         temporary.EMBEDDING_BACKEND = system.get('embedding_backend', 'sentence_transformers')
         temporary.GRADIO_VERSION = system.get('gradio_version', '3.50.2')
-        
-        # Load llama paths (constants from installer)
         temporary.LLAMA_CLI_PATH = system.get('llama_cli_path', None)
         temporary.LLAMA_BIN_PATH = system.get('llama_bin_path', None)
+        temporary.TTS_ENGINE = system.get('tts_engine', None)
         
         print(f"[INI] Platform: {temporary.PLATFORM}")
         print(f"[INI] Backend: {temporary.BACKEND_TYPE}")
         print(f"[INI] Vulkan: {temporary.VULKAN_AVAILABLE}")
         print(f"[INI] Embedding Model: {temporary.EMBEDDING_MODEL_NAME}")
-        print(f"[INI] Embedding Backend: {temporary.EMBEDDING_BACKEND}")
         print(f"[INI] Gradio Version: {temporary.GRADIO_VERSION}")
-        print(f"[INI] Llama CLI Path: {temporary.LLAMA_CLI_PATH}")
-        print(f"[INI] Llama Bin Path: {temporary.LLAMA_BIN_PATH}")
+        print(f"[INI] TTS Engine: {temporary.TTS_ENGINE}")
         
-        # OS version (generic)
         temporary.OS_VERSION = system.get('os_version', 'unknown')
         print(f"[INI] OS Version: {temporary.OS_VERSION}")
 
-        # Windows-specific version
         if temporary.PLATFORM == "windows":
             temporary.WINDOWS_VERSION = system.get('windows_version', temporary.OS_VERSION)
             print(f"[INI] Windows Version: {temporary.WINDOWS_VERSION}")
@@ -124,11 +122,11 @@ def load_system_ini():
         raise RuntimeError(f"Cannot read constants.ini: {e}") from e
 
 def load_config():
-    """Load configuration with validation and error handling."""
+    """Load configuration with strict validation - no defaults, error on missing keys."""
     if not CONFIG_PATH.exists():
         raise RuntimeError(
             f"Configuration file not found: {CONFIG_PATH}\n"
-            "Re-run the installer or restore the file from backup."
+            "Re-run the installer to generate persistent.json."
         )
 
     try:
@@ -137,59 +135,31 @@ def load_config():
     except Exception as e:
         raise RuntimeError(f"Cannot read configuration file {CONFIG_PATH}: {e}") from e
 
-    # Handle both old format (nested) and new format (flat) from installer
-    if "model_settings" in config:
-        model_settings = config.get("model_settings", {})
-    else:
-        # New installer format - flat structure
-        model_settings = {
-            "model_dir": config.get("model_folder", "models"),
-            "model_name": config.get("model_name", "Select_a_model..."),
-            "context_size": config.get("context_size", 4096),
-            "vram_size": config.get("vram_size", 0),
-            "temperature": config.get("temperature", 0.7),
-            "repeat_penalty": config.get("repeat_penalty", 1.1),
-            "llama_cli_path": config.get("llama_cli_path"),
-            "llama_bin_path": config.get("llama_bin_path"),
-            "selected_gpu": config.get("selected_gpu", "Auto"),
-            "selected_cpu": config.get("selected_cpu", "Auto"),
-            "mmap": config.get("mmap", True),
-            "mlock": config.get("mlock", False),
-            "n_batch": config.get("batch_size", 512),
-            "dynamic_gpu_layers": config.get("dynamic_gpu_layers", True),
-            "max_history_slots": config.get("max_history_slots", 12),
-            "max_attach_slots": config.get("max_attach_slots", 6),
-            "session_log_height": config.get("session_log_height", 650),
-            "show_think_phase": config.get("show_think_phase", False),
-            "print_raw_output": config.get("print_raw_output", False),
-            "cpu_threads": config.get("cpu_threads"),
-            "bleep_on_events": config.get("bleep_on_events", False),
-            "use_python_bindings": config.get("use_python_bindings", True),
-            "layer_allocation_mode": config.get("layer_allocation_mode", "SRAM_ONLY"),
-        }
-
-    # Validate required keys with defaults
-    required_defaults = {
-        "model_dir": "models",
-        "context_size": 4096,
-        "vram_size": 0,
-        "temperature": 0.7,
-        "repeat_penalty": 1.1,
-        "max_history_slots": 12,
-        "max_attach_slots": 6,
-        "session_log_height": 650,
-        "show_think_phase": False,
-        "print_raw_output": False,
-        "cpu_threads": None,
-        "bleep_on_events": False,
-        "use_python_bindings": True,
-        "layer_allocation_mode": "SRAM_ONLY"
-    }
+    # Must have model_settings section
+    if "model_settings" not in config:
+        raise RuntimeError(
+            f"Configuration file missing 'model_settings' section.\n"
+            "Re-run the installer to regenerate persistent.json."
+        )
     
-    for key, default in required_defaults.items():
-        if key not in model_settings:
-            model_settings[key] = default
-            print(f"[CONFIG] Missing key '{key}', using default: {default}")
+    model_settings = config["model_settings"]
+    
+    # Required keys - error if missing
+    required_keys = [
+        "model_dir", "model_name", "context_size", "vram_size", "temperature",
+        "repeat_penalty", "selected_gpu", "selected_cpu", "mmap", "mlock",
+        "n_batch", "dynamic_gpu_layers", "max_history_slots", "max_attach_slots",
+        "session_log_height", "show_think_phase", "print_raw_output", "cpu_threads",
+        "bleep_on_events", "use_python_bindings", "layer_allocation_mode",
+        "tts_sound_device", "tts_sample_rate", "tts_voice"
+    ]
+    
+    missing_keys = [k for k in required_keys if k not in model_settings]
+    if missing_keys:
+        raise RuntimeError(
+            f"Configuration file missing required keys: {', '.join(missing_keys)}\n"
+            "Re-run the installer to regenerate persistent.json."
+        )
 
     # Load MODEL_FOLDER first (critical for model discovery)
     temporary.MODEL_FOLDER = model_settings["model_dir"]
@@ -204,7 +174,7 @@ def load_config():
     print(f"[CONFIG] Context: {temporary.CONTEXT_SIZE}, VRAM: {temporary.VRAM_SIZE}MB, Temp: {temporary.TEMPERATURE}")
     
     # Layer allocation
-    temporary.LAYER_ALLOCATION_MODE = model_settings.get("layer_allocation_mode", "SRAM_ONLY")
+    temporary.LAYER_ALLOCATION_MODE = model_settings["layer_allocation_mode"]
     
     # Only force SRAM_ONLY if backend is CPU_CPU (from INI)
     if temporary.BACKEND_TYPE == "CPU_CPU":
@@ -225,35 +195,40 @@ def load_config():
     temporary.USE_PYTHON_BINDINGS = model_settings["use_python_bindings"]
     print(f"[CONFIG] UI: History={temporary.MAX_HISTORY_SLOTS}, Attach={temporary.MAX_ATTACH_SLOTS}, Height={temporary.SESSION_LOG_HEIGHT}")
 
-    # Load optional settings with fallback
-    optional_map = {
-        "selected_gpu": "SELECTED_GPU",
-        "selected_cpu": "SELECTED_CPU",
-        "mmap": "MMAP",
-        "mlock": "MLOCK",
-        "n_batch": "BATCH_SIZE",
-        "dynamic_gpu_layers": "DYNAMIC_GPU_LAYERS",
-    }
+    # Load TTS user settings
+    temporary.TTS_SOUND_DEVICE = model_settings["tts_sound_device"]
+    temporary.TTS_SAMPLE_RATE = model_settings["tts_sample_rate"]
+    temporary.TTS_VOICE = model_settings["tts_voice"]
+    print(f"[CONFIG] TTS: Device={temporary.TTS_SOUND_DEVICE}, Rate={temporary.TTS_SAMPLE_RATE}, Voice={temporary.TTS_VOICE}")
 
-    for json_key, tmp_attr in optional_map.items():
-        if json_key in model_settings:
-            value = model_settings[json_key]
-            # Ensure selected_cpu is always a label string
-            if json_key == "selected_cpu":
-                if isinstance(value, (int, float)):
-                    print(f"[CONFIG] SELECTED_CPU is numeric ({value}) - migrating to 'Auto-Select'")
-                    value = "Auto-Select"
-                elif not isinstance(value, str):
-                    value = "Auto-Select"
-            setattr(temporary, tmp_attr, value)
-            print(f"[CONFIG] {tmp_attr}: {getattr(temporary, tmp_attr)}")
+    # Load hardware selection settings
+    temporary.SELECTED_GPU = model_settings["selected_gpu"]
+    temporary.SELECTED_CPU = model_settings["selected_cpu"]
+    temporary.MMAP = model_settings["mmap"]
+    temporary.MLOCK = model_settings["mlock"]
+    temporary.BATCH_SIZE = model_settings["n_batch"]
+    temporary.DYNAMIC_GPU_LAYERS = model_settings["dynamic_gpu_layers"]
+    
+    # Ensure selected_cpu is always a label string
+    if isinstance(temporary.SELECTED_CPU, (int, float)):
+        print(f"[CONFIG] SELECTED_CPU is numeric ({temporary.SELECTED_CPU}) - setting to 'Auto-Select'")
+        temporary.SELECTED_CPU = "Auto-Select"
+    elif not isinstance(temporary.SELECTED_CPU, str):
+        temporary.SELECTED_CPU = "Auto-Select"
+    
+    print(f"[CONFIG] SELECTED_GPU: {temporary.SELECTED_GPU}")
+    print(f"[CONFIG] SELECTED_CPU: {temporary.SELECTED_CPU}")
+    print(f"[CONFIG] MMAP: {temporary.MMAP}")
+    print(f"[CONFIG] MLOCK: {temporary.MLOCK}")
+    print(f"[CONFIG] BATCH_SIZE: {temporary.BATCH_SIZE}")
+    print(f"[CONFIG] DYNAMIC_GPU_LAYERS: {temporary.DYNAMIC_GPU_LAYERS}")
     
     # Load model list from the configured folder
     temporary.AVAILABLE_MODELS = get_available_models()
     print(f"[CONFIG] Found {len(temporary.AVAILABLE_MODELS)} models in {temporary.MODEL_FOLDER}")
     
     # Load saved model name
-    saved_model = model_settings.get("model_name")
+    saved_model = model_settings["model_name"]
     print(f"[CONFIG] Saved model name: {saved_model}")
     
     if saved_model and saved_model in temporary.AVAILABLE_MODELS:
@@ -291,8 +266,6 @@ def save_config():
     if isinstance(cpu_label, (int, float)):
         cpu_label = "Auto-Select"
 
-    # Note: llama_cli_path, llama_bin_path, embedding_model, embedding_backend
-    # are stored in constants.ini (constants), not in persistent.json (variables)
     config = {
         "model_settings": {
             "model_dir": temporary.MODEL_FOLDER,
@@ -317,6 +290,10 @@ def save_config():
             "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "layer_allocation_mode": getattr(temporary, 'LAYER_ALLOCATION_MODE', 'SRAM_ONLY'),
             "vulkan_enabled": getattr(temporary, 'VULKAN_AVAILABLE', False),
+            # TTS user settings (3 keys only)
+            "tts_sound_device": getattr(temporary, 'TTS_SOUND_DEVICE', -1),
+            "tts_sample_rate": getattr(temporary, 'TTS_SAMPLE_RATE', 22050),
+            "tts_voice": getattr(temporary, 'TTS_VOICE', None),
         }
     }
 
@@ -326,7 +303,7 @@ def save_config():
     print(f"[SAVE]   Model folder: {config['model_settings']['model_dir']}")
     print(f"[SAVE]   Model name: {config['model_settings']['model_name']}")
     print(f"[SAVE]   Selected CPU: {config['model_settings']['selected_cpu']}")
-    print(f"[SAVE]   CPU threads: {config['model_settings']['cpu_threads']}")
+    print(f"[SAVE]   TTS voice: {config['model_settings']['tts_voice']}")
     
     with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=4, ensure_ascii=False)
@@ -341,7 +318,7 @@ def update_setting(key, value):
     
     try:
         # Convert value to appropriate type
-        if key in {"context_size", "vram_size", "n_gpu_layers", "n_batch", "max_history_slots", "max_attach_slots", "session_log_height", "cpu_threads"}:
+        if key in {"context_size", "vram_size", "n_gpu_layers", "n_batch", "max_history_slots", "max_attach_slots", "session_log_height", "cpu_threads", "tts_sound_device", "tts_sample_rate"}:
             value = int(value)
         elif key in {"temperature", "repeat_penalty"}:
             value = float(value)

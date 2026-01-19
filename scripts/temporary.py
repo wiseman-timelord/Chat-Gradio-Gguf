@@ -41,6 +41,8 @@ REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 HISTORY_SLOT_OPTIONS = [4, 8, 10, 12, 16]
 ATTACH_SLOT_OPTIONS = [2, 4, 6, 8, 10]
 SESSION_LOG_HEIGHT_OPTIONS = [250, 450, 550, 600, 625, 650, 700, 800, 1000, 1400]
+COQUI_DEFAULT_VOICES = {"english_male": "tts_models/en/ljspeech/tacotron2-DDC", "english_female": "tts_models/en/ljspeech/glow-tts", "american_male": "tts_models/en/ljspeech/speedy-speech", "american_female": "tts_models/en/ljspeech/vits"}
+SAMPLE_RATES = [22050, 44100, 48000]
 
 # General Constants/Variables/Lists/Maps/Arrays
 TEMP_DIR = "data/temp"
@@ -78,6 +80,12 @@ SELECTED_CPU = None
 
 # Arrays
 session_attached_files = []
+
+# TTS Configuration
+TTS_ENGINE = None              # "coqui" or "pyttsx3" (from INI, set at install)
+TTS_SOUND_DEVICE = -1          # -1 = default, or device ID (JSON)
+TTS_SAMPLE_RATE = 22050        # 22050, 44100, or 48000 (JSON)
+TTS_VOICE = None               # Selected voice name (JSON)
 
 # UI Constants/Variables
 USER_COLOR = "#ffffff"
