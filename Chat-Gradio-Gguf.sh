@@ -1,8 +1,9 @@
 #!/bin/bash
 # Script: `./Chat-Gradio-Gguf.sh`
 
-# Set terminal title (Linux/Unix method)
+# Set terminal configuration (Linux/Unix method)
 echo -ne "\033]0;Chat-Gradio-Gguf\007"
+printf '\e[8;29;80t'
 
 # Change to script directory
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
@@ -22,19 +23,21 @@ sleep 1
 
 # Separator functions
 display_separator_thick() {
-    printf "%${MENU_WIDTH}s\n" | tr ' ' '='
+    echo "==============================================================================="
 }
 
 display_separator_thin() {
-    printf "%${MENU_WIDTH}s\n" | tr ' ' '-'
+    echo "-------------------------------------------------------------------------------"
 }
 
-# Menu functions
-main_menu_80() {
+# Main menu
+main_menu() {
     clear
     display_separator_thick
     echo "    Chat-Gradio-Gguf: Bash Menu"
     display_separator_thick
+    echo ""
+    echo ""
     echo ""
     echo ""
     echo ""
@@ -48,38 +51,6 @@ main_menu_80() {
     echo "    3. Run Validation"
     echo ""
     echo ""
-    echo ""
-    echo ""
-    echo ""
-    echo ""
-    display_separator_thick
-    read -p "Selection; Menu Options = 1-3, Exit Bash = X: " choice
-}
-
-main_menu_120() {
-    clear
-    display_separator_thick
-    echo "                                  _________             ________            ________                                 "
-    echo "                                  \_   ___ \           /  _____/           /  _____/                                 "
-    echo "                                  /    \  \/   ______ /   \  ___   ______ /   \  ___                                 "
-    echo "                                  \     \____ /_____/ \    \_\  \ /_____/ \    \_\  \                                "
-    echo "                                   \______  /          \______  /          \______  /                                "
-    echo "                                          \/                  \/                  \/                                 "
-    display_separator_thin
-    echo "    Chat-Gradio-Gguf: Bash Menu"
-    display_separator_thick
-    echo ""
-    echo ""
-    echo ""
-    echo ""
-    echo ""
-    echo ""
-    echo ""
-    echo "    1. Run Main Program"
-    echo ""
-    echo "    2. Run Installation"
-    echo ""
-    echo "    3. Run Validation"
     echo ""
     echo ""
     echo ""
@@ -95,11 +66,7 @@ main_menu_120() {
 run_main_program() {
     clear
     display_separator_thick
-    if [ "$MENU_WIDTH" = "120" ]; then
-        echo "                                     Chat-Gradio-Gguf: Launcher"
-    else
-        echo "    Chat-Gradio-Gguf: Launcher"
-    fi
+    echo "    Chat-Gradio-Gguf: Launcher"
     display_separator_thick
     echo ""
     echo "Starting Chat-Gradio-Gguf..."
@@ -126,11 +93,7 @@ run_main_program() {
 run_installation() {
     clear
     display_separator_thick
-    if [ "$MENU_WIDTH" = "120" ]; then
-        echo "                                     Chat-Gradio-Gguf: Installer"
-    else
-        echo "    Chat-Gradio-Gguf: Installer"
-    fi
+    echo "    Chat-Gradio-Gguf: Installer"
     display_separator_thick
     echo ""
     echo "Running Installer..."
@@ -168,11 +131,7 @@ run_installation() {
 run_validation() {
     clear
     display_separator_thick
-    if [ "$MENU_WIDTH" = "120" ]; then
-        echo "                                     Chat-Gradio-Gguf: Library Validation"
-    else
-        echo "    Chat-Gradio-Gguf: Library Validation"
-    fi
+    echo "    Chat-Gradio-Gguf: Library Validation"
     display_separator_thick
     echo ""
     echo "Running Library Validation..."
@@ -194,21 +153,9 @@ run_validation() {
     read -p "Press Enter to continue..."
 }
 
-# Detect terminal width
-COLUMNS=$(tput cols 2>/dev/null || echo 80)
-if [ "$COLUMNS" -ge 120 ]; then
-    MENU_WIDTH=120
-else
-    MENU_WIDTH=80
-fi
-
 # Main loop
 while true; do
-    if [ "$MENU_WIDTH" = "120" ]; then
-        main_menu_120
-    else
-        main_menu_80
-    fi
+    main_menu
     case $choice in
         1)
             run_main_program

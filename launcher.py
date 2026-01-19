@@ -237,6 +237,14 @@ def main():
         # NEW: Pre-load auxiliary models to avoid memory conflicts
         print("\n[INIT] Pre-loading auxiliary models...")
         preload_auxiliary_models()
+
+        # Initialize TTS
+        print("\n[INIT] Initializing TTS...")
+        from scripts.sounds import initialize_tts
+        if initialize_tts():
+            print("[INIT] OK TTS ready")
+        else:
+            print("[INIT] WARN TTS unavailable")
         
         # Launch interface
         print("\nLaunching Gradio Interface...")

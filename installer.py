@@ -39,6 +39,8 @@ VS_GENERATOR = None
 DETECTED_PYTHON_INFO = {}
 SELECTED_GRADIO = ""
 SELECTED_QTWEB = ""
+TTS_ENGINE_INSTALLED = None
+TTS_ACCENTS_SELECTED = []
 
 # Maps/Lists...
 DIRECTORIES = [
@@ -425,6 +427,304 @@ def get_torch_version_for_python() -> str:
     else:
         # Python 3.12+ requires torch 2.4.0+
         return "torch>=2.4.0"
+
+def get_tts_engine_for_platform() -> tuple:
+    """
+    Determine TTS engine and package version based on OS/Python.
+    Returns: (engine_name, package_spec, torch_spec) or (engine_name, None, None) for pyttsx3
+    """
+    py_minor = sys.version_info.minor
+    
+    if PLATFORM == "windows":
+        win_ver = detect_windows_version() or "unknown"
+        if win_ver == "7":
+            return ("pyttsx3", None, None)
+        if win_ver == "8.1" and py_minor == 9:
+            return ("coqui_legacy", "TTS==0.13.0", "torch==1.13.1+cpu")
+        if py_minor >= 10:
+            return ("coqui", "coqui-tts>=0.27.3", None)
+        return ("pyttsx3", None, None)
+    else:
+        if py_minor >= 10:
+            return ("coqui", "coqui-tts>=0.27.3", None)
+        return ("pyttsx3", None, None)
+
+def download_coqui_voices() -> bool:
+    """Download Coqui TTS voices based on selected accents with retry/resume."""
+    global TTS_ACCENTS_SELECTED
+    
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                    ("python.exe" if PLATFORM == "windows" else "python"))
+    
+    # Voice models based on accent selection
+    all_voices = {
+        "american": [
+            ("American Female", "tts_models/en/ljspeech/vits"),
+            ("American Male", "tts_models/en/ljspeech/speedy-speech"),
+        ],
+        "english": [
+            ("English Female", "tts_models/en/ljspeech/glow-tts"),
+            ("English Male", "tts_models/en/ljspeech/tacotron2-DDC"),
+        ],
+    }
+    
+    # Build voice list based on selection
+    voices = []
+    accents = TTS_ACCENTS_SELECTED if TTS_ACCENTS_SELECTED else ["american", "english"]
+    for accent in accents:
+        if accent in all_voices:
+            voices.extend(all_voices[accent])
+    
+    if not voices:
+        print_status("No TTS voices selected", False)
+        return True
+    
+    cache_dir = BASE_DIR / "data" / "tts_models"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Download script with retry/resume and cleaner progress
+    download_script = f'''
+import os
+import sys
+import time
+
+# Set TTS cache directory BEFORE importing TTS
+cache_dir = r"{cache_dir}"
+os.environ["TTS_HOME"] = cache_dir
+
+# Custom progress bar format (no speed/time, longer bar)
+os.environ["TQDM_NCOLS"] = "70"
+
+from tqdm import tqdm
+
+# Monkey-patch tqdm to use cleaner format
+_original_tqdm_init = tqdm.__init__
+def _custom_tqdm_init(self, *args, **kwargs):
+    kwargs['bar_format'] = '{{percentage:3.0f}}%|{{bar:30}}| {{n_fmt}}/{{total_fmt}}'
+    kwargs['ncols'] = 70
+    _original_tqdm_init(self, *args, **kwargs)
+tqdm.__init__ = _custom_tqdm_init
+
+from TTS.api import TTS
+
+voices = {voices}
+max_retries = 3
+
+for name, model in voices:
+    print(f"Downloading {{name}}...")
+    sys.stdout.flush()
+    
+    success = False
+    for attempt in range(max_retries):
+        try:
+            tts = TTS(model_name=model, progress_bar=True)
+            print(f"  {{name}} ready")
+            sys.stdout.flush()
+            success = True
+            break
+        except Exception as e:
+            error_msg = str(e)
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 5
+                print(f"  Retry {{attempt + 2}}/{{max_retries}} in {{wait_time}}s...")
+                sys.stdout.flush()
+                time.sleep(wait_time)
+            else:
+                print(f"  {{name}} failed after {{max_retries}} attempts: {{error_msg[:60]}}")
+                sys.stdout.flush()
+    
+    if not success:
+        # Continue with other voices even if one fails
+        pass
+
+print("Voice download complete")
+sys.stdout.flush()
+'''
+    
+    script_path = TEMP_DIR / "download_voices.py"
+    try:
+        script_path.write_text(download_script)
+        
+        accent_str = " + ".join(a.title() for a in accents)
+        print_status(f"Downloading TTS voices ({accent_str})...")
+        
+        # Set TTS_HOME in subprocess environment
+        env = os.environ.copy()
+        env["TTS_HOME"] = str(cache_dir)
+        
+        process = subprocess.Popen(
+            [python_exe, str(script_path)],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1,
+            env=env
+        )
+        
+        for line in process.stdout:
+            line = line.strip()
+            if line:
+                # Show progress lines and status
+                if "%" in line and "|" in line:
+                    # Progress bar line - show as-is
+                    print(f"\r  {line:<70}", end='', flush=True)
+                elif "Downloading" in line or "ready" in line or "complete" in line:
+                    print(f"\n  {line}")
+                elif "Retry" in line:
+                    print(f"\n  {line}")
+                elif "failed" in line:
+                    print(f"\n  {line}")
+        
+        process.wait(timeout=1200)  # 20 min timeout
+        print()
+        
+        # Verify files were downloaded
+        downloaded = list(cache_dir.rglob("*.pth"))
+        if downloaded:
+            print_status(f"TTS voices ready ({len(downloaded)} model files)")
+            return True
+        else:
+            # Check default location
+            home = Path.home()
+            default_tts = home / "AppData" / "Local" / "tts" if PLATFORM == "windows" else home / ".local" / "share" / "tts"
+            if default_tts.exists():
+                default_files = list(default_tts.rglob("*.pth"))
+                if default_files:
+                    print_status(f"TTS voices ready ({len(default_files)} files in default location)")
+                    return True
+            
+            print_status("Some TTS voices may download on first use", False)
+            return True
+            
+    except subprocess.TimeoutExpired:
+        print_status("TTS download timed out - voices will download on first use", False)
+        return True
+    except Exception as e:
+        print_status(f"Voice download error: {e}", False)
+        return True
+    finally:
+        script_path.unlink(missing_ok=True)
+
+def install_tts_engine() -> bool:
+    """Install appropriate TTS engine based on platform/Python version."""
+    global TTS_ENGINE_INSTALLED
+    
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                 ("pip.exe" if PLATFORM == "windows" else "pip"))
+    
+    engine_type, tts_package, torch_override = get_tts_engine_for_platform()
+    
+    if engine_type in ("coqui", "coqui_legacy"):
+        quality_label = "neural quality" if engine_type == "coqui" else "neural legacy"
+        print_status(f"Installing Coqui TTS ({quality_label})...")
+        
+        # Install sounddevice for audio playback
+        if not pip_install_with_retry(pip_exe, "sounddevice==0.5.0", max_retries=5):
+            print_status("sounddevice failed - falling back to pyttsx3", False)
+            engine_type = "pyttsx3"
+        else:
+            # For legacy Coqui, install specific torch first
+            if torch_override:
+                print_status(f"Installing {torch_override} for legacy Coqui...")
+                if not pip_install_with_retry(pip_exe, torch_override,
+                                             ["--index-url", "https://download.pytorch.org/whl/cpu"],
+                                             max_retries=5):
+                    print_status("Legacy torch failed - falling back to pyttsx3", False)
+                    engine_type = "pyttsx3"
+            
+            if engine_type != "pyttsx3":
+                # Install Coqui TTS with progress
+                print(f"  Downloading Coqui TTS (this may take several minutes)...")
+                try:
+                    process = subprocess.Popen(
+                        [pip_exe, "install", tts_package, "--progress-bar", "on"],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, bufsize=1
+                    )
+                    
+                    for line in process.stdout:
+                        line = line.strip()
+                        if line:
+                            if "Downloading" in line or "%" in line or "Installing" in line:
+                                print(f"\r  {line[:75]:<75}", end='', flush=True)
+                            elif "Successfully" in line:
+                                print(f"\n  {line}")
+                    
+                    process.wait(timeout=1800)
+                    print()
+                    
+                    if process.returncode == 0:
+                        print_status(f"Coqui TTS installed ({quality_label})")
+                        TTS_ENGINE_INSTALLED = "coqui"
+                        
+                        # Download default voices
+                        download_coqui_voices()
+                        return True
+                    else:
+                        print_status("Coqui TTS install failed - falling back to pyttsx3", False)
+                        engine_type = "pyttsx3"
+                        
+                except subprocess.TimeoutExpired:
+                    print_status("Coqui TTS install timed out - falling back to pyttsx3", False)
+                    engine_type = "pyttsx3"
+                except Exception as e:
+                    print_status(f"Coqui TTS install error: {e} - falling back to pyttsx3", False)
+                    engine_type = "pyttsx3"
+    
+    if engine_type == "pyttsx3":
+        print_status("Installing pyttsx3 TTS (system voices)...")
+        try:
+            python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                           ("python.exe" if PLATFORM == "windows" else "python"))
+            result = subprocess.run([python_exe, "-c", "import pyttsx3; print('OK')"],
+                                   capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                print_status("pyttsx3 TTS ready (system voices)")
+                TTS_ENGINE_INSTALLED = "pyttsx3"
+                return True
+        except Exception as e:
+            print_status(f"pyttsx3 verification failed: {e}", False)
+    
+    print_status("WARNING: No TTS engine available", False)
+    TTS_ENGINE_INSTALLED = None
+    return False
+
+def update_ini_tts_engine():
+    """Update constants.ini with TTS engine after installation."""
+    global TTS_ENGINE_INSTALLED
+    
+    if not TTS_ENGINE_INSTALLED:
+        return
+    
+    system_ini_path = BASE_DIR / "data" / "constants.ini"
+    if not system_ini_path.exists():
+        return
+    
+    try:
+        # Read existing content
+        with open(system_ini_path, "r") as f:
+            content = f.read()
+        
+        # Check if tts_engine already exists
+        if "tts_engine" in content:
+            # Replace existing line
+            lines = content.split("\n")
+            new_lines = []
+            for line in lines:
+                if line.startswith("tts_engine"):
+                    new_lines.append(f"tts_engine = {TTS_ENGINE_INSTALLED}")
+                else:
+                    new_lines.append(line)
+            content = "\n".join(new_lines)
+        else:
+            # Add new line before end
+            content = content.rstrip() + f"\ntts_engine = {TTS_ENGINE_INSTALLED}\n"
+        
+        # Write back
+        with open(system_ini_path, "w") as f:
+            f.write(content)
+        
+        print_status(f"Updated constants.ini with TTS engine: {TTS_ENGINE_INSTALLED}")
+    except Exception as e:
+        print_status(f"Failed to update INI with TTS engine: {e}", False)
 
 def detect_all_pythons() -> dict:
     """Detect all Python installations and select optimal version for OS compatibility."""
@@ -951,7 +1251,7 @@ def create_config(backend: str, embedding_model: str) -> None:
     
     # Use model_settings format for compatibility with settings.py
     # Note: Constants like llama_cli_path, llama_bin_path, embedding_model, 
-    # embedding_backend are stored in constants.ini, not here
+    # embedding_backend, tts_engine are stored in constants.ini, not here
     config = {
         "model_settings": {
             "layer_allocation_mode": layer_mode,
@@ -976,6 +1276,10 @@ def create_config(backend: str, embedding_model: str) -> None:
             "bleep_on_events": False,
             "use_python_bindings": True,
             "vulkan_enabled": vulkan_enabled,
+            # TTS user settings
+            "tts_sound_device": -1,
+            "tts_sample_rate": 22050,
+            "tts_voice": None,
         }
     }
     
@@ -1019,6 +1323,8 @@ def create_system_ini(platform: str, os_version: str, python_version: str,
                 f.write(f"llama_bin_path = {llama_bin_path}\n")
             if platform == "windows" and windows_version:
                 f.write(f"windows_version = {windows_version}\n")
+            if TTS_ENGINE_INSTALLED:
+                f.write(f"tts_engine = {TTS_ENGINE_INSTALLED}\n")
         print_status("System information file created")
         return True
     except Exception as e:
@@ -2163,10 +2469,17 @@ def select_backend_and_embedding():
         print(f"   {letter}) {model['display']}")
     
     print()
+    
+    # TTS Accent options
+    print("TTS Accent Options...")
+    print("   d) American")
+    print("   e) English")
+    
+    print()
     print("=" * width)
     
     max_backend = len(backend_opts)
-    prompt = f"Selection; Backend = 1-{max_backend} + Embeddings = a-c (e.g. 2b), Abandon = A: "
+    prompt = f"Selection; Backend=1-{max_backend}, Embed=a-c, TTS=d-e, Abandon=A; (e.g. 2be): "
     choice = input(prompt).strip().lower()
     
     if choice == "a":
@@ -2176,20 +2489,38 @@ def select_backend_and_embedding():
     choice = choice.replace(" ", "").replace("-", "")
     
     while True:
-        if len(choice) == 2 and choice[0].isdigit() and choice[1] in "abc":
+        # Parse choice: digit + embed letter + optional TTS letters
+        # Valid formats: "2b", "2bd", "2be", "2bde", "2bed"
+        if len(choice) >= 2 and choice[0].isdigit() and choice[1] in "abc":
             backend_num = int(choice[0])
             embed_letter = choice[1]
+            tts_letters = choice[2:] if len(choice) > 2 else ""
             
-            if 1 <= backend_num <= len(backend_opts):
+            # Validate TTS letters (only d and e allowed, in any order)
+            valid_tts = all(c in "de" for c in tts_letters)
+            
+            if 1 <= backend_num <= len(backend_opts) and valid_tts:
                 embed_key = str(ord(embed_letter) - 96)
                 if embed_key in embed_opts:
                     selected_backend = backend_opts[backend_num - 1]
                     selected_model = embed_opts[embed_key]["name"]
                     
+                    # Parse TTS accents
+                    global TTS_ACCENTS_SELECTED
+                    TTS_ACCENTS_SELECTED = []
+                    if 'd' in tts_letters:
+                        TTS_ACCENTS_SELECTED.append("american")
+                    if 'e' in tts_letters:
+                        TTS_ACCENTS_SELECTED.append("english")
+                    # Default to both if none selected
+                    if not TTS_ACCENTS_SELECTED:
+                        TTS_ACCENTS_SELECTED = ["american", "english"]
+                    
                     time.sleep(1)
                     return selected_backend, selected_model
         
-        print("Invalid selection. Please enter a valid combination (e.g. 2b).")
+        print("Invalid selection. Please enter a valid combination (e.g. 2bde).")
+        prompt = f"Selection; Backend 1-{max_backend}, Embed a-c, TTS d/e/de (e.g. 2bde), Abandon = A: "
         choice = input(prompt).strip().lower()
         if choice == "a":
             print("\nAbandoning installation...")
@@ -2259,7 +2590,13 @@ def install():
     else:
         os_display = f"Ubuntu {OS_VERSION}" if OS_VERSION else "Ubuntu"
     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
-    print(f"Installing {APP_NAME} on {os_display} with Python {py_ver} using install route {backend} with, Llama.Cpp {LLAMACPP_TARGET_VERSION} and Gradio {SELECTED_GRADIO} and Qt-Web {SELECTED_QTWEB}")
+
+    tts_type, _, _ = get_tts_engine_for_platform()
+    tts_label = "Coqui TTS" if "coqui" in tts_type else "pyttsx3"
+    print(f"Installing {APP_NAME} on {os_display} with Python {py_ver}")
+    print(f"  Route: {backend}")
+    print(f"  Llama.Cpp {LLAMACPP_TARGET_VERSION}, Gradio {SELECTED_GRADIO}, Qt-Web {SELECTED_QTWEB}, TTS {tts_label}")
+
     print(f"Embedding model: {embedding_model}")
     
     # Determine backend_type
@@ -2315,6 +2652,13 @@ def install():
     spacy_ok = download_spacy_model()
     if not spacy_ok:
         print_status("WARNING: spaCy model download failed - session labeling may not work", False)
+
+    tts_ok = install_tts_engine()
+    if not tts_ok:
+        print_status("WARNING: TTS unavailable - speech features disabled", False)
+    
+    # Update INI with TTS engine (since INI was created before TTS was installed)
+    update_ini_tts_engine()
 
     # Download/compile backend
     if not download_extract_backend(backend):
