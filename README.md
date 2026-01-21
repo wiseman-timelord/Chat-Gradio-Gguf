@@ -24,19 +24,19 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 ### Preview
 - The Interaction page on Windows, with Command Prompt in the background...
-![preview_image](media/conversation_page_windows.jpg)
+![image_missing](media/conversation_page_windows.jpg)
 
 - The Interaction page on Ubuntu with Command Prompt in the background...
-![preview_images](media/conversation_page_ubuntu,jpg)
+![image_missing](media/conversation_page_ubuntu.jpg)
 
 - The collapseable Left/Right Panel on the Interaction page (click the `<->` button)...
-![preview_image](media/conversation_expand.jpg)
+![image_missing](media/conversation_expand.jpg)
 
 - The dynamic progress indication replaces the user input box upon submission...
-![preview_image](media/dynamic_progress.jpg)
+![image_missing](media/dynamic_progress.jpg)
 
 - The Configuration page, for configuration of, models, hardware, GUI, and other settings...
-![preview_image](media/configuration_page.jpg)
+![image_missing](media/configuration_page.jpg)
 
 - Startup looks like this in the terminal/console (ignore warnings) (v0.98.2)...
 <details>
