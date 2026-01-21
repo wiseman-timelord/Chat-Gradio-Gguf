@@ -664,11 +664,12 @@ project_root/
 # Development for v0.xx-xx-v1.00.00
 Now that the program is 99% made, there are some rolling issues to investigate/correct, however there are no critical issues currently...
 1. Context handling was upgraded recently and needs proper testing.
-2. **Safe Globals** - Standardize all global variables using safe, unique 2-3 word labels to avoid conflicts.  
+2. **Safe Globals** - Standardize more global variables using safe, unique 3 word labels to avoid conflicts.  
 
 # Development for => v1.01.00
-1. Thinking visualisation.
-2. Possibility of artifacts?
+1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
+2. Possibility of artifacts, the AI mentioned this, I want to see how feasable it i first.
+
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
