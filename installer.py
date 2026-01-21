@@ -1519,8 +1519,17 @@ def install_linux_system_dependencies(backend: str) -> bool:
     """Install Linux system dependencies including optional CUDA/Vulkan build tools."""
     print_status("Installing Linux system dependencies...")
     
+    # Get Qt version for OS first
+    qt_version, use_qt5 = get_qt_version_for_os()
+    linux_ver = detect_linux_version()
+    
+    try:
+        major_ver = int(linux_ver.split('.')[0]) if linux_ver != "unknown" else 24
+    except (ValueError, AttributeError):
+        major_ver = 24
+    
     # Base packages needed for Python packages
-    apt_packages = [
+    base_packages = [
         "python3-dev",
         "build-essential",
         "libffi-dev",
@@ -1532,26 +1541,50 @@ def install_linux_system_dependencies(backend: str) -> bool:
         "libgl1",
         "libxkbcommon0",
         "libxcb-cursor0",
-        # NEW: For headless Qt WebEngine (virtual display)
+        # For headless Qt WebEngine (virtual display)
         "xvfb",
     ]
     
-    # Qt dependencies based on version
+    # Qt dependencies based on version and Ubuntu version
     if use_qt5:
+        # Ubuntu 22/23 - Qt5
         qt_packages = [
-            "libxcb-xinerama0", "libxkbcommon0", "libegl1", "libgl1",
-            "qt5-default", "libqt5webengine5", "libqt5webenginewidgets5",
+            "libxcb-xinerama0",
+            "libxkbcommon0",
+            "libegl1",
+            "libgl1",
         ]
-        # Fallback packages for systems without qt5-default metapackage
+        # qt5-default doesn't exist in Ubuntu 22+, use these instead
+        if major_ver >= 22:
+            qt_packages.extend([
+                "qtbase5-dev",
+                "qtchooser",
+                "qt5-qmake",
+                "qtbase5-dev-tools",
+                "libqt5webengine5",
+                "libqt5webenginewidgets5",
+            ])
         qt_fallback = [
-            "qtbase5-dev", "qtwebengine5-dev",
+            "qtwebengine5-dev",
         ]
     else:
+        # Ubuntu 24/25 - Qt6
         qt_packages = [
-            "libxcb-cursor0", "libxkbcommon0", "libegl1", "libgl1",
-            "qt6-base-dev", "libqt6webenginecore6", "libqt6webenginewidgets6",
+            "libxcb-cursor0",
+            "libxkbcommon0",
+            "libegl1",
+            "libgl1",
+            "libxcb-xinerama0",
         ]
-        qt_fallback = []
+        if major_ver >= 24:
+            qt_packages.extend([
+                "qt6-base-dev",
+                "libqt6webenginecore6",
+                "libqt6webenginewidgets6",
+            ])
+        qt_fallback = [
+            "libqt6webengine6-data",
+        ]
     
     info = BACKEND_OPTIONS[backend]
     vulkan_packages = []
@@ -2298,16 +2331,56 @@ def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
                 pass
 
 def copy_linux_binaries(src_path: Path, dest_path: Path) -> None:
-    """Copy Linux binaries to destination and set permissions"""
-    for item in src_path.iterdir():
-        if item.is_file() and not item.suffix:
+    """Copy Linux binaries from extracted archive to destination and set permissions.
+    
+    Handles nested directory structures from tarballs (e.g., llama-b7688-bin-ubuntu-vulkan-x64/bin/)
+    """
+    # First, check if there's a nested directory (common in GitHub release tarballs)
+    subdirs = [d for d in src_path.iterdir() if d.is_dir()]
+    
+    # If there's exactly one subdirectory and it looks like the release folder, use it
+    if len(subdirs) == 1 and subdirs[0].name.startswith("llama-"):
+        actual_src = subdirs[0]
+        # Check for bin subdirectory
+        if (actual_src / "bin").exists():
+            actual_src = actual_src / "bin"
+    elif (src_path / "bin").exists():
+        actual_src = src_path / "bin"
+    else:
+        actual_src = src_path
+    
+    # Copy all executable files
+    copied_count = 0
+    for item in actual_src.iterdir():
+        if item.is_file():
             dest = dest_path / item.name
             shutil.copy2(item, dest)
-            os.chmod(dest, 0o755)
+            # Set executable permission for files without extensions (Linux binaries)
+            if not item.suffix or item.suffix in ['.so']:
+                os.chmod(dest, 0o755)
+            copied_count += 1
+    
+    # Also copy any .so files from lib directory if present
+    lib_candidates = [
+        src_path / "lib",
+        subdirs[0] / "lib" if len(subdirs) == 1 else None,
+    ]
+    for lib_dir in lib_candidates:
+        if lib_dir and lib_dir.exists():
+            for item in lib_dir.iterdir():
+                if item.is_file() and '.so' in item.name:
+                    dest = dest_path / item.name
+                    shutil.copy2(item, dest)
+                    os.chmod(dest, 0o755)
+                    copied_count += 1
+    
+    if copied_count > 0:
+        print_status(f"Copied {copied_count} binary files")
 
 def download_extract_backend(backend: str) -> bool:
     """Download and extract backend binaries"""
     import zipfile
+    import tarfile
     
     info = BACKEND_OPTIONS[backend]
     
@@ -2320,31 +2393,60 @@ def download_extract_backend(backend: str) -> bool:
     
     print_status("Downloading backend binaries...")
     
-    temp_zip = TEMP_DIR / "backend.zip"
+    # Determine file type from URL
+    url = info["url"]
+    if url.endswith(".tar.gz"):
+        temp_archive = TEMP_DIR / "backend.tar.gz"
+        is_tarball = True
+    else:
+        temp_archive = TEMP_DIR / "backend.zip"
+        is_tarball = False
     
     try:
-        download_with_progress(info["url"], temp_zip, "Downloading backend")
+        download_with_progress(url, temp_archive, "Downloading backend")
         
         print_status("Extracting backend...")
         
         dest_path = BASE_DIR / info["dest"]
         dest_path.mkdir(parents=True, exist_ok=True)
 
-        with zipfile.ZipFile(temp_zip, 'r') as zf:
-            members = zf.namelist()
-            total = len(members)
-            for i, m in enumerate(members):
-                zf.extract(m, dest_path)
-                if i % 25 == 0 or i == total - 1:
-                    print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
-            print()
+        if is_tarball:
+            # Handle .tar.gz (Linux)
+            with tarfile.open(temp_archive, 'r:gz') as tf:
+                members = tf.getmembers()
+                total = len(members)
+                for i, member in enumerate(members):
+                    # Use filter for Python 3.12+ compatibility
+                    tf.extract(member, dest_path, filter='data' if sys.version_info >= (3, 12) else None)
+                    if i % 25 == 0 or i == total - 1:
+                        print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
+                print()
+        else:
+            # Handle .zip (Windows)
+            with zipfile.ZipFile(temp_archive, 'r') as zf:
+                members = zf.namelist()
+                total = len(members)
+                for i, m in enumerate(members):
+                    zf.extract(m, dest_path)
+                    if i % 25 == 0 or i == total - 1:
+                        print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
+                print()
 
         if PLATFORM == "linux":
+            # Copy binaries from nested structure to dest_path root
             copy_linux_binaries(dest_path, dest_path)
 
         cli_path = BASE_DIR / info["cli_path"]
         if not cli_path.exists():
+            # Debug: list what was actually extracted
+            print(f"  Debug: Contents of {dest_path}:")
+            for item in dest_path.iterdir():
+                print(f"    {item.name}{'/' if item.is_dir() else ''}")
+                if item.is_dir():
+                    for subitem in item.iterdir():
+                        print(f"      {subitem.name}{'/' if subitem.is_dir() else ''}")
             raise FileNotFoundError(f"llama-cli not found: {cli_path}")
+        
         if PLATFORM == "linux":
             os.chmod(cli_path, 0o755)
 
@@ -2354,8 +2456,8 @@ def download_extract_backend(backend: str) -> bool:
         print_status(f"Backend install failed: {e}", False)
         return False
     finally:
-        temp_zip.unlink(missing_ok=True)
-
+        temp_archive.unlink(missing_ok=True)
+		
 def clean_compile_temp() -> None:
     """Clean up Windows compilation temp folder"""
     if PLATFORM == "windows" and WIN_COMPILE_TEMP.exists():
