@@ -165,7 +165,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Installation for option 2a (v0.98.0)..
+- Installation for option 2a on Windows 8.1 (v0.98.0)..
 <details>
     
     ===============================================================================
@@ -256,6 +256,177 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     [V] Cleaned up compilation temp folder
     DeActivated: `.venv`
     Press any key to continue . . .
+
+</details>
+
+- Installation for option 2ag on Ubuntu 25 (v0.99.3)..
+<details>
+    
+    ===============================================================================
+        Chat-Gradio-Gguf - Installation
+    ===============================================================================
+    
+    Installing Chat-Gradio-Gguf on Ubuntu 25.04 with Python 3.13
+      Route: Download Vulkan Bin / Default CPU Wheel
+      Llama.Cpp b7688, Gradio 5.49.1, Qt-Web v6, TTS pyttsx3
+    Embedding model: BAAI/bge-small-en-v1.5
+    [✓] Verified directory: data
+    [✓] Verified directory: scripts
+    [✓] Verified directory: models
+    [✓] Verified directory: data/history
+    [✓] Verified directory: data/temp
+    [✓] Verified directory: data/vectors
+    [✓] Verified directory: data/embedding_cache
+    [✓] Using project temp path: /home/mastar/Programs/Chat-Gradio-Gguf/Chat-Gradio-Gguf-0.99.2/data/temp
+    [✓] System information file created
+    [✓] Installing Linux system dependencies...
+    Hit:1 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64  InRelease
+    Hit:2 http://security.ubuntu.com/ubuntu plucky-security InRelease
+    Hit:3 http://gb.archive.ubuntu.com/ubuntu plucky InRelease
+    Hit:4 http://gb.archive.ubuntu.com/ubuntu plucky-updates InRelease
+    Hit:5 http://gb.archive.ubuntu.com/ubuntu plucky-backports InRelease
+    Reading package lists... Done
+    Reading package lists... Done
+    Building dependency tree... Done
+    Reading state information... Done
+    libegl1 is already the newest version (1.7.0-1build1).
+    libffi-dev is already the newest version (3.4.7-1).
+    libssl-dev is already the newest version (3.4.1-1ubuntu4).
+    build-essential is already the newest version (12.12ubuntu1).
+    python3-dev is already the newest version (3.13.3-1).
+    portaudio19-dev is already the newest version (19.6.0-1.2build3).
+    libgl1 is already the newest version (1.7.0-1build1).
+    libxkbcommon0 is already the newest version (1.7.0-2).
+    libxcb-cursor0 is already the newest version (0.1.5-1).
+    espeak-ng is already the newest version (1.52.0+dfsg-4).
+    libespeak-ng1 is already the newest version (1.52.0+dfsg-4).
+    xvfb is already the newest version (2:21.1.16-1ubuntu1.2).
+    Solving dependencies... Done
+    The following packages were automatically installed and are no longer required:
+      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
+      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
+      linux-modules-extra-6.14.0-23-generic
+      linux-modules-nvidia-570-6.14.0-23-generic
+      linux-objects-nvidia-570-6.14.0-23-generic
+      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
+      linux-tools-6.14.0-23-generic
+    Use 'sudo apt autoremove' to remove them.
+    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
+    [✓] Base dependencies installed
+    [✓] Installing Qt6 dependencies...
+    [✓]   Installed libxcb-cursor0
+    [✓]   Installed libxkbcommon0
+    [✓]   Installed libegl1
+    [✓]   Installed libgl1
+    [✓]   Installed libxcb-xinerama0
+    [✓]   Installed qt6-base-dev
+    [✓]   Installed libqt6webenginecore6
+    [✓]   Installed libqt6webenginewidgets6
+    [✓] Installing Vulkan development packages...
+    Reading package lists... Done
+    Building dependency tree... Done
+    Reading state information... Done
+    vulkan-tools is already the newest version (1.4.304.0+dfsg1-1).
+    Solving dependencies... Done
+    The following packages were automatically installed and are no longer required:
+      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
+      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
+      linux-modules-extra-6.14.0-23-generic
+      linux-modules-nvidia-570-6.14.0-23-generic
+      linux-objects-nvidia-570-6.14.0-23-generic
+      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
+      linux-tools-6.14.0-23-generic
+    Use 'sudo apt autoremove' to remove them.
+    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
+    [✓]   Installed vulkan-tools
+    Reading package lists... Done
+    Building dependency tree... Done
+    Reading state information... Done
+    libvulkan1 is already the newest version (1.4.304.0-1).
+    Solving dependencies... Done
+    The following packages were automatically installed and are no longer required:
+      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
+      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
+      linux-modules-extra-6.14.0-23-generic
+      linux-modules-nvidia-570-6.14.0-23-generic
+      linux-objects-nvidia-570-6.14.0-23-generic
+      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
+      linux-tools-6.14.0-23-generic
+    Use 'sudo apt autoremove' to remove them.
+    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
+    [✓]   Installed libvulkan1
+    [✓] Linux dependencies installed
+    [✓] Installing Python dependencies...
+    [✓] Installing base packages (Gradio 5.49.1)...
+      [1/19] Installing numpy<2... OK
+      [2/19] Installing requests... OK
+      [3/19] Installing pyperclip... OK
+      [4/19] Installing spacy... OK
+      [5/19] Installing psutil... OK
+      [6/19] Installing ddgs... OK
+      [7/19] Installing langchain-community... OK
+      [8/19] Installing faiss-cpu... OK
+      [9/19] Installing langchain... OK
+      [10/19] Installing pygments... OK
+      [11/19] Installing lxml... OK
+      [12/19] Installing lxml_html_clean... OK
+      [13/19] Installing pyttsx3... OK
+      [14/19] Installing tokenizers... OK
+      [15/19] Installing beautifulsoup4... OK
+      [16/19] Installing aiohttp... OK
+      [17/19] Installing pyvirtualdisplay... OK
+      [18/19] Installing newspaper4k... OK
+      [19/19] Installing gradio... OK
+    [✓] Base packages installed
+    [✓] Installing embedding backend (torch + sentence-transformers)...
+    [✓] Installing PyTorch 2.4+ (CPU-only) for Python 3.13...
+    [✓] PyTorch 2.4+ (CPU) installed
+    [✓] Installing transformers>=4.42.0...
+    [✓] transformers installed
+    [✓] Installing sentence-transformers>=3.0.0...
+    [✓] sentence-transformers installed
+    [✓] Embedding backend verified
+    [✓] Installing Qt WebEngine for custom browser...
+    [✓] Ubuntu 25.04 - installing PyQt6 + Qt6 WebEngine...
+    [✓] Qt6 WebEngine installed
+    [✓] Installing pre-built llama-cpp-python (CPU)...
+    [✓] Pre-built wheel installed
+    [✓] Python dependencies installed successfully
+    [✓] Installing optional file format support...
+    [✓]   Installed PyPDF2
+    [✓]   Installed python-docx
+    [✓]   Installed openpyxl
+    [✓]   Installed python-pptx
+    [✓] Initializing embedding cache for BAAI/bge-small-en-v1.5...
+    Embedding Initialization Output...
+        Importing torch...
+        torch version: 2.10.0+cpu
+        CUDA available: False (should be False)
+        Importing sentence_transformers...
+        Loading model: BAAI/bge-small-en-v1.5
+        Testing embedding...
+        SUCCESS: Model loaded, dimension: 384
+    [✓] Embedding cache initialized
+    [✓] Downloading spaCy language model...
+    Downloading spaCy model: [==============================] 100% (12.2MB/12.2MB) - Complete
+    [✓] Installing spaCy model...
+    [✓] spaCy model installed
+    [✓] Installing pyttsx3 TTS (system voices)...
+    [✓] pyttsx3 TTS ready (system voices)
+    [✓] Updated constants.ini with TTS engine: pyttsx3
+    [✓] Downloading backend binaries...
+    Downloading backend: [==============================] 100% (36.0MB/36.0MB) - Complete
+    [✓] Extracting backend...
+    Extracting: [=========================] 100% (51.0B/51.0B)
+    [✓] Copied 50 binary files
+    [✓] Backend ready
+    [✓] Configuration file created
+    [✓] Installation complete!
+    
+    Run the launcher to start Chat-Gradio-Gguf
+    
+    Deactivated: .venv
+    Press Enter to continue...
 
 </details>
 
