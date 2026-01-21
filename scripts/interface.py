@@ -1492,7 +1492,7 @@ def launch_interface():
                         )
 
                         with gr.Row(elem_classes=["clean-elements"]):
-                            action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=10)
+                            action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=1)
                             action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", scale=1, visible=False)
                             action_buttons["copy_response"] = gr.Button("Copy Output", variant="secondary", scale=1, visible=False)
                             action_buttons["cancel_input"] = gr.Button("", variant="primary", scale=1, visible=False)  # Hidden placeholder for output compatibility
