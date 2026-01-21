@@ -1322,7 +1322,7 @@ def toggle_research(current_state):
     """Toggle deep web research mode (full page analysis)."""
     new_state = not current_state
     variant = "primary" if new_state else "secondary"
-    label = "🔬 Web Research ON" if new_state else "🔬 Web Research"
+    label = "🔬 Web Search ON" if new_state else "🔬 Web Search"
     return new_state, gr.update(variant=variant, value=label), gr.update(variant=variant)
 
 def toggle_speech(current_state):
@@ -1825,7 +1825,7 @@ def launch_interface():
             new_search = False if new_research else search_state
             
             research_variant = "primary" if new_research else "secondary"
-            research_label = "🔬 Web Research ON" if new_research else "🔬 Web Research"
+            research_label = "🔬 Web Search ON" if new_research else "🔬 Web Search"
             search_variant = "primary" if new_search else "secondary"
             search_label = "🔍 DDG Search ON" if new_search else "🔍 DDG Search"
             
