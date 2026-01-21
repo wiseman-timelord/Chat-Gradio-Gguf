@@ -5,7 +5,8 @@ setlocal enabledelayedexpansion
 REM ==== Static Configuration ====
 set "TITLE=Chat-Gradio-Gguf"
 title %TITLE%
-mode 80,29
+mode con cols=80 lines=30
+powershell -noprofile -command "& { $w = $Host.UI.RawUI; $b = $w.BufferSize; $b.Height = 6000; $w.BufferSize = $b; }"
 
 :: DP0 TO SCRIPT BLOCK
 set "ScriptDirectory=%~dp0"
@@ -44,6 +45,7 @@ color 0F
 call :DisplaySeparatorThick
 echo     Chat-Gradio-Gguf: Batch Menu
 call :DisplaySeparatorThick
+echo.
 echo.
 echo.
 echo.

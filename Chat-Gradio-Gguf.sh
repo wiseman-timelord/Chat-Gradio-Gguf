@@ -3,7 +3,7 @@
 
 # Set terminal configuration (Linux/Unix method)
 echo -ne "\033]0;Chat-Gradio-Gguf\007"
-printf '\e[8;29;80t'
+printf '\e[8;30;80t'
 
 # Change to script directory
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"

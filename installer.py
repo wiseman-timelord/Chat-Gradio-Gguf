@@ -243,6 +243,8 @@ BASE_REQ = [
     "lxml_html_clean==0.4.3",
     "pyttsx3==2.99",
     "tokenizers==0.22.2",
+    "beautifulsoup4>=4.12.0",       # HTML parsing for deep research
+    "aiohttp>=3.10.0",              # Async HTTP for parallel page fetches
 ]
 
 if PLATFORM == "windows":
@@ -251,12 +253,16 @@ if PLATFORM == "windows":
         "tk==0.1.0",
         "pythonnet==3.0.5",
     ])
+elif PLATFORM == "linux":
+    BASE_REQ.extend([
+        "pyvirtualdisplay>=3.0",    # Headless Qt WebEngine support
+    ])
 
 # newspaper4k requires Python 3.10+, 3.9 → must fallback
 if sys.version_info >= (3, 10):
     BASE_REQ.append("newspaper4k==0.9.4.1")     # latest stable as of Jan 2026
 else:
-    BASE_REQ.append("newspaper3k==0.2.8")  
+    BASE_REQ.append("newspaper3k==0.2.8") 
 
 # Functions...
 def backend_requires_compilation(backend: str) -> bool:
@@ -1453,18 +1459,24 @@ def verify_backend_dependencies(backend: str) -> bool:
     return True
 
 def install_linux_system_dependencies(backend: str) -> bool:
-    """Install Linux system dependencies including Qt5/Qt6 based on Ubuntu version."""
-    if PLATFORM != "linux":
-        return True
-    
+    """Install Linux system dependencies including optional CUDA/Vulkan build tools."""
     print_status("Installing Linux system dependencies...")
     
-    qt_version, use_qt5 = get_qt_version_for_os()
-    
-    base_packages = [
-        "build-essential", "cmake", "python3-venv", "python3-dev",
-        "portaudio19-dev", "libasound2-dev", "python3-tk",
-        "espeak", "libespeak-dev", "ffmpeg", "xclip", "beep",
+    # Base packages needed for Python packages
+    apt_packages = [
+        "python3-dev",
+        "build-essential",
+        "libffi-dev",
+        "libssl-dev",
+        "portaudio19-dev",
+        "libespeak-ng1",
+        "espeak-ng",
+        "libegl1",
+        "libgl1",
+        "libxkbcommon0",
+        "libxcb-cursor0",
+        # NEW: For headless Qt WebEngine (virtual display)
+        "xvfb",
     ]
     
     # Qt dependencies based on version
