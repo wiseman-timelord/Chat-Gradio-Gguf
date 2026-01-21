@@ -576,7 +576,7 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 3. Go back to the `Interaction` page and begin interactions, ensuring to notice tool options available, and select appropriately for your intended use, then type your input into the User Input box, and then click Send Input.
 4. When all is finished, click `Exit` on the bottom right, then you are left with the terminal menu, where you type `x` to exit.
 ```
-- Internet researcg Tools...
+- Internet researcg Tools (v0.99.6)...
 ```
 DDG Search only → Quick DDG search
 Web Search only → Deep web research
