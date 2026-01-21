@@ -208,6 +208,7 @@ def get_available_gpus_linux():
     
     if not unique_gpus:
         temporary.set_status("No GPU", console=True)
+        print("[GPU] WARNING: No GPUs detected, exiting.")
         sys.exit(1)
     
     return unique_gpus
@@ -479,8 +480,16 @@ def get_saved_sessions():
     session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
     return [f.name for f in session_files]
 
+
+# ============================================================================
+# WEB SEARCH / RESEARCH FUNCTIONS
+# ============================================================================
+
 def web_search(query: str, num_results=5, max_hits: int = 6) -> str:
-    """DuckDuckGo text search with automatic current date injection."""
+    """
+    Quick DuckDuckGo text search with automatic current date injection.
+    This is the fast "Search" mode - returns snippets only.
+    """
     if not query.strip():
         return "Empty query."
 
@@ -518,6 +527,112 @@ def web_search(query: str, num_results=5, max_hits: int = 6) -> str:
         print("=== RAW DDG ===\n", date_header + raw, "\n=== END ===", flush=True)
 
     return date_header + raw
+
+
+def web_research(query: str, max_pages: int = 5, use_js: bool = False) -> str:
+    """
+    Deep web research with full page reading capabilities.
+    This is the comprehensive "Research" mode - fetches and analyzes full pages.
+    
+    Args:
+        query: Search query
+        max_pages: Maximum pages to fetch and analyze (default 5)
+        use_js: Use Qt WebEngine for JS-rendered pages (slower but more accurate)
+    
+    Returns:
+        Formatted research results string for LLM context
+    """
+    try:
+        from scripts.research import web_research as deep_research
+        return deep_research(query, mode="deep", max_pages=max_pages, use_js=use_js)
+    except ImportError as e:
+        print(f"[RESEARCH] Module not available: {e}")
+        # Fallback to enhanced DDG search
+        return _research_fallback(query, max_pages)
+    except Exception as e:
+        print(f"[RESEARCH] Error: {e}")
+        return _research_fallback(query, max_pages)
+
+
+def _research_fallback(query: str, max_pages: int = 5) -> str:
+    """
+    Fallback research using newspaper3k/4k for article extraction.
+    Used when research.py module is unavailable.
+    """
+    current_date = datetime.now().strftime("%B %d, %Y")
+    
+    header = f"[Research Results - {current_date}]\n[Query: {query}]\n\n"
+    
+    try:
+        hits = DDGS().text(query, max_results=max_pages + 2)
+    except DDGSException as e:
+        return header + f"Search error: {e}"
+    
+    if not hits:
+        return header + "No results found."
+    
+    results = []
+    for i, hit in enumerate(hits[:max_pages], 1):
+        url = hit.get('href', '')
+        title = hit.get('title', 'Untitled')
+        snippet = hit.get('body', '')
+        
+        # Try to extract full article content
+        article_content = ""
+        try:
+            article = Article(url)
+            article.download()
+            article.parse()
+            if article.text:
+                # Limit to first ~2000 chars
+                article_content = article.text[:2000]
+                if len(article.text) > 2000:
+                    article_content += "\n[...truncated...]"
+        except Exception as e:
+            print(f"[RESEARCH-FALLBACK] Article extraction failed for {url}: {e}")
+            article_content = snippet
+        
+        results.append(f"Source {i}: {title}")
+        results.append(f"URL: {url}")
+        results.append(f"Content:\n{article_content or snippet}")
+        results.append("")
+    
+    return header + "\n".join(results)
+
+
+def is_research_available() -> bool:
+    """Check if deep research capabilities are available."""
+    try:
+        from scripts.research import is_deep_research_available
+        return is_deep_research_available()
+    except ImportError:
+        # Check if newspaper is available as fallback
+        try:
+            from newspaper import Article
+            return True
+        except ImportError:
+            return False
+
+
+def get_research_capabilities() -> dict:
+    """Get information about available research capabilities."""
+    try:
+        from scripts.research import get_research_capabilities
+        return get_research_capabilities()
+    except ImportError:
+        return {
+            "quick_search": True,
+            "deep_research": is_research_available(),
+            "js_rendering": False,
+            "async_fetch": False,
+            "bs4_parsing": False,
+            "qt_version": 0
+        }
+
+
+# ============================================================================
+# REMAINING UTILITY FUNCTIONS
+# ============================================================================
 
 def summarize_document(file_path):
     """Summarize the contents of a document using spaCy, up to 100 characters."""
