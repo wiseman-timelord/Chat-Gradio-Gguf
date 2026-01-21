@@ -139,32 +139,37 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The combined Info/Install menu  (v0.98.0)...
+- The combined Info/Install menu  (v0.99.4)...
 <details>
     
-    ===============================================================================
-        Chat-Gradio-Gguf - Configuration Selection
-    ===============================================================================
-    
-    System Detections...
-        CPU Features: AVX, AVX2, FMA, F16C, SSE3, SSSE3, SSE4_1, SSE4_2
-        Operating System: Windows 8.1
-        Optimal Python: 3.11; Vulkan Present: Yes
-        Build Tools: Git, CMake, MSVC, MSBuild
-    
-    Backend Options...
-       1) Download CPU Wheel / Default CPU Wheel
-       2) Download Vulkan Bin / Default CPU Wheel
-       3) Compile CPU Binaries / Compile CPU Wheel
-       4) Compile Vulkan Binaries / Compile Vulkan Wheel
-    
-    Embedding Model...
-       a) Bge-Small-En v1.5 (Fastest - 132MB)
-       b) Bge-Base-En v1.5 (Regular - 425MB)
-       c) Bge-Large-En v1.5 (Quality - 1.35GB)
-    
-    ===============================================================================
-    Selection; Backend = 1-4 + Embeddings = a-c (e.g. 2b), Abandon = A:
+===============================================================================
+    Chat-Gradio-Gguf - Configure Installation
+===============================================================================
+
+System Detections...
+    CPU Features: AVX, AVX2, FMA, F16C, SSE3, SSSE3, SSE4_1, SSE4_2
+    Operating System: Windows 8.1
+    Optimal Python: 3.11; Vulkan Present: Yes
+    Build Tools: Git, CMake, MSVC, MSBuild
+
+Backend Options...
+   1) Download CPU Wheel / Default CPU Wheel
+   2) Download Vulkan Bin / Default CPU Wheel
+   3) Compile CPU Binaries / Compile CPU Wheel
+   4) Compile Vulkan Binaries / Compile Vulkan Wheel
+
+Embedding Model...
+   a) Bge-Small-En v1.5 (Fastest - 132MB)
+   b) Bge-Base-En v1.5 (Regular - 425MB)
+   c) Bge-Large-En v1.5 (Quality - 1.35GB)
+
+TTS Options...
+   d) American Accent
+   e) English Accent
+   f) Robot Accent (Smaller Install)
+
+===============================================================================
+Selection; Backend=1-4, Embed=a-c, TTS=d/e/f, Abandon=A; (e.g. 2be):
 
 </details>
 
