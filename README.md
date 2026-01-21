@@ -654,7 +654,7 @@ project_root/
 └────── *
 ```
 
-### Plan for the Sound/Tts system
+### Robot Voice Tts option
 | Mode     | TTS engine       | Audio *player* |
 | -------- | ---------------- | -------------- |
 | Windows  | `pyttsx3` (SAPI) | **built-in**   |
