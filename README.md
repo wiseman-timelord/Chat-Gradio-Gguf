@@ -27,7 +27,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 ![preview_image](media/conversation_page_windows.jpg)
 
 - The Interaction page on Ubuntu with Command Prompt in the background...
-![preview_image](media/conversation_page_ubuntu,jpg)
+![preview_images](media/conversation_page_ubuntu,jpg)
 
 - The collapseable Left/Right Panel on the Interaction page (click the `<->` button)...
 ![preview_image](media/conversation_expand.jpg)
