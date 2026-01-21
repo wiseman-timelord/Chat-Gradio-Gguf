@@ -69,6 +69,9 @@ def load_constants_ini() -> bool:
             'vulkan_available': config.getboolean('system', 'vulkan_available', fallback=False),
             'llama_cli_path': config.get('system', 'llama_cli_path', fallback=None),
             'llama_bin_path': config.get('system', 'llama_bin_path', fallback=None),
+            'gradio_version': config.get('system', 'gradio_version', fallback='5.49.1'),
+            'qt_version': config.get('system', 'qt_version', fallback='6'),
+            'tts_engine': config.get('system', 'tts_engine', fallback='pyttsx3'),
         }
         
         if PLATFORM == 'windows':
@@ -78,6 +81,17 @@ def load_constants_ini() -> bool:
     except Exception as e:
         print(f"ERROR reading constants.ini: {e}")
         return False
+
+def get_python_minor_version() -> int:
+    """Get Python minor version from constants.ini or current runtime"""
+    py_ver = SYSTEM_INFO.get('python_version', 'unknown')
+    try:
+        parts = py_ver.split('.')
+        if len(parts) >= 2:
+            return int(parts[1])
+    except:
+        pass
+    return sys.version_info.minor
 
 def test_directories() -> bool:
     """Verify required directories exist"""
@@ -209,30 +223,52 @@ def test_core_libs() -> bool:
         return False
     
     success = True
+    py_minor = get_python_minor_version()
     
-    # Core packages all installs need
+    # Core packages all installs need (matching installer BASE_REQ + dynamic additions)
     core_checks = [
         ("gradio", "gradio"),
+        ("numpy", "numpy"),
         ("requests", "requests"),
         ("pyperclip", "pyperclip"),
         ("spacy", "spacy"),
         ("psutil", "psutil"),
-        ("newspaper3k", "newspaper"),
-        ("langchain", "langchain"),
+        ("ddgs", "duckduckgo_search"),
+        ("langchain-community", "langchain_community"),
         ("faiss-cpu", "faiss"),
+        ("langchain", "langchain"),
+        ("pygments", "pygments"),
+        ("lxml", "lxml"),
+        ("lxml_html_clean", "lxml_html_clean"),
+        ("pyttsx3", "pyttsx3"),
+        ("tokenizers", "tokenizers"),
+        ("beautifulsoup4", "bs4"),
+        ("aiohttp", "aiohttp"),
+        ("py-cpuinfo", "cpuinfo"),
+        # Embedding backend packages
         ("sentence-transformers", "sentence_transformers"),
         ("torch", "torch"),
+        ("transformers", "transformers"),
+        # LLM backend
         ("llama-cpp-python", "llama_cpp"),
-        ("pyttsx3", "pyttsx3"),
     ]
     
-    # Platform-specific
+    # newspaper version depends on Python version
+    if py_minor >= 10:
+        core_checks.append(("newspaper4k", "newspaper"))
+    else:
+        core_checks.append(("newspaper3k", "newspaper"))
+    
+    # Platform-specific packages
     if PLATFORM == "windows":
         core_checks.extend([
             ("pywin32", "win32api"),
             ("tk", "tkinter"),
             ("pythonnet", "clr"),
         ])
+    else:
+        # Linux-specific
+        core_checks.append(("pyvirtualdisplay", "pyvirtualdisplay"))
     
     for pkg_name, import_name in core_checks:
         try:
@@ -297,25 +333,115 @@ def test_optional_libs() -> None:
     if optional_missing > 0:
         print(f"\n  Note: {optional_missing} optional packages missing (text-only fallback will be used)")
 
+def test_tts_engine() -> bool:
+    """Verify TTS engine based on constants.ini tts_engine setting"""
+    print("\n=== TTS Engine Validation ===")
+    
+    venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
+    tts_engine = SYSTEM_INFO.get('tts_engine', 'pyttsx3')
+    
+    print(f"  Configured TTS engine: {tts_engine}")
+    
+    if tts_engine == "pyttsx3":
+        # Check pyttsx3 is available
+        try:
+            result = subprocess.run(
+                [str(venv_py), "-c", "import pyttsx3; print('OK')"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                print_status("pyttsx3 available (system voices)")
+                return True
+            else:
+                print_status("pyttsx3 not available", False)
+                return False
+        except Exception as e:
+            print_status(f"pyttsx3 check failed: {e}", False)
+            return False
+    
+    elif tts_engine in ("coqui", "coqui_legacy"):
+        # Check Coqui TTS is available
+        success = True
+        
+        # Check sounddevice
+        try:
+            result = subprocess.run(
+                [str(venv_py), "-c", "import sounddevice; print('OK')"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                print_status("sounddevice available")
+            else:
+                print_status("sounddevice missing (required for Coqui TTS)", False)
+                success = False
+        except Exception:
+            print_status("sounddevice check failed", False)
+            success = False
+        
+        # Check TTS package (coqui-tts or TTS)
+        try:
+            result = subprocess.run(
+                [str(venv_py), "-c", "from TTS.api import TTS; print('OK')"],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                print_status("Coqui TTS package available")
+            else:
+                print_status("Coqui TTS package missing", False)
+                success = False
+        except Exception:
+            print_status("Coqui TTS check failed", False)
+            success = False
+        
+        # Check if voice models directory exists
+        tts_models_dir = BASE_DIR / "data" / "tts_models"
+        if tts_models_dir.exists():
+            model_files = list(tts_models_dir.rglob("*.pth"))
+            if model_files:
+                print_status(f"TTS voice models found ({len(model_files)} files)")
+            else:
+                print_status("TTS models directory empty (voices will download on first use)", False)
+        else:
+            # Check default location
+            if PLATFORM == "windows":
+                default_tts = Path.home() / "AppData" / "Local" / "tts"
+            else:
+                default_tts = Path.home() / ".local" / "share" / "tts"
+            
+            if default_tts.exists():
+                model_files = list(default_tts.rglob("*.pth"))
+                if model_files:
+                    print_status(f"TTS voice models found in default location ({len(model_files)} files)")
+                else:
+                    print_status("TTS voices will download on first use", False)
+            else:
+                print_status("TTS voices will download on first use", False)
+        
+        return success
+    
+    else:
+        print_status(f"Unknown TTS engine: {tts_engine}", False)
+        return False
+
 def test_browser_setup() -> bool:
-    """Minimal check: gradio + the Qt WebEngine the installer should have put in"""
+    """Minimal check: gradio + the Qt WebEngine from constants.ini"""
     print("\n=== Gradio & Custom Browser Check ===")
     
     venv_py = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python")
     
-    # Tell user what path installer took (from OS detection in constants.ini)
-    if PLATFORM == "windows":
-        win_ver = SYSTEM_INFO.get('windows_version', 'unknown')
-        qt_part = "PyQt5 WebEngine" if win_ver in ["7", "8", "8.1"] else "PyQt6 WebEngine"
-    else:
-        os_ver = SYSTEM_INFO.get('os_version', 'unknown')
-        try:
-            major = int(os_ver.split('.')[0])
-        except:
-            major = 99
-        qt_part = "PyQt5 WebEngine" if major < 24 else "PyQt6 WebEngine"
+    # Get Qt version from constants.ini (set by installer)
+    qt_version = SYSTEM_INFO.get('qt_version', '6')
+    gradio_version = SYSTEM_INFO.get('gradio_version', '5.49.1')
     
-    print(f"  Installer path: {qt_part}")
+    # Determine Qt package name
+    if str(qt_version) == "5":
+        qt_part = "PyQt5 WebEngine"
+        qt_module = "PyQt5"
+    else:
+        qt_part = "PyQt6 WebEngine"
+        qt_module = "PyQt6"
+    
+    print(f"  Expected: Gradio {gradio_version}, {qt_part}")
     
     # 1. Gradio exists?
     try:
@@ -327,7 +453,6 @@ def test_browser_setup() -> bool:
         return False
     
     # 2. Expected WebEngine exists?
-    qt_module = "PyQt5" if "PyQt5" in qt_part else "PyQt6"
     try:
         code = f"from {qt_module}.QtWebEngineWidgets import QWebEngineView"
         subprocess.run([str(venv_py), "-c", code],
@@ -337,8 +462,6 @@ def test_browser_setup() -> bool:
     except:
         print_status(f"{qt_part} NOT found → will fall back to system browser", False)
         return False  # still non-fatal
-
-
 
 
 def test_spacy_model() -> bool:
@@ -427,17 +550,35 @@ except Exception as e:
         return False
 
 def test_linux_system_packages() -> bool:
-    """Very light warning about TTS deps installer does NOT handle"""
+    """Check Linux system dependencies for TTS and Qt"""
     if PLATFORM != "linux":
         return True
         
-    print("\n=== Linux TTS (pyttsx3) System Deps Reminder ===")
-    print("  Installer does not install these - you need them for normal TTS voice:")
+    print("\n=== Linux System Dependencies ===")
     
-    common = ["espeak", "libespeak1", "libportaudio2"]
+    tts_engine = SYSTEM_INFO.get('tts_engine', 'pyttsx3')
+    qt_version = SYSTEM_INFO.get('qt_version', '6')
+    
+    # TTS system dependencies
+    if tts_engine == "pyttsx3":
+        tts_packages = ["espeak-ng", "libespeak-ng1", "portaudio19-dev"]
+    else:
+        # Coqui TTS uses sounddevice, needs portaudio
+        tts_packages = ["portaudio19-dev"]
+    
+    # Qt system dependencies
+    if str(qt_version) == "5":
+        qt_packages = ["libxcb-xinerama0", "libxkbcommon0", "libegl1", "libgl1"]
+    else:
+        qt_packages = ["libxcb-cursor0", "libxkbcommon0", "libegl1", "libgl1"]
+    
+    # Headless Qt support
+    display_packages = ["xvfb"]
+    
+    all_packages = tts_packages + qt_packages + display_packages
     missing = []
     
-    for pkg in common:
+    for pkg in all_packages:
         try:
             r = subprocess.run(["dpkg", "-s", pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if r.returncode != 0:
@@ -446,12 +587,11 @@ def test_linux_system_packages() -> bool:
             missing.append(pkg + " (check failed)")
     
     if missing:
-        print_status("Missing packages detected: " + ", ".join(missing), False)
-        print("  → TTS may be silent, robotic or crash")
-        print("  Suggested fix:  sudo apt install espeak libespeak1 libportaudio2")
+        print_status("Some system packages may be missing: " + ", ".join(missing), False)
+        print(f"  → Suggested fix: sudo apt install {' '.join(missing)}")
         return False
     else:
-        print_status("Common TTS packages seem present")
+        print_status("Linux system packages present")
         return True
 
 def main():
@@ -481,7 +621,9 @@ def main():
     print(f"System: {SYSTEM_INFO['platform']} {SYSTEM_INFO['os_version']}")
     print(f"Python: {SYSTEM_INFO['python_version']}")
     print(f"Backend: {SYSTEM_INFO['backend_type']}")
-    print(f"Embedding: {SYSTEM_INFO['embedding_model']}\n")
+    print(f"Embedding: {SYSTEM_INFO['embedding_model']}")
+    print(f"Gradio: {SYSTEM_INFO['gradio_version']}, Qt: {SYSTEM_INFO['qt_version']}")
+    print(f"TTS Engine: {SYSTEM_INFO['tts_engine']}\n")
     
     results = {
         "directories": test_directories(),
@@ -497,6 +639,7 @@ def main():
         test_optional_libs()  # Non-fatal
         results["spacy"] = test_spacy_model()
         results["embedding"] = test_embedding_model()
+        results["tts"] = test_tts_engine()
         results["browser"] = test_browser_setup()
         
         if PLATFORM == "linux":

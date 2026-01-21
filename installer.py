@@ -434,16 +434,65 @@ def get_torch_version_for_python() -> str:
         # Python 3.12+ requires torch 2.4.0+
         return "torch>=2.4.0"
 
+def should_show_tts_menu() -> bool:
+    """
+    Determine if TTS accent options should be shown in the menu.
+    
+    TTS menu (Coqui options) only shows on:
+    - Windows 8.1, 10, 11
+    - Ubuntu 24, 25
+    
+    Basic TTS (pyttsx3) is used without menu on:
+    - Windows 7, 8
+    - Ubuntu 22, 23
+    
+    Returns:
+        bool: True if TTS menu should be shown
+    """
+    if PLATFORM == "windows":
+        win_ver = detect_windows_version()
+        # Show TTS menu only for Windows 8.1 and above
+        # Windows 7 and 8 (not 8.1) get basic TTS automatically
+        if win_ver in ["8.1", "10", "11"]:
+            return True
+        return False
+    else:  # Linux
+        linux_ver = detect_linux_version()
+        try:
+            major_ver = int(linux_ver.split('.')[0]) if linux_ver != "unknown" else 24
+            # Show TTS menu only for Ubuntu 24+
+            # Ubuntu 22, 23 get basic TTS automatically
+            if major_ver >= 24:
+                return True
+            return False
+        except (ValueError, AttributeError):
+            return True  # Default to showing menu on unknown
+
 def get_tts_engine_for_platform() -> tuple:
     """
-    Determine TTS engine and package version based on OS/Python.
+    Determine TTS engine and package version based on OS/Python and user selection.
     Returns: (engine_name, package_spec, torch_spec) or (engine_name, None, None) for pyttsx3
+    
+    TTS Options:
+    - "coqui" / "coqui_legacy": Neural TTS with Coqui (American/English accents)
+    - "pyttsx3": Basic system TTS (Robot accent, or fallback for older OS)
     """
+    global TTS_ACCENTS_SELECTED
     py_minor = sys.version_info.minor
+    
+    # Check if user selected robot accent (basic TTS) or if TTS menu wasn't shown
+    if "robot" in TTS_ACCENTS_SELECTED:
+        return ("pyttsx3", None, None)
+    
+    # For older OS that doesn't show TTS menu, use basic TTS
+    if not should_show_tts_menu():
+        return ("pyttsx3", None, None)
     
     if PLATFORM == "windows":
         win_ver = detect_windows_version() or "unknown"
         if win_ver == "7":
+            return ("pyttsx3", None, None)
+        if win_ver == "8":
             return ("pyttsx3", None, None)
         if win_ver == "8.1" and py_minor == 9:
             return ("coqui_legacy", "TTS==0.13.0", "torch==1.13.1+cpu")
@@ -451,6 +500,14 @@ def get_tts_engine_for_platform() -> tuple:
             return ("coqui", "coqui-tts>=0.27.3", None)
         return ("pyttsx3", None, None)
     else:
+        linux_ver = detect_linux_version()
+        try:
+            major_ver = int(linux_ver.split('.')[0]) if linux_ver != "unknown" else 24
+            if major_ver < 24:
+                return ("pyttsx3", None, None)
+        except (ValueError, AttributeError):
+            pass
+        
         if py_minor >= 10:
             return ("coqui", "coqui-tts>=0.27.3", None)
         return ("pyttsx3", None, None)
@@ -474,9 +531,9 @@ def download_coqui_voices() -> bool:
         ],
     }
     
-    # Build voice list based on selection
+    # Build voice list based on selection (exclude robot since it uses pyttsx3)
     voices = []
-    accents = TTS_ACCENTS_SELECTED if TTS_ACCENTS_SELECTED else ["american", "english"]
+    accents = [a for a in TTS_ACCENTS_SELECTED if a != "robot"] if TTS_ACCENTS_SELECTED else ["american", "english"]
     for accent in accents:
         if accent in all_voices:
             voices.extend(all_voices[accent])
@@ -2412,6 +2469,8 @@ def detect_build_tools_available() -> dict:
 
 def select_backend_and_embedding():
     """Combined selection of backend and embedding model on one page"""
+    global TTS_ACCENTS_SELECTED
+    
     width = shutil.get_terminal_size().columns - 1
     print_header("Configure Installation")
     
@@ -2482,16 +2541,23 @@ def select_backend_and_embedding():
     
     print()
     
-    # TTS Accent options
-    print("TTS Accent Options...")
-    print("   d) American")
-    print("   e) English")
+    # TTS Accent options - only show on supported OS versions
+    show_tts = should_show_tts_menu()
+    if show_tts:
+        print("TTS Options...")
+        print("   d) American Accent")
+        print("   e) English Accent")
+        print("   f) Robot Accent (Smaller Install)")
+        print()
     
-    print()
     print("=" * width)
     
     max_backend = len(backend_opts)
-    prompt = f"Selection; Backend=1-{max_backend}, Embed=a-c, TTS=d-e, Abandon=A; (e.g. 2be): "
+    if show_tts:
+        prompt = f"Selection; Backend=1-{max_backend}, Embed=a-c, TTS=d/e/f, Abandon=A; (e.g. 2be): "
+    else:
+        prompt = f"Selection; Backend=1-{max_backend}, Embed=a-c, Abandon=A; (e.g. 2b): "
+    
     choice = input(prompt).strip().lower()
     
     if choice == "a":
@@ -2502,14 +2568,18 @@ def select_backend_and_embedding():
     
     while True:
         # Parse choice: digit + embed letter + optional TTS letters
-        # Valid formats: "2b", "2bd", "2be", "2bde", "2bed"
+        # Valid formats: "2b", "2bd", "2be", "2bf", "2bde", "2bdef"
         if len(choice) >= 2 and choice[0].isdigit() and choice[1] in "abc":
             backend_num = int(choice[0])
             embed_letter = choice[1]
             tts_letters = choice[2:] if len(choice) > 2 else ""
             
-            # Validate TTS letters (only d and e allowed, in any order)
-            valid_tts = all(c in "de" for c in tts_letters)
+            # Validate TTS letters based on whether TTS menu is shown
+            if show_tts:
+                valid_tts = all(c in "def" for c in tts_letters)
+            else:
+                # No TTS letters allowed if menu not shown
+                valid_tts = (tts_letters == "")
             
             if 1 <= backend_num <= len(backend_opts) and valid_tts:
                 embed_key = str(ord(embed_letter) - 96)
@@ -2518,21 +2588,31 @@ def select_backend_and_embedding():
                     selected_model = embed_opts[embed_key]["name"]
                     
                     # Parse TTS accents
-                    global TTS_ACCENTS_SELECTED
                     TTS_ACCENTS_SELECTED = []
-                    if 'd' in tts_letters:
-                        TTS_ACCENTS_SELECTED.append("american")
-                    if 'e' in tts_letters:
-                        TTS_ACCENTS_SELECTED.append("english")
-                    # Default to both if none selected
-                    if not TTS_ACCENTS_SELECTED:
-                        TTS_ACCENTS_SELECTED = ["american", "english"]
+                    if show_tts:
+                        if 'd' in tts_letters:
+                            TTS_ACCENTS_SELECTED.append("american")
+                        if 'e' in tts_letters:
+                            TTS_ACCENTS_SELECTED.append("english")
+                        if 'f' in tts_letters:
+                            TTS_ACCENTS_SELECTED.append("robot")
+                        # Default to both american+english if none selected (and TTS menu shown)
+                        if not TTS_ACCENTS_SELECTED:
+                            TTS_ACCENTS_SELECTED = ["american", "english"]
+                    else:
+                        # Older OS - auto-select robot (pyttsx3)
+                        TTS_ACCENTS_SELECTED = ["robot"]
                     
                     time.sleep(1)
                     return selected_backend, selected_model
         
-        print("Invalid selection. Please enter a valid combination (e.g. 2bde).")
-        prompt = f"Selection; Backend 1-{max_backend}, Embed a-c, TTS d/e/de (e.g. 2bde), Abandon = A: "
+        if show_tts:
+            print("Invalid selection. Please enter a valid combination (e.g. 2bde or 2bf).")
+            prompt = f"Selection; Backend 1-{max_backend}, Embed a-c, TTS d/e/f (e.g. 2bde), Abandon = A: "
+        else:
+            print("Invalid selection. Please enter a valid combination (e.g. 2b).")
+            prompt = f"Selection; Backend 1-{max_backend}, Embed a-c (e.g. 2b), Abandon = A: "
+        
         choice = input(prompt).strip().lower()
         if choice == "a":
             print("\nAbandoning installation...")
