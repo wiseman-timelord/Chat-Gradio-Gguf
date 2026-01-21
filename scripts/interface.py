@@ -103,6 +103,14 @@ def tuples_to_messages(tuples):
     
     return messages
 
+def get_chatbot_output(session_tuples, session_messages):
+    """Return correct format for Chatbot based on Gradio version."""
+    if temporary.GRADIO_VERSION.startswith('3.'):
+        return session_tuples
+    else:
+        # Gradio 4.x/5.x uses messages format directly
+        return session_messages
+
 # Functions...
 def get_panel_choices(model_settings):
     """Determine available panel choices based on model settings."""
@@ -329,14 +337,23 @@ def handle_model_selection(model_name, model_folder_state):
     return model_folder_state, model_name, f"Selected model: {model_name}"
 
 def browse_on_click(current_path):
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    root.update_idletasks()
-    folder_selected = filedialog.askdirectory(initialdir=current_path or os.path.expanduser("~"))
-    root.attributes('-topmost', False)
-    root.destroy()
-    return folder_selected if folder_selected else current_path
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        root.update_idletasks()
+        folder_selected = filedialog.askdirectory(initialdir=current_path or os.path.expanduser("~"))
+        root.attributes('-topmost', False)
+        root.destroy()
+        return folder_selected if folder_selected else current_path
+    except ImportError:
+        print("[BROWSE] tkinter not available - install python3-tk")
+        return current_path
+    except Exception as e:
+        print(f"[BROWSE] Error: {e}")
+        return current_path
 
 def web_search_trigger(query):
     try:
@@ -400,9 +417,6 @@ def eject_file(file_list, slot_index, is_attach=True):
 def start_new_session(session_messages, attached_files):
     """
     Start a fresh session.
-    - Saves current session if it exists and has content
-    - Resets all session state
-    - Returns updated UI components
     """
     import scripts.temporary as temporary
     from scripts.utility import save_session_history
@@ -419,19 +433,20 @@ def start_new_session(session_messages, attached_files):
     temporary.SESSION_ACTIVE = False
     temporary.current_session_id = None
     temporary.session_label = ""
-    temporary.session_attached_files = []  # Clear attachments
+    temporary.session_attached_files = []
 
-    # 3. Return values matching your button's outputs
+    # 3. Return values - use get_chatbot_output for empty lists
+    chatbot_output = get_chatbot_output([], [])
     return (
-        [],                                 # session_log (tuples) → empty
+        chatbot_output,                     # session_log → empty (correct format)
         [],                                 # session_messages → empty list
         [],                                 # attached_files → empty
         "New session started.",             # interaction_global_status
-        "New session started.",             # config_global_status (if you use separate status)
+        "New session started.",             # config_global_status
         "",                                 # user_input → cleared
-        False,                              # web_search_enabled → default off (adjust if needed)
+        False,                              # web_search_enabled → default off
         False,                              # has_ai_response → false for new session
-        *update_action_buttons("waiting_for_input", False)  # action buttons updates
+        *update_action_buttons("waiting_for_input", False)
     )
 
 def _get_cpu_default():
@@ -450,45 +465,48 @@ def load_session_by_index(idx):
         return [], [], [], "No session found.", False
     
     filename = saved_sessions[idx]
-    session_id, label, history, attached_files = utility.load_session_history(filename)  # Updated to receive attached_files
+    session_id, label, history, attached_files = utility.load_session_history(filename)
     
     if not session_id:
         return [], [], [], "Error loading session.", False
     
     temporary.current_session_id = session_id
     temporary.session_label = label
-    temporary.session_attached_files = attached_files  # Set loaded attachments
+    temporary.session_attached_files = attached_files
     temporary.SESSION_ACTIVE = True
     
     # Check if session has AI response
     has_ai = any(msg.get('role') == 'assistant' for msg in history)
     
     status = f"Loaded session: {label}"
-    return messages_to_tuples(history), history, attached_files, status, has_ai
+    # Return correct format for Gradio version
+    chatbot_output = get_chatbot_output(messages_to_tuples(history), history)
+    return chatbot_output, history, attached_files, status, has_ai
 
 def edit_previous_prompt(session_tuples, session_messages):
     """Remove the last exchange and put the user's message back in the input box for editing."""
     if not session_messages or len(session_messages) < 2:
-        return session_tuples, session_messages, "", "No previous message to edit.", False
+        chatbot_output = get_chatbot_output(session_tuples, session_messages)
+        return chatbot_output, session_messages, "", "No previous message to edit.", False
     
     # Get the last user message
     last_user_msg = ""
     
     # Find and remove the last user-assistant pair
-    # session_messages is [..., {user}, {assistant}]
     if session_messages[-1].get('role') == 'assistant':
-        session_messages = session_messages[:-1]  # Remove assistant
+        session_messages = session_messages[:-1]
     if session_messages and session_messages[-1].get('role') == 'user':
         last_user_msg = session_messages[-1].get('content', '')
-        session_messages = session_messages[:-1]  # Remove user
+        session_messages = session_messages[:-1]
     
-    # Update tuples - remove last tuple
-    if session_tuples:
-        session_tuples = session_tuples[:-1]
+    # Update tuples from messages
+    session_tuples = messages_to_tuples(session_messages)
     
     has_ai_response = len([m for m in session_messages if m.get('role') == 'assistant']) > 0
     
-    return session_tuples, session_messages, last_user_msg, "Editing previous message.", has_ai_response
+    # Return correct format for Gradio version
+    chatbot_output = get_chatbot_output(session_tuples, session_messages)
+    return chatbot_output, session_messages, last_user_msg, "Editing previous message.", has_ai_response
 
 def copy_last_response(session_messages):
     """Copy last AI response to clipboard, excluding thinking phase"""
@@ -900,7 +918,7 @@ def conversation_interface(
     # Early guards
     if not models_loaded_state or not llm_state:
         yield (
-            session_tuples, session_messages, "", 
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=True), gr.update(visible=False),
             *update_action_buttons("waiting_for_input", False),
             False, loaded_files, "waiting_for_input",
@@ -910,7 +928,7 @@ def conversation_interface(
 
     if not user_input.strip():
         yield (
-            session_tuples, session_messages, "",
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=True), gr.update(visible=False),
             *update_action_buttons("waiting_for_input", has_ai_response_state),
             False, loaded_files, "waiting_for_input",
@@ -933,7 +951,7 @@ def conversation_interface(
     # ═══════════════════════════════════════════════════════════════════════════
     
     yield (
-        session_tuples, session_messages, "",
+        get_chatbot_output(session_tuples, session_messages), session_messages, "",
         gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0, web_search_enabled, research_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
@@ -968,7 +986,7 @@ def conversation_interface(
             file_contents_section = "\n".join(file_parts)
     
     yield (
-        session_tuples, session_messages, "",
+        get_chatbot_output(session_tuples, session_messages), session_messages, "",
         gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, web_search_enabled, research_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
@@ -1002,7 +1020,7 @@ def conversation_interface(
             print(f"[RAG-TEMP] Error: {e}")
     
     yield (
-        session_tuples, session_messages, "",
+        get_chatbot_output(session_tuples, session_messages), session_messages, "",
         gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, web_search_enabled, research_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
@@ -1016,7 +1034,7 @@ def conversation_interface(
         complete_user_message = processed_input + file_contents_section
     
     yield (
-        session_tuples, session_messages, "",
+        get_chatbot_output(session_tuples, session_messages), session_messages, "",
         gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, web_search_enabled, research_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
@@ -1037,7 +1055,7 @@ def conversation_interface(
     interaction_phase = "input_submitted"
     
     yield (
-        session_tuples, session_messages, "",
+        get_chatbot_output(session_tuples, session_messages), session_messages, "",
         gr.update(visible=False), gr.update(visible=True, value=build_progress_html(4, web_search_enabled, research_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
@@ -1076,7 +1094,7 @@ def conversation_interface(
             search_results = f"Search error: {str(e)}"
     
     yield (
-        session_tuples, session_messages, "",
+        get_chatbot_output(session_tuples, session_messages), session_messages, "",
         gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, web_search_enabled, research_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
@@ -1087,7 +1105,7 @@ def conversation_interface(
     if research_enabled:
         # Phase: Deep Research
         yield (
-            session_tuples, session_messages, "",
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=False), gr.update(visible=True, value=build_progress_html(6, web_search_enabled, research_enabled, speech_enabled)),
             *update_action_buttons("input_submitted", has_ai_response),
             cancel_flag, loaded_files, "input_submitted",
@@ -1097,7 +1115,7 @@ def conversation_interface(
         
         # Phase: Fetching Pages
         yield (
-            session_tuples, session_messages, "",
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=False), gr.update(visible=True, value=build_progress_html(7, web_search_enabled, research_enabled, speech_enabled)),
             *update_action_buttons("input_submitted", has_ai_response),
             cancel_flag, loaded_files, "input_submitted",
@@ -1107,7 +1125,7 @@ def conversation_interface(
         
         # Phase: Analyzing Content
         yield (
-            session_tuples, session_messages, "",
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=False), gr.update(visible=True, value=build_progress_html(8, web_search_enabled, research_enabled, speech_enabled)),
             *update_action_buttons("input_submitted", has_ai_response),
             cancel_flag, loaded_files, "input_submitted",
@@ -1118,7 +1136,7 @@ def conversation_interface(
     elif web_search_enabled:
         # Phase: Web Search
         yield (
-            session_tuples, session_messages, "",
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=False), gr.update(visible=True, value=build_progress_html(6, web_search_enabled, research_enabled, speech_enabled)),
             *update_action_buttons("input_submitted", has_ai_response),
             cancel_flag, loaded_files, "input_submitted",
@@ -1128,7 +1146,7 @@ def conversation_interface(
         
         # Phase: Processing Results
         yield (
-            session_tuples, session_messages, "",
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=False), gr.update(visible=True, value=build_progress_html(7, web_search_enabled, research_enabled, speech_enabled)),
             *update_action_buttons("input_submitted", has_ai_response),
             cancel_flag, loaded_files, "input_submitted",
@@ -1157,7 +1175,7 @@ def conversation_interface(
     
     try:
         yield (
-            session_tuples, session_messages, "",
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, web_search_enabled, research_enabled, speech_enabled)),
             *update_action_buttons("generating_response", has_ai_response),
             cancel_flag, loaded_files, "generating_response",
@@ -1192,7 +1210,7 @@ def conversation_interface(
             session_tuples[-1] = (session_tuples[-1][0], bot_display)
             
             yield (
-                session_tuples, session_messages, "",
+                get_chatbot_output(session_tuples, session_messages), session_messages, "",
                 gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, web_search_enabled, research_enabled, speech_enabled)),
                 *update_action_buttons("generating_response", has_ai_response),
                 cancel_flag, loaded_files, "generating_response",
@@ -1248,7 +1266,7 @@ def conversation_interface(
         
         # Show "Generating TTS" phase in progress
         yield (
-            session_tuples, session_messages, "",
+            get_chatbot_output(session_tuples, session_messages), session_messages, "",
             gr.update(visible=False), gr.update(visible=True, value=build_progress_html(tts_phase, web_search_enabled, research_enabled, speech_enabled)),
             *update_action_buttons("speaking", True),
             cancel_flag, loaded_files, "speaking",
@@ -1280,7 +1298,7 @@ def conversation_interface(
     
     # Final yield - with cleared attached_files
     yield (
-        session_tuples, session_messages, "",
+        get_chatbot_output(session_tuples, session_messages), session_messages, "",
         gr.update(visible=True), gr.update(visible=False),
         *update_action_buttons("waiting_for_input", True),
         False, cleared_files, "waiting_for_input",  # <-- cleared_files instead of loaded_files
@@ -1297,20 +1315,20 @@ def toggle_web_search(current_state):
     """Toggle quick web search (DDG snippets)."""
     new_state = not current_state
     variant = "primary" if new_state else "secondary"
-    label = "🔍 Search ON" if new_state else "🔍 Search"
+    label = "🔍 DDG Search ON" if new_state else "🔍 DDG Search"
     return new_state, gr.update(variant=variant, value=label), gr.update(variant=variant)
 
 def toggle_research(current_state):
     """Toggle deep web research mode (full page analysis)."""
     new_state = not current_state
     variant = "primary" if new_state else "secondary"
-    label = "🔬 Research ON" if new_state else "🔬 Research"
+    label = "🔬 Web Research ON" if new_state else "🔬 Web Research"
     return new_state, gr.update(variant=variant, value=label), gr.update(variant=variant)
 
 def toggle_speech(current_state):
     new_state = not current_state
     variant = "primary" if new_state else "secondary"
-    label = "🔊 Speech ON" if new_state else "🔊 Speech"
+    label = "🔊 Speech Out ON" if new_state else "🔊 Speech Out"
     return new_state, gr.update(variant=variant, value=label), gr.update(variant=variant)
 
 # ============================================================================
@@ -1449,7 +1467,7 @@ def launch_interface():
 
                     # CENTER - Main chat area
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
-                        # Gradio 3.x Chatbot - no type parameter
+                        # Chatbot - same definition for all Gradio versions
                         conversation_components["session_log"] = gr.Chatbot(
                             label="Session Log", 
                             height=temporary.SESSION_LOG_HEIGHT,
@@ -1761,9 +1779,9 @@ def launch_interface():
             new_research = False if new_search else research_state
             
             search_variant = "primary" if new_search else "secondary"
-            search_label = "🔍 Search ON" if new_search else "🔍 Search"
+            search_label = "🔍 DDG Search ON" if new_search else "🔍 DDG Search"
             research_variant = "primary" if new_research else "secondary"
-            research_label = "🔬 Research ON" if new_research else "🔬 Research"
+            research_label = "🔬 Web Research ON" if new_research else "🔬 Web Research"
             
             return (
                 new_search,
@@ -1807,9 +1825,9 @@ def launch_interface():
             new_search = False if new_research else search_state
             
             research_variant = "primary" if new_research else "secondary"
-            research_label = "🔬 Research ON" if new_research else "🔬 Research"
+            research_label = "🔬 Web Research ON" if new_research else "🔬 Web Research"
             search_variant = "primary" if new_search else "secondary"
-            search_label = "🔍 Search ON" if new_search else "🔍 Search"
+            search_label = "🔍 DDG Search ON" if new_search else "🔍 DDG Search"
             
             return (
                 new_research,

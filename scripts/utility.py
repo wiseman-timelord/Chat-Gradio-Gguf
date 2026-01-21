@@ -207,9 +207,9 @@ def get_available_gpus_linux():
     unique_gpus = [g for g in gpus if not (g in seen or seen.add(g))]
     
     if not unique_gpus:
-        temporary.set_status("No GPU", console=True)
-        print("[GPU] WARNING: No GPUs detected, exiting.")
-        sys.exit(1)
+        # Don't exit - return a fallback instead
+        print("[GPU] WARNING: No GPUs detected, using CPU-only mode")
+        return ["CPU Only"]
     
     return unique_gpus
 

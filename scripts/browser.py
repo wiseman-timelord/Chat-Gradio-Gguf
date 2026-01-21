@@ -173,6 +173,18 @@ def _launch_qt6_browser(url, title, width, height, frameless, maximized):
     """Launch browser using PyQt6 + Qt6 WebEngine (Windows 10/11, Ubuntu 22-25)"""
     global _qt_app, _qt_browser, _signal_handler
     
+    import os
+    import scripts.temporary as tmp
+    
+    # Linux: Set Chromium flags for sandbox issues (especially when running as root)
+    if tmp.PLATFORM == 'linux':
+        if os.geteuid() == 0:
+            print("[BROWSER] Running as root - disabling Chromium sandbox")
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--no-sandbox --disable-gpu-sandbox"
+        else:
+            # Even non-root may need this on some Ubuntu systems
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu-sandbox"
+    
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtWebEngineWidgets import QWebEngineView
     from PyQt6.QtWebEngineCore import QWebEngineSettings
