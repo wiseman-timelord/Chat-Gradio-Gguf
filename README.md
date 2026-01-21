@@ -576,6 +576,12 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 3. Go back to the `Interaction` page and begin interactions, ensuring to notice tool options available, and select appropriately for your intended use, then type your input into the User Input box, and then click Send Input.
 4. When all is finished, click `Exit` on the bottom right, then you are left with the terminal menu, where you type `x` to exit.
 ```
+- Internet researcg Tools...
+```
+DDG Search only → Quick DDG search
+Web Search only → Deep web research
+BOTH enabled → DDG-enhanced Web Search (DDG for initial results, then fetch full pages)
+```
 
 ### Notation 
 - Core Principle - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only 2 tools, Search and Speech, in order for people to be able to use it as a framework/reference for their own AI programs.
