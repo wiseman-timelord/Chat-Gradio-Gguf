@@ -234,7 +234,7 @@ def test_core_libs() -> bool:
         ("pyperclip", "pyperclip"),
         ("spacy", "spacy"),
         ("psutil", "psutil"),
-        ("ddgs", "duckduckgo_search"),
+        ("ddgs", "ddgs"),
         ("langchain-community", "langchain_community"),
         ("faiss-cpu", "faiss"),
         ("langchain", "langchain"),
