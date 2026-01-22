@@ -46,7 +46,12 @@ TTS_ACCENTS_SELECTED = []
 DIRECTORIES = [
     "data", "scripts", "models",
     "data/history", "data/temp", "data/vectors",
-    "data/embedding_cache"
+    "data/embedding_cache", "data/tts_models"
+]
+
+PROTECTED_DIRECTORIES = [
+    "data/tts_models",
+    "data/embedding_cache",
 ]
 
 EMBEDDING_MODELS = {
@@ -468,6 +473,100 @@ def should_show_tts_menu() -> bool:
         except (ValueError, AttributeError):
             return True  # Default to showing menu on unknown
 
+def check_existing_tts_voices(accents: list) -> dict:
+    """Check which TTS voice models already exist and are valid (>10MB).
+    
+    Returns dict mapping accent -> list of (name, model_path, exists, valid)
+    """
+    all_voices = {
+        "american": [
+            ("American Female", "tts_models/en/ljspeech/vits"),
+            ("American Male", "tts_models/en/ljspeech/speedy-speech"),
+        ],
+        "english": [
+            ("English Female", "tts_models/en/ljspeech/glow-tts"),
+            ("English Male", "tts_models/en/ljspeech/tacotron2-DDC"),
+        ],
+    }
+    
+    # Possible cache locations - platform specific
+    cache_dir = BASE_DIR / "data" / "tts_models"
+    home = Path.home()
+    if PLATFORM == "windows":
+        default_tts = home / "AppData" / "Local" / "tts"
+    else:
+        default_tts = home / ".local" / "share" / "tts"
+    
+    cache_locations = [cache_dir, default_tts]
+    
+    MIN_VALID_SIZE = 10 * 1024 * 1024  # 10MB minimum for valid model
+    
+    result = {}
+    for accent in accents:
+        if accent not in all_voices or accent == "robot":
+            continue
+        
+        accent_status = []
+        for name, model_path in all_voices[accent]:
+            # Model path format: tts_models/en/ljspeech/vits -> stored as nested dirs
+            # Files are typically: model_file.pth, config.json, etc.
+            model_found = False
+            model_valid = False
+            
+            # Split model_path into components for cross-platform Path construction
+            model_parts = model_path.split("/")
+            
+            for cache_loc in cache_locations:
+                if not cache_loc.exists():
+                    continue
+                
+                # TTS stores models in various structures, check common patterns
+                # Build paths using Path joining (works on both Windows and Linux)
+                possible_paths = []
+                
+                # Pattern 1: Nested directory structure (cache_loc/tts_models/en/ljspeech/vits)
+                nested_path = cache_loc
+                for part in model_parts:
+                    nested_path = nested_path / part
+                possible_paths.append(nested_path)
+                
+                # Pattern 2: Flat with double-dash separator (cache_loc/tts_models--en--ljspeech--vits)
+                flat_name = "--".join(model_parts)
+                possible_paths.append(cache_loc / flat_name)
+                
+                # Pattern 3: Just the model name (cache_loc/vits)
+                possible_paths.append(cache_loc / model_parts[-1])
+                
+                for model_dir in possible_paths:
+                    if model_dir.exists() and model_dir.is_dir():
+                        # Look for .pth files (model weights)
+                        try:
+                            pth_files = list(model_dir.rglob("*.pth"))
+                        except (OSError, PermissionError):
+                            pth_files = []
+                        
+                        if pth_files:
+                            model_found = True
+                            # Check if any .pth file is > 10MB
+                            for pth in pth_files:
+                                try:
+                                    if pth.stat().st_size >= MIN_VALID_SIZE:
+                                        model_valid = True
+                                        break
+                                except (OSError, PermissionError):
+                                    pass
+                        if model_valid:
+                            break
+                
+                if model_valid:
+                    break
+            
+            accent_status.append((name, model_path, model_found, model_valid))
+        
+        result[accent] = accent_status
+    
+    return result
+
 def get_tts_engine_for_platform() -> tuple:
     """
     Determine TTS engine and package version based on OS/Python and user selection.
@@ -513,7 +612,8 @@ def get_tts_engine_for_platform() -> tuple:
         return ("pyttsx3", None, None)
 
 def download_coqui_voices() -> bool:
-    """Download Coqui TTS voices based on selected accents with retry/resume."""
+    """Download Coqui TTS voices based on selected accents with retry/resume.
+    Skips voices that already exist and are valid (>10MB)."""
     global TTS_ACCENTS_SELECTED
     
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
@@ -532,20 +632,42 @@ def download_coqui_voices() -> bool:
     }
     
     # Build voice list based on selection (exclude robot since it uses pyttsx3)
-    voices = []
     accents = [a for a in TTS_ACCENTS_SELECTED if a != "robot"] if TTS_ACCENTS_SELECTED else ["american", "english"]
+    
+    if not accents:
+        print_status("No TTS voices selected", False)
+        return True
+    
+    # Check which voices already exist
+    existing_voices = check_existing_tts_voices(accents)
+    
+    voices_to_download = []
+    voices_skipped = []
+    
     for accent in accents:
         if accent in all_voices:
-            voices.extend(all_voices[accent])
+            for name, model_path in all_voices[accent]:
+                # Check if this voice exists and is valid
+                accent_status = existing_voices.get(accent, [])
+                voice_info = next((v for v in accent_status if v[1] == model_path), None)
+                
+                if voice_info and voice_info[3]:  # voice_info[3] = valid (>10MB)
+                    voices_skipped.append(name)
+                else:
+                    voices_to_download.append((name, model_path))
     
-    if not voices:
-        print_status("No TTS voices selected", False)
+    if voices_skipped:
+        print_status(f"Found {len(voices_skipped)} existing voice(s): {', '.join(voices_skipped)}")
+    
+    if not voices_to_download:
+        print_status("All TTS voices already downloaded")
         return True
     
     cache_dir = BASE_DIR / "data" / "tts_models"
     cache_dir.mkdir(parents=True, exist_ok=True)
     
     # Download script with retry/resume and cleaner progress
+    voices_json = str(voices_to_download).replace("'", '"')
     download_script = f'''
 import os
 import sys
@@ -570,7 +692,7 @@ tqdm.__init__ = _custom_tqdm_init
 
 from TTS.api import TTS
 
-voices = {voices}
+voices = {voices_to_download}
 max_retries = 3
 
 for name, model in voices:
@@ -609,7 +731,7 @@ sys.stdout.flush()
         script_path.write_text(download_script)
         
         accent_str = " + ".join(a.title() for a in accents)
-        print_status(f"Downloading TTS voices ({accent_str})...")
+        print_status(f"Downloading {len(voices_to_download)} TTS voice(s) ({accent_str})...")
         
         # Set TTS_HOME in subprocess environment
         env = os.environ.copy()

@@ -224,6 +224,7 @@ def test_core_libs() -> bool:
     
     success = True
     py_minor = get_python_minor_version()
+    tts_engine = SYSTEM_INFO.get('tts_engine', 'pyttsx3')
     
     # Core packages all installs need (matching installer BASE_REQ + dynamic additions)
     core_checks = [
@@ -240,7 +241,6 @@ def test_core_libs() -> bool:
         ("pygments", "pygments"),
         ("lxml", "lxml"),
         ("lxml_html_clean", "lxml_html_clean"),
-        ("pyttsx3", "pyttsx3"),
         ("tokenizers", "tokenizers"),
         ("beautifulsoup4", "bs4"),
         ("aiohttp", "aiohttp"),
@@ -252,6 +252,15 @@ def test_core_libs() -> bool:
         # LLM backend
         ("llama-cpp-python", "llama_cpp"),
     ]
+    
+    # TTS-related packages based on installed TTS engine
+    if tts_engine == "pyttsx3":
+        # pyttsx3 is only required when it's the selected TTS engine
+        core_checks.append(("pyttsx3", "pyttsx3"))
+    elif tts_engine in ("coqui", "coqui_legacy"):
+        # Coqui TTS requires sounddevice and TTS package
+        core_checks.append(("sounddevice", "sounddevice"))
+        # Note: TTS package is checked separately in test_tts_engine for better error messages
     
     # newspaper version depends on Python version
     if py_minor >= 10:
@@ -351,6 +360,35 @@ def test_tts_engine() -> bool:
             )
             if result.returncode == 0 and "OK" in result.stdout:
                 print_status("pyttsx3 available (system voices)")
+                
+                # Platform-specific verification
+                if PLATFORM == "windows":
+                    # Check SAPI voices exist
+                    try:
+                        result = subprocess.run(
+                            [str(venv_py), "-c", 
+                             "import pyttsx3; e = pyttsx3.init(); v = e.getProperty('voices'); print(len(v))"],
+                            capture_output=True, text=True, timeout=15
+                        )
+                        if result.returncode == 0:
+                            voice_count = result.stdout.strip()
+                            if voice_count.isdigit() and int(voice_count) > 0:
+                                print_status(f"Windows SAPI voices found ({voice_count})")
+                            else:
+                                print_status("No Windows SAPI voices found", False)
+                    except Exception:
+                        print_status("Could not enumerate Windows voices", False)
+                else:
+                    # Linux - check espeak-ng
+                    try:
+                        r = subprocess.run(["which", "espeak-ng"], capture_output=True)
+                        if r.returncode == 0:
+                            print_status("espeak-ng backend available")
+                        else:
+                            print_status("espeak-ng not found (pyttsx3 may not work)", False)
+                    except Exception:
+                        pass
+                
                 return True
             else:
                 print_status("pyttsx3 not available", False)
@@ -385,7 +423,11 @@ def test_tts_engine() -> bool:
                 capture_output=True, text=True, timeout=30
             )
             if result.returncode == 0 and "OK" in result.stdout:
-                print_status("Coqui TTS package available")
+                # Differentiate between coqui and coqui_legacy
+                if tts_engine == "coqui_legacy":
+                    print_status("Coqui TTS package available (legacy mode)")
+                else:
+                    print_status("Coqui TTS package available")
             else:
                 print_status("Coqui TTS package missing", False)
                 success = False
@@ -393,35 +435,56 @@ def test_tts_engine() -> bool:
             print_status("Coqui TTS check failed", False)
             success = False
         
-        # Check if voice models directory exists
-        tts_models_dir = BASE_DIR / "data" / "tts_models"
-        if tts_models_dir.exists():
-            model_files = list(tts_models_dir.rglob("*.pth"))
-            if model_files:
-                print_status(f"TTS voice models found ({len(model_files)} files)")
-            else:
-                print_status("TTS models directory empty (voices will download on first use)", False)
-        else:
-            # Check default location
-            if PLATFORM == "windows":
-                default_tts = Path.home() / "AppData" / "Local" / "tts"
-            else:
-                default_tts = Path.home() / ".local" / "share" / "tts"
-            
-            if default_tts.exists():
-                model_files = list(default_tts.rglob("*.pth"))
-                if model_files:
-                    print_status(f"TTS voice models found in default location ({len(model_files)} files)")
-                else:
-                    print_status("TTS voices will download on first use", False)
-            else:
-                print_status("TTS voices will download on first use", False)
+        # Check if voice models exist
+        voice_check_result = _check_coqui_voice_models()
+        if not voice_check_result:
+            # Non-fatal - voices will download on first use
+            pass
         
         return success
     
     else:
         print_status(f"Unknown TTS engine: {tts_engine}", False)
         return False
+
+def _check_coqui_voice_models() -> bool:
+    """Check if Coqui TTS voice models are cached (helper function)"""
+    # Check project-local tts_models directory first
+    tts_models_dir = BASE_DIR / "data" / "tts_models"
+    if tts_models_dir.exists():
+        model_files = list(tts_models_dir.rglob("*.pth"))
+        if model_files:
+            # Check if any model file is reasonably sized (>10MB)
+            valid_models = [f for f in model_files if f.stat().st_size > 10 * 1024 * 1024]
+            if valid_models:
+                print_status(f"TTS voice models found ({len(valid_models)} valid files)")
+                return True
+            else:
+                print_status("TTS model files exist but may be incomplete", False)
+        else:
+            print_status("TTS models directory empty (voices will download on first use)", False)
+    else:
+        # Check default system location
+        if PLATFORM == "windows":
+            default_tts = Path.home() / "AppData" / "Local" / "tts"
+        else:
+            default_tts = Path.home() / ".local" / "share" / "tts"
+        
+        if default_tts.exists():
+            model_files = list(default_tts.rglob("*.pth"))
+            if model_files:
+                valid_models = [f for f in model_files if f.stat().st_size > 10 * 1024 * 1024]
+                if valid_models:
+                    print_status(f"TTS voice models found in default location ({len(valid_models)} files)")
+                    return True
+                else:
+                    print_status("TTS voices will download on first use", False)
+            else:
+                print_status("TTS voices will download on first use", False)
+        else:
+            print_status("TTS voices will download on first use", False)
+    
+    return False
 
 def test_browser_setup() -> bool:
     """Minimal check: gradio + the Qt WebEngine from constants.ini"""
@@ -559,12 +622,15 @@ def test_linux_system_packages() -> bool:
     tts_engine = SYSTEM_INFO.get('tts_engine', 'pyttsx3')
     qt_version = SYSTEM_INFO.get('qt_version', '6')
     
-    # TTS system dependencies
+    # TTS system dependencies - conditional based on tts_engine
     if tts_engine == "pyttsx3":
+        # pyttsx3 uses espeak-ng on Linux
         tts_packages = ["espeak-ng", "libespeak-ng1", "portaudio19-dev"]
-    else:
-        # Coqui TTS uses sounddevice, needs portaudio
+    elif tts_engine in ("coqui", "coqui_legacy"):
+        # Coqui TTS uses sounddevice which needs portaudio
         tts_packages = ["portaudio19-dev"]
+    else:
+        tts_packages = []
     
     # Qt system dependencies
     if str(qt_version) == "5":
@@ -618,12 +684,23 @@ def main():
         input("\nPress Enter to exit...")
         return 1
     
+    # Display TTS engine type more descriptively
+    tts_engine = SYSTEM_INFO.get('tts_engine', 'pyttsx3')
+    if tts_engine == "pyttsx3":
+        tts_display = "pyttsx3 (System TTS)"
+    elif tts_engine == "coqui":
+        tts_display = "Coqui TTS (Neural)"
+    elif tts_engine == "coqui_legacy":
+        tts_display = "Coqui TTS (Legacy)"
+    else:
+        tts_display = tts_engine
+    
     print(f"System: {SYSTEM_INFO['platform']} {SYSTEM_INFO['os_version']}")
     print(f"Python: {SYSTEM_INFO['python_version']}")
     print(f"Backend: {SYSTEM_INFO['backend_type']}")
     print(f"Embedding: {SYSTEM_INFO['embedding_model']}")
     print(f"Gradio: {SYSTEM_INFO['gradio_version']}, Qt: {SYSTEM_INFO['qt_version']}")
-    print(f"TTS Engine: {SYSTEM_INFO['tts_engine']}\n")
+    print(f"TTS Engine: {tts_display}\n")
     
     results = {
         "directories": test_directories(),
