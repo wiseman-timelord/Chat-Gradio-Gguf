@@ -260,22 +260,35 @@ def format_response(output: str) -> str:
     # Common basic normalization
     clean_output = re.sub(r' {2,}', ' ', clean_output)        # reduce multiple spaces to 1
     
-    # Aggressive cleanup for both versions of Gradio
-    clean_output = clean_output.replace('<p>', '\n')          # <p> → single newline
-    clean_output = clean_output.replace('</p>', '\n')           # drop closing tag
-    clean_output = clean_output.replace('\n\n\n\r', '\n\r')
-    clean_output = clean_output.replace('\n\n\n\t', '\n\t')
-    clean_output = clean_output.replace('\r\n\n\n', '\r\n')
-    clean_output = clean_output.replace('\t\n\n\n', '\t\n')
-    clean_output = clean_output.replace('\n\r\n', '\n')
-    clean_output = clean_output.replace('\n\n\r', '\r')
-    clean_output = clean_output.replace('\n\n\t', '\t')
-    clean_output = clean_output.replace('\r\n\n', '\r')
-    clean_output = clean_output.replace('\t\n\n', '\t')
-    clean_output = clean_output.replace('\n\r', '\r')
-    clean_output = clean_output.replace('\n\t', '\t')
-    clean_output = clean_output.replace('\r\n', '\r')
-    clean_output = clean_output.replace('\t\n', '\t')
+    if GRADIO_VERSION.startswith('3.'):
+        # Aggressive cleanup for Gradio 3 + Qt WebEngine (old Windows)
+        clean_output = clean_output.replace('<p>', '\n')          # <p> → single newline
+        clean_output = clean_output.replace('</p>', '\n')           # drop closing tag
+        clean_output = clean_output.replace('\n\n\n\r', '\n\r')
+        clean_output = clean_output.replace('\n\n\n\t', '\n\t')
+        clean_output = clean_output.replace('\r\n\n\n', '\r\n')
+        clean_output = clean_output.replace('\t\n\n\n', '\t\n')
+        clean_output = clean_output.replace('\n\r\n', '\n')
+        clean_output = clean_output.replace('\n\n\r', '\r')
+        clean_output = clean_output.replace('\n\n\t', '\t')
+        clean_output = clean_output.replace('\r\n\n', '\r')
+        clean_output = clean_output.replace('\t\n\n', '\t')
+        clean_output = clean_output.replace('\n\r', '\r')
+        clean_output = clean_output.replace('\n\t', '\t')
+        clean_output = clean_output.replace('\r\n', '\r')
+        clean_output = clean_output.replace('\t\n', '\t')
+
+    if GRADIO_VERSION.startswith('5'):
+        # Gentler cleanup for Gradio 4+ / 5+ (preserves more natural spacing)
+        clean_output = clean_output.replace('\n\n\n\r', '\n\r')
+        clean_output = clean_output.replace('\n\n\n\t', '\n\t')
+        clean_output = clean_output.replace('\r\n\n\n', '\r\n')
+        clean_output = clean_output.replace('\t\n\n\n', '\t\n')
+        clean_output = clean_output.replace('\n\n\r', '\n\r')
+        clean_output = clean_output.replace('\n\n\t', '\n\t')
+        clean_output = clean_output.replace('\r\n\n', '\r\n')
+        clean_output = clean_output.replace('\t\n\n', '\t\n')
+        clean_output = clean_output.replace('\n\n\n', '\n\n')
         
     clean_output = clean_output.strip()
     
