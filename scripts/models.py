@@ -855,7 +855,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     if web_search_enabled and search_results:
-        system_message += f"\n\nWeb search results:\n{search_results}"
+        system_message += f"\n\n--- WEB SEARCH CONTEXT (Use this information to answer) ---\n{search_results}\n--- END SEARCH CONTEXT ---"
 
     messages = []
     if system_message:

@@ -1086,11 +1086,27 @@ def conversation_interface(
     search_results = None
     if (ddg_search_enabled or web_search_enabled) and user_input.strip():
         try:
-            # Clean query for search
-            clean_query = re.sub(r'^(what|when|where|who|why|how|can you|could you|please)\s+', '', user_input.lower())
-            clean_query = re.sub(r'\?+$', '', clean_query).strip()
-            words = clean_query.split()[:10]
-            search_query = ' '.join(words).strip()
+            # Preserve temporal context while cleaning query
+            # Don't strip out years, dates, or time-related words
+            clean_query = user_input.strip()
+            
+            # Remove only polite prefixes, keep substance
+            polite_prefixes = [
+                r'^(can you|could you|please|would you|i want you to|i need you to)\s+',
+                r'^(tell me|show me|find|search for|look up|research)\s+',
+            ]
+            for prefix in polite_prefixes:
+                clean_query = re.sub(prefix, '', clean_query, flags=re.IGNORECASE)
+            
+            # Remove trailing punctuation but preserve the query
+            clean_query = re.sub(r'[?!.]+$', '', clean_query).strip()
+            
+            # Limit length but don't over-truncate - keep up to 150 chars
+            if len(clean_query) > 150:
+                # Try to break at a word boundary
+                clean_query = clean_query[:150].rsplit(' ', 1)[0]
+            
+            search_query = clean_query if clean_query else user_input[:100].strip()
             
             if not search_query or len(search_query) < 3:
                 search_query = user_input[:100].strip()

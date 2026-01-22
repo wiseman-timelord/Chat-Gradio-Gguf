@@ -496,13 +496,32 @@ def web_search(query: str, num_results=5, max_hits: int = 6) -> str:
     current_date = datetime.now().strftime("%B %d, %Y")
     current_year = datetime.now().year
     
-    time_sensitive_keywords = ['latest', 'current', 'new', 'recent', 'today', 'now', '2026', 'version']
-    if any(keyword in query.lower() for keyword in time_sensitive_keywords):
+    # Expanded time-sensitive keywords including year references
+    time_sensitive_keywords = [
+        'latest', 'current', 'new', 'recent', 'today', 'now', 
+        'this year', 'this month', 'this week',
+        '2024', '2025', '2026', '2027',  # Cover near years
+        'update', 'breaking', 'news', 'developments', 'happening'
+    ]
+    
+    # Check if query already has a year or is time-sensitive
+    query_lower = query.lower()
+    has_year = any(str(y) in query_lower for y in range(2020, 2030))
+    is_time_sensitive = any(keyword in query_lower for keyword in time_sensitive_keywords)
+    
+    if is_time_sensitive and not has_year:
+        # Add current year to make search more relevant
         enhanced_query = f"{query} {current_year}"
     else:
         enhanced_query = query
     
-    date_header = f"[Current Date: {current_date}]\n[Search Query Used: {enhanced_query}]\n\n"
+    # Create informative header for LLM context
+    date_header = (
+        f"[Web Search Results]\n"
+        f"[Current Date: {current_date}]\n"
+        f"[Search Query: {enhanced_query}]\n"
+        f"[Note: Prioritize recent information. Results may contain outdated content.]\n\n"
+    )
 
     try:
         hits = DDGS().text(enhanced_query, max_results=max_hits)
@@ -527,7 +546,6 @@ def web_search(query: str, num_results=5, max_hits: int = 6) -> str:
         print("=== RAW DDG ===\n", date_header + raw, "\n=== END ===", flush=True)
 
     return date_header + raw
-
 
 def web_research(query: str, max_pages: int = 5, use_js: bool = False) -> str:
     """
@@ -560,11 +578,27 @@ def _research_fallback(query: str, max_pages: int = 5) -> str:
     Used when research.py module is unavailable.
     """
     current_date = datetime.now().strftime("%B %d, %Y")
+    current_year = datetime.now().year
     
-    header = f"[Research Results - {current_date}]\n[Query: {query}]\n\n"
+    # Enhance query with year if time-sensitive
+    query_lower = query.lower()
+    time_sensitive = any(kw in query_lower for kw in [
+        'latest', 'current', 'new', 'recent', 'today', 'now',
+        'update', 'breaking', 'news', 'developments', 'happening'
+    ])
+    has_year = any(str(y) in query_lower for y in range(2020, 2030))
+    
+    search_query = f"{query} {current_year}" if time_sensitive and not has_year else query
+    
+    header = (
+        f"[Deep Research Results]\n"
+        f"[Current Date: {current_date}]\n"
+        f"[Query: {search_query}]\n"
+        f"[Note: Verify information recency. Prioritize recent sources.]\n\n"
+    )
     
     try:
-        hits = DDGS().text(query, max_results=max_pages + 2)
+        hits = DDGS().text(search_query, max_results=max_pages + 2)
     except DDGSException as e:
         return header + f"Search error: {e}"
     
@@ -588,6 +622,9 @@ def _research_fallback(query: str, max_pages: int = 5) -> str:
                 article_content = article.text[:2000]
                 if len(article.text) > 2000:
                     article_content += "\n[...truncated...]"
+                # Try to get publish date
+                if article.publish_date:
+                    article_content = f"[Published: {article.publish_date.strftime('%Y-%m-%d')}]\n{article_content}"
         except Exception as e:
             print(f"[RESEARCH-FALLBACK] Article extraction failed for {url}: {e}")
             article_content = snippet
