@@ -1227,7 +1227,7 @@ def conversation_interface(
         for chunk in get_response_stream(
             session_log=session_messages,
             settings=model_settings,
-            web_search_enabled=ddg_search_enabled,
+            ddg_search_enabled=ddg_search_enabled,
             search_results=search_results,
             cancel_event=_cancel_event,
             llm_state=llm_state,

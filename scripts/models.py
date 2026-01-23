@@ -827,7 +827,7 @@ def build_messages_with_context_management(session_log, system_message, context_
 
     return messages
 
-def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None,
+def get_response_stream(session_log, settings, ddg_search_enabled=False, search_results=None,
                         cancel_event=None, llm_state=None, models_loaded_state=False):
     """
     Streaming response handler – NO phase strings yielded.
@@ -845,7 +845,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         return
 
     # DEBUG: Log search parameters
-    print(f"[RESPONSE-STREAM] web_search_enabled={web_search_enabled}, search_results={'present (' + str(len(search_results)) + ' chars)' if search_results else 'None'}")
+    print(f"[RESPONSE-STREAM] ddg_search_enabled={ddg_search_enabled}, search_results={'present (' + str(len(search_results)) + ' chars)' if search_results else 'None'}")
     if search_results and len(search_results) > 0:
         # Print first 300 chars of search results for debugging
         print(f"[RESPONSE-STREAM] Search results preview: {search_results[:300]}...")
@@ -854,7 +854,7 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
         is_nsfw=settings.get("is_nsfw", False),
-        web_search_enabled=web_search_enabled,
+        ddg_search_enabled=ddg_search_enabled,
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False),
         is_code=settings.get("is_code", False),
@@ -863,12 +863,12 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     # FIXED: Inject search results into system message with explicit instructions
-    if web_search_enabled and search_results:
+    if ddg_search_enabled and search_results:
         search_context = f"\n\n--- WEB SEARCH CONTEXT (Use this information to answer the user's query) ---\n{search_results}\n--- END SEARCH CONTEXT ---\n\nIMPORTANT: Base your response on the search results above. Cite sources when possible."
         system_message += search_context
         print(f"[RESPONSE-STREAM] Search context INJECTED into system message ({len(search_context)} chars added)")
-    elif web_search_enabled and not search_results:
-        print("[RESPONSE-STREAM] WARNING: web_search_enabled=True but search_results is empty/None!")
+    elif ddg_search_enabled and not search_results:
+        print("[RESPONSE-STREAM] WARNING: ddg_search_enabled=True but search_results is empty/None!")
         system_message += "\n\n[Note: Web search was enabled but returned no results. Answer based on your knowledge.]"
 
     # DEBUG: Log final system message length
