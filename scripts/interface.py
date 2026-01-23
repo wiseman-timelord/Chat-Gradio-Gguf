@@ -32,7 +32,10 @@ from scripts.utility import (
     get_available_gpus, filter_operational_content, process_files,
     summarize_session
 )
-from scripts.sounds import speak_text, beep
+from scripts.utility import speak_text, beep
+# OR directly:
+from scripts.tools import speak_text
+from scripts.utility import beep
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings, inspect_model, load_models
 )
@@ -835,13 +838,13 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False,
     Build dynamic progress indicator HTML based on enabled features.
     
     Cases:
-    1. Vanilla (no search, no speech): 9 steps
+    1. Vanilla (no search, no speech): 9 steps (0-8)
     2. DDG search only: 11 steps (adds "DDG Search", "Processing Results")
     3. Web search only: 12 steps (adds "Deep Research", "Fetching Pages", "Analyzing Content")
-    4. DDG + Web search (combined): 12 steps (adds "DDG Search", "Fetching Pages", "Analyzing Content")
+    4. DDG + Web search (HYBRID): 13 steps (DDG Pre-Search, Analyze Results, Deep Fetch, Merge Results)
     5. Speech: adds "Generating TTS" at end
     """
-    # Base phases (always present)
+    # Base phases (always present) - indices 0-5
     base_phases = [
         "Handle Input",      # 0
         "Build Prompt",      # 1
@@ -855,19 +858,20 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False,
     
     # Add search phases based on mode
     if ddg_search_enabled and web_search_enabled:
-        # Combined mode: DDG-enhanced Web Search
-        phases.append("DDG Search")
-        phases.append("Fetching Pages")
-        phases.append("Analyzing Content")
+        # HYBRID mode: DDG pre-research → targeted deep fetch
+        phases.append("DDG Pre-Search")     # 6
+        phases.append("Analyze Results")    # 7
+        phases.append("Deep Fetch")         # 8
+        phases.append("Merge Results")      # 9
     elif web_search_enabled:
         # Web search only (deep research)
-        phases.append("Deep Research")
-        phases.append("Fetching Pages")
-        phases.append("Analyzing Content")
+        phases.append("Deep Research")      # 6
+        phases.append("Fetching Pages")     # 7
+        phases.append("Analyzing Content")  # 8
     elif ddg_search_enabled:
         # DDG search only (quick snippets)
-        phases.append("DDG Search")
-        phases.append("Processing Results")
+        phases.append("DDG Search")         # 6
+        phases.append("Processing Results") # 7
     
     # Add generation and processing phases
     phases.extend([
@@ -897,6 +901,91 @@ def handle_cpu_threads_change(new_threads):
     """Handle CPU threads slider changes"""
     temporary.CPU_THREADS = int(new_threads)
     return f"CPU threads set to {new_threads}"
+
+def extract_search_query(user_input: str) -> str:
+    """
+    Extract a clean, focused search query from natural language user input.
+    
+    This is CRITICAL for web search to work properly. The user might say:
+    "Can you please search online and tell me about the protests in Iran in January 2026?"
+    
+    We need to extract: "Iran protests January 2026"
+    
+    NOT: "Can you please search online and tell me about the protests in Iran in January 2026?"
+    """
+    import re
+    
+    original = user_input.strip()
+    query = original
+    
+    # Step 1: Remove conversational preamble - be AGGRESSIVE here
+    # These patterns remove the "please do X" wrapper around the actual query
+    conversational_patterns = [
+        # Testing/chatbot meta-language - MOST IMPORTANT to remove
+        r'^.*?(?:testing|test)\s+(?:the\s+)?(?:internet\s+)?(?:search|web\s*search).*?(?:features?|capabilities?).*?(?:in\s+this\s+)?(?:chatbot|chat\s*bot|ai)?[,.]?\s*',
+        r'^.*?(?:please\s+)?(?:research|search)\s+(?:online\s+)?(?:to\s+)?(?:find\s+out|discover|learn|tell\s+me)\s+(?:what\s+you\s+can\s+)?(?:about\s+)?',
+        
+        # Common request patterns
+        r'^(?:can\s+you|could\s+you|would\s+you|will\s+you|please)\s+(?:help\s+me\s+)?(?:search|find|look\s+up|research|google|check|investigate)\s+(?:for\s+|about\s+|on\s+|online\s+)?(?:information\s+(?:on|about)\s+)?',
+        r'^(?:i\s+want\s+(?:you\s+)?to|i\s+need\s+(?:you\s+)?to|i\'d\s+like\s+(?:you\s+)?to)\s+(?:search|find|look\s+up|research)\s+(?:for\s+|about\s+)?',
+        r'^(?:search|find|look\s+up|research|google|check)\s+(?:for\s+|about\s+|on\s+)?(?:me\s+)?(?:information\s+(?:on|about)\s+)?',
+        r'^(?:what\s+(?:is|are|can\s+you\s+(?:tell|find))\s+(?:the\s+)?(?:latest|current|recent)\s+(?:news|information|updates?)\s+(?:on|about|regarding)\s+)',
+        r'^(?:tell\s+me|show\s+me|give\s+me|get\s+me)\s+(?:information\s+)?(?:on|about)\s+',
+        r'^(?:i\'m\s+looking\s+for|looking\s+for)\s+(?:information\s+)?(?:on|about)\s+',
+        
+        # Question prefixes
+        r'^(?:what\s+(?:do\s+you\s+know|can\s+you\s+tell\s+me|is\s+happening|happened|is\s+going\s+on)\s+(?:about|with|regarding)\s+)',
+    ]
+    
+    for pattern in conversational_patterns:
+        query = re.sub(pattern, '', query, flags=re.IGNORECASE).strip()
+    
+    # Step 2: Remove ending question markers but preserve content
+    query = re.sub(r'\?+\s*$', '', query)
+    
+    # Step 3: Remove trailing "please", "thank you", etc.
+    query = re.sub(r'\s*(?:please|thank\s*you|thanks|if\s+(?:you\s+)?(?:can|could|would))[.!?]?\s*$', '', query, flags=re.IGNORECASE)
+    
+    # Step 4: Extract the TOPIC if query is still too long or conversational
+    topic_indicators = [
+        r'(?:about|regarding|concerning|on)\s+(?:the\s+)?(.+)',
+        r'(?:what\s+)?(?:is|are)\s+(?:the\s+)?(.+?)(?:\s+(?:that|which|who).*)?$',
+    ]
+    
+    if len(query) > 120:
+        for pattern in topic_indicators:
+            match = re.search(pattern, query, flags=re.IGNORECASE)
+            if match:
+                extracted = match.group(1).strip()
+                if len(extracted) > 10:  # Don't use if too short
+                    query = extracted
+                    break
+    
+    # Step 5: Clean up residual punctuation and whitespace
+    query = re.sub(r'^[,.\-:;]+', '', query)
+    query = re.sub(r'[,.\-:;]+$', '', query)
+    query = re.sub(r'\s+', ' ', query).strip()
+    
+    # Step 6: If still nothing useful, use keyword extraction
+    if not query or len(query) < 5:
+        words = original.split()
+        keywords = [w.strip('.,!?:;') for w in words 
+                   if (w[0].isupper() or len(w) > 4) 
+                   and w.lower() not in {'please', 'could', 'would', 'about', 'search', 'find', 
+                                         'online', 'internet', 'features', 'testing', 'chatbot'}]
+        query = ' '.join(keywords[:8]) if keywords else original[:100]
+    
+    # Step 7: Ensure minimum viable query
+    if len(query) < 3:
+        query = original[:100]
+    
+    # Step 8: Truncate if still too long
+    if len(query) > 80:
+        query = query[:80].rsplit(' ', 1)[0]
+    
+    print(f"[SEARCH-QUERY] Original: '{original[:80]}...' → Extracted: '{query}'")
+    return query
+
 
 # Global cancel event
 import threading
@@ -1084,49 +1173,48 @@ def conversation_interface(
     # SEARCH LOGIC: Handle all 3 search modes
     # ═══════════════════════════════════════════════════════════════════════════
     search_results = None
+    search_metadata = None
+    search_status_text = ""
+    
     if (ddg_search_enabled or web_search_enabled) and user_input.strip():
         try:
-            # Preserve temporal context while cleaning query
-            # Don't strip out years, dates, or time-related words
-            clean_query = user_input.strip()
-            
-            # Remove only polite prefixes, keep substance
-            polite_prefixes = [
-                r'^(can you|could you|please|would you|i want you to|i need you to)\s+',
-                r'^(tell me|show me|find|search for|look up|research)\s+',
-            ]
-            for prefix in polite_prefixes:
-                clean_query = re.sub(prefix, '', clean_query, flags=re.IGNORECASE)
-            
-            # Remove trailing punctuation but preserve the query
-            clean_query = re.sub(r'[?!.]+$', '', clean_query).strip()
-            
-            # Limit length but don't over-truncate - keep up to 150 chars
-            if len(clean_query) > 150:
-                # Try to break at a word boundary
-                clean_query = clean_query[:150].rsplit(' ', 1)[0]
-            
-            search_query = clean_query if clean_query else user_input[:100].strip()
-            
-            if not search_query or len(search_query) < 3:
-                search_query = user_input[:100].strip()
+            # Use proper query extraction
+            search_query = extract_search_query(user_input)
             
             if ddg_search_enabled and web_search_enabled:
-                # CASE 3: Both enabled - DDG-enhanced Web Search
-                print(f"[DDG+WEB] Combined search: {search_query}")
-                search_results = utility.web_research(search_query, max_pages=5, use_js=False)
+                # CASE 3: HYBRID - DDG pre-research → targeted deep fetch
+                print(f"[HYBRID] Starting hybrid search: '{search_query}'")
+                result = utility.hybrid_search(search_query, ddg_results=8, deep_fetch=4)
             elif web_search_enabled:
                 # CASE 2: Web search only - Deep research with full page reading
-                print(f"[WEB-SEARCH] Deep research: {search_query}")
-                search_results = utility.web_research(search_query, max_pages=5, use_js=False)
+                print(f"[WEB-SEARCH] Deep research: '{search_query}'")
+                result = utility.web_research(search_query, max_pages=5)
             else:
                 # CASE 1: DDG search only - Quick DDG snippets
-                print(f"[DDG-SEARCH] Quick search: {search_query}")
-                search_results = utility.web_search(search_query, num_results=5, max_hits=6)
+                print(f"[DDG-SEARCH] Quick search: '{search_query}'")
+                result = utility.web_search(search_query, num_results=5, max_hits=6)
+            
+            # Extract content and metadata from dict return format
+            if isinstance(result, dict):
+                search_results = result.get('content', '')
+                search_metadata = result.get('metadata', {})
+            else:
+                search_results = result
+                search_metadata = {'type': 'unknown', 'query': search_query, 'sources': [], 'error': None}
+            
+            # Format search status for chat display
+            if search_metadata:
+                search_status_text = utility.format_search_status_for_chat(search_metadata)
+                if search_status_text:
+                    print(f"[SEARCH-STATUS]\n{search_status_text}")
                 
         except Exception as e:
             print(f"[SEARCH] Error: {e}")
+            import traceback
+            traceback.print_exc()
             search_results = f"Search error: {str(e)}"
+            search_metadata = {'type': 'error', 'query': user_input[:100], 'error': str(e), 'sources': []}
+            search_status_text = f"⚠️ Search Error: {str(e)}"
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
@@ -1138,8 +1226,8 @@ def conversation_interface(
 
     # Search progress phases (if any search is enabled)
     if ddg_search_enabled and web_search_enabled:
-        # Combined mode: 3 phases
-        for phase_idx in [6, 7, 8]:
+        # HYBRID mode: 4 phases (DDG Pre-Search, Analyze, Deep Fetch, Merge)
+        for phase_idx in [6, 7, 8, 9]:
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
                 gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, web_search_enabled, speech_enabled)),
@@ -1147,7 +1235,7 @@ def conversation_interface(
                 cancel_flag, loaded_files, "input_submitted",
                 gr.update(), gr.update(), gr.update()
             )
-            time.sleep(0.1)
+            time.sleep(0.15)  # Slightly longer for hybrid phases
         
     elif web_search_enabled:
         # Web search only: 3 phases (Deep Research, Fetching, Analyzing)
@@ -1175,13 +1263,13 @@ def conversation_interface(
 
     # Calculate Generate Stream phase index
     if ddg_search_enabled and web_search_enabled:
-        generate_phase = 9  # After 3 combined phases
+        generate_phase = 10  # After 4 hybrid phases (6,7,8,9)
     elif web_search_enabled:
-        generate_phase = 9  # After 3 research phases
+        generate_phase = 9   # After 3 research phases (6,7,8)
     elif ddg_search_enabled:
-        generate_phase = 8  # After 2 DDG phases
+        generate_phase = 8   # After 2 DDG phases (6,7)
     else:
-        generate_phase = 6  # Base case (no search)
+        generate_phase = 6   # Base case (no search)
 
     # Phase: Generating response
     interaction_phase = "generating_response"
@@ -1336,17 +1424,17 @@ def toggle_right_expanded_state(current_state):
     return not current_state
 
 def toggle_ddg_search(current_state):
-    """Toggle quick DDG search (DDG snippets only) - independent toggle."""
+    """Toggle DDG Quick Search (snippets only) - independent toggle."""
     new_state = not current_state
     variant = "primary" if new_state else "secondary"
-    label = "🔍 DDG Search ON" if new_state else "🔍 DDG Search"
+    label = "🔍 DDG Quick Search ON" if new_state else "🔍 DDG Quick Search"
     return new_state, gr.update(variant=variant, value=label), gr.update(variant=variant)
 
 def toggle_web_search(current_state):
-    """Toggle deep web search mode (full page analysis) - independent toggle."""
+    """Toggle DDG Deep Search (full article fetching) - independent toggle."""
     new_state = not current_state
     variant = "primary" if new_state else "secondary"
-    label = "🔬 Web Search ON" if new_state else "🔬 Web Search"
+    label = "🔬 DDG Deep Search ON" if new_state else "🔬 DDG Deep Search"
     return new_state, gr.update(variant=variant, value=label), gr.update(variant=variant)
 
 def toggle_speech(current_state):
@@ -1527,8 +1615,8 @@ def launch_interface():
                         toggle_button_right_expanded = gr.Button(">-------<", variant="secondary")
                         gr.Markdown("**Tools / Options**")
                         with gr.Row(elem_classes=["clean-elements"]):
-                            action_buttons["ddg_search"] = gr.Button("🔍 DDG Search", variant="secondary", scale=1)
-                            action_buttons["web_search"] = gr.Button("🔬 Web Search", variant="secondary", scale=1, visible=is_research_available())
+                            action_buttons["ddg_search"] = gr.Button("🔍 DDG Quick Search", variant="secondary", scale=1)
+                            action_buttons["web_search"] = gr.Button("🔬 DDG Deep Search", variant="secondary", scale=1, visible=is_research_available())
                             action_buttons["speech"] = gr.Button("🔊 Speech Out", variant="secondary", scale=1)
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as right_column_collapsed:
@@ -1622,7 +1710,7 @@ def launch_interface():
                         )
 
                     # Sound Hardware (bottom of Hardware section, visible only for Coqui TTS)
-                    from scripts.sounds import (
+                    from scripts.tools import (
                         get_sound_device_names, get_sample_rate_options,
                         get_voice_options_for_engine, get_tts_config_visibility, 
                         get_tts_engine_name
@@ -1798,14 +1886,14 @@ def launch_interface():
 
         # Web search toggle (mutually exclusive with research)
         def toggle_search_exclusive(search_state, research_state):
-            """Toggle search, disable research if search is enabled."""
+            """Toggle DDG Quick search, disable Deep if Quick is enabled."""
             new_search = not search_state
             new_research = False if new_search else research_state
             
             search_variant = "primary" if new_search else "secondary"
-            search_label = "🔍 DDG Search ON" if new_search else "🔍 DDG Search"
+            search_label = "🔍 DDG Quick Search ON" if new_search else "🔍 DDG Quick Search"
             research_variant = "primary" if new_research else "secondary"
-            research_label = "🔬 Web Research ON" if new_research else "🔬 Web Research"
+            research_label = "🔬 DDG Deep Search ON" if new_research else "🔬 DDG Deep Search"
             
             return (
                 new_search,
@@ -1818,14 +1906,14 @@ def launch_interface():
         
         # Research toggle (mutually exclusive with search)
         def toggle_research_exclusive(research_state, search_state):
-            """Toggle research, disable search if research is enabled."""
+            """Toggle DDG Deep search, disable Quick if Deep is enabled."""
             new_research = not research_state
             new_search = False if new_research else search_state
             
             research_variant = "primary" if new_research else "secondary"
-            research_label = "🔬 Web Search ON" if new_research else "🔬 Web Search"
+            research_label = "🔬 DDG Deep Search ON" if new_research else "🔬 DDG Deep Search"
             search_variant = "primary" if new_search else "secondary"
-            search_label = "🔍 DDG Search ON" if new_search else "🔍 DDG Search"
+            search_label = "🔍 DDG Quick Search ON" if new_search else "🔍 DDG Quick Search"
             
             return (
                 new_research,

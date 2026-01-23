@@ -240,7 +240,7 @@ def main():
 
         # Initialize TTS
         print("\n[INIT] Initializing TTS...")
-        from scripts.sounds import initialize_tts
+        from scripts.tools import initialize_tts
         if initialize_tts():
             print("[INIT] OK TTS ready")
         else:

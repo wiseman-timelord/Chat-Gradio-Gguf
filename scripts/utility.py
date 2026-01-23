@@ -5,10 +5,6 @@ import tempfile
 import re, subprocess, json, time, random, psutil, shutil, os, zipfile, spacy, sys, PyPDF2
 from pathlib import Path
 from datetime import datetime
-from newspaper import Article
-from ddgs import DDGS
-from ddgs.exceptions import DDGSException
-import requests.exceptions  # For HTTPError and Timeout
 from docx import Document
 from openpyxl import load_workbook
 from pptx import Presentation
@@ -19,7 +15,12 @@ from .temporary import (
     current_session_id, session_label
 )
 from . import temporary
-from scripts.sounds import speak_text, beep, cleanup_tts_resources
+
+# Import TTS and search functions from tools module
+from scripts.tools import (
+    speak_text, cleanup_tts_resources, initialize_tts,
+    web_search, web_research, hybrid_search, format_search_status_for_chat  # Added hybrid_search
+)
 
 # Variables
 _nlp_model = None
@@ -28,7 +29,56 @@ _nlp_model = None
 # lazily inside the functions that need them. This is because temporary.PLATFORM
 # is not set until after the launcher parses command-line arguments.
 
-# Functions...
+
+# =============================================================================
+# BEEP FUNCTION (simple utility, doesn't belong in tools.py)
+# =============================================================================
+
+def beep() -> None:
+    """Play a notification beep if enabled."""
+    if not getattr(temporary, "BLEEP_ON_EVENTS", False):
+        return
+    if temporary.PLATFORM == "windows":
+        _beep_windows()
+    elif temporary.PLATFORM == "linux":
+        _beep_linux()
+
+
+def _beep_windows() -> None:
+    try:
+        import winsound
+        winsound.Beep(1000, 150)
+    except:
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_OK)
+        except:
+            pass
+
+
+def _beep_linux() -> None:
+    methods = [
+        lambda: subprocess.run(['beep', '-f', '1000', '-l', '150'], timeout=2, check=True, 
+                              stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL),
+        lambda: subprocess.run(['paplay', '/usr/share/sounds/freedesktop/stereo/complete.oga'], 
+                              timeout=2, check=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL) 
+                if os.path.exists('/usr/share/sounds/freedesktop/stereo/complete.oga') else (_ for _ in ()).throw(Exception()),
+        lambda: subprocess.run(['play', '-n', 'synth', '0.15', 'sin', '1000'], timeout=2, check=True,
+                              stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL),
+        lambda: print("\a", end="", flush=True),
+    ]
+    for method in methods:
+        try:
+            method()
+            return
+        except:
+            continue
+
+
+# =============================================================================
+# GENERAL UTILITY FUNCTIONS
+# =============================================================================
+
 def has_vulkan_binary():
     """Check if Vulkan binary is available (VULKAN_CPU or VULKAN_VULKAN modes)"""
     return temporary.BACKEND_TYPE in ["VULKAN_CPU", "VULKAN_VULKAN"]
@@ -80,6 +130,11 @@ def filter_operational_content(text):
         text = re.sub(pattern, '', text, flags=re.DOTALL)
     
     return text.strip()
+
+
+# =============================================================================
+# CPU/GPU DETECTION
+# =============================================================================
 
 def detect_cpu_config():
     """Detect CPU configuration and set thread options."""
@@ -207,7 +262,6 @@ def get_available_gpus_linux():
     unique_gpus = [g for g in gpus if not (g in seen or seen.add(g))]
     
     if not unique_gpus:
-        # Don't exit - return a fallback instead
         print("[GPU] WARNING: No GPUs detected, using CPU-only mode")
         return ["CPU Only"]
     
@@ -234,7 +288,6 @@ def get_cpu_info():
         
         elif temporary.PLATFORM == "windows":
             try:
-                import subprocess
                 result = subprocess.run(
                     ["wmic", "cpu", "get", "name"],
                     capture_output=True, text=True, timeout=5
@@ -276,7 +329,12 @@ def get_available_gpus():
     elif temporary.PLATFORM == "linux":
         return get_available_gpus_linux()
     return ["CPU Only"]
-            
+
+
+# =============================================================================
+# SESSION MANAGEMENT
+# =============================================================================
+
 def generate_session_id():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -289,24 +347,19 @@ def summarize_session(messages):
     if not messages:
         return "New Session"
     
-    # Find the first user message
     first_user_msg = next((m['content'] for m in messages if m.get('role') == 'user'), "")
     if not first_user_msg.strip():
         return "Untitled Session"
     
-    # Clean the input - remove User: prefix if present
     clean_msg = re.sub(r'^User:\s*\n?', '', first_user_msg.strip(), flags=re.MULTILINE).strip()
     
     nlp = get_nlp_model()
     if nlp:
         try:
-            # Process limited text to avoid slow processing
             doc = nlp(clean_msg[:500])
             
-            # Strategy 1: Extract key noun chunks (spaCy's actual summarization approach)
             noun_chunks = list(doc.noun_chunks)
             if noun_chunks:
-                # Get unique root nouns to form a summary
                 key_phrases = []
                 seen_roots = set()
                 for chunk in noun_chunks:
@@ -314,7 +367,6 @@ def summarize_session(messages):
                     if root_text not in seen_roots and len(chunk.text) > 2:
                         seen_roots.add(root_text)
                         key_phrases.append(chunk.text)
-                        # Stop if we have enough for a good summary
                         if len(' '.join(key_phrases)) >= 40:
                             break
                 
@@ -324,7 +376,6 @@ def summarize_session(messages):
                         return summary[:MAX_LABEL_LENGTH - 3] + "..."
                     return summary
             
-            # Strategy 2: Extract named entities as fallback
             entities = [ent.text for ent in doc.ents if len(ent.text) > 2]
             if entities:
                 summary = ' '.join(entities[:5])
@@ -332,7 +383,6 @@ def summarize_session(messages):
                     return summary[:MAX_LABEL_LENGTH - 3] + "..."
                 return summary
             
-            # Strategy 3: Get subject and verb from first sentence
             for sent in doc.sents:
                 subjects = [tok.text for tok in sent if tok.dep_ in ('nsubj', 'nsubjpass')]
                 verbs = [tok.lemma_ for tok in sent if tok.pos_ == 'VERB']
@@ -340,14 +390,13 @@ def summarize_session(messages):
                     summary = f"{subjects[0]} {verbs[0]}"
                     if len(summary) <= MAX_LABEL_LENGTH:
                         return summary
-                break  # Only process first sentence
+                break
                 
         except Exception as e:
             print(f"[SESSION-LABEL] spaCy processing error: {e}")
     else:
         print("[SESSION-LABEL] spaCy model not available, using fallback")
     
-    # Fallback: First few words, trimmed to max length
     words = clean_msg.split()[:8]
     fallback = ' '.join(words)
     if len(fallback) > MAX_LABEL_LENGTH:
@@ -365,6 +414,53 @@ def get_nlp_model():
             _nlp_model = None
     return _nlp_model
 
+def save_session_history(session_messages, attached_files):
+    """Save session history to JSON file."""
+    if not temporary.session_label:
+        temporary.session_label = "Untitled"
+    
+    safe_label = re.sub(r'[^a-zA-Z0-9_-]', '_', temporary.session_label)[:50]
+    if not safe_label:
+        safe_label = "Untitled"
+    
+    filepath = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}_{safe_label}.json"
+    
+    data = {
+        "session_id": temporary.current_session_id,
+        "label": temporary.session_label,
+        "history": session_messages,
+        "attached_files": attached_files
+    }
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    
+    print(f"Session saved: {filepath.name}")
+    return filepath
+
+def load_session_history(filename):
+    """Load session history from JSON file."""
+    filepath = Path(HISTORY_DIR) / filename
+    
+    if not filepath.exists():
+        return None, None, [], []
+    
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    return data.get("session_id"), data.get("label"), data.get("history", []), data.get("attached_files", [])
+
+def get_saved_sessions():
+    """Get list of saved session files sorted by modification time."""
+    history_dir = Path(HISTORY_DIR)
+    session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+    return [f.name for f in session_files]
+
+
+# =============================================================================
+# FILE HANDLING
+# =============================================================================
+
 def read_file_content(file_path):
     """Read content from various file types with proper error handling."""
     path = Path(file_path)
@@ -372,21 +468,19 @@ def read_file_content(file_path):
     
     try:
         if suffix in ['.txt', '.md', '.py', '.json', '.yaml', '.xml', '.html', '.css', '.js', '.bat', '.ps1']:
-            # Try multiple encodings for cross-platform compatibility
             encodings_to_try = ['utf-8', 'cp1252', 'iso-8859-1', 'latin-1']
             content = None
             for encoding in encodings_to_try:
                 try:
                     with open(path, 'r', encoding=encoding) as f:
                         content = f.read()
-                    break  # Success, exit loop
+                    break
                 except UnicodeDecodeError:
-                    continue  # Try next encoding
+                    continue
             
             if content is not None:
                 return content, "text", True, None
             else:
-                # Last resort: read with errors='replace' to substitute bad chars
                 with open(path, 'r', encoding='utf-8', errors='replace') as f:
                     return f.read(), "text", True, None
         
@@ -435,242 +529,6 @@ def read_file_content(file_path):
     except Exception as e:
         return None, None, False, str(e)
 
-def save_session_history(session_messages, attached_files):
-    """Save session history to JSON file."""
-    import re  # Add if not already imported
-    
-    if not temporary.session_label:
-        temporary.session_label = "Untitled"
-    
-    # Sanitize label for filename (remove invalid chars, limit length)
-    safe_label = re.sub(r'[^a-zA-Z0-9_-]', '_', temporary.session_label)[:50]
-    if not safe_label:
-        safe_label = "Untitled"
-    
-    filepath = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}_{safe_label}.json"
-    
-    data = {
-        "session_id": temporary.current_session_id,
-        "label": temporary.session_label,
-        "history": session_messages,
-        "attached_files": attached_files
-    }
-    
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    
-    print(f"Session saved: {filepath.name}")
-    return filepath
-
-def load_session_history(filename):
-    """Load session history from JSON file."""
-    filepath = Path(HISTORY_DIR) / filename
-    
-    if not filepath.exists():
-        return None, None, [], []
-    
-    with open(filepath, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    return data.get("session_id"), data.get("label"), data.get("history", []), data.get("attached_files", [])
-
-def get_saved_sessions():
-    """Get list of saved session files sorted by modification time."""
-    history_dir = Path(HISTORY_DIR)
-    session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
-    return [f.name for f in session_files]
-
-
-# ============================================================================
-# WEB SEARCH / RESEARCH FUNCTIONS
-# ============================================================================
-
-def web_search(query: str, num_results=5, max_hits: int = 6) -> str:
-    """
-    Quick DuckDuckGo text search with automatic current date injection.
-    This is the fast "Search" mode - returns snippets only.
-    """
-    if not query.strip():
-        return "Empty query."
-
-    current_date = datetime.now().strftime("%B %d, %Y")
-    current_year = datetime.now().year
-    
-    # Expanded time-sensitive keywords including year references
-    time_sensitive_keywords = [
-        'latest', 'current', 'new', 'recent', 'today', 'now', 
-        'this year', 'this month', 'this week',
-        '2024', '2025', '2026', '2027',  # Cover near years
-        'update', 'breaking', 'news', 'developments', 'happening'
-    ]
-    
-    # Check if query already has a year or is time-sensitive
-    query_lower = query.lower()
-    has_year = any(str(y) in query_lower for y in range(2020, 2030))
-    is_time_sensitive = any(keyword in query_lower for keyword in time_sensitive_keywords)
-    
-    if is_time_sensitive and not has_year:
-        # Add current year to make search more relevant
-        enhanced_query = f"{query} {current_year}"
-    else:
-        enhanced_query = query
-    
-    # Create informative header for LLM context
-    date_header = (
-        f"[Web Search Results]\n"
-        f"[Current Date: {current_date}]\n"
-        f"[Search Query: {enhanced_query}]\n"
-        f"[Note: Prioritize recent information. Results may contain outdated content.]\n\n"
-    )
-
-    try:
-        hits = DDGS().text(enhanced_query, max_results=max_hits)
-    except DDGSException as e:
-        raw = f"DuckDuckGo error: {e}"
-        if temporary.PRINT_RAW_OUTPUT:
-            print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
-        return date_header + raw
-
-    if not hits:
-        raw = "DuckDuckGo returned zero results."
-        if temporary.PRINT_RAW_OUTPUT:
-            print("=== RAW DDG ===\n", raw, "\n=== END ===", flush=True)
-        return date_header + raw
-
-    raw = "\n\n".join(
-        f"[{i}] **{h.get('title','')}**\n{h.get('body','')}\n*Source:* <{h.get('href','')}>"
-        for i, h in enumerate(hits, 1)
-    )
-
-    if temporary.PRINT_RAW_OUTPUT:
-        print("=== RAW DDG ===\n", date_header + raw, "\n=== END ===", flush=True)
-
-    return date_header + raw
-
-def web_research(query: str, max_pages: int = 5, use_js: bool = False) -> str:
-    """
-    Deep web research with full page reading capabilities.
-    This is the comprehensive "Research" mode - fetches and analyzes full pages.
-    
-    Args:
-        query: Search query
-        max_pages: Maximum pages to fetch and analyze (default 5)
-        use_js: Use Qt WebEngine for JS-rendered pages (slower but more accurate)
-    
-    Returns:
-        Formatted research results string for LLM context
-    """
-    try:
-        from scripts.research import web_research as deep_research
-        return deep_research(query, mode="deep", max_pages=max_pages, use_js=use_js)
-    except ImportError as e:
-        print(f"[RESEARCH] Module not available: {e}")
-        # Fallback to enhanced DDG search
-        return _research_fallback(query, max_pages)
-    except Exception as e:
-        print(f"[RESEARCH] Error: {e}")
-        return _research_fallback(query, max_pages)
-
-
-def _research_fallback(query: str, max_pages: int = 5) -> str:
-    """
-    Fallback research using newspaper3k/4k for article extraction.
-    Used when research.py module is unavailable.
-    """
-    current_date = datetime.now().strftime("%B %d, %Y")
-    current_year = datetime.now().year
-    
-    # Enhance query with year if time-sensitive
-    query_lower = query.lower()
-    time_sensitive = any(kw in query_lower for kw in [
-        'latest', 'current', 'new', 'recent', 'today', 'now',
-        'update', 'breaking', 'news', 'developments', 'happening'
-    ])
-    has_year = any(str(y) in query_lower for y in range(2020, 2030))
-    
-    search_query = f"{query} {current_year}" if time_sensitive and not has_year else query
-    
-    header = (
-        f"[Deep Research Results]\n"
-        f"[Current Date: {current_date}]\n"
-        f"[Query: {search_query}]\n"
-        f"[Note: Verify information recency. Prioritize recent sources.]\n\n"
-    )
-    
-    try:
-        hits = DDGS().text(search_query, max_results=max_pages + 2)
-    except DDGSException as e:
-        return header + f"Search error: {e}"
-    
-    if not hits:
-        return header + "No results found."
-    
-    results = []
-    for i, hit in enumerate(hits[:max_pages], 1):
-        url = hit.get('href', '')
-        title = hit.get('title', 'Untitled')
-        snippet = hit.get('body', '')
-        
-        # Try to extract full article content
-        article_content = ""
-        try:
-            article = Article(url)
-            article.download()
-            article.parse()
-            if article.text:
-                # Limit to first ~2000 chars
-                article_content = article.text[:2000]
-                if len(article.text) > 2000:
-                    article_content += "\n[...truncated...]"
-                # Try to get publish date
-                if article.publish_date:
-                    article_content = f"[Published: {article.publish_date.strftime('%Y-%m-%d')}]\n{article_content}"
-        except Exception as e:
-            print(f"[RESEARCH-FALLBACK] Article extraction failed for {url}: {e}")
-            article_content = snippet
-        
-        results.append(f"Source {i}: {title}")
-        results.append(f"URL: {url}")
-        results.append(f"Content:\n{article_content or snippet}")
-        results.append("")
-    
-    return header + "\n".join(results)
-
-
-def is_research_available() -> bool:
-    """Check if deep research capabilities are available."""
-    try:
-        from scripts.research import is_deep_research_available
-        return is_deep_research_available()
-    except ImportError:
-        # Check if newspaper is available as fallback
-        try:
-            from newspaper import Article
-            return True
-        except ImportError:
-            return False
-
-
-def get_research_capabilities() -> dict:
-    """Get information about available research capabilities."""
-    try:
-        from scripts.research import get_research_capabilities
-        return get_research_capabilities()
-    except ImportError:
-        return {
-            "quick_search": True,
-            "deep_research": is_research_available(),
-            "js_rendering": False,
-            "async_fetch": False,
-            "bs4_parsing": False,
-            "qt_version": 0
-        }
-
-
-# ============================================================================
-# REMAINING UTILITY FUNCTIONS
-# ============================================================================
-
 def summarize_document(file_path):
     """Summarize the contents of a document using spaCy, up to 100 characters."""
     try:
@@ -717,7 +575,6 @@ def load_and_chunk_documents(file_paths: list) -> list:
     """Load and chunk documents from a list of file paths for RAG."""
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain_community.document_loaders import TextLoader
-    # Fixed typo: DIVIDER not DEVIDER
     from .temporary import CONTEXT_SIZE, RAG_CHUNK_SIZE_DIVIDER, RAG_CHUNK_OVERLAP_DIVIDER
     documents = []
     try:
@@ -751,25 +608,18 @@ def create_session_vectorstore(file_paths):
     context_injector.set_session_vectorstore(file_paths)
 
 def process_files(files, existing_files, max_files, is_attach=True):
-    """Process uploaded files for attach or vector, ensuring no duplicates and respecting max file limits.
-    
-    Handles both Gradio 3.x (_TemporaryFileWrapper objects) and Gradio 4.x (string paths).
-    """
+    """Process uploaded files for attach or vector, ensuring no duplicates and respecting max file limits."""
     if not files:
         return "No files uploaded.", existing_files
 
-    # Normalize files to string paths - handle both Gradio 3.x and 4.x formats
     normalized_files = []
     for f in files:
         if f is None:
             continue
-        # Handle _TemporaryFileWrapper or file-like objects (Gradio 3.x)
         if hasattr(f, 'name'):
             file_path = f.name
-        # Handle string paths (Gradio 4.x or already normalized)
         elif isinstance(f, (str, Path)):
             file_path = str(f)
-        # Handle dict format (some Gradio versions return {"name": path, ...})
         elif isinstance(f, dict) and 'name' in f:
             file_path = f['name']
         else:
@@ -782,12 +632,10 @@ def process_files(files, existing_files, max_files, is_attach=True):
     if not normalized_files:
         return "No valid files to add.", existing_files
 
-    # Filter out files already in existing_files
     new_files = [f for f in normalized_files if f not in existing_files]
     if not new_files:
         return "No new files to add.", existing_files
 
-    # Remove existing files with the same name (replace with new version)
     for f in new_files:
         file_name = Path(f).name
         existing_files = [ef for ef in existing_files if Path(ef).name != file_name]
@@ -803,3 +651,27 @@ def process_files(files, existing_files, max_files, is_attach=True):
 
     status = f"Processed {len(processed_files)} new {'attach' if is_attach else 'vector'} files."
     return status, updated_files
+
+
+# =============================================================================
+# RESEARCH CAPABILITY CHECK (for UI visibility)
+# =============================================================================
+
+def is_research_available() -> bool:
+    """Check if web research capabilities are available (newspaper library)."""
+    try:
+        from newspaper import Article
+        return True
+    except ImportError:
+        return False
+
+def get_research_capabilities() -> dict:
+    """Get information about available research capabilities."""
+    return {
+        "quick_search": True,  # DDG always available
+        "deep_research": is_research_available(),
+        "js_rendering": False,
+        "async_fetch": False,
+        "bs4_parsing": False,
+        "qt_version": 0
+    }
