@@ -23,7 +23,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
 
 ### Preview
-- The Interaction page on Windows, with Command Prompt in the background (v0.99.5)...
+- The Interaction page on Windows, in this case showing the "Hybrid DDG Search", with Command Prompt in the background (v0.99.8)...
 ![image_missing](media/conversation_page_windows.jpg)
 
 - The Interaction page on Ubuntu with Ubuntu Terminal in the background (v0.99.4)...
@@ -583,8 +583,13 @@ Web Search only → Deep web research
 BOTH enabled → DDG-enhanced Web Search (DDG for initial results, then fetch full pages)
 ```
 
+### Core Principles
+- This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only 2 tools, Search and Speech, in order for people to be able to use it as a framework/reference for their own AI programs.
+- Must attempt a, Windows 7-11 and Ubuntu 22-25, compatibility range; though Ubuntu 25 users have limitations I believe already. Must when possible attempt find solutions to any and all compatibility issues, having determined possibilities.
+
 ### Notation 
-- Core Principle - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only 2 tools, Search and Speech, in order for people to be able to use it as a framework/reference for their own AI programs.
+
+- Because of how the WT-Web interface works, there is ongoing issue with how sometimes lists of values in the configuration page are non-selectable; just select a different number in list first, then select number you want. Only way to fix this would be to drop older windows/ubuntu support, in order to use better viewer, but instead this will become other project Agent-Gradio-Gguf, due to core principle.  
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
 - Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
