@@ -17,9 +17,10 @@ from .temporary import (
 from . import temporary
 
 # Import TTS and search functions from tools module
+# NOTE: Only hybrid_search is used - web_search and web_research have been removed
 from scripts.tools import (
     speak_text, cleanup_tts_resources, initialize_tts,
-    web_search, web_research, hybrid_search, format_search_status_for_chat  # Added hybrid_search
+    hybrid_search, format_search_status_for_chat
 )
 
 # Variables
@@ -206,255 +207,155 @@ def calculate_optimal_gpu_layers(model_path, vram_mb, context_size):
         context_mb = context_size / 1024
         usable_vram = vram_mb * 0.8
         estimated_layer_size = model_size_mb / 40
-        available_for_layers = usable_vram - context_mb
         
+        available_for_layers = usable_vram - context_mb - 200
         if available_for_layers <= 0:
             return 0
         
         optimal_layers = int(available_for_layers / estimated_layer_size)
-        optimal_layers = min(optimal_layers, 128)
+        optimal_layers = max(0, min(optimal_layers, 99))
         
-        print(f"[GPU-CALC] Model: {model_size_mb:.0f}MB, Context: {context_mb:.0f}MB, "
-              f"VRAM: {vram_mb}MB → {optimal_layers} layers")
-        
-        return max(0, optimal_layers)
+        print(f"[GPU-CALC] Model: {model_size_mb:.0f}MB, VRAM: {vram_mb}MB, Layers: {optimal_layers}")
+        return optimal_layers
         
     except Exception as e:
         print(f"[GPU-CALC] Error: {e}")
         return 0
 
 def get_available_gpus_linux():
-    """Get available GPUs on Linux systems with proper Intel detection."""
-    gpus = []
-    
+    """Retrieve available GPUs on Linux using lspci."""
     try:
-        output = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-            stderr=subprocess.DEVNULL, text=True
-        )
-        gpus.extend(line.strip() for line in output.splitlines() if line.strip())
+        output = subprocess.check_output("lspci | grep -i vga", shell=True).decode()
+        gpus = []
+        for line in output.split('\n'):
+            if line.strip():
+                match = re.search(r': (.+)$', line)
+                if match:
+                    gpu_name = match.group(1).strip()
+                    gpus.append(gpu_name)
+        if gpus:
+            return gpus
     except:
         pass
-    
-    try:
-        output = subprocess.check_output(["rocminfo"], stderr=subprocess.DEVNULL, text=True)
-        for line in output.splitlines():
-            if "Marketing Name" in line:
-                name = line.split(":", 1)[-1].strip()
-                if name:
-                    gpus.append(name)
-    except:
-        pass
-    
-    try:
-        output = subprocess.check_output(["lspci", "-nn"], stderr=subprocess.DEVNULL, text=True)
-        for line in output.splitlines():
-            lower = line.lower()
-            if any(keyword in lower for keyword in ["vga", "display", "3d"]):
-                name = line.split(":", 2)[-1].strip()
-                name = re.sub(r'\[[\da-f:]+\]', '', name).strip()
-                if name and name not in gpus:
-                    gpus.append(name)
-    except:
-        pass
-    
-    seen = set()
-    unique_gpus = [g for g in gpus if not (g in seen or seen.add(g))]
-    
-    if not unique_gpus:
-        print("[GPU] WARNING: No GPUs detected, using CPU-only mode")
-        return ["CPU Only"]
-    
-    return unique_gpus
-
-def get_cpu_info():
-    """Get CPU information for configuration purposes (Windows and Linux)."""
-    try:
-        import psutil
-        cpu_count = psutil.cpu_count(logical=False) or 1
-        logical_count = psutil.cpu_count(logical=True) or 1
-        
-        model = "Unknown CPU"
-        
-        if temporary.PLATFORM == "linux":
-            try:
-                with open('/proc/cpuinfo', 'r') as f:
-                    cpuinfo = f.read()
-                model_match = re.search(r'model name\s*:\s*(.+)', cpuinfo)
-                if model_match:
-                    model = model_match.group(1).strip()
-            except:
-                model = "Generic CPU"
-        
-        elif temporary.PLATFORM == "windows":
-            try:
-                result = subprocess.run(
-                    ["wmic", "cpu", "get", "name"],
-                    capture_output=True, text=True, timeout=5
-                )
-                if result.returncode == 0:
-                    lines = [l.strip() for l in result.stdout.strip().split('\n') if l.strip() and l.strip() != "Name"]
-                    if lines:
-                        model = lines[0]
-            except:
-                try:
-                    import platform
-                    model = platform.processor() or "Generic CPU"
-                except:
-                    model = "Generic CPU"
-        
-        return [{
-            "label": f"{model} ({cpu_count} cores, {logical_count} threads)",
-            "physical_cores": cpu_count,
-            "logical_cores": logical_count
-        }]
-    except ImportError:
-        return [{
-            "label": "Generic CPU",
-            "physical_cores": 4,
-            "logical_cores": 8
-        }]
-    except Exception as e:
-        print(f"Error getting CPU info: {e}")
-        return [{
-            "label": "Default CPU",
-            "physical_cores": 4,
-            "logical_cores": 8
-        }]
+    return ["CPU Only"]
 
 def get_available_gpus():
-    """Unified GPU detection for both Windows and Linux with Intel support."""
+    """Cross-platform GPU detection."""
     if temporary.PLATFORM == "windows":
         return get_available_gpus_windows()
-    elif temporary.PLATFORM == "linux":
+    else:
         return get_available_gpus_linux()
-    return ["CPU Only"]
+
+def get_cpu_info():
+    """Get CPU information for display."""
+    try:
+        import cpuinfo
+        info = cpuinfo.get_cpu_info()
+        brand = info.get('brand_raw', 'Unknown CPU')
+        return [{"label": brand, "cores": psutil.cpu_count(logical=False)}]
+    except:
+        return [{"label": f"CPU ({psutil.cpu_count(logical=False)} cores)", "cores": psutil.cpu_count(logical=False)}]
+
+
+# =============================================================================
+# NLP MODEL (spaCy)
+# =============================================================================
+
+def get_nlp_model():
+    """Get or initialize the spaCy NLP model (lazy load)."""
+    global _nlp_model
+    if _nlp_model is None:
+        try:
+            _nlp_model = spacy.load("en_core_web_sm")
+        except OSError:
+            try:
+                subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"], check=True)
+                _nlp_model = spacy.load("en_core_web_sm")
+            except:
+                print("[NLP] Failed to load spaCy model - using fallback")
+                _nlp_model = None
+    return _nlp_model
 
 
 # =============================================================================
 # SESSION MANAGEMENT
 # =============================================================================
 
-def generate_session_id():
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
-
-def summarize_session(messages):
-    """Generate a short label for the session based on the first user message.
-    Uses spaCy to extract key noun phrases for summarization, max 60 chars.
-    """
-    MAX_LABEL_LENGTH = 50
+def get_saved_sessions():
+    """Get list of saved session files, newest first."""
+    history_dir = Path(HISTORY_DIR)
+    if not history_dir.exists():
+        return []
     
-    if not messages:
-        return "New Session"
-    
-    first_user_msg = next((m['content'] for m in messages if m.get('role') == 'user'), "")
-    if not first_user_msg.strip():
-        return "Untitled Session"
-    
-    clean_msg = re.sub(r'^User:\s*\n?', '', first_user_msg.strip(), flags=re.MULTILINE).strip()
-    
-    nlp = get_nlp_model()
-    if nlp:
+    sessions = []
+    for f in history_dir.glob("*.json"):
         try:
-            doc = nlp(clean_msg[:500])
-            
-            noun_chunks = list(doc.noun_chunks)
-            if noun_chunks:
-                key_phrases = []
-                seen_roots = set()
-                for chunk in noun_chunks:
-                    root_text = chunk.root.text.lower()
-                    if root_text not in seen_roots and len(chunk.text) > 2:
-                        seen_roots.add(root_text)
-                        key_phrases.append(chunk.text)
-                        if len(' '.join(key_phrases)) >= 40:
-                            break
-                
-                if key_phrases:
-                    summary = ' '.join(key_phrases)
-                    if len(summary) > MAX_LABEL_LENGTH:
-                        return summary[:MAX_LABEL_LENGTH - 3] + "..."
-                    return summary
-            
-            entities = [ent.text for ent in doc.ents if len(ent.text) > 2]
-            if entities:
-                summary = ' '.join(entities[:5])
-                if len(summary) > MAX_LABEL_LENGTH:
-                    return summary[:MAX_LABEL_LENGTH - 3] + "..."
-                return summary
-            
-            for sent in doc.sents:
-                subjects = [tok.text for tok in sent if tok.dep_ in ('nsubj', 'nsubjpass')]
-                verbs = [tok.lemma_ for tok in sent if tok.pos_ == 'VERB']
-                if subjects and verbs:
-                    summary = f"{subjects[0]} {verbs[0]}"
-                    if len(summary) <= MAX_LABEL_LENGTH:
-                        return summary
-                break
-                
-        except Exception as e:
-            print(f"[SESSION-LABEL] spaCy processing error: {e}")
-    else:
-        print("[SESSION-LABEL] spaCy model not available, using fallback")
+            mtime = f.stat().st_mtime
+            sessions.append((mtime, f.name))
+        except:
+            continue
     
-    words = clean_msg.split()[:8]
-    fallback = ' '.join(words)
-    if len(fallback) > MAX_LABEL_LENGTH:
-        return fallback[:MAX_LABEL_LENGTH - 3] + "..."
-    return fallback or "Chat Started"
+    sessions.sort(reverse=True)
+    return [name for _, name in sessions]
 
-def get_nlp_model():
-    """Load spaCy NLP model lazily."""
-    global _nlp_model
-    if _nlp_model is None:
-        try:
-            _nlp_model = spacy.load("en_core_web_sm")
-        except OSError:
-            print("[NLP] spaCy model not found, using basic processing")
-            _nlp_model = None
-    return _nlp_model
+def load_session_history(filename):
+    """Load a session from JSON file."""
+    try:
+        filepath = Path(HISTORY_DIR) / filename
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        session_id = data.get('session_id', '')
+        label = data.get('label', 'Unnamed Session')
+        history = data.get('history', [])
+        attached_files = data.get('attached_files', [])
+        
+        return session_id, label, history, attached_files
+    except Exception as e:
+        print(f"[SESSION] Load error: {e}")
+        return None, None, [], []
 
-def save_session_history(session_messages, attached_files):
-    """Save session history to JSON file."""
-    if not temporary.session_label:
-        temporary.session_label = "Untitled"
+def save_session_history(session_messages, attached_files=None):
+    """Save current session to JSON file."""
+    if not session_messages:
+        return
     
-    safe_label = re.sub(r'[^a-zA-Z0-9_-]', '_', temporary.session_label)[:50]
-    if not safe_label:
-        safe_label = "Untitled"
+    session_id = temporary.current_session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+    label = temporary.session_label or summarize_session(session_messages)
     
-    filepath = Path(HISTORY_DIR) / f"session_{temporary.current_session_id}_{safe_label}.json"
+    temporary.current_session_id = session_id
+    temporary.session_label = label
+    temporary.SESSION_ACTIVE = True
     
     data = {
-        "session_id": temporary.current_session_id,
-        "label": temporary.session_label,
-        "history": session_messages,
-        "attached_files": attached_files
+        'session_id': session_id,
+        'label': label,
+        'history': session_messages,
+        'attached_files': attached_files or [],
+        'saved_at': datetime.now().isoformat()
     }
+    
+    filename = f"{session_id}.json"
+    filepath = Path(HISTORY_DIR) / filename
     
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     
-    print(f"Session saved: {filepath.name}")
-    return filepath
+    print(f"[SESSION] Saved: {filepath.name}")
 
-def load_session_history(filename):
-    """Load session history from JSON file."""
-    filepath = Path(HISTORY_DIR) / filename
+def summarize_session(messages):
+    """Generate a short label for a session based on first user message."""
+    if not messages:
+        return "Empty Session"
     
-    if not filepath.exists():
-        return None, None, [], []
+    for msg in messages:
+        if msg.get('role') == 'user':
+            content = msg.get('content', '')[:50]
+            content = re.sub(r'[^\w\s]', '', content).strip()
+            if content:
+                return content
     
-    with open(filepath, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    return data.get("session_id"), data.get("label"), data.get("history", []), data.get("attached_files", [])
-
-def get_saved_sessions():
-    """Get list of saved session files sorted by modification time."""
-    history_dir = Path(HISTORY_DIR)
-    session_files = sorted(history_dir.glob("session_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
-    return [f.name for f in session_files]
+    return f"Session {datetime.now().strftime('%H:%M')}"
 
 
 # =============================================================================
@@ -462,12 +363,15 @@ def get_saved_sessions():
 # =============================================================================
 
 def read_file_content(file_path):
-    """Read content from various file types with proper error handling."""
-    path = Path(file_path)
-    suffix = path.suffix.lower()
-    
+    """
+    Read content from various file types.
+    Returns: (content, type, success, error_msg)
+    """
     try:
-        if suffix in ['.txt', '.md', '.py', '.json', '.yaml', '.xml', '.html', '.css', '.js', '.bat', '.ps1']:
+        path = Path(file_path)
+        suffix = path.suffix.lower()
+        
+        if suffix in ['.txt', '.md', '.py', '.js', '.html', '.css', '.json', '.xml', '.csv']:
             encodings_to_try = ['utf-8', 'cp1252', 'iso-8859-1', 'latin-1']
             content = None
             for encoding in encodings_to_try:
@@ -658,7 +562,7 @@ def process_files(files, existing_files, max_files, is_attach=True):
 # =============================================================================
 
 def is_research_available() -> bool:
-    """Check if web research capabilities are available (newspaper library)."""
+    """Check if hybrid search capabilities are available (newspaper library)."""
     try:
         from newspaper import Article
         return True
@@ -668,10 +572,6 @@ def is_research_available() -> bool:
 def get_research_capabilities() -> dict:
     """Get information about available research capabilities."""
     return {
-        "quick_search": True,  # DDG always available
-        "deep_research": is_research_available(),
-        "js_rendering": False,
-        "async_fetch": False,
-        "bs4_parsing": False,
-        "qt_version": 0
+        "hybrid_search": is_research_available(),  # DDG + newspaper for deep fetch
+        "ddg_available": True  # DDG is always available
     }

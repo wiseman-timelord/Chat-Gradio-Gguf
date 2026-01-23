@@ -8,8 +8,7 @@ TTS Engines:
 - pyttsx3 + espeak: Linux with Python 3.9
 
 Search Tools:
-- DDG Search: Quick DuckDuckGo snippets
-- Web Research: DDG + full article fetching via newspaper
+- DDG Hybrid Search: DDG snippets + full article fetching via newspaper
 """
 
 import os
@@ -468,395 +467,8 @@ def cleanup_tts_resources() -> None:
 
 
 # =============================================================================
-# WEB SEARCH TOOLS
+# WEB SEARCH - HYBRID ONLY
 # =============================================================================
-
-def web_search(query: str, num_results: int = 5, max_hits: int = 6) -> dict:
-    """
-    Quick DuckDuckGo text search with automatic current date injection.
-    FIXED: Added timelimit and news() for current events queries.
-    """
-    from ddgs import DDGS
-    from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
-    import requests.exceptions
-    from datetime import datetime
-    
-    tmp = _get_temporary()
-    
-    empty_result = {
-        'content': '',
-        'metadata': {
-            'type': 'ddg',
-            'query': query,
-            'result_count': 0,
-            'sources': [],
-            'error': None
-        }
-    }
-    
-    if not query.strip():
-        print("[DDG-SEARCH] Empty query provided")
-        empty_result['content'] = "[Search Error] Empty query provided."
-        empty_result['metadata']['error'] = "Empty query"
-        return empty_result
-
-    current_date = datetime.now().strftime("%B %d, %Y")
-    current_year = datetime.now().year
-    
-    # Detect if this is a news/current events query
-    news_keywords = [
-        'news', 'latest', 'current', 'recent', 'today', 'breaking',
-        'protests', 'uprising', 'election', 'war', 'crisis', 'conflict',
-        'headlines', 'developments', 'happening', 'update', 'announced',
-        'january', 'february', 'march', 'april', 'may', 'june',
-        'july', 'august', 'september', 'october', 'november', 'december',
-        '2024', '2025', '2026', '2027'
-    ]
-    
-    query_lower = query.lower()
-    is_news_query = any(keyword in query_lower for keyword in news_keywords)
-    has_year = any(str(y) in query_lower for y in range(2020, 2030))
-    
-    # Enhance query with year if time-sensitive but missing year
-    if is_news_query and not has_year:
-        enhanced_query = f"{query} {current_year}"
-    else:
-        enhanced_query = query
-    
-    date_header = (
-        f"[Web Search Results]\n"
-        f"[Current Date: {current_date}]\n"
-        f"[Search Query: {enhanced_query}]\n"
-        f"[Note: Prioritize recent information from the results below.]\n\n"
-    )
-
-    print(f"[DDG-SEARCH] ══════════════════════════════════════════════════════")
-    print(f"[DDG-SEARCH] Original query: '{query}'")
-    print(f"[DDG-SEARCH] Enhanced query: '{enhanced_query}'")
-    print(f"[DDG-SEARCH] Is news query: {is_news_query}")
-    print(f"[DDG-SEARCH] ══════════════════════════════════════════════════════")
-    
-    try:
-        ddgs = DDGS(timeout=20)
-        
-        if is_news_query:
-            # Use news() for current events - returns more relevant recent results
-            print(f"[DDG-SEARCH] Using NEWS search (timelimit='m')")
-            hits = list(ddgs.news(
-                enhanced_query,
-                region="wt-wt",  # Worldwide
-                safesearch="off",
-                timelimit="m",  # Last month
-                max_results=max_hits
-            ))
-            # news() returns different keys: 'title', 'body', 'url', 'date', 'source'
-            # Normalize to match text() format
-            normalized_hits = []
-            for h in hits:
-                normalized_hits.append({
-                    'title': h.get('title', 'No title'),
-                    'body': h.get('body', 'No description'),
-                    'href': h.get('url', 'No URL'),
-                    'date': h.get('date', ''),
-                    'source': h.get('source', '')
-                })
-            hits = normalized_hits
-        else:
-            # Use text() for general queries with timelimit
-            print(f"[DDG-SEARCH] Using TEXT search (timelimit='m')")
-            hits = list(ddgs.text(
-                enhanced_query,
-                region="wt-wt",
-                safesearch="off",
-                timelimit="m",  # Last month - helps get recent results
-                max_results=max_hits
-            ))
-        
-        print(f"[DDG-SEARCH] Received {len(hits) if hits else 0} results")
-        
-        # Log actual results for debugging
-        if hits:
-            for i, h in enumerate(hits[:3], 1):
-                title = h.get('title', 'No title')[:60]
-                print(f"[DDG-SEARCH]   Result {i}: {title}...")
-        
-    except RatelimitException as e:
-        error_msg = f"Rate limited by DDG: {e}"
-        print(f"[DDG-SEARCH] {error_msg}")
-        empty_result['content'] = date_header + f"[Search Error] {error_msg}\nPlease wait and try again."
-        empty_result['metadata']['error'] = "Rate limited"
-        empty_result['metadata']['query'] = enhanced_query
-        return empty_result
-    except TimeoutException as e:
-        error_msg = f"Search timed out: {e}"
-        print(f"[DDG-SEARCH] {error_msg}")
-        empty_result['content'] = date_header + f"[Search Error] {error_msg}"
-        empty_result['metadata']['error'] = "Timeout"
-        empty_result['metadata']['query'] = enhanced_query
-        return empty_result
-    except DDGSException as e:
-        error_msg = f"DuckDuckGo error: {e}"
-        print(f"[DDG-SEARCH] DDGSException: {e}")
-        empty_result['content'] = date_header + f"[Search Error] {error_msg}"
-        empty_result['metadata']['error'] = str(e)
-        empty_result['metadata']['query'] = enhanced_query
-        return empty_result
-    except requests.exceptions.Timeout as e:
-        error_msg = "Search timed out - network may be slow"
-        print(f"[DDG-SEARCH] Timeout: {e}")
-        empty_result['content'] = date_header + f"[Search Error] {error_msg}"
-        empty_result['metadata']['error'] = "Timeout"
-        empty_result['metadata']['query'] = enhanced_query
-        return empty_result
-    except requests.exceptions.ConnectionError as e:
-        error_msg = "Connection error - check internet connection"
-        print(f"[DDG-SEARCH] Connection error: {e}")
-        empty_result['content'] = date_header + f"[Search Error] {error_msg}"
-        empty_result['metadata']['error'] = "Connection error"
-        empty_result['metadata']['query'] = enhanced_query
-        return empty_result
-    except Exception as e:
-        error_msg = f"Unexpected error: {type(e).__name__}: {e}"
-        print(f"[DDG-SEARCH] Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
-        empty_result['content'] = date_header + f"[Search Error] {error_msg}"
-        empty_result['metadata']['error'] = str(e)
-        empty_result['metadata']['query'] = enhanced_query
-        return empty_result
-
-    if not hits:
-        print("[DDG-SEARCH] No results returned from DDG")
-        empty_result['content'] = date_header + "[No Results] DuckDuckGo returned no results for this query."
-        empty_result['metadata']['query'] = enhanced_query
-        return empty_result
-
-    # Build sources list for metadata
-    sources = []
-    formatted_results = []
-    for i, h in enumerate(hits, 1):
-        title = h.get('title', 'No title')
-        body = h.get('body', 'No description')
-        href = h.get('href', 'No URL')
-        date = h.get('date', '')
-        source = h.get('source', '')
-        
-        sources.append({'title': title, 'url': href})
-        
-        # Include date and source for news results
-        if date or source:
-            date_line = f"\n*Date: {date}*" if date else ""
-            source_line = f" | *From: {source}*" if source else ""
-            formatted_results.append(f"[{i}] **{title}**{date_line}{source_line}\n{body}\n*URL:* <{href}>")
-        else:
-            formatted_results.append(f"[{i}] **{title}**\n{body}\n*Source:* <{href}>")
-    
-    raw = "\n\n".join(formatted_results)
-
-    if getattr(tmp, 'PRINT_RAW_OUTPUT', False):
-        print("=== RAW DDG RESULTS ===")
-        print(date_header + raw)
-        print("=== END RAW DDG ===", flush=True)
-
-    print(f"[DDG-SEARCH] Successfully formatted {len(hits)} results ({len(raw)} chars)")
-    
-    return {
-        'content': date_header + raw,
-        'metadata': {
-            'type': 'ddg',
-            'query': enhanced_query,
-            'result_count': len(hits),
-            'sources': sources,
-            'error': None
-        }
-    }
-
-
-def web_research(query: str, max_pages: int = 5) -> dict:
-    """
-    Deep web research with full page reading via newspaper library.
-    FIXED: Added timelimit and news() for current events queries.
-    """
-    from ddgs import DDGS
-    from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
-    from newspaper import Article
-    import requests.exceptions
-    from datetime import datetime
-    
-    tmp = _get_temporary()
-    
-    print(f"[WEB-RESEARCH] ══════════════════════════════════════════════════════")
-    print(f"[WEB-RESEARCH] Starting deep research")
-    print(f"[WEB-RESEARCH] Query: '{query}'")
-    print(f"[WEB-RESEARCH] ══════════════════════════════════════════════════════")
-    
-    current_date = datetime.now().strftime("%B %d, %Y")
-    current_year = datetime.now().year
-    
-    # Detect news/current events
-    news_keywords = [
-        'news', 'latest', 'current', 'recent', 'today', 'breaking',
-        'protests', 'uprising', 'election', 'war', 'crisis', 'conflict',
-        'headlines', 'developments', 'happening', 'update',
-        'january', 'february', 'march', 'april', 'may', 'june',
-        'july', 'august', 'september', 'october', 'november', 'december',
-        '2024', '2025', '2026', '2027'
-    ]
-    
-    query_lower = query.lower()
-    is_news_query = any(kw in query_lower for kw in news_keywords)
-    has_year = any(str(y) in query_lower for y in range(2020, 2030))
-    
-    search_query = f"{query} {current_year}" if is_news_query and not has_year else query
-    
-    header = (
-        f"[Deep Research Results]\n"
-        f"[Current Date: {current_date}]\n"
-        f"[Query: {search_query}]\n"
-        f"[Note: Full articles fetched. Verify information recency.]\n\n"
-    )
-    
-    empty_result = {
-        'content': header,
-        'metadata': {
-            'type': 'web_research',
-            'query': search_query,
-            'result_count': 0,
-            'sources': [],
-            'error': None
-        }
-    }
-    
-    # Step 1: DDG search to get URLs
-    try:
-        print(f"[WEB-RESEARCH] Searching DDG for: '{search_query}'")
-        print(f"[WEB-RESEARCH] Is news query: {is_news_query}")
-        ddgs = DDGS(timeout=20)
-        
-        if is_news_query:
-            # Use news() for current events
-            print(f"[WEB-RESEARCH] Using NEWS search")
-            hits = list(ddgs.news(
-                search_query,
-                region="wt-wt",
-                safesearch="off",
-                timelimit="m",
-                max_results=max_pages + 2
-            ))
-            # Normalize news results
-            normalized = []
-            for h in hits:
-                normalized.append({
-                    'title': h.get('title', 'Untitled'),
-                    'body': h.get('body', ''),
-                    'href': h.get('url', ''),
-                    'date': h.get('date', ''),
-                    'source': h.get('source', '')
-                })
-            hits = normalized
-        else:
-            # Use text() with timelimit
-            print(f"[WEB-RESEARCH] Using TEXT search")
-            hits = list(ddgs.text(
-                search_query,
-                region="wt-wt",
-                safesearch="off",
-                timelimit="m",
-                max_results=max_pages + 2
-            ))
-        
-        print(f"[WEB-RESEARCH] Got {len(hits) if hits else 0} search results")
-        
-        if hits:
-            for i, h in enumerate(hits[:3], 1):
-                print(f"[WEB-RESEARCH]   Result {i}: {h.get('title', 'No title')[:60]}...")
-                
-    except (DDGSException, RatelimitException, TimeoutException) as e:
-        error_msg = f"DDG error: {type(e).__name__}: {e}"
-        print(f"[WEB-RESEARCH] {error_msg}")
-        empty_result['content'] = header + f"[Search Error] {error_msg}"
-        empty_result['metadata']['error'] = str(e)
-        return empty_result
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Network error: {e}"
-        print(f"[WEB-RESEARCH] {error_msg}")
-        empty_result['content'] = header + f"[Search Error] {error_msg}"
-        empty_result['metadata']['error'] = str(e)
-        return empty_result
-    except Exception as e:
-        error_msg = f"{type(e).__name__}: {e}"
-        print(f"[WEB-RESEARCH] Unexpected error: {error_msg}")
-        import traceback
-        traceback.print_exc()
-        empty_result['content'] = header + f"[Search Error] {error_msg}"
-        empty_result['metadata']['error'] = str(e)
-        return empty_result
-    
-    if not hits:
-        print("[WEB-RESEARCH] No search results")
-        empty_result['content'] = header + "[No Results] No search results found for this query."
-        return empty_result
-    
-    # Step 2: Fetch full articles
-    results = []
-    sources = []
-    
-    for i, hit in enumerate(hits[:max_pages], 1):
-        url = hit.get('href', '')
-        title = hit.get('title', 'Untitled')
-        snippet = hit.get('body', '')
-        date = hit.get('date', '')
-        source = hit.get('source', '')
-        
-        print(f"[WEB-RESEARCH] [{i}/{min(len(hits), max_pages)}] Fetching: {title[:50]}...")
-        
-        source_info = {'title': title, 'url': url, 'fetched': False}
-        
-        # Try to extract full article content
-        article_content = ""
-        try:
-            article = Article(url)
-            article.download()
-            article.parse()
-            if article.text and len(article.text) > 100:
-                article_content = article.text[:2500]
-                if len(article.text) > 2500:
-                    article_content += "\n[...truncated...]"
-                if article.publish_date:
-                    article_content = f"[Published: {article.publish_date.strftime('%Y-%m-%d')}]\n{article_content}"
-                elif date:
-                    article_content = f"[Date: {date}]\n{article_content}"
-                source_info['fetched'] = True
-                print(f"[WEB-RESEARCH]   ✓ Fetched {len(article_content)} chars")
-            else:
-                print(f"[WEB-RESEARCH]   ○ Article too short, using snippet")
-                article_content = snippet
-        except Exception as e:
-            print(f"[WEB-RESEARCH]   ✗ Failed: {e}")
-            article_content = snippet
-        
-        sources.append(source_info)
-        
-        results.append(f"═══ Source {i}: {title} ═══")
-        results.append(f"URL: {url}")
-        if source:
-            results.append(f"Source: {source}")
-        results.append(f"Content:\n{article_content or snippet}")
-        results.append("")
-    
-    fetched_count = sum(1 for s in sources if s.get('fetched', False))
-    print(f"[WEB-RESEARCH] Completed: {fetched_count}/{len(sources)} articles fully fetched")
-    
-    return {
-        'content': header + "\n".join(results),
-        'metadata': {
-            'type': 'web_research',
-            'query': search_query,
-            'result_count': len(sources),
-            'sources': sources,
-            'error': None
-        }
-    }
 
 def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict:
     """
@@ -865,6 +477,12 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
     This provides the best of both worlds:
     - DDG gives quick overview of many sources (breadth)
     - Deep fetch gives full content from top sources (depth)
+    
+    Workflow:
+    1. DDG Pre-Search: Quick DDG search to discover sources with snippets
+    2. Analyze Results: Score and rank sources based on relevance
+    3. Deep Fetch: Extract full article content from top sources
+    4. Merge Results: Combine deep articles + DDG snippets
     
     Args:
         query: Search query
@@ -888,7 +506,6 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
     from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
     from newspaper import Article
     import requests.exceptions
-    from datetime import datetime
     
     tmp = _get_temporary()
     
@@ -1147,9 +764,17 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
         }
     }
 
+
 def format_search_status_for_chat(search_metadata: dict) -> str:
     """
     Format search metadata into a readable status string for the chat display.
+    This appears before the AI response to show what was searched.
+    
+    Args:
+        search_metadata: The 'metadata' dict from hybrid_search
+        
+    Returns:
+        Formatted string showing search activity
     """
     if not search_metadata:
         return ""
@@ -1163,62 +788,31 @@ def format_search_status_for_chat(search_metadata: dict) -> str:
     # Truncate long queries for display
     display_query = query[:80] + "..." if len(query) > 80 else query
     
-    if search_type == 'ddg':
-        # DDG quick search
+    if search_type == 'hybrid':
+        # Hybrid search - show DDG + deep fetch summary
         if error:
-            lines.append(f"🔍 DDG Search: \"{display_query}\" — ⚠️ {error}")
-        elif sources:
-            lines.append(f"🔍 DDG Search: \"{display_query}\" — {len(sources)} results")
+            lines.append(f"🔍 Hybrid Search: \"{display_query}\" — ⚠️ {error}")
         else:
-            lines.append(f"🔍 DDG Search: \"{display_query}\" — No results")
-            
-    elif search_type == 'web_research':
-        # Deep research
-        if error:
-            lines.append(f"🔬 Web Research: \"{display_query}\" — ⚠️ {error}")
-        else:
-            fetched = sum(1 for s in sources if s.get('fetched', False))
-            lines.append(f"🔬 Web Research: \"{display_query}\" — {fetched}/{len(sources)} articles fetched")
-            
-            for i, source in enumerate(sources, 1):
-                url = source.get('url', '')
-                fetched_status = source.get('fetched', False)
-                domain = ""
-                try:
-                    from urllib.parse import urlparse
-                    domain = urlparse(url).netloc
-                    if domain.startswith('www.'):
-                        domain = domain[4:]
-                except:
-                    domain = url[:35] if url else "unknown"
-                status = "✓" if fetched_status else "○"
-                lines.append(f"   {status} {domain}")
-    
-    elif search_type == 'hybrid':
-        # HYBRID mode - DDG + Deep Fetch
-        if error:
-            lines.append(f"🔍+🔬 Hybrid Search: \"{display_query}\" — ⚠️ {error}")
-        else:
-            ddg_count = search_metadata.get('ddg_count', 0)
-            deep_count = search_metadata.get('deep_count', 0)
-            lines.append(f"🔍+🔬 Hybrid Search: \"{display_query}\"")
-            lines.append(f"   DDG sources: {ddg_count} found")
-            lines.append(f"   Deep fetched: {deep_count} articles")
-            
-            # Show deep-fetched sources
             deep_sources = [s for s in sources if s.get('type') == 'deep']
+            ddg_sources = [s for s in sources if s.get('type') == 'ddg']
+            fetched = sum(1 for s in deep_sources if s.get('fetched', False))
+            
+            lines.append(f"🔍 Hybrid Search: \"{display_query}\"")
+            lines.append(f"   📰 {fetched}/{len(deep_sources)} articles deep-fetched")
+            if ddg_sources:
+                lines.append(f"   📋 {len(ddg_sources)} additional DDG snippets")
+            
+            # Show domains of deep-fetched articles
             for source in deep_sources:
-                url = source.get('url', '')
-                fetched = source.get('fetched', False)
-                domain = ""
-                try:
-                    from urllib.parse import urlparse
-                    domain = urlparse(url).netloc
-                    if domain.startswith('www.'):
-                        domain = domain[4:]
-                except:
-                    domain = url[:35] if url else "unknown"
-                status = "✓" if fetched else "○"
-                lines.append(f"   {status} 📰 {domain}")
+                if source.get('fetched'):
+                    url = source.get('url', '')
+                    try:
+                        from urllib.parse import urlparse
+                        domain = urlparse(url).netloc
+                        if domain.startswith('www.'):
+                            domain = domain[4:]
+                        lines.append(f"      ✓ {domain}")
+                    except:
+                        pass
     
     return "\n".join(lines)
