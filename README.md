@@ -672,14 +672,15 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development for v0.xx-xx-v1.00.00
-Now that the program is 99% made, there are some rolling issues to investigate/correct, however there are no critical issues currently...
-1. Context handling was upgraded recently and needs proper testing.
-2. **Safe Globals** - Standardize more global variables using safe, unique 3 word labels to avoid conflicts.  
+Now that the program is 99% made, and I have ensured to include, Windows 7-11 and Ubuntu 22-25, compatibility, there is the rolling issue while editing, where the scripts of the program have become very large, 2 of them over 100k, hence I only trust Claude Opus to edit on the Chatbot, and even then, it is a challenge for the AI. So future expansion on current AI systems, is somewhat bleak, until better AI systems are developed. Thus encouraging myself to either...
+- Continue the program on windows 10, while streamlining compatibility from v1.01.00+ with compatibility for. Windows 10-11 and Ubuntu 24-25, only.
+- Continue working on new project Chat-Lightwave-Gguf, but use MS Edge WebView, and use lightwave instead of gradio, and limit operation to Windows 8.1-11, while waiting for AI to improve, then come back to Chat-Gradio-Gguf. Chat-Lightwave-Gguf will then allow to understand future upgrades for Chat-Gradio-Gguf, that I would later integrate selectively.
 
-# Development for => v1.01.00
+# Update Ideas
 1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
-2. Possibility of artifacts, the AI mentioned this, I want to see how feasable it i first.
-
+2. Possibility of artifacts, the AI mentioned this, I want to see how feasable it is first.
+3. Actual web searches.
+4. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading).
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
