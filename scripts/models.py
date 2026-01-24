@@ -404,13 +404,10 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             gc.collect()
             time.sleep(0.5)
 
-    if BACKEND_TYPE.lower() == "cpu-only":
-        MAX_CTX = 32_768
-    elif "vulkan" in BACKEND_TYPE.lower():
-        MAX_CTX = 48_768 if vram_size >= 12_288 else 32_768
-    else:
-        MAX_CTX = CONTEXT_SIZE
-    effective_ctx = min(CONTEXT_SIZE, MAX_CTX)
+    # FIXED: Respect user's CONTEXT_SIZE setting - no arbitrary backend caps
+    # The model's trained context limit (n_ctx_train) will be enforced later at line 565
+    # This allows users to set their desired context up to what the model supports
+    effective_ctx = CONTEXT_SIZE  # Trust the user's setting
 
     set_status(f"Loading model {gpu_layers}/{num_layers} layers...", console=True, priority=True)
 

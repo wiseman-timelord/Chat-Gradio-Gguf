@@ -828,8 +828,8 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False,
     
     Cases:
     1. Vanilla (no search, no speech): 9 steps (0-8)
-    2. DDG hybrid search: 13 steps (adds 4 hybrid phases)
-    3. Web search: 13 steps (adds 4 web search phases)
+    2. DDG hybrid search: 14 steps (adds 4 hybrid phases + Inject Context)
+    3. Web search: 14 steps (adds 4 web search phases + Inject Context)
     4. Speech: adds "Generating TTS" at end
     
     Note: DDG and Web search are mutually exclusive.
@@ -852,17 +852,19 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False,
         phases.append("Analyze Results")   # 7
         phases.append("Deep Fetch")        # 8
         phases.append("Merge Results")     # 9
+        phases.append("Inject Context")    # 10 - NEW: injecting search results
     elif web_search_enabled:
         phases.append("Search Discovery")  # 6
         phases.append("Rank & Select")     # 7
         phases.append("Parallel Fetch")    # 8
         phases.append("Process & Merge")   # 9
+        phases.append("Inject Context")    # 10 - NEW: injecting search results
     
     # Add generation and processing phases
     phases.extend([
-        "Generate Stream",   # 6 or 10
-        "Split Thinking",    # 7 or 11
-        "Format Response"    # 8 or 12
+        "Generate Stream",   # 6 or 11
+        "Split Thinking",    # 7 or 12
+        "Format Response"    # 8 or 13
     ])
     
     # Add TTS phase at the end if speech is enabled
@@ -1158,23 +1160,44 @@ def conversation_interface(
     search_results = None
     search_metadata = None
     search_status_text = ""
+    search_warning = ""
     
     # Determine which search mode is active (only one can be active at a time)
     search_active = ddg_search_enabled or web_search_enabled
     
     if search_active and user_input.strip():
         try:
+            # Calculate context-scaled search parameters
+            # Base values are calibrated for 32768 context (multiplier = 1.0)
+            effective_ctx = temporary.LOADED_CONTEXT_SIZE or temporary.CONTEXT_SIZE
+            context_multiplier = effective_ctx / 32768.0
+            
+            # Warn if context is below recommended minimum for search
+            if effective_ctx < 16384:
+                search_warning = f"⚠️ Low context ({effective_ctx}) may limit search quality. Recommend 32768+."
+                print(f"[SEARCH-WARNING] {search_warning}")
+            
+            # Scale parameters based on context (min values ensure functionality)
+            # DDG Search: base 8 results, 4 deep fetch at 32k context
+            # Web Search: base 12 results, 6 deep fetch at 32k context
+            if ddg_search_enabled:
+                scaled_ddg_results = max(4, round(8 * context_multiplier))
+                scaled_deep_fetch = max(2, round(4 * context_multiplier))
+            else:
+                scaled_max_results = max(6, round(12 * context_multiplier))
+                scaled_deep_fetch = max(3, round(6 * context_multiplier))
+            
             # Use proper query extraction
             search_query = extract_search_query(user_input)
             
             if ddg_search_enabled:
-                # DDG Hybrid Search
-                print(f"[HYBRID-SEARCH] Query: {search_query}")
-                result = utility.hybrid_search(search_query, ddg_results=8, deep_fetch=4)
+                # DDG Hybrid Search with scaled parameters
+                print(f"[HYBRID-SEARCH] Query: {search_query} (ctx={effective_ctx}, results={scaled_ddg_results}, deep={scaled_deep_fetch})")
+                result = utility.hybrid_search(search_query, ddg_results=scaled_ddg_results, deep_fetch=scaled_deep_fetch)
             else:
-                # Comprehensive Web Search
-                print(f"[WEB-SEARCH] Query: {search_query}")
-                result = utility.web_search(search_query, max_results=12, deep_fetch=6)
+                # Comprehensive Web Search with scaled parameters
+                print(f"[WEB-SEARCH] Query: {search_query} (ctx={effective_ctx}, results={scaled_max_results}, deep={scaled_deep_fetch})")
+                result = utility.web_search(search_query, max_results=scaled_max_results, deep_fetch=scaled_deep_fetch)
             
             # Extract content and metadata from dict return format
             if isinstance(result, dict):
@@ -1185,11 +1208,18 @@ def conversation_interface(
                 search_type = 'hybrid' if ddg_search_enabled else 'web_search'
                 search_metadata = {'type': search_type, 'query': search_query, 'sources': [], 'error': None}
             
+            # Add context scaling info to metadata
+            if search_metadata:
+                search_metadata['context_size'] = effective_ctx
+                search_metadata['context_multiplier'] = round(context_multiplier, 2)
+            
             # Format search status for chat display
             if search_metadata:
                 search_status_text = utility.format_search_status_for_chat(search_metadata)
+                if search_warning:
+                    search_status_text = f"{search_warning}\n{search_status_text}" if search_status_text else search_warning
                 if search_status_text:
-                    print(f"[SEARCH-STATUS]\\n{search_status_text}")
+                    print(f"[SEARCH-STATUS]\n{search_status_text}")
                 
         except Exception as e:
             print(f"[SEARCH] Error: {e}")
@@ -1209,8 +1239,10 @@ def conversation_interface(
     )
 
     # Search progress phases (if any search is enabled)
+    # Now includes 5 phases: Search Discovery/DDG Pre-Search (6), Rank/Analyze (7), 
+    # Parallel/Deep Fetch (8), Process/Merge (9), Inject Context (10)
     if ddg_search_enabled or web_search_enabled:
-        for phase_idx in [6, 7, 8, 9]:
+        for phase_idx in [6, 7, 8, 9, 10]:
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
                 gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, web_search_enabled, speech_enabled)),
@@ -1220,11 +1252,11 @@ def conversation_interface(
             )
             time.sleep(0.15)  # Slight delay for visual feedback
 
-    # Calculate Generate Stream phase index
+    # Calculate Generate Stream phase index (after 5 search phases if enabled)
     if ddg_search_enabled or web_search_enabled:
-        generate_phase = 10
+        generate_phase = 11  # After 6 base + 5 search phases
     else:
-        generate_phase = 6
+        generate_phase = 6   # After 6 base phases
 
     # Phase: Generating response
     interaction_phase = "generating_response"
