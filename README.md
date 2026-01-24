@@ -584,7 +584,7 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 ```
 
 ### Useful Info
-- Internet researcg Tools (v0.99.6+)...
+- Internet research Tools (v0.99.6+)...
 ```
 DDG Search = Faster DuckDuckGo research.
 Web Search = Slower actual website reading research. 
