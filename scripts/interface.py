@@ -821,14 +821,18 @@ def update_backend_ui():
         gr.update()
     ]
 
-def build_progress_html(step: int, ddg_search_enabled: bool = False, speech_enabled: bool = False):
+def build_progress_html(step: int, ddg_search_enabled: bool = False, 
+                        web_search_enabled: bool = False, speech_enabled: bool = False):
     """
     Build dynamic progress indicator HTML based on enabled features.
     
     Cases:
     1. Vanilla (no search, no speech): 9 steps (0-8)
     2. DDG hybrid search: 13 steps (adds 4 hybrid phases)
-    3. Speech: adds "Generating TTS" at end
+    3. Web search: 13 steps (adds 4 web search phases)
+    4. Speech: adds "Generating TTS" at end
+    
+    Note: DDG and Web search are mutually exclusive.
     """
     # Base phases (always present) - indices 0-5
     base_phases = [
@@ -842,12 +846,17 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False, speech_enab
     
     phases = base_phases.copy()
     
-    # Add hybrid search phases if DDG search is enabled
+    # Add search phases if either search mode is enabled (they're mutually exclusive)
     if ddg_search_enabled:
         phases.append("DDG Pre-Search")    # 6
         phases.append("Analyze Results")   # 7
         phases.append("Deep Fetch")        # 8
         phases.append("Merge Results")     # 9
+    elif web_search_enabled:
+        phases.append("Search Discovery")  # 6
+        phases.append("Rank & Select")     # 7
+        phases.append("Parallel Fetch")    # 8
+        phases.append("Process & Merge")   # 9
     
     # Add generation and processing phases
     phases.extend([
@@ -969,7 +978,7 @@ _cancel_event = threading.Event()
 
 def conversation_interface(
     user_input, session_tuples, session_messages, loaded_files,
-    is_reasoning_model, cancel_flag, ddg_search_enabled,
+    is_reasoning_model, cancel_flag, ddg_search_enabled, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
     speech_enabled, has_ai_response_state
 ):
@@ -977,8 +986,9 @@ def conversation_interface(
     Main conversation handler - Gradio 3.x compatible.
     Uses tuple format for Chatbot display, message dicts internally.
     
-    Search mode:
+    Search modes (mutually exclusive):
     - DDG Hybrid Search (ddg_search_enabled): DDG snippets + deep article fetching
+    - Web Search (web_search_enabled): Comprehensive multi-source search with parallel fetching
     """
     import gradio as gr
     from scripts import temporary, utility
@@ -1027,7 +1037,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0, ddg_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0, ddg_search_enabled, web_search_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1062,7 +1072,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, ddg_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, ddg_search_enabled, web_search_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1096,7 +1106,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, ddg_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, ddg_search_enabled, web_search_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1110,7 +1120,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, ddg_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, ddg_search_enabled, web_search_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1131,7 +1141,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1143,19 +1153,28 @@ def conversation_interface(
     model_settings = get_model_settings(temporary.MODEL_NAME)
     
     # ═══════════════════════════════════════════════════════════════════════════
-    # SEARCH LOGIC: Handle all 3 search modes
+    # SEARCH LOGIC: Handle DDG Search and Web Search (mutually exclusive)
     # ═══════════════════════════════════════════════════════════════════════════
     search_results = None
     search_metadata = None
     search_status_text = ""
     
-    if ddg_search_enabled and user_input.strip():
+    # Determine which search mode is active (only one can be active at a time)
+    search_active = ddg_search_enabled or web_search_enabled
+    
+    if search_active and user_input.strip():
         try:
             # Use proper query extraction
             search_query = extract_search_query(user_input)
             
-            print(f"[HYBRID-SEARCH] Query: {search_query}")
-            result = utility.hybrid_search(search_query, ddg_results=8, deep_fetch=4)
+            if ddg_search_enabled:
+                # DDG Hybrid Search
+                print(f"[HYBRID-SEARCH] Query: {search_query}")
+                result = utility.hybrid_search(search_query, ddg_results=8, deep_fetch=4)
+            else:
+                # Comprehensive Web Search
+                print(f"[WEB-SEARCH] Query: {search_query}")
+                result = utility.web_search(search_query, max_results=12, deep_fetch=6)
             
             # Extract content and metadata from dict return format
             if isinstance(result, dict):
@@ -1163,44 +1182,46 @@ def conversation_interface(
                 search_metadata = result.get('metadata', {})
             else:
                 search_results = result
-                search_metadata = {'type': 'hybrid', 'query': search_query, 'sources': [], 'error': None}
+                search_type = 'hybrid' if ddg_search_enabled else 'web_search'
+                search_metadata = {'type': search_type, 'query': search_query, 'sources': [], 'error': None}
             
             # Format search status for chat display
             if search_metadata:
                 search_status_text = utility.format_search_status_for_chat(search_metadata)
                 if search_status_text:
-                    print(f"[SEARCH-STATUS]\n{search_status_text}")
+                    print(f"[SEARCH-STATUS]\\n{search_status_text}")
                 
         except Exception as e:
             print(f"[SEARCH] Error: {e}")
             import traceback
             traceback.print_exc()
             search_results = f"Search error: {str(e)}"
-            search_metadata = {'type': 'error', 'query': user_input[:100], 'error': str(e), 'sources': []}
+            search_type = 'hybrid' if ddg_search_enabled else 'web_search'
+            search_metadata = {'type': search_type, 'query': user_input[:100], 'error': str(e), 'sources': []}
             search_status_text = f"⚠️ Search Error: {str(e)}"
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, ddg_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, ddg_search_enabled, web_search_enabled, speech_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
     )
 
     # Search progress phases (if any search is enabled)
-    if ddg_search_enabled:
+    if ddg_search_enabled or web_search_enabled:
         for phase_idx in [6, 7, 8, 9]:
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, speech_enabled)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, web_search_enabled, speech_enabled)),
                 *update_action_buttons("input_submitted", has_ai_response),
                 cancel_flag, loaded_files, "input_submitted",
                 gr.update(), gr.update(), gr.update()
             )
-            time.sleep(0.15)  # Slightly longer for hybrid phases
+            time.sleep(0.15)  # Slight delay for visual feedback
 
     # Calculate Generate Stream phase index
-    if ddg_search_enabled:
+    if ddg_search_enabled or web_search_enabled:
         generate_phase = 10
     else:
         generate_phase = 6
@@ -1217,7 +1238,7 @@ def conversation_interface(
     try:
         yield (
             get_chatbot_output(session_tuples, session_messages), session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, speech_enabled)),
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled, speech_enabled)),
             *update_action_buttons("generating_response", has_ai_response),
             cancel_flag, loaded_files, "generating_response",
             gr.update(), gr.update(), gr.update()
@@ -1252,7 +1273,7 @@ def conversation_interface(
             
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, speech_enabled)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled, speech_enabled)),
                 *update_action_buttons("generating_response", has_ai_response),
                 cancel_flag, loaded_files, "generating_response",
                 gr.update(), gr.update(), gr.update()
@@ -1308,7 +1329,7 @@ def conversation_interface(
         # Show "Generating TTS" phase in progress
         yield (
             get_chatbot_output(session_tuples, session_messages), session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(tts_phase, ddg_search_enabled, speech_enabled)),
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(tts_phase, ddg_search_enabled, web_search_enabled, speech_enabled)),
             *update_action_buttons("speaking", True),
             cancel_flag, loaded_files, "speaking",
             gr.update(), gr.update(), gr.update()
@@ -1352,12 +1373,54 @@ def toggle_left_expanded_state(current_state):
 def toggle_right_expanded_state(current_state):
     return not current_state
 
-def toggle_ddg_search(current_state):
-    """Toggle DDG Search (hybrid mode)."""
-    new_state = not current_state
-    variant = "primary" if new_state else "secondary"
-    label = "🔍 DDG Search ON" if new_state else "🔍 DDG Search"
-    return new_state, gr.update(variant=variant, value=label), gr.update(variant=variant)
+def toggle_ddg_search(current_ddg_state, current_web_state):
+    """Toggle DDG Search (hybrid mode). Disables Web Search if enabling DDG."""
+    import gradio as gr
+    
+    new_ddg_state = not current_ddg_state
+    
+    # If enabling DDG, disable Web Search (mutual exclusivity)
+    new_web_state = False if new_ddg_state else current_web_state
+    
+    ddg_variant = "primary" if new_ddg_state else "secondary"
+    ddg_label = "🔍 DDG Search ON" if new_ddg_state else "🔍 DDG Search"
+    
+    web_variant = "primary" if new_web_state else "secondary"
+    web_label = "🌐 Web Search ON" if new_web_state else "🌐 Web Search"
+    
+    return (
+        new_ddg_state,                                          # ddg_search_enabled state
+        new_web_state,                                          # web_search_enabled state
+        gr.update(variant=ddg_variant, value=ddg_label),        # ddg_search button
+        gr.update(variant=ddg_variant),                         # ddg_search_collapsed button
+        gr.update(variant=web_variant, value=web_label),        # web_search button
+        gr.update(variant=web_variant)                          # web_search_collapsed button
+    )
+
+
+def toggle_web_search(current_web_state, current_ddg_state):
+    """Toggle Web Search (comprehensive mode). Disables DDG Search if enabling Web Search."""
+    import gradio as gr
+    
+    new_web_state = not current_web_state
+    
+    # If enabling Web Search, disable DDG Search (mutual exclusivity)
+    new_ddg_state = False if new_web_state else current_ddg_state
+    
+    web_variant = "primary" if new_web_state else "secondary"
+    web_label = "🌐 Web Search ON" if new_web_state else "🌐 Web Search"
+    
+    ddg_variant = "primary" if new_ddg_state else "secondary"
+    ddg_label = "🔍 DDG Search ON" if new_ddg_state else "🔍 DDG Search"
+    
+    return (
+        new_web_state,                                          # web_search_enabled state
+        new_ddg_state,                                          # ddg_search_enabled state
+        gr.update(variant=web_variant, value=web_label),        # web_search button
+        gr.update(variant=web_variant),                         # web_search_collapsed button
+        gr.update(variant=ddg_variant, value=ddg_label),        # ddg_search button
+        gr.update(variant=ddg_variant)                          # ddg_search_collapsed button
+    )
 
 def toggle_speech(current_state):
     new_state = not current_state
@@ -1450,6 +1513,7 @@ def launch_interface():
             right_expanded_state=gr.State(True),
             model_settings=gr.State({}),
             ddg_search_enabled=gr.State(False),
+            web_search_enabled=gr.State(False),
             speech_enabled=gr.State(False),
             has_ai_response=gr.State(False)
         )
@@ -1537,11 +1601,13 @@ def launch_interface():
                         gr.Markdown("**Tools / Options**")
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["ddg_search"] = gr.Button("🔍 DDG Search", variant="secondary", scale=1)
+                            action_buttons["web_search"] = gr.Button("🌐 Web Search", variant="secondary", scale=1)
                             action_buttons["speech"] = gr.Button("🔊 Speech Out", variant="secondary", scale=1)
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as right_column_collapsed:
                         toggle_button_right_collapsed = gr.Button("<->", variant="secondary")
                         action_buttons["ddg_search_collapsed"] = gr.Button("🔍", variant="secondary")
+                        action_buttons["web_search_collapsed"] = gr.Button("🌐", variant="secondary")
                         action_buttons["speech_collapsed"] = gr.Button("🔊", variant="secondary")
 
                 with gr.Row():
@@ -1803,22 +1869,55 @@ def launch_interface():
             outputs=[states["right_expanded_state"], right_column_expanded, right_column_collapsed]
         )
         
-        # DDG Search toggle - independent
+        # DDG Search toggle - mutually exclusive with Web Search
         action_buttons["ddg_search"].click(
             fn=toggle_ddg_search,
-            inputs=[states["ddg_search_enabled"]],
+            inputs=[states["ddg_search_enabled"], states["web_search_enabled"]],
             outputs=[
                 states["ddg_search_enabled"],
+                states["web_search_enabled"],
                 action_buttons["ddg_search"],
-                action_buttons["ddg_search_collapsed"]
+                action_buttons["ddg_search_collapsed"],
+                action_buttons["web_search"],
+                action_buttons["web_search_collapsed"]
             ]
         )
         
         action_buttons["ddg_search_collapsed"].click(
             fn=toggle_ddg_search,
-            inputs=[states["ddg_search_enabled"]],
+            inputs=[states["ddg_search_enabled"], states["web_search_enabled"]],
             outputs=[
                 states["ddg_search_enabled"],
+                states["web_search_enabled"],
+                action_buttons["ddg_search"],
+                action_buttons["ddg_search_collapsed"],
+                action_buttons["web_search"],
+                action_buttons["web_search_collapsed"]
+            ]
+        )
+        
+        # Web Search toggle - mutually exclusive with DDG Search
+        action_buttons["web_search"].click(
+            fn=toggle_web_search,
+            inputs=[states["web_search_enabled"], states["ddg_search_enabled"]],
+            outputs=[
+                states["web_search_enabled"],
+                states["ddg_search_enabled"],
+                action_buttons["web_search"],
+                action_buttons["web_search_collapsed"],
+                action_buttons["ddg_search"],
+                action_buttons["ddg_search_collapsed"]
+            ]
+        )
+        
+        action_buttons["web_search_collapsed"].click(
+            fn=toggle_web_search,
+            inputs=[states["web_search_enabled"], states["ddg_search_enabled"]],
+            outputs=[
+                states["web_search_enabled"],
+                states["ddg_search_enabled"],
+                action_buttons["web_search"],
+                action_buttons["web_search_collapsed"],
                 action_buttons["ddg_search"],
                 action_buttons["ddg_search_collapsed"]
             ]
@@ -2054,6 +2153,7 @@ def launch_interface():
                 states["is_reasoning_model"],
                 states["cancel_flag"],
                 states["ddg_search_enabled"],
+                states["web_search_enabled"],
                 states["interaction_phase"],
                 states["llm"],
                 states["models_loaded"],

@@ -863,12 +863,14 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     # FIXED: Inject search results into system message with explicit instructions
-    if ddg_search_enabled and search_results:
+    # Works for both DDG hybrid search and comprehensive web search
+    if search_results:
         search_context = f"\n\n--- WEB SEARCH CONTEXT (Use this information to answer the user's query) ---\n{search_results}\n--- END SEARCH CONTEXT ---\n\nIMPORTANT: Base your response on the search results above. Cite sources when possible."
         system_message += search_context
         print(f"[RESPONSE-STREAM] Search context INJECTED into system message ({len(search_context)} chars added)")
-    elif ddg_search_enabled and not search_results:
-        print("[RESPONSE-STREAM] WARNING: ddg_search_enabled=True but search_results is empty/None!")
+    elif ddg_search_enabled:
+        # Only warn about missing results if search was explicitly enabled
+        print("[RESPONSE-STREAM] WARNING: Search enabled but search_results is empty/None!")
         system_message += "\n\n[Note: Web search was enabled but returned no results. Answer based on your knowledge.]"
 
     # DEBUG: Log final system message length

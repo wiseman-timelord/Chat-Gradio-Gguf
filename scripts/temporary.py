@@ -87,6 +87,10 @@ TTS_SOUND_DEVICE = -1          # -1 = default, or device ID (JSON)
 TTS_SAMPLE_RATE = 22050        # 22050, 44100, or 48000 (JSON)
 TTS_VOICE = None               # Selected voice name (JSON)
 
+# Search Configuration - DDG Search and Web Search are mutually exclusive
+DDG_SEARCH_ENABLED = False     # Hybrid DDG search (snippets + deep fetch)
+WEB_SEARCH_ENABLED = False     # Comprehensive web search (multi-source + parallel fetch)
+
 # UI Constants/Variables
 USER_COLOR = "#ffffff"
 THINK_COLOR = "#c8a2c8"
@@ -203,92 +207,82 @@ class ContextInjector:
             # Load the model with CPU-only mode and local_files_only
             # HF_HUB_OFFLINE=1 ensures no network requests at all
             self.embedding = SentenceTransformer(
-                model_to_load, 
+                model_to_load,
                 device="cpu",
-                local_files_only=True,
-                cache_folder=str(cache_dir)  # Explicit cache folder
+                cache_folder=str(cache_dir)
             )
-            self.embedding.eval()  # Set to evaluation mode
+            self.embedding.eval()
             
-            print(f"[RAG] Successfully loaded: {model_to_load}")
+            # Test embedding
+            test = self.embedding.encode(["test"], batch_size=1, normalize_embeddings=True)
+            dim = test.shape[1] if len(test.shape) > 1 else len(test)
+            print(f"[RAG] Model loaded successfully, embedding dimension: {dim}")
             
-        except OSError as e:
-            # OSError typically means model files not found in cache
-            print(f"[RAG] Model not found in cache: {e}")
-            print(f"[RAG] Expected cache location: {cache_dir}")
-            print("[RAG] RAG features will be disabled. Re-run installer to download model.")
-            self.embedding = None
         except Exception as e:
             print(f"[RAG] Failed to load embedding model: {e}")
-            print("[RAG] RAG features will be disabled.")
+            print("[RAG] RAG features will be unavailable")
             self.embedding = None
-
+    
     def _embed_texts(self, texts):
-        """Embed a list of texts using sentence-transformers (CPU-only)."""
+        """Create embeddings using sentence-transformers."""
+        if self.embedding is None:
+            self._ensure_embedding_model()
+        
         if self.embedding is None:
             return None
         
         try:
-            # Use convert_to_tensor=True then convert to numpy to avoid numpy 2.x issues
+            # Use convert_to_tensor=False to get numpy arrays directly
             embeddings = self.embedding.encode(
-                texts, 
-                batch_size=32, 
+                texts,
+                batch_size=32,
                 normalize_embeddings=True,
-                show_progress_bar=False,
-                convert_to_tensor=True,
-                device="cpu"
+                convert_to_tensor=False,
+                show_progress_bar=False
             )
-            # Convert tensor to numpy array
-            return embeddings.cpu().numpy().astype('float32')
+            return np.array(embeddings, dtype=np.float32)
         except Exception as e:
             print(f"[RAG] Embedding error: {e}")
             return None
-
+    
     def set_session_vectorstore(self, file_paths):
-            """Create/refresh vector store from list of file paths with improved chunking."""
-            if not file_paths:
-                self.file_index = None
-                self.file_chunks = []
-                return
-            
-            self._ensure_embedding_model()
-            
-            if self.embedding is None:
-                print("[RAG] Cannot create vectorstore - embedding model unavailable")
-                return
-
-            all_docs = []
-            
-            # Use loaded context size for chunk sizing
-            effective_ctx = LOADED_CONTEXT_SIZE or CONTEXT_SIZE
-            chunk_size = effective_ctx // RAG_CHUNK_SIZE_DIVIDER
-            chunk_overlap = effective_ctx // RAG_CHUNK_OVERLAP_DIVIDER
-            
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                length_function=len,
-                separators=["\n\n", "\n", ". ", " ", ""]
-            )
-            
-            for path in file_paths:
-                try:
-                    if path.suffix.lower() in ['.txt', '.md', '.py', '.json', '.yaml', '.yml']:
-                        loader = TextLoader(str(path), encoding='utf-8')
-                        documents = loader.load()
-                        for doc in documents:
-                            chunks = splitter.split_text(doc.page_content)
-                            for chunk in chunks:
-                                all_docs.append(type('Doc', (), {'page_content': chunk, 'metadata': {'source': str(path)}})())
-                except Exception as e:
-                    print(f"[RAG] Error loading {path}: {e}")
-                    continue
-            
-            if not all_docs:
-                print("[RAG] No documents could be loaded")
-                return
-
-            texts = [d.page_content for d in all_docs]
+        """Ingest files for RAG retrieval using sentence-transformers."""
+        if not file_paths:
+            self.file_index = None
+            self.file_chunks = []
+            print("[RAG] Cleared file vectorstore")
+            return
+        
+        self._ensure_embedding_model()
+        
+        if self.embedding is None:
+            print("[RAG] Cannot create vectorstore - embedding model unavailable")
+            return
+        
+        # Use loaded context size for chunk sizing
+        effective_ctx = LOADED_CONTEXT_SIZE or CONTEXT_SIZE
+        chunk_size = effective_ctx // RAG_CHUNK_SIZE_DIVIDER
+        chunk_overlap = effective_ctx // RAG_CHUNK_OVERLAP_DIVIDER
+        
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+        
+        texts = []
+        for path in file_paths:
+            try:
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
+                chunks = splitter.split_text(content)
+                texts.extend(chunks)
+            except Exception as e:
+                print(f"[RAG] Error loading {path}: {e}")
+        
+        if texts:
+            print(f"[RAG] Processing {len(texts)} chunks from {len(file_paths)} files")
             
             # Create embeddings using sentence-transformers
             embeddings = self._embed_texts(texts)
