@@ -6,6 +6,12 @@ Beta - Working fine during tests on v0.99.x on my, Ubuntu 25 and Windows 8.1, sy
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration. One thing to mention though, is that because a goal of the project is to make a Chatbot compatible as it is, therefore compromises had to be made, and it may not have all the latest versions of things, more the most widely compatible versions of things, so some features are not as good as they could be, but also, this program serves as a valuable reference for what needs to be used on what OS, albeit it, as a personal project it could be streamlined/enhanced/customized to your own likings later.   
 
+### Core Principles
+- This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. 
+- A, Windows 7-11 and Ubuntu 22-25, compatibility range; though Ubuntu 25 users have limitations I believe already due to python 3.13. Any and all compatibility issues within those ranges MUST be overcome.
+- This Program is also intended to have only basic tools of, DDG Search, Web Search, and Speech Out. Maybe later there will be a poll, for what tools people want to see.
+- I am not making this program for ME, its for the community, so that people on OS people should be using, that is Ubuntu and Windows, are able to use AI, even on legacy setups or banger laptops.
+
 ### Features
 - **Qt-Web Custom Browser**: The interface uses Qt-Web with Gradio, it appears as a regular application, and means your default browser are untouched.  
 - **Comprihensive GPU Support**: Vulkan, with dropdown list in configuration selection supporting multi CPU/GPU setup.
@@ -576,6 +582,8 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 3. Go back to the `Interaction` page and begin interactions, ensuring to notice tool options available, and select appropriately for your intended use, then type your input into the User Input box, and then click Send Input.
 4. When all is finished, click `Exit` on the bottom right, then you are left with the terminal menu, where you type `x` to exit.
 ```
+
+### Useful Info
 - Internet researcg Tools (v0.99.6+)...
 ```
 DDG Search = Faster DuckDuckGo research.
@@ -590,10 +598,14 @@ Web Search = Slower actual website reading research.
 | 65536   | 2.0x       | 16          | 8        | 24          | 12       |
 | 131072  | 4.0x       | 32          | 16       | 48          | 24       |
 ```
-
-### Core Principles
-- This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only 2 tools, Search and Speech, in order for people to be able to use it as a framework/reference for their own AI programs.
-- Must attempt a, Windows 7-11 and Ubuntu 22-25, compatibility range; though Ubuntu 25 users have limitations I believe already. Must when possible attempt find solutions to any and all compatibility issues, having determined possibilities.
+- Robot Voice Tts option
+```
+| Mode     | TTS engine       | Audio *player* |
+| -------- | ---------------- | -------------- |
+| Windows  | `pyttsx3` (SAPI) | **built-in**   |
+| Pulse    | `espeak-ng`      | `paplay`       |
+| PipeWire | `espeak-ng`      | `pw-play`      |
+```
 
 ### Notation 
 - Because of how the WT-Web interface works, there is ongoing issue with how sometimes lists of values in the configuration page are non-selectable; just select a different number in list first, then select number you want. Only way to fix this would be to drop older windows/ubuntu support.  
@@ -672,13 +684,6 @@ project_root/
 ├── .venv/
 └────── *
 ```
-
-### Robot Voice Tts option
-| Mode     | TTS engine       | Audio *player* |
-| -------- | ---------------- | -------------- |
-| Windows  | `pyttsx3` (SAPI) | **built-in**   |
-| Pulse    | `espeak-ng`      | `paplay`       |
-| PipeWire | `espeak-ng`      | `pw-play`      |
 
 # Development for v0.xx-xx-v1.00.00
 Now that the program is 99% made, and I have ensured to include, Windows 7-11 and Ubuntu 22-25, compatibility, there is the rolling issue while editing, where the scripts of the program have become very large, 2 of them over 100k, hence I only trust Claude Opus to edit on the Chatbot, and even then, it is a challenge for the AI. So future expansion on current AI systems, is somewhat bleak, until better AI systems are developed. Thus encouraging myself to either...
