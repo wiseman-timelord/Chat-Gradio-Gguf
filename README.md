@@ -582,14 +582,14 @@ DDG Search = Faster DuckDuckGo research.
 Web Search = Slower actual website reading research. 
 ```
 - Research scaled to Context Length...
+```
 | Context | Multiplier | DDG Results | DDG Deep | Web Results | Web Deep |
 |---------|------------|-------------|----------|-------------|----------|
 | 16384   | 0.5x       | 4           | 2        | 6           | 3        |
 | 32768   | 1.0x       | 8           | 4        | 12          | 6        |
 | 65536   | 2.0x       | 16          | 8        | 24          | 12       |
 | 131072  | 4.0x       | 32          | 16       | 48          | 24       |
-
-
+```
 
 ### Core Principles
 - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only 2 tools, Search and Speech, in order for people to be able to use it as a framework/reference for their own AI programs.
