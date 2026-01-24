@@ -576,12 +576,20 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 3. Go back to the `Interaction` page and begin interactions, ensuring to notice tool options available, and select appropriately for your intended use, then type your input into the User Input box, and then click Send Input.
 4. When all is finished, click `Exit` on the bottom right, then you are left with the terminal menu, where you type `x` to exit.
 ```
-- Internet researcg Tools (v0.99.6)...
+- Internet researcg Tools (v0.99.6+)...
 ```
-DDG Search only → Quick DDG search
-Web Search only → Deep web research
-BOTH enabled → DDG-enhanced Web Search (DDG for initial results, then fetch full pages)
+DDG Search = Faster DuckDuckGo research.
+Web Search = Slower actual website reading research. 
 ```
+- Research scaled to Context Length...
+| Context | Multiplier | DDG Results | DDG Deep | Web Results | Web Deep |
+|---------|------------|-------------|----------|-------------|----------|
+| 16384   | 0.5x       | 4           | 2        | 6           | 3        |
+| 32768   | 1.0x       | 8           | 4        | 12          | 6        |
+| 65536   | 2.0x       | 16          | 8        | 24          | 12       |
+| 131072  | 4.0x       | 32          | 16       | 48          | 24       |
+
+
 
 ### Core Principles
 - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Code-Gradio-Gguf` or `Agent-Gradio-Gguf`. This Program is also intended to have only 2 tools, Search and Speech, in order for people to be able to use it as a framework/reference for their own AI programs.
