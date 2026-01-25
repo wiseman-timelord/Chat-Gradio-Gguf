@@ -599,14 +599,6 @@ Web Search = Slower actual website reading research.
 | 65536   | 2.0x       | 16          | 8        | 24          | 12       |
 | 131072  | 4.0x       | 32          | 16       | 48          | 24       |
 ```
-- Robot Voice Tts option
-```
-| Mode     | TTS engine       | Audio *player* |
-| -------- | ---------------- | -------------- |
-| Windows  | `pyttsx3` (SAPI) | **built-in**   |
-| Pulse    | `espeak-ng`      | `paplay`       |
-| PipeWire | `espeak-ng`      | `pw-play`      |
-```
 
 ### Notation 
 - Because of how the WT-Web interface works, there is ongoing issue with how sometimes lists of values in the configuration page are non-selectable; just select a different number in list first, then select number you want. Only way to fix this would be to drop older windows/ubuntu support.  
@@ -684,9 +676,18 @@ project_root/
 ```
 
 # Development for v0.xx-xx-v1.00.00
-Now that the program is 99% made, and I have ensured to include, Windows 7-11 and Ubuntu 22-25, compatibility, there is the rolling issue while editing, where the scripts of the program have become very large, 2 of them over 100k, hence I only trust Claude Opus to edit on the Chatbot, and even then, it is a challenge for the AI. So future expansion on current AI systems, is somewhat bleak, until better AI systems are developed. Thus encouraging myself to either...
-- Continue the program on windows 10, while streamlining compatibility from v1.01.00+ with compatibility for. Windows 10-11 and Ubuntu 24-25, only.
-- Continue working on new project Chat-Lightwave-Gguf, but use MS Edge WebView, and use lightwave instead of gradio, and limit operation to Windows 8.1-11, while waiting for AI to improve, then come back to Chat-Gradio-Gguf. Chat-Lightwave-Gguf will then allow to understand future upgrades for Chat-Gradio-Gguf, that I would later integrate selectively.
+Now that the program is 100% made, I am tidying up, and finishing testing/bugfixing... 
+- Release v1.00.0 upcoming, which will be tested on, ubuntu 25 and windows 8.1, and 100% bugfixed.
+- Work on v1.01.0+ will maintain, Windows 7-11 and Ubuntu 22-25, compatibility, while new project Chat-Lightwave-Gguf, will be optimized towards windows 8-10, but use MS Edge WebView, and use lightwave instead of gradio, and limit operation to Windows 8.1-11, while waiting for AI to improve, then come back to Chat-Gradio-Gguf. Chat-Lightwave-Gguf will then allow to understand future upgrades for Chat-Gradio-Gguf, that I would later integrate selectively.
+- Optimization, then testing/bugfixing.
+- Re-implementation of Robot Voice Tts option (TTS not currently implemented).
+```
+| Mode     | TTS engine       | Audio *player* |
+| -------- | ---------------- | -------------- |
+| Windows  | `pyttsx3` (SAPI) | **built-in**   |
+| Pulse    | `espeak-ng`      | `paplay`       |
+| PipeWire | `espeak-ng`      | `pw-play`      |
+```
 
 # Update Ideas
 1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
