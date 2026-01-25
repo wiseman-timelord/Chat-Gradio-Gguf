@@ -745,7 +745,7 @@ def delete_all_sessions():
 def handle_customization_save(
     max_hist, height, max_att, show_think, print_raw, bleep,
     ctx, batch, temp, repeat, vram, gpu, cpu, cpu_threads, model, model_path,
-    layer_allocation_mode=None
+    layer_allocation_mode=None, sound_device=None, sample_rate=None, tts_voice=None
 ):
     """Save ALL configuration settings to both temporary globals and persistent.json."""
     try:
@@ -780,6 +780,29 @@ def handle_customization_save(
         if layer_allocation_mode is not None and temporary.VULKAN_AVAILABLE:
             temporary.LAYER_ALLOCATION_MODE = layer_allocation_mode
         
+        # TTS settings
+        if sound_device is not None:
+            # Convert device name to ID: "Default" = -1, else find index
+            from scripts.tools import get_sound_device_names
+            devices = get_sound_device_names()
+            if sound_device == "Default" or sound_device not in devices:
+                temporary.TTS_SOUND_DEVICE = -1
+            else:
+                try:
+                    temporary.TTS_SOUND_DEVICE = devices.index(sound_device) - 1  # -1 because "Default" is at index 0
+                except ValueError:
+                    temporary.TTS_SOUND_DEVICE = -1
+        
+        if sample_rate is not None:
+            rate = int(sample_rate)
+            if rate in [44100, 48000]:
+                temporary.TTS_SAMPLE_RATE = rate
+            else:
+                temporary.TTS_SAMPLE_RATE = 44100
+        
+        if tts_voice is not None:
+            temporary.TTS_VOICE = tts_voice
+        
         # Save to persistent.json
         from scripts.settings import save_config
         save_config()
@@ -787,6 +810,7 @@ def handle_customization_save(
         print(f"[SAVE] Settings saved: CTX={temporary.CONTEXT_SIZE}, Batch={temporary.BATCH_SIZE}, "
               f"Temp={temporary.TEMPERATURE}, VRAM={temporary.VRAM_SIZE}, GPU={temporary.SELECTED_GPU}, "
               f"CPU={temporary.SELECTED_CPU}, Threads={temporary.CPU_THREADS}")
+        print(f"[SAVE] TTS: Device={temporary.TTS_SOUND_DEVICE}, Rate={temporary.TTS_SAMPLE_RATE}, Voice={temporary.TTS_VOICE}")
         
         # Return appropriate message
         if ctx_changed:
@@ -1736,17 +1760,33 @@ def launch_interface():
                     tts_vis = get_tts_config_visibility()
                     
                     with gr.Row(elem_classes=["clean-elements"], visible=tts_vis.get("sound_device", False)) as sound_hw_row:
+                        # Get sound device choices and determine initial value
+                        sound_devices = get_sound_device_names()
+                        saved_device_id = getattr(temporary, 'TTS_SOUND_DEVICE', -1)
+                        # Map device ID to name: -1 = "Default", else find by index
+                        if saved_device_id == -1 or saved_device_id >= len(sound_devices):
+                            sound_device_value = "Default"
+                        else:
+                            sound_device_value = sound_devices[0]  # "Default" is always first
+                        
                         config_components["sound_device"] = gr.Dropdown(
-                            choices=get_sound_device_names(),
+                            choices=sound_devices,
                             label="Sound Card",
-                            value="Default",
+                            value=sound_device_value,
                             interactive=True,
                             scale=5
                         )
+                        
+                        # Get sample rate choices and validate saved value
+                        sample_rates = get_sample_rate_options()
+                        saved_sample_rate = getattr(temporary, 'TTS_SAMPLE_RATE', 44100)
+                        if saved_sample_rate not in sample_rates:
+                            saved_sample_rate = sample_rates[0] if sample_rates else 44100
+                        
                         config_components["sample_rate"] = gr.Dropdown(
-                            choices=get_sample_rate_options(),
+                            choices=sample_rates,
                             label="Sample Rate",
-                            value=22050,
+                            value=saved_sample_rate,
                             interactive=True,
                             scale=5
                         )
@@ -1797,10 +1837,16 @@ def launch_interface():
                             scale=5
                         )
                         voices = get_voice_options_for_engine()
+                        saved_voice = getattr(temporary, 'TTS_VOICE', None)
+                        if saved_voice and saved_voice in voices:
+                            voice_value = saved_voice
+                        else:
+                            voice_value = voices[0] if voices else "Default"
+                        
                         config_components["tts_voice"] = gr.Dropdown(
                             choices=voices,
                             label="Voice Type",
-                            value=voices[0] if voices else "Default",
+                            value=voice_value,
                             interactive=True,
                             scale=5
                         )
@@ -2082,12 +2128,12 @@ def launch_interface():
         def handle_save_wrapper(
             max_hist, height, max_att, show_think, print_raw, bleep,
             ctx, batch, temp, repeat, vram, gpu, cpu, cpu_threads, model, model_path,
-            layer_mode
+            layer_mode, sound_device, sample_rate, tts_voice
         ):
             result = handle_customization_save(
                 max_hist, height, max_att, show_think, print_raw, bleep,
                 ctx, batch, temp, repeat, vram, gpu, cpu, cpu_threads, model, model_path,
-                layer_mode
+                layer_mode, sound_device, sample_rate, tts_voice
             )
             return result, result
         
@@ -2132,7 +2178,11 @@ def launch_interface():
                 config_components["cpu_threads"],
                 config_components["model"],
                 config_components["model_path"],
-                layer_allocation_radio
+                layer_allocation_radio,
+                # TTS settings
+                config_components["sound_device"],
+                config_components["sample_rate"],
+                config_components["tts_voice"]
             ],
             outputs=[interaction_global_status, config_global_status]
         ).then(

@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
         "use_python_bindings": True,
         # TTS user settings (3 keys only)
         "tts_sound_device": -1,
-        "tts_sample_rate": 22050,
+        "tts_sample_rate": 44100,
         "tts_voice": None,
     }
 }
@@ -199,6 +199,12 @@ def load_config():
     temporary.TTS_SOUND_DEVICE = model_settings["tts_sound_device"]
     temporary.TTS_SAMPLE_RATE = model_settings["tts_sample_rate"]
     temporary.TTS_VOICE = model_settings["tts_voice"]
+    
+    # Validate TTS sample rate (must be 44100 or 48000)
+    if temporary.TTS_SAMPLE_RATE not in [44100, 48000]:
+        print(f"[CONFIG] Invalid TTS sample rate {temporary.TTS_SAMPLE_RATE}, defaulting to 44100")
+        temporary.TTS_SAMPLE_RATE = 44100
+    
     print(f"[CONFIG] TTS: Device={temporary.TTS_SOUND_DEVICE}, Rate={temporary.TTS_SAMPLE_RATE}, Voice={temporary.TTS_VOICE}")
 
     # Load hardware selection settings
@@ -266,6 +272,11 @@ def save_config():
     if isinstance(cpu_label, (int, float)):
         cpu_label = "Auto-Select"
 
+    # Validate TTS sample rate before saving
+    tts_sample_rate = getattr(temporary, 'TTS_SAMPLE_RATE', 44100)
+    if tts_sample_rate not in [44100, 48000]:
+        tts_sample_rate = 44100
+
     config = {
         "model_settings": {
             "model_dir": temporary.MODEL_FOLDER,
@@ -292,7 +303,7 @@ def save_config():
             "vulkan_enabled": getattr(temporary, 'VULKAN_AVAILABLE', False),
             # TTS user settings (3 keys only)
             "tts_sound_device": getattr(temporary, 'TTS_SOUND_DEVICE', -1),
-            "tts_sample_rate": getattr(temporary, 'TTS_SAMPLE_RATE', 22050),
+            "tts_sample_rate": tts_sample_rate,
             "tts_voice": getattr(temporary, 'TTS_VOICE', None),
         }
     }
@@ -304,6 +315,7 @@ def save_config():
     print(f"[SAVE]   Model name: {config['model_settings']['model_name']}")
     print(f"[SAVE]   Selected CPU: {config['model_settings']['selected_cpu']}")
     print(f"[SAVE]   TTS voice: {config['model_settings']['tts_voice']}")
+    print(f"[SAVE]   TTS sample rate: {config['model_settings']['tts_sample_rate']}")
     
     with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=4, ensure_ascii=False)
@@ -324,6 +336,10 @@ def update_setting(key, value):
             value = float(value)
         elif key in {"mlock", "dynamic_gpu_layers"}:
             value = bool(value)
+        
+        # Validate TTS sample rate
+        if key == "tts_sample_rate" and value not in [44100, 48000]:
+            value = 44100
         
         # Set the attribute
         attr_name = key.upper() if hasattr(temporary, key.upper()) else key

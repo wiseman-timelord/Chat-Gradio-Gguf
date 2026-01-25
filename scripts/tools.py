@@ -105,16 +105,38 @@ def get_available_sound_devices() -> list:
                     preferred_api_idx = idx
                     break
         else:
+            # On Linux, prefer PulseAudio as it shows only user-visible sinks
             for idx, api in enumerate(host_apis):
                 api_name = api.get('name', '')
                 if "pulse" in api_name.lower():
                     preferred_api_idx = idx
                     break
-                elif "alsa" in api_name.lower() and preferred_api_idx is None:
-                    preferred_api_idx = idx
         
         seen_names = set()
         all_devices = sd.query_devices()
+        
+        # On Linux with PulseAudio, get only active sinks (what shows in Sound Settings)
+        active_pulse_sinks = set()
+        if platform != "windows" and preferred_api_idx is not None:
+            try:
+                import subprocess
+                # pactl list short sinks shows only active/available audio outputs
+                result = subprocess.run(
+                    ['pactl', 'list', 'short', 'sinks'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.strip().split('\n'):
+                        if line.strip():
+                            parts = line.split('\t')
+                            if len(parts) >= 2:
+                                sink_name = parts[1].lower()
+                                # Extract meaningful part of sink name
+                                active_pulse_sinks.add(sink_name)
+                    print(f"[SOUND] Active PulseAudio sinks: {len(active_pulse_sinks)}")
+            except Exception as e:
+                print(f"[SOUND] Could not query PulseAudio sinks: {e}")
+                active_pulse_sinks = None  # Fall back to showing all
         
         for i, dev in enumerate(all_devices):
             if dev.get('max_output_channels', 0) <= 0:
@@ -125,6 +147,24 @@ def get_available_sound_devices() -> list:
                     continue
             
             name = dev['name']
+            
+            # On Linux with PulseAudio, filter to only active sinks
+            if platform != "windows" and active_pulse_sinks is not None and len(active_pulse_sinks) > 0:
+                # Check if this device matches any active sink
+                dev_name_lower = name.lower()
+                is_active = False
+                for sink in active_pulse_sinks:
+                    # Match by partial name (PulseAudio sink names contain device description)
+                    if any(part in sink for part in dev_name_lower.split() if len(part) > 3):
+                        is_active = True
+                        break
+                    if any(part in dev_name_lower for part in sink.split('_') if len(part) > 3):
+                        is_active = True
+                        break
+                if not is_active:
+                    continue
+            
+            # Clean up name
             for suffix in ['(WASAPI)', '(DirectSound)', '(MME)', '(Windows WASAPI)', '(Windows DirectSound)']:
                 name = name.replace(suffix, '').strip()
             
@@ -134,7 +174,7 @@ def get_available_sound_devices() -> list:
                 continue
             seen_names.add(name.lower())
             
-            skip_keywords = ['loopback', 'virtual', 'stereo mix', 'what u hear', 'wave out']
+            skip_keywords = ['loopback', 'virtual', 'stereo mix', 'what u hear', 'wave out', 'monitor of']
             if any(kw in name.lower() for kw in skip_keywords):
                 continue
             
@@ -152,7 +192,7 @@ def get_sound_device_names() -> list:
 
 def get_sample_rate_options() -> list:
     tmp = _get_temporary()
-    return getattr(tmp, 'SAMPLE_RATES', [22050, 44100, 48000])
+    return getattr(tmp, 'SAMPLE_RATES', [44100, 48000])
 
 
 # =============================================================================
@@ -327,13 +367,22 @@ def speak_text(text: str) -> None:
         else:
             _speak_pyttsx3_linux(text)
 
-
 def _speak_coqui(text: str) -> None:
+    """
+    Coqui TTS speech synthesis with proper phonemizer handling.
+    
+    LJSpeech models (tacotron2-DDC, glow-tts, speedy-speech, vits) are grapheme-based,
+    meaning they expect plain English characters, NOT IPA phonemes. When gruut is 
+    installed, Coqui TTS may auto-convert text to phonemes, causing garbled output.
+    
+    This function explicitly disables phonemization for grapheme-based models.
+    """
     tmp = _get_temporary()
     COQUI_DEFAULT_VOICES = getattr(tmp, 'COQUI_DEFAULT_VOICES', {})
     
     try:
         import sounddevice as sd
+        import numpy as np
         from TTS.api import TTS
         
         voice_name = getattr(tmp, 'TTS_VOICE', None)
@@ -344,21 +393,173 @@ def _speak_coqui(text: str) -> None:
         cache_dir.mkdir(parents=True, exist_ok=True)
         os.environ["COQUI_TTS_CACHE"] = str(cache_dir)
         
+        # Detect if this is an LJSpeech model (grapheme-based, NOT phoneme-based)
+        is_ljspeech_model = "ljspeech" in model_name.lower()
+        
+        print(f"[TTS-COQUI] Loading model: {model_name}")
+        print(f"[TTS-COQUI] LJSpeech (grapheme) model: {is_ljspeech_model}")
+        
+        # Initialize TTS
         tts = TTS(model_name=model_name, progress_bar=False)
         tts.to("cpu")
-        wav = tts.tts(text=text)
         
+        # CRITICAL: Disable phonemization for LJSpeech/grapheme models
+        # These models expect plain text characters, not IPA phonemes
+        if is_ljspeech_model and hasattr(tts, 'synthesizer') and tts.synthesizer is not None:
+            synth = tts.synthesizer
+            
+            # Method 1: Disable via synthesizer config
+            if hasattr(synth, 'tts_config') and synth.tts_config is not None:
+                synth.tts_config.use_phonemes = False
+                print("[TTS-COQUI] Disabled phonemes via tts_config")
+            
+            # Method 2: Disable via model config
+            if hasattr(synth, 'tts_model') and synth.tts_model is not None:
+                if hasattr(synth.tts_model, 'config'):
+                    synth.tts_model.config.use_phonemes = False
+                    print("[TTS-COQUI] Disabled phonemes via tts_model.config")
+            
+            # Method 3: Set phoneme_language to None to prevent phonemization
+            if hasattr(synth, 'seg'):
+                synth.seg = None
+                print("[TTS-COQUI] Cleared sentence segmenter")
+        
+        # Generate speech - use tts_to_file to avoid phonemization pipeline issues
+        wav = None
+        temp_wav = None
+        
+        try:
+            # Method A: Try direct synthesis with explicit phoneme disable
+            if hasattr(tts, 'synthesizer') and tts.synthesizer is not None:
+                # Call synthesizer.tts directly with use_griffin_lim for grapheme models
+                synth = tts.synthesizer
+                if hasattr(synth, 'tts') and callable(synth.tts):
+                    # Force text input mode (not phonemes)
+                    wav = synth.tts(text, speaker_name=None, language_name=None, speaker_wav=None)
+                    if isinstance(wav, dict):
+                        wav = wav.get('wav', None)
+                    if wav is not None:
+                        print("[TTS-COQUI] Generated via synthesizer.tts()")
+        except Exception as e:
+            print(f"[TTS-COQUI] Direct synthesis failed: {e}")
+            wav = None
+        
+        # Method B: Fallback to file-based synthesis
+        if wav is None:
+            try:
+                import tempfile
+                import wave
+                
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+                    temp_wav = f.name
+                
+                # tts_to_file often handles phonemization differently
+                tts.tts_to_file(text=text, file_path=temp_wav, split_sentences=False)
+                
+                # Read the WAV file back
+                with wave.open(temp_wav, 'rb') as wf:
+                    n_channels = wf.getnchannels()
+                    sampwidth = wf.getsampwidth()
+                    framerate = wf.getframerate()
+                    n_frames = wf.getnframes()
+                    raw_data = wf.readframes(n_frames)
+                
+                # Convert to numpy
+                if sampwidth == 2:
+                    wav = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
+                elif sampwidth == 4:
+                    wav = np.frombuffer(raw_data, dtype=np.int32).astype(np.float32) / 2147483648.0
+                else:
+                    wav = np.frombuffer(raw_data, dtype=np.float32)
+                
+                # Handle stereo
+                if n_channels == 2:
+                    wav = wav.reshape(-1, 2).mean(axis=1)
+                
+                print(f"[TTS-COQUI] Generated via tts_to_file(), {framerate}Hz")
+                
+            except Exception as e2:
+                print(f"[TTS-COQUI] File synthesis failed: {e2}")
+                wav = None
+            finally:
+                if temp_wav and os.path.exists(temp_wav):
+                    try:
+                        os.unlink(temp_wav)
+                    except:
+                        pass
+        
+        # Method C: Last resort - standard API call
+        if wav is None:
+            wav = tts.tts(text=text)
+            print("[TTS-COQUI] Generated via tts.tts()")
+        
+        # Get model's native sample rate
+        model_sr = 22050  # Default for LJSpeech models
+        if hasattr(tts, 'synthesizer') and tts.synthesizer is not None:
+            if hasattr(tts.synthesizer, 'output_sample_rate'):
+                model_sr = tts.synthesizer.output_sample_rate
+        
+        # Get user's configured sample rate (default to 44100)
+        target_sr = getattr(tmp, 'TTS_SAMPLE_RATE', 44100)
+        
+        # Ensure target is valid (44100 or 48000)
+        if target_sr not in [44100, 48000]:
+            target_sr = 44100
+        
+        # Convert to numpy array if needed
+        if not isinstance(wav, np.ndarray):
+            wav = np.array(wav, dtype=np.float32)
+        
+        # Ensure float32 and normalized
+        wav = wav.astype(np.float32)
+        max_val = np.abs(wav).max()
+        if max_val > 1.0:
+            wav = wav / max_val
+        
+        # Resample if model rate differs from target rate
+        if model_sr != target_sr:
+            try:
+                # Use scipy for high-quality resampling
+                from scipy import signal
+                
+                num_samples = int(len(wav) * target_sr / model_sr)
+                wav_resampled = signal.resample(wav, num_samples)
+                wav = wav_resampled.astype(np.float32)
+                print(f"[TTS-COQUI] Resampled {model_sr}Hz -> {target_sr}Hz")
+            except ImportError:
+                # Fallback: numpy linear interpolation
+                old_indices = np.arange(len(wav))
+                new_length = int(len(wav) * target_sr / model_sr)
+                new_indices = np.arange(new_length) * (len(wav) - 1) / (new_length - 1)
+                wav = np.interp(new_indices, old_indices, wav).astype(np.float32)
+                print(f"[TTS-COQUI] Resampled (linear) {model_sr}Hz -> {target_sr}Hz")
+        
+        # Play audio
         if device_id >= 0:
-            sd.play(wav, samplerate=tts.synthesizer.output_sample_rate, device=device_id)
+            sd.play(wav, samplerate=target_sr, device=device_id)
         else:
-            sd.play(wav, samplerate=tts.synthesizer.output_sample_rate)
+            sd.play(wav, samplerate=target_sr)
         sd.wait()
         print(f"[TTS-COQUI] Spoke: {text[:50]}...")
+        
+    except ImportError as e:
+        error_msg = str(e).lower()
+        print(f"[TTS-COQUI] Import error: {e}")
+        
+        # Check if it's the gruut phonemizer error
+        if "gruut" in error_msg or "phonemizer" in error_msg:
+            print("[TTS-COQUI] Gruut phonemizer not found. Installing...")
+            print("[TTS-COQUI] Run: pip install gruut gruut-ipa --break-system-packages")
+            print("[TTS-COQUI] Or reinstall TTS: pip install coqui-tts[languages] --break-system-packages")
+        
+        print("[TTS-COQUI] Falling back to espeak...")
+        _speak_espeak_fallback(text)
     except Exception as e:
         print(f"[TTS-COQUI] Error: {e}")
-        _speak_pyttsx3_fallback(text)
-
-
+        import traceback
+        traceback.print_exc()
+        _speak_espeak_fallback(text)
+		
 def _speak_pyttsx3_windows(text: str) -> None:
     result_queue = queue.Queue()
     tmp = _get_temporary()
@@ -441,11 +642,28 @@ def _speak_pyttsx3_fallback(text: str) -> None:
 
 
 def _speak_espeak_fallback(text: str) -> None:
+    """Fallback TTS using espeak (usually pre-installed on Linux)."""
     try:
-        subprocess.run(['espeak', '-v', 'en', text], timeout=30, check=False,
-                      stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-    except:
-        pass
+        # Try espeak-ng first (newer), then espeak
+        for cmd in ['espeak-ng', 'espeak']:
+            try:
+                result = subprocess.run(
+                    [cmd, '-v', 'en', text], 
+                    timeout=60, 
+                    check=False,
+                    stderr=subprocess.PIPE, 
+                    stdout=subprocess.PIPE
+                )
+                if result.returncode == 0:
+                    print(f"[TTS-ESPEAK] Spoke: {text[:50]}...")
+                    return
+            except FileNotFoundError:
+                continue
+        print("[TTS-ESPEAK] espeak not found. Install with: sudo apt install espeak-ng")
+    except subprocess.TimeoutExpired:
+        print("[TTS-ESPEAK] Speech timed out")
+    except Exception as e:
+        print(f"[TTS-ESPEAK] Error: {e}")
 
 
 # =============================================================================
