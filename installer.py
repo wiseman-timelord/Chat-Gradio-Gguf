@@ -246,7 +246,7 @@ BASE_REQ = [
     "pygments==2.17.2",
     "lxml[html_clean]==6.0.2",
     "lxml_html_clean==0.4.3",
-    "pyttsx3==2.99",
+    # pyttsx3 removed - using Coqui TTS only
     "tokenizers==0.22.2",
     "beautifulsoup4>=4.12.0",       # HTML parsing for deep research
     "aiohttp>=3.10.0",              # Async HTTP for parallel page fetches
@@ -503,7 +503,7 @@ def check_existing_tts_voices(accents: list) -> dict:
     
     result = {}
     for accent in accents:
-        if accent not in all_voices or accent == "robot":
+        if accent not in all_voices:
             continue
         
         accent_status = []
@@ -569,47 +569,42 @@ def check_existing_tts_voices(accents: list) -> dict:
 
 def get_tts_engine_for_platform() -> tuple:
     """
-    Determine TTS engine and package version based on OS/Python and user selection.
-    Returns: (engine_name, package_spec, torch_spec) or (engine_name, None, None) for pyttsx3
+    Determine TTS engine and package version based on OS/Python.
+    Returns: (engine_name, package_spec, torch_spec) or (None, None, None) if unsupported
     
-    TTS Options:
-    - "coqui" / "coqui_legacy": Neural TTS with Coqui (American/English accents)
-    - "pyttsx3": Basic system TTS (Robot accent, or fallback for older OS)
+    TTS is always Coqui neural TTS - no robot/pyttsx3 option.
     """
-    global TTS_ACCENTS_SELECTED
     py_minor = sys.version_info.minor
-    
-    # Check if user selected robot accent (basic TTS) or if TTS menu wasn't shown
-    if "robot" in TTS_ACCENTS_SELECTED:
-        return ("pyttsx3", None, None)
-    
-    # For older OS that doesn't show TTS menu, use basic TTS
-    if not should_show_tts_menu():
-        return ("pyttsx3", None, None)
     
     if PLATFORM == "windows":
         win_ver = detect_windows_version() or "unknown"
-        if win_ver == "7":
-            return ("pyttsx3", None, None)
-        if win_ver == "8":
-            return ("pyttsx3", None, None)
+        # Windows 7/8 not supported for Coqui TTS
+        if win_ver in ("7", "8"):
+            print_status("Windows 7/8 not supported for neural TTS", False)
+            return (None, None, None)
         if win_ver == "8.1" and py_minor == 9:
-            return ("coqui_legacy", "TTS==0.13.0", "torch==1.13.1+cpu")
+            return ("coqui_legacy", "TTS==0.13.0", "torch==1.13.1+cpu torchaudio==0.13.1+cpu")
         if py_minor >= 10:
-            return ("coqui", "coqui-tts[languages]>=0.27.3", None)
-        return ("pyttsx3", None, None)
+            # Modern Python needs codec extra for PyTorch 2.9+ audio IO
+            return ("coqui", "coqui-tts[languages,codec]>=0.27.3", "torchaudio")
+        print_status("Python version not supported for neural TTS", False)
+        return (None, None, None)
     else:
+        # Linux - requires [languages] extra for Gruut phonemizer + [codec] for audio
         linux_ver = detect_linux_version()
         try:
             major_ver = int(linux_ver.split('.')[0]) if linux_ver != "unknown" else 24
             if major_ver < 24:
-                return ("pyttsx3", None, None)
+                print_status("Ubuntu < 24 not supported for neural TTS", False)
+                return (None, None, None)
         except (ValueError, AttributeError):
             pass
         
         if py_minor >= 10:
-            return ("coqui", "coqui-tts[languages]>=0.27.3", None)
-        return ("pyttsx3", None, None)
+            # Linux needs languages + codec extras
+            return ("coqui", "coqui-tts[languages,codec]>=0.27.3", "torchaudio")
+        print_status("Python version not supported for neural TTS", False)
+        return (None, None, None)
 
 def download_coqui_voices() -> bool:
     """Download Coqui TTS voices based on selected accents with retry/resume.
@@ -631,8 +626,8 @@ def download_coqui_voices() -> bool:
         ],
     }
     
-    # Build voice list based on selection (exclude robot since it uses pyttsx3)
-    accents = [a for a in TTS_ACCENTS_SELECTED if a != "robot"] if TTS_ACCENTS_SELECTED else ["american", "english"]
+    # Build voice list based on selection
+    accents = TTS_ACCENTS_SELECTED if TTS_ACCENTS_SELECTED else ["american", "english"]
     
     if not accents:
         print_status("No TTS voices selected", False)
@@ -794,8 +789,6 @@ def install_tts_engine() -> bool:
     
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                  ("pip.exe" if PLATFORM == "windows" else "pip"))
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                    ("python.exe" if PLATFORM == "windows" else "python"))
     
     engine_type, tts_package, torch_override = get_tts_engine_for_platform()
     
@@ -805,118 +798,73 @@ def install_tts_engine() -> bool:
         
         # Install sounddevice for audio playback
         if not pip_install_with_retry(pip_exe, "sounddevice==0.5.0", max_retries=5):
-            print_status("sounddevice failed - falling back to pyttsx3", False)
-            engine_type = "pyttsx3"
+            print_status("sounddevice installation failed", False)
+            TTS_ENGINE_INSTALLED = None
+            return False
+        
+        # Install torchaudio (required by Coqui TTS)
+        if torch_override:
+            # Legacy Coqui needs specific torch+torchaudio versions
+            print_status(f"Installing {torch_override} for Coqui...")
+            # torch_override contains both torch and torchaudio for legacy
+            for pkg in torch_override.split():
+                if not pip_install_with_retry(pip_exe, pkg,
+                                             ["--index-url", "https://download.pytorch.org/whl/cpu"],
+                                             max_retries=5):
+                    print_status(f"Failed to install {pkg}", False)
+                    TTS_ENGINE_INSTALLED = None
+                    return False
         else:
-            # For legacy Coqui, install specific torch first
-            if torch_override:
-                print_status(f"Installing {torch_override} for legacy Coqui...")
-                if not pip_install_with_retry(pip_exe, torch_override,
-                                             ["--index-url", "https://download.pytorch.org/whl/cpu"],
-                                             max_retries=5):
-                    print_status("Legacy torch failed - falling back to pyttsx3", False)
-                    engine_type = "pyttsx3"
-            
-            if engine_type != "pyttsx3":
-                # Install torchaudio from PyTorch index
-                # Required by Coqui TTS but not always declared as dependency
-                print_status("Installing torchaudio for Coqui TTS...")
-                if not pip_install_with_retry(pip_exe, "torchaudio",
-                                             ["--index-url", "https://download.pytorch.org/whl/cpu"],
-                                             max_retries=5):
-                    print_status("torchaudio failed - falling back to pyttsx3", False)
-                    engine_type = "pyttsx3"
-            
-            if engine_type != "pyttsx3":
-                # Check PyTorch version to determine if torchcodec is needed
-                # torchcodec is required for PyTorch 2.9+ audio I/O
-                try:
-                    result = subprocess.run(
-                        [python_exe, "-c", "import torch; print(torch.__version__)"],
-                        capture_output=True, text=True, timeout=30
-                    )
-                    torch_version = result.stdout.strip()
-                    # Extract major.minor version (e.g., "2.10.0+cpu" -> "2.10")
-                    version_match = re.match(r'(\d+)\.(\d+)', torch_version)
-                    if version_match:
-                        major = int(version_match.group(1))
-                        minor = int(version_match.group(2))
-                        needs_torchcodec = (major > 2) or (major == 2 and minor >= 9)
-                    else:
-                        needs_torchcodec = True  # Assume needed if can't parse
-                except Exception:
-                    needs_torchcodec = True  # Assume needed on error
-                
-                if needs_torchcodec:
-                    # Install torchcodec from PyPI (not from PyTorch index)
-                    # Required for PyTorch 2.9+ audio I/O in torchaudio
-                    print_status("Installing torchcodec for PyTorch 2.9+ audio support...")
-                    if not pip_install_with_retry(pip_exe, "torchcodec", max_retries=5):
-                        print_status("torchcodec failed - falling back to pyttsx3", False)
-                        engine_type = "pyttsx3"
-            
-            if engine_type != "pyttsx3":
-                # Install Coqui TTS with progress
-                print(f"  Downloading Coqui TTS (this may take several minutes)...")
-                try:
-                    process = subprocess.Popen(
-                        [pip_exe, "install", tts_package, "--progress-bar", "on"],
-                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True, bufsize=1
-                    )
-                    
-                    for line in process.stdout:
-                        line = line.strip()
-                        if line:
-                            if "Downloading" in line or "%" in line or "Installing" in line:
-                                print(f"\r  {line[:75]:<75}", end='', flush=True)
-                            elif "Successfully" in line:
-                                print(f"\n  {line}")
-                    
-                    process.wait(timeout=1800)
-                    print()
-                    
-                    if process.returncode == 0:
-                        print_status(f"Coqui TTS installed ({quality_label})")
-                        
-                        # Explicitly install gruut phonemizer
-                        # The [languages] extra sometimes doesn't install gruut correctly
-                        print_status("Installing Gruut phonemizer for text processing...")
-                        gruut_success = pip_install_with_retry(pip_exe, "gruut>=2.4.0", max_retries=3)
-                        if not gruut_success:
-                            # Try individual gruut packages
-                            pip_install_with_retry(pip_exe, "gruut-ipa>=0.1.0", max_retries=2)
-                            pip_install_with_retry(pip_exe, "gruut-lang-en>=2.0.0", max_retries=2)
-                        
-                        TTS_ENGINE_INSTALLED = "coqui"
-                        
-                        # Download default voices
-                        download_coqui_voices()
-                        return True
-                    else:
-                        print_status("Coqui TTS install failed - falling back to pyttsx3", False)
-                        engine_type = "pyttsx3"
-                        
-                except subprocess.TimeoutExpired:
-                    print_status("Coqui TTS install timed out - falling back to pyttsx3", False)
-                    engine_type = "pyttsx3"
-                except Exception as e:
-                    print_status(f"Coqui TTS install error: {e} - falling back to pyttsx3", False)
-                    engine_type = "pyttsx3"
-    
-    if engine_type == "pyttsx3":
-        print_status("Installing pyttsx3 TTS (system voices)...")
+            # Modern Coqui - install torchaudio separately
+            print_status("Installing torchaudio...")
+            if not pip_install_with_retry(pip_exe, "torchaudio", max_retries=5):
+                print_status("torchaudio installation failed", False)
+                TTS_ENGINE_INSTALLED = None
+                return False
+        
+        # Install Coqui TTS with progress
+        print(f"  Downloading Coqui TTS (this may take several minutes)...")
         try:
-            result = subprocess.run([python_exe, "-c", "import pyttsx3; print('OK')"],
-                                   capture_output=True, text=True, timeout=30)
-            if result.returncode == 0:
-                print_status("pyttsx3 TTS ready (system voices)")
-                TTS_ENGINE_INSTALLED = "pyttsx3"
+            process = subprocess.Popen(
+                [pip_exe, "install", tts_package, "--progress-bar", "on"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1
+            )
+            
+            for line in process.stdout:
+                line = line.strip()
+                if line:
+                    if "Downloading" in line or "%" in line or "Installing" in line:
+                        print(f"\r  {line[:75]:<75}", end='', flush=True)
+                    elif "Successfully" in line:
+                        print(f"\n  {line}")
+            
+            process.wait(timeout=1800)
+            print()
+            
+            if process.returncode == 0:
+                print_status(f"Coqui TTS installed ({quality_label})")
+                TTS_ENGINE_INSTALLED = "coqui"
+                
+                # Download default voices
+                download_coqui_voices()
                 return True
+            else:
+                print_status("Coqui TTS install failed", False)
+                TTS_ENGINE_INSTALLED = None
+                return False
+                
+        except subprocess.TimeoutExpired:
+            print_status("Coqui TTS install timed out", False)
+            TTS_ENGINE_INSTALLED = None
+            return False
         except Exception as e:
-            print_status(f"pyttsx3 verification failed: {e}", False)
+            print_status(f"Coqui TTS install error: {e}", False)
+            TTS_ENGINE_INSTALLED = None
+            return False
     
-    print_status("WARNING: No TTS engine available", False)
+    # No supported TTS engine
+    print_status("TTS not available for this platform", False)
     TTS_ENGINE_INSTALLED = None
     return False
 
@@ -1511,7 +1459,7 @@ def create_config(backend: str, embedding_model: str) -> None:
             "vulkan_enabled": vulkan_enabled,
             # TTS user settings
             "tts_sound_device": -1,
-            "tts_sample_rate": 44100,
+            "tts_sample_rate": 22050,
             "tts_voice": None,
         }
     }
@@ -2819,14 +2767,13 @@ def select_backend_and_embedding():
         print("TTS Options...")
         print("   d) American Accent")
         print("   e) English Accent")
-        print("   f) Robot Accent (Smaller Install)")
         print()
     
     print("=" * width)
     
     max_backend = len(backend_opts)
     if show_tts:
-        prompt = f"Selection; Backend=1-{max_backend}, Embed=a-c, TTS=d/e/f, Abandon=A; (e.g. 2be): "
+        prompt = f"Selection; Backend=1-{max_backend}, Embed=a-c, TTS=d/e, Abandon=A; (e.g. 2bd): "
     else:
         prompt = f"Selection; Backend=1-{max_backend}, Embed=a-c, Abandon=A; (e.g. 2b): "
     
@@ -2866,21 +2813,19 @@ def select_backend_and_embedding():
                             TTS_ACCENTS_SELECTED.append("american")
                         if 'e' in tts_letters:
                             TTS_ACCENTS_SELECTED.append("english")
-                        if 'f' in tts_letters:
-                            TTS_ACCENTS_SELECTED.append("robot")
                         # Default to both american+english if none selected (and TTS menu shown)
                         if not TTS_ACCENTS_SELECTED:
                             TTS_ACCENTS_SELECTED = ["american", "english"]
                     else:
-                        # Older OS - auto-select robot (pyttsx3)
-                        TTS_ACCENTS_SELECTED = ["robot"]
+                        # Older OS without TTS menu - still default to american+english
+                        TTS_ACCENTS_SELECTED = ["american", "english"]
                     
                     time.sleep(1)
                     return selected_backend, selected_model
         
         if show_tts:
-            print("Invalid selection. Please enter a valid combination (e.g. 2bde or 2bf).")
-            prompt = f"Selection; Backend 1-{max_backend}, Embed a-c, TTS d/e/f (e.g. 2bde), Abandon = A: "
+            print("Invalid selection. Please enter a valid combination (e.g. 2bd or 2bde).")
+            prompt = f"Selection; Backend 1-{max_backend}, Embed a-c, TTS d/e (e.g. 2bd), Abandon = A: "
         else:
             print("Invalid selection. Please enter a valid combination (e.g. 2b).")
             prompt = f"Selection; Backend 1-{max_backend}, Embed a-c (e.g. 2b), Abandon = A: "

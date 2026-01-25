@@ -121,14 +121,6 @@ def shutdown_platform():
             pythoncom.CoUninitialize()
         except:
             pass
-    elif temporary.PLATFORM == "linux":
-        try:
-            from scripts import utility
-            if hasattr(utility, 'tts_engine'):
-                utility.tts_engine.stop()
-                del utility.tts_engine
-        except:
-            pass
     print(f"Cleaned up {temporary.PLATFORM} resources")
 
 def setup_directories():
@@ -234,17 +226,9 @@ def main():
         temporary.set_status("Config loaded")
         print_configuration()
         
-        # NEW: Pre-load auxiliary models to avoid memory conflicts
+        # Pre-load auxiliary models to avoid memory conflicts
         print("\n[INIT] Pre-loading auxiliary models...")
         preload_auxiliary_models()
-
-        # Initialize TTS
-        print("\n[INIT] Initializing TTS...")
-        from scripts.tools import initialize_tts
-        if initialize_tts():
-            print("[INIT] OK TTS ready")
-        else:
-            print("[INIT] WARN TTS unavailable")
         
         # Launch interface
         print("\nLaunching Gradio Interface...")
