@@ -179,17 +179,17 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Installation for option 2a on Windows 8.1 (v0.98.0)..
+- Installation for option 2b on Windows 8.1 (v1.00.00-b)..
 <details>
     
     ===============================================================================
         Chat-Gradio-Gguf - Installation
     ===============================================================================
     
-    Installing Chat-Gradio-Gguf on Windows 8.1 with Python 3.11 using install route
-    Download Vulkan Bin / Default CPU Wheel with, Llama.Cpp b7688 and Gradio 3.50.2
-    and Qt-Web v5
-    Embedding model: BAAI/bge-small-en-v1.5
+    Installing Chat-Gradio-Gguf on Windows 8.1 with Python 3.11
+      Route: Download Vulkan Bin / Default CPU Wheel
+      Llama.Cpp b7688, Gradio 3.50.2, Qt-Web v5
+    Embedding model: BAAI/bge-base-en-v1.5
     [V] Verified directory: data
     [V] Verified directory: scripts
     [V] Verified directory: models
@@ -198,41 +198,42 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     [V] Verified directory: data/vectors
     [V] Verified directory: data/embedding_cache
     [V] Using project temp path: C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-
-    0.97.3\data\temp
+    1.00.0\data\temp
     [V] System information file created
     [V] Installing Python dependencies...
-    [V] Installing base packages...
-      [1/19] Installing numpy<2... OK
-      [2/19] Installing requests... OK
-      [3/19] Installing gradio... OK
-      [4/19] Installing pyperclip... OK
-      [5/19] Installing spacy... OK
-      [6/19] Installing psutil... OK
-      [7/19] Installing ddgs... OK
-      [8/19] Installing newspaper3k... OK
-      [9/19] Installing langchain-community... OK
-      [10/19] Installing faiss-cpu... OK
-      [11/19] Installing langchain... OK
-      [12/19] Installing pygments... OK
-      [13/19] Installing lxml... OK
-      [14/19] Installing lxml_html_clean... OK
-      [15/19] Installing pyttsx3... OK
-      [16/19] Installing tokenizers... OK
-      [17/19] Installing pywin32... OK
-      [18/19] Installing tk... OK
-      [19/19] Installing pythonnet... OK
+    [V] Installing base packages (Gradio 3.50.2)...
+      [1/20] Installing numpy<2... OK
+      [2/20] Installing requests... OK
+      [3/20] Installing pyperclip... OK
+      [4/20] Installing spacy... OK
+      [5/20] Installing psutil... OK
+      [6/20] Installing ddgs... OK
+      [7/20] Installing langchain-community... OK
+      [8/20] Installing faiss-cpu... OK
+      [9/20] Installing langchain... OK
+      [10/20] Installing pygments... OK
+      [11/20] Installing lxml... OK
+      [12/20] Installing lxml_html_clean... OK
+      [13/20] Installing tokenizers... OK
+      [14/20] Installing beautifulsoup4... OK
+      [15/20] Installing aiohttp... OK
+      [16/20] Installing pywin32... OK
+      [17/20] Installing tk... OK
+      [18/20] Installing pythonnet... OK
+      [19/20] Installing newspaper4k... OK
+      [20/20] Installing gradio... OK
     [V] Base packages installed
     [V] Installing embedding backend (torch + sentence-transformers)...
-    [V] Installing PyTorch 2.2.2 (CPU-only)...
+    [V] Installing PyTorch 2.2.2 (CPU-only) for Python 3.11...
     [V] PyTorch 2.2.2 (CPU) installed
-    [V] Installing transformers 4.41.2...
+    [V] Installing transformers==4.41.2...
     [V] transformers installed
-    [V] Installing sentence-transformers 3.0.1...
+    [V] Installing sentence-transformers==3.0.1...
     [V] sentence-transformers installed
     [V] Embedding backend verified
     [V] Installing Qt WebEngine for custom browser...
-    [V] Windows 7-8.1 - installing PyQt5 + Qt5 WebEngine...
-    [V] Qt WebEngine installed
+    [V] Windows 8.1 - installing PyQt5 + Qt5 WebEngine...
+    [V] Qt5 WebEngine installed
     [V] Installing pre-built llama-cpp-python (CPU)...
     [V] Pre-built wheel installed
     [V] Python dependencies installed successfully
@@ -241,15 +242,15 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     [V]   Installed python-docx
     [V]   Installed openpyxl
     [V]   Installed python-pptx
-    [V] Initializing embedding cache for BAAI/bge-small-en-v1.5...
+    [V] Initializing embedding cache for BAAI/bge-base-en-v1.5...
     Embedding Initialization Output...
         Importing torch...
         torch version: 2.2.2+cpu
         CUDA available: False (should be False)
         Importing sentence_transformers...
-        Loading model: BAAI/bge-small-en-v1.5
+        Loading model: BAAI/bge-base-en-v1.5
         Testing embedding...
-        SUCCESS: Model loaded, dimension: 384
+        SUCCESS: Model loaded, dimension: 768
     [V] Embedding cache initialized
     [V] Downloading spaCy language model...
     Downloading spaCy model: [==============================] 100% (12.2MB/12.2MB) -
