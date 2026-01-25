@@ -16,10 +16,9 @@ from .temporary import (
 )
 from . import temporary
 
-# Import TTS and search functions from tools module
+# Import search functions from tools module
 # NOTE: hybrid_search is DDG-based, web_search is comprehensive multi-source
 from scripts.tools import (
-    speak_text, cleanup_tts_resources, initialize_tts,
     hybrid_search, format_search_status_for_chat,
     web_search, format_web_search_status_for_chat
 )

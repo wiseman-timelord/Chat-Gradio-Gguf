@@ -62,10 +62,6 @@ DEFAULT_CONFIG = {
         "cpu_threads": None,
         "bleep_on_events": False,
         "use_python_bindings": True,
-        # TTS user settings (3 keys only)
-        "tts_sound_device": -1,
-        "tts_sample_rate": 44100,
-        "tts_voice": None,
     }
 }
 
@@ -98,14 +94,12 @@ def load_system_ini():
         temporary.GRADIO_VERSION = system.get('gradio_version', '3.50.2')
         temporary.LLAMA_CLI_PATH = system.get('llama_cli_path', None)
         temporary.LLAMA_BIN_PATH = system.get('llama_bin_path', None)
-        temporary.TTS_ENGINE = system.get('tts_engine', None)
         
         print(f"[INI] Platform: {temporary.PLATFORM}")
         print(f"[INI] Backend: {temporary.BACKEND_TYPE}")
         print(f"[INI] Vulkan: {temporary.VULKAN_AVAILABLE}")
         print(f"[INI] Embedding Model: {temporary.EMBEDDING_MODEL_NAME}")
         print(f"[INI] Gradio Version: {temporary.GRADIO_VERSION}")
-        print(f"[INI] TTS Engine: {temporary.TTS_ENGINE}")
         
         temporary.OS_VERSION = system.get('os_version', 'unknown')
         print(f"[INI] OS Version: {temporary.OS_VERSION}")
@@ -150,8 +144,7 @@ def load_config():
         "repeat_penalty", "selected_gpu", "selected_cpu", "mmap", "mlock",
         "n_batch", "dynamic_gpu_layers", "max_history_slots", "max_attach_slots",
         "session_log_height", "show_think_phase", "print_raw_output", "cpu_threads",
-        "bleep_on_events", "use_python_bindings", "layer_allocation_mode",
-        "tts_sound_device", "tts_sample_rate", "tts_voice"
+        "bleep_on_events", "use_python_bindings", "layer_allocation_mode"
     ]
     
     missing_keys = [k for k in required_keys if k not in model_settings]
@@ -194,18 +187,6 @@ def load_config():
     temporary.BLEEP_ON_EVENTS = model_settings["bleep_on_events"]
     temporary.USE_PYTHON_BINDINGS = model_settings["use_python_bindings"]
     print(f"[CONFIG] UI: History={temporary.MAX_HISTORY_SLOTS}, Attach={temporary.MAX_ATTACH_SLOTS}, Height={temporary.SESSION_LOG_HEIGHT}")
-
-    # Load TTS user settings
-    temporary.TTS_SOUND_DEVICE = model_settings["tts_sound_device"]
-    temporary.TTS_SAMPLE_RATE = model_settings["tts_sample_rate"]
-    temporary.TTS_VOICE = model_settings["tts_voice"]
-    
-    # Validate TTS sample rate (must be 44100 or 48000)
-    if temporary.TTS_SAMPLE_RATE not in [44100, 48000]:
-        print(f"[CONFIG] Invalid TTS sample rate {temporary.TTS_SAMPLE_RATE}, defaulting to 44100")
-        temporary.TTS_SAMPLE_RATE = 44100
-    
-    print(f"[CONFIG] TTS: Device={temporary.TTS_SOUND_DEVICE}, Rate={temporary.TTS_SAMPLE_RATE}, Voice={temporary.TTS_VOICE}")
 
     # Load hardware selection settings
     temporary.SELECTED_GPU = model_settings["selected_gpu"]
@@ -272,11 +253,6 @@ def save_config():
     if isinstance(cpu_label, (int, float)):
         cpu_label = "Auto-Select"
 
-    # Validate TTS sample rate before saving
-    tts_sample_rate = getattr(temporary, 'TTS_SAMPLE_RATE', 44100)
-    if tts_sample_rate not in [44100, 48000]:
-        tts_sample_rate = 44100
-
     config = {
         "model_settings": {
             "model_dir": temporary.MODEL_FOLDER,
@@ -301,10 +277,6 @@ def save_config():
             "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "layer_allocation_mode": getattr(temporary, 'LAYER_ALLOCATION_MODE', 'SRAM_ONLY'),
             "vulkan_enabled": getattr(temporary, 'VULKAN_AVAILABLE', False),
-            # TTS user settings (3 keys only)
-            "tts_sound_device": getattr(temporary, 'TTS_SOUND_DEVICE', -1),
-            "tts_sample_rate": tts_sample_rate,
-            "tts_voice": getattr(temporary, 'TTS_VOICE', None),
         }
     }
 
@@ -314,8 +286,6 @@ def save_config():
     print(f"[SAVE]   Model folder: {config['model_settings']['model_dir']}")
     print(f"[SAVE]   Model name: {config['model_settings']['model_name']}")
     print(f"[SAVE]   Selected CPU: {config['model_settings']['selected_cpu']}")
-    print(f"[SAVE]   TTS voice: {config['model_settings']['tts_voice']}")
-    print(f"[SAVE]   TTS sample rate: {config['model_settings']['tts_sample_rate']}")
     
     with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=4, ensure_ascii=False)
@@ -330,16 +300,12 @@ def update_setting(key, value):
     
     try:
         # Convert value to appropriate type
-        if key in {"context_size", "vram_size", "n_gpu_layers", "n_batch", "max_history_slots", "max_attach_slots", "session_log_height", "cpu_threads", "tts_sound_device", "tts_sample_rate"}:
+        if key in {"context_size", "vram_size", "n_gpu_layers", "n_batch", "max_history_slots", "max_attach_slots", "session_log_height", "cpu_threads"}:
             value = int(value)
         elif key in {"temperature", "repeat_penalty"}:
             value = float(value)
         elif key in {"mlock", "dynamic_gpu_layers"}:
             value = bool(value)
-        
-        # Validate TTS sample rate
-        if key == "tts_sample_rate" and value not in [44100, 48000]:
-            value = 44100
         
         # Set the attribute
         attr_name = key.upper() if hasattr(temporary, key.upper()) else key

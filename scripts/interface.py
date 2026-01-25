@@ -30,14 +30,14 @@ from scripts.utility import (
     get_saved_sessions, get_cpu_info,
     load_session_history, save_session_history,
     get_available_gpus, filter_operational_content, process_files,
-    summarize_session
+    summarize_session, beep
 )
-from scripts.utility import speak_text, beep
-# OR directly:
-from scripts.tools import speak_text
 from scripts.models import (
     get_response_stream, get_available_models, unload_models, get_model_settings, inspect_model, load_models
 )
+
+# Dummy TTS function (TTS feature removed - stub for compatibility)
+def speak_text(text): pass
 
 # ============================================================================
 # GRADIO 3.x COMPATIBILITY LAYER
@@ -745,7 +745,7 @@ def delete_all_sessions():
 def handle_customization_save(
     max_hist, height, max_att, show_think, print_raw, bleep,
     ctx, batch, temp, repeat, vram, gpu, cpu, cpu_threads, model, model_path,
-    layer_allocation_mode=None, sound_device=None, sample_rate=None, tts_voice=None
+    layer_allocation_mode=None
 ):
     """Save ALL configuration settings to both temporary globals and persistent.json."""
     try:
@@ -780,29 +780,6 @@ def handle_customization_save(
         if layer_allocation_mode is not None and temporary.VULKAN_AVAILABLE:
             temporary.LAYER_ALLOCATION_MODE = layer_allocation_mode
         
-        # TTS settings
-        if sound_device is not None:
-            # Convert device name to ID: "Default" = -1, else find index
-            from scripts.tools import get_sound_device_names
-            devices = get_sound_device_names()
-            if sound_device == "Default" or sound_device not in devices:
-                temporary.TTS_SOUND_DEVICE = -1
-            else:
-                try:
-                    temporary.TTS_SOUND_DEVICE = devices.index(sound_device) - 1  # -1 because "Default" is at index 0
-                except ValueError:
-                    temporary.TTS_SOUND_DEVICE = -1
-        
-        if sample_rate is not None:
-            rate = int(sample_rate)
-            if rate in [44100, 48000]:
-                temporary.TTS_SAMPLE_RATE = rate
-            else:
-                temporary.TTS_SAMPLE_RATE = 44100
-        
-        if tts_voice is not None:
-            temporary.TTS_VOICE = tts_voice
-        
         # Save to persistent.json
         from scripts.settings import save_config
         save_config()
@@ -810,7 +787,6 @@ def handle_customization_save(
         print(f"[SAVE] Settings saved: CTX={temporary.CONTEXT_SIZE}, Batch={temporary.BATCH_SIZE}, "
               f"Temp={temporary.TEMPERATURE}, VRAM={temporary.VRAM_SIZE}, GPU={temporary.SELECTED_GPU}, "
               f"CPU={temporary.SELECTED_CPU}, Threads={temporary.CPU_THREADS}")
-        print(f"[SAVE] TTS: Device={temporary.TTS_SOUND_DEVICE}, Rate={temporary.TTS_SAMPLE_RATE}, Voice={temporary.TTS_VOICE}")
         
         # Return appropriate message
         if ctx_changed:
@@ -846,15 +822,14 @@ def update_backend_ui():
     ]
 
 def build_progress_html(step: int, ddg_search_enabled: bool = False, 
-                        web_search_enabled: bool = False, speech_enabled: bool = False):
+                        web_search_enabled: bool = False):
     """
     Build dynamic progress indicator HTML based on enabled features.
     
     Cases:
-    1. Vanilla (no search, no speech): 9 steps (0-8)
+    1. Vanilla (no search): 9 steps (0-8)
     2. DDG hybrid search: 14 steps (adds 4 hybrid phases + Inject Context)
     3. Web search: 14 steps (adds 4 web search phases + Inject Context)
-    4. Speech: adds "Generating TTS" at end
     
     Note: DDG and Web search are mutually exclusive.
     """
@@ -890,10 +865,6 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False,
         "Split Thinking",    # 7 or 12
         "Format Response"    # 8 or 13
     ])
-    
-    # Add TTS phase at the end if speech is enabled
-    if speech_enabled:
-        phases.append("Generating TTS")
     
     # Build HTML segments
     segments = []
@@ -1006,7 +977,7 @@ def conversation_interface(
     user_input, session_tuples, session_messages, loaded_files,
     is_reasoning_model, cancel_flag, ddg_search_enabled, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
-    speech_enabled, has_ai_response_state
+    has_ai_response_state
 ):
     """
     Main conversation handler - Gradio 3.x compatible.
@@ -1020,7 +991,7 @@ def conversation_interface(
     from scripts import temporary, utility
     from scripts.models import get_model_settings, get_response_stream
     from scripts.temporary import context_injector
-    from scripts.utility import read_file_content, filter_operational_content, speak_text
+    from scripts.utility import read_file_content, filter_operational_content
     from pathlib import Path
     import time
     import re
@@ -1063,7 +1034,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0, ddg_search_enabled, web_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(0, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1098,7 +1069,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, ddg_search_enabled, web_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1132,7 +1103,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, ddg_search_enabled, web_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1146,7 +1117,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, ddg_search_enabled, web_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1167,7 +1138,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1256,7 +1227,7 @@ def conversation_interface(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, ddg_search_enabled, web_search_enabled, speech_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         gr.update(), gr.update(), gr.update()
@@ -1269,7 +1240,7 @@ def conversation_interface(
         for phase_idx in [6, 7, 8, 9, 10]:
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, web_search_enabled, speech_enabled)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, web_search_enabled)),
                 *update_action_buttons("input_submitted", has_ai_response),
                 cancel_flag, loaded_files, "input_submitted",
                 gr.update(), gr.update(), gr.update()
@@ -1294,7 +1265,7 @@ def conversation_interface(
     try:
         yield (
             get_chatbot_output(session_tuples, session_messages), session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled, speech_enabled)),
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled)),
             *update_action_buttons("generating_response", has_ai_response),
             cancel_flag, loaded_files, "generating_response",
             gr.update(), gr.update(), gr.update()
@@ -1329,7 +1300,7 @@ def conversation_interface(
             
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled, speech_enabled)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled)),
                 *update_action_buttons("generating_response", has_ai_response),
                 cancel_flag, loaded_files, "generating_response",
                 gr.update(), gr.update(), gr.update()
@@ -1372,47 +1343,14 @@ def conversation_interface(
     except:
         pass
 
-    # TTS: Speak response if enabled
-    if speech_enabled and accumulated_response:
-        # Calculate TTS phase index based on search mode
-        # Hybrid search: Base(6) + Hybrid(4) + Generate(3) = 13
-        # No search: Base(6) + Generate(3) = 9
-        if ddg_search_enabled:
-            tts_phase = 13
-        else:
-            tts_phase = 9
-        
-        # Show "Generating TTS" phase in progress
-        yield (
-            get_chatbot_output(session_tuples, session_messages), session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(tts_phase, ddg_search_enabled, web_search_enabled, speech_enabled)),
-            *update_action_buttons("speaking", True),
-            cancel_flag, loaded_files, "speaking",
-            gr.update(), gr.update(), gr.update()
-        )
-        
-        try:
-            # Clean response for TTS - remove thinking phases and special chars
-            tts_text = filter_operational_content(accumulated_response)
-            # Keep only letters, spaces, commas, and periods
-            tts_text = re.sub(r'[^a-zA-Z\s,.]', ' ', tts_text)
-            # Collapse multiple spaces
-            tts_text = re.sub(r'\s+', ' ', tts_text).strip()
-            if tts_text:
-                print(f"[TTS] Speaking {len(tts_text)} chars...")
-                speak_text(tts_text)
-        except Exception as e:
-            print(f"[TTS] Error: {e}")
-
     
     # FIXED: Clear attached files after successful response
     
     cleared_files = []  # Empty the attached files list
     temporary.session_attached_files = []  # Also clear the global tracker
     
-    # Beep to notify user response is complete (unless TTS is active)
-    if not speech_enabled:
-        beep()
+    # Beep to notify user response is complete
+    beep()
     
     # Final yield - with cleared attached_files
     yield (
@@ -1477,12 +1415,6 @@ def toggle_web_search(current_web_state, current_ddg_state):
         gr.update(variant=ddg_variant, value=ddg_label),        # ddg_search button
         gr.update(variant=ddg_variant)                          # ddg_search_collapsed button
     )
-
-def toggle_speech(current_state):
-    new_state = not current_state
-    variant = "primary" if new_state else "secondary"
-    label = "🔊 Speech Out ON" if new_state else "🔊 Speech Out"
-    return new_state, gr.update(variant=variant, value=label), gr.update(variant=variant)
 
 # ============================================================================
 # MAIN INTERFACE LAUNCH
@@ -1570,7 +1502,6 @@ def launch_interface():
             model_settings=gr.State({}),
             ddg_search_enabled=gr.State(False),
             web_search_enabled=gr.State(False),
-            speech_enabled=gr.State(False),
             has_ai_response=gr.State(False)
         )
         
@@ -1658,13 +1589,11 @@ def launch_interface():
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["ddg_search"] = gr.Button("🔍 DDG Search", variant="secondary", scale=1)
                             action_buttons["web_search"] = gr.Button("🌐 Web Search", variant="secondary", scale=1)
-                            action_buttons["speech"] = gr.Button("🔊 Speech Out", variant="secondary", scale=1)
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as right_column_collapsed:
                         toggle_button_right_collapsed = gr.Button("<->", variant="secondary")
                         action_buttons["ddg_search_collapsed"] = gr.Button("🔍", variant="secondary")
                         action_buttons["web_search_collapsed"] = gr.Button("🌐", variant="secondary")
-                        action_buttons["speech_collapsed"] = gr.Button("🔊", variant="secondary")
 
                 with gr.Row():
                     interaction_global_status = gr.Textbox(
@@ -1749,47 +1678,6 @@ def launch_interface():
                             interactive=True,
                             scale=5
                         )
-
-                    # Sound Hardware (bottom of Hardware section, visible only for Coqui TTS)
-                    from scripts.tools import (
-                        get_sound_device_names, get_sample_rate_options,
-                        get_voice_options_for_engine, get_tts_config_visibility, 
-                        get_tts_engine_name
-                    )
-                    
-                    tts_vis = get_tts_config_visibility()
-                    
-                    with gr.Row(elem_classes=["clean-elements"], visible=tts_vis.get("sound_device", False)) as sound_hw_row:
-                        # Get sound device choices and determine initial value
-                        sound_devices = get_sound_device_names()
-                        saved_device_id = getattr(temporary, 'TTS_SOUND_DEVICE', -1)
-                        # Map device ID to name: -1 = "Default", else find by index
-                        if saved_device_id == -1 or saved_device_id >= len(sound_devices):
-                            sound_device_value = "Default"
-                        else:
-                            sound_device_value = sound_devices[0]  # "Default" is always first
-                        
-                        config_components["sound_device"] = gr.Dropdown(
-                            choices=sound_devices,
-                            label="Sound Card",
-                            value=sound_device_value,
-                            interactive=True,
-                            scale=5
-                        )
-                        
-                        # Get sample rate choices and validate saved value
-                        sample_rates = get_sample_rate_options()
-                        saved_sample_rate = getattr(temporary, 'TTS_SAMPLE_RATE', 44100)
-                        if saved_sample_rate not in sample_rates:
-                            saved_sample_rate = sample_rates[0] if sample_rates else 44100
-                        
-                        config_components["sample_rate"] = gr.Dropdown(
-                            choices=sample_rates,
-                            label="Sample Rate",
-                            value=saved_sample_rate,
-                            interactive=True,
-                            scale=5
-                        )
                     
                     gr.Markdown("**Model**")
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -1827,29 +1715,6 @@ def launch_interface():
                         browse = gr.Button("📁 Browse Folders", variant="secondary")
                         config_components["load"] = gr.Button("💾 Load Model", variant="primary")
                         config_components["unload"] = gr.Button("🗑️ Unload Model", variant="stop")
-
-                    gr.Markdown("**Text-to-Speech**")
-                    with gr.Row(elem_classes=["clean-elements"], visible=tts_vis.get("voice_select", False)) as tts_row:
-                        tts_engine_display = gr.Textbox(
-                            label="TTS Engine",
-                            value=get_tts_engine_name(),
-                            interactive=False,
-                            scale=5
-                        )
-                        voices = get_voice_options_for_engine()
-                        saved_voice = getattr(temporary, 'TTS_VOICE', None)
-                        if saved_voice and saved_voice in voices:
-                            voice_value = saved_voice
-                        else:
-                            voice_value = voices[0] if voices else "Default"
-                        
-                        config_components["tts_voice"] = gr.Dropdown(
-                            choices=voices,
-                            label="Voice Type",
-                            value=voice_value,
-                            interactive=True,
-                            scale=5
-                        )
                     
                     gr.Markdown("**Program**")
                     with gr.Row(elem_classes=["clean-elements"]):
@@ -2001,19 +1866,6 @@ def launch_interface():
             ]
         )
 
-        # Speech toggle (unchanged)
-        action_buttons["speech"].click(
-            fn=toggle_speech,
-            inputs=[states["speech_enabled"]],
-            outputs=[states["speech_enabled"], action_buttons["speech"], action_buttons["speech_collapsed"]]
-        )
-        
-        action_buttons["speech_collapsed"].click(
-            fn=toggle_speech,
-            inputs=[states["speech_enabled"]],
-            outputs=[states["speech_enabled"], action_buttons["speech"], action_buttons["speech_collapsed"]]
-        )
-
         # Normal (visible) Start New Session button
         start_new_session_btn.click(
             fn=start_new_session,
@@ -2128,12 +1980,12 @@ def launch_interface():
         def handle_save_wrapper(
             max_hist, height, max_att, show_think, print_raw, bleep,
             ctx, batch, temp, repeat, vram, gpu, cpu, cpu_threads, model, model_path,
-            layer_mode, sound_device, sample_rate, tts_voice
+            layer_mode
         ):
             result = handle_customization_save(
                 max_hist, height, max_att, show_think, print_raw, bleep,
                 ctx, batch, temp, repeat, vram, gpu, cpu, cpu_threads, model, model_path,
-                layer_mode, sound_device, sample_rate, tts_voice
+                layer_mode
             )
             return result, result
         
@@ -2178,11 +2030,7 @@ def launch_interface():
                 config_components["cpu_threads"],
                 config_components["model"],
                 config_components["model_path"],
-                layer_allocation_radio,
-                # TTS settings
-                config_components["sound_device"],
-                config_components["sample_rate"],
-                config_components["tts_voice"]
+                layer_allocation_radio
             ],
             outputs=[interaction_global_status, config_global_status]
         ).then(
@@ -2239,7 +2087,6 @@ def launch_interface():
                 states["interaction_phase"],
                 states["llm"],
                 states["models_loaded"],
-                states["speech_enabled"],
                 states["has_ai_response"]
             ],
             outputs=[

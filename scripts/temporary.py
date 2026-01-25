@@ -41,8 +41,6 @@ REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 HISTORY_SLOT_OPTIONS = [4, 8, 10, 12, 16]
 ATTACH_SLOT_OPTIONS = [2, 4, 6, 8, 10]
 SESSION_LOG_HEIGHT_OPTIONS = [250, 450, 550, 600, 625, 650, 700, 800, 1000, 1400]
-COQUI_DEFAULT_VOICES = {"english_male": "tts_models/en/ljspeech/tacotron2-DDC", "english_female": "tts_models/en/ljspeech/glow-tts", "american_male": "tts_models/en/ljspeech/speedy-speech", "american_female": "tts_models/en/ljspeech/vits"}
-SAMPLE_RATES = [44100, 48000]
 
 # General Constants/Variables/Lists/Maps/Arrays
 TEMP_DIR = "data/temp"
@@ -60,7 +58,6 @@ STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
-SPEECH_ENABLED = False
 LLAMA_CLI_PATH = None  # will be set from constants.ini
 LLAMA_BIN_PATH = None  # will be set from constants.ini
 global_status = None
@@ -80,12 +77,6 @@ SELECTED_CPU = None
 
 # Arrays
 session_attached_files = []
-
-# TTS Configuration
-TTS_ENGINE = None              # "coqui" or "pyttsx3" (from INI, set at install)
-TTS_SOUND_DEVICE = -1          # -1 = default, or device ID (JSON)
-TTS_SAMPLE_RATE = 44100        # 44100, or 48000 (JSON)
-TTS_VOICE = None               # Selected voice name (JSON)
 
 # Search Configuration - DDG Search and Web Search are mutually exclusive
 DDG_SEARCH_ENABLED = False     # Hybrid DDG search (snippets + deep fetch)
@@ -202,61 +193,45 @@ class ContextInjector:
             from sentence_transformers import SentenceTransformer
             
             print(f"[RAG] Cache directory: {cache_dir}")
-            print(f"[RAG] Attempting to load (offline): {model_to_load}")
+            print(f"[RAG] Loading embedding model: {model_to_load}")
             
-            # Load the model with CPU-only mode and local_files_only
-            # HF_HUB_OFFLINE=1 ensures no network requests at all
             self.embedding = SentenceTransformer(
                 model_to_load,
-                device="cpu",
-                cache_folder=str(cache_dir)
+                cache_folder=str(cache_dir),
+                device="cpu"
             )
-            self.embedding.eval()
-            
-            # Test embedding
-            test = self.embedding.encode(["test"], batch_size=1, normalize_embeddings=True)
-            dim = test.shape[1] if len(test.shape) > 1 else len(test)
-            print(f"[RAG] Model loaded successfully, embedding dimension: {dim}")
+            print(f"[RAG] Embedding model loaded successfully")
             
         except Exception as e:
             print(f"[RAG] Failed to load embedding model: {e}")
-            print("[RAG] RAG features will be unavailable")
             self.embedding = None
     
     def _embed_texts(self, texts):
-        """Create embeddings using sentence-transformers."""
-        if self.embedding is None:
-            self._ensure_embedding_model()
-        
+        """Embed a list of texts using the current embedding model."""
         if self.embedding is None:
             return None
         
         try:
-            # Use convert_to_tensor=False to get numpy arrays directly
             embeddings = self.embedding.encode(
                 texts,
-                batch_size=32,
-                normalize_embeddings=True,
-                convert_to_tensor=False,
-                show_progress_bar=False
+                convert_to_numpy=True,
+                show_progress_bar=False,
+                normalize_embeddings=False  # We normalize after for FAISS
             )
-            return np.array(embeddings, dtype=np.float32)
+            return embeddings.astype('float32')
         except Exception as e:
             print(f"[RAG] Embedding error: {e}")
             return None
-    
-    def set_session_vectorstore(self, file_paths):
-        """Ingest files for RAG retrieval using sentence-transformers."""
+
+    def add_files(self, file_paths):
+        """Chunk and index files for RAG retrieval."""
         if not file_paths:
-            self.file_index = None
-            self.file_chunks = []
-            print("[RAG] Cleared file vectorstore")
             return
-        
+            
         self._ensure_embedding_model()
         
         if self.embedding is None:
-            print("[RAG] Cannot create vectorstore - embedding model unavailable")
+            print("[RAG] Cannot ingest files - embedding model unavailable")
             return
         
         # Use loaded context size for chunk sizing
@@ -274,16 +249,15 @@ class ContextInjector:
         texts = []
         for path in file_paths:
             try:
-                with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                    content = f.read()
-                chunks = splitter.split_text(content)
-                texts.extend(chunks)
+                loader = TextLoader(path, encoding='utf-8')
+                docs = loader.load()
+                for doc in docs:
+                    chunks = splitter.split_text(doc.page_content)
+                    texts.extend(chunks)
             except Exception as e:
                 print(f"[RAG] Error loading {path}: {e}")
         
         if texts:
-            print(f"[RAG] Processing {len(texts)} chunks from {len(file_paths)} files")
-            
             # Create embeddings using sentence-transformers
             embeddings = self._embed_texts(texts)
             
