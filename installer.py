@@ -596,7 +596,7 @@ def get_tts_engine_for_platform() -> tuple:
         if win_ver == "8.1" and py_minor == 9:
             return ("coqui_legacy", "TTS==0.13.0", "torch==1.13.1+cpu")
         if py_minor >= 10:
-            return ("coqui", "coqui-tts>=0.27.3", None)
+            return ("coqui", "coqui-tts[languages]>=0.27.3", None)
         return ("pyttsx3", None, None)
     else:
         linux_ver = detect_linux_version()
@@ -608,7 +608,7 @@ def get_tts_engine_for_platform() -> tuple:
             pass
         
         if py_minor >= 10:
-            return ("coqui", "coqui-tts>=0.27.3", None)
+            return ("coqui", "coqui-tts[languages]>=0.27.3", None)
         return ("pyttsx3", None, None)
 
 def download_coqui_voices() -> bool:
@@ -794,6 +794,8 @@ def install_tts_engine() -> bool:
     
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                  ("pip.exe" if PLATFORM == "windows" else "pip"))
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                    ("python.exe" if PLATFORM == "windows" else "python"))
     
     engine_type, tts_package, torch_override = get_tts_engine_for_platform()
     
@@ -814,6 +816,44 @@ def install_tts_engine() -> bool:
                                              max_retries=5):
                     print_status("Legacy torch failed - falling back to pyttsx3", False)
                     engine_type = "pyttsx3"
+            
+            if engine_type != "pyttsx3":
+                # Install torchaudio from PyTorch index
+                # Required by Coqui TTS but not always declared as dependency
+                print_status("Installing torchaudio for Coqui TTS...")
+                if not pip_install_with_retry(pip_exe, "torchaudio",
+                                             ["--index-url", "https://download.pytorch.org/whl/cpu"],
+                                             max_retries=5):
+                    print_status("torchaudio failed - falling back to pyttsx3", False)
+                    engine_type = "pyttsx3"
+            
+            if engine_type != "pyttsx3":
+                # Check PyTorch version to determine if torchcodec is needed
+                # torchcodec is required for PyTorch 2.9+ audio I/O
+                try:
+                    result = subprocess.run(
+                        [python_exe, "-c", "import torch; print(torch.__version__)"],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    torch_version = result.stdout.strip()
+                    # Extract major.minor version (e.g., "2.10.0+cpu" -> "2.10")
+                    version_match = re.match(r'(\d+)\.(\d+)', torch_version)
+                    if version_match:
+                        major = int(version_match.group(1))
+                        minor = int(version_match.group(2))
+                        needs_torchcodec = (major > 2) or (major == 2 and minor >= 9)
+                    else:
+                        needs_torchcodec = True  # Assume needed if can't parse
+                except Exception:
+                    needs_torchcodec = True  # Assume needed on error
+                
+                if needs_torchcodec:
+                    # Install torchcodec from PyPI (not from PyTorch index)
+                    # Required for PyTorch 2.9+ audio I/O in torchaudio
+                    print_status("Installing torchcodec for PyTorch 2.9+ audio support...")
+                    if not pip_install_with_retry(pip_exe, "torchcodec", max_retries=5):
+                        print_status("torchcodec failed - falling back to pyttsx3", False)
+                        engine_type = "pyttsx3"
             
             if engine_type != "pyttsx3":
                 # Install Coqui TTS with progress
@@ -838,6 +878,16 @@ def install_tts_engine() -> bool:
                     
                     if process.returncode == 0:
                         print_status(f"Coqui TTS installed ({quality_label})")
+                        
+                        # Explicitly install gruut phonemizer
+                        # The [languages] extra sometimes doesn't install gruut correctly
+                        print_status("Installing Gruut phonemizer for text processing...")
+                        gruut_success = pip_install_with_retry(pip_exe, "gruut>=2.4.0", max_retries=3)
+                        if not gruut_success:
+                            # Try individual gruut packages
+                            pip_install_with_retry(pip_exe, "gruut-ipa>=0.1.0", max_retries=2)
+                            pip_install_with_retry(pip_exe, "gruut-lang-en>=2.0.0", max_retries=2)
+                        
                         TTS_ENGINE_INSTALLED = "coqui"
                         
                         # Download default voices
@@ -857,8 +907,6 @@ def install_tts_engine() -> bool:
     if engine_type == "pyttsx3":
         print_status("Installing pyttsx3 TTS (system voices)...")
         try:
-            python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                           ("python.exe" if PLATFORM == "windows" else "python"))
             result = subprocess.run([python_exe, "-c", "import pyttsx3; print('OK')"],
                                    capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
@@ -1463,7 +1511,7 @@ def create_config(backend: str, embedding_model: str) -> None:
             "vulkan_enabled": vulkan_enabled,
             # TTS user settings
             "tts_sound_device": -1,
-            "tts_sample_rate": 22050,
+            "tts_sample_rate": 44100,
             "tts_voice": None,
         }
     }
