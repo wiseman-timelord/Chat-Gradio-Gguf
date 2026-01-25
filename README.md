@@ -445,7 +445,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Validation of Installation (v0.98.2)..
+- Validation of Installation (v1.00.0)..
 <details>
     
     ===============================================================================
@@ -461,7 +461,8 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     System: windows 8.1
     Python: 3.11.0
     Backend: VULKAN_CPU
-    Embedding: BAAI/bge-small-en-v1.5
+    Embedding: BAAI/bge-base-en-v1.5
+    Gradio: 3.50.2, Qt: 5
     
     === Directory Validation ===
       V data
@@ -493,17 +494,27 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     === Core Library Validation ===
       V gradio
+      V numpy
       V requests
       V pyperclip
       V spacy
       V psutil
-      V newspaper3k
-      V langchain
+      V ddgs
+      V langchain-community
       V faiss-cpu
+      V langchain
+      V pygments
+      V lxml
+      V lxml_html_clean
+      V tokenizers
+      V beautifulsoup4
+      V aiohttp
+      V py-cpuinfo
       V sentence-transformers
       V torch
+      V transformers
       V llama-cpp-python
-      V pyttsx3
+      V newspaper4k
       V pywin32
       V tk
       V pythonnet
@@ -518,10 +529,10 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
       V en_core_web_sm model available
     
     === Embedding Model Validation ===
-      V Embedding model verified (BAAI/bge-small-en-v1.5)
+      V Embedding model verified (BAAI/bge-base-en-v1.5)
     
     === Gradio & Custom Browser Check ===
-      Installer path: PyQt5 WebEngine
+      Expected: Gradio 3.50.2, PyQt5 WebEngine
       V Gradio import OK
       V PyQt5 WebEngine import OK
     
@@ -637,6 +648,7 @@ Web Search = Slower actual website reading research.
     - MuSR (Multi-Step Reasoning) - Assesses an AI’s capability to handle tasks needing multiple logical or reasoning steps.
     - MMLU (Massive Multitask Language Understanding) - A broad test of general knowledge and understanding across 57 subjects, like STEM and humanities.
     - CO2 Cost - Quantifies the carbon dioxide emissions from training or running an AI model, reflecting its environmental impact.
+
 </details>
 
 ## Structure
