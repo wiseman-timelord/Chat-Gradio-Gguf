@@ -44,6 +44,9 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The Configuration page, for configuration of, models, hardware, GUI, and other settings...
 ![image_missing](media/configuration_page.jpg)
 
+- The Filtering page, for configuration of model output filter settings...
+![image_missing](media/filtering_page.jpg)
+
 - Startup looks like this in the terminal/console (ignore warnings) (v0.98.2)...
 <details>
     
