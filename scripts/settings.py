@@ -62,6 +62,7 @@ DEFAULT_CONFIG = {
         "cpu_threads": None,
         "bleep_on_events": False,
         "use_python_bindings": True,
+        "filter_mode": "gradio3",  # Output filtering mode: gradio3, gradio5, or custom
     }
 }
 
@@ -210,6 +211,11 @@ def load_config():
     print(f"[CONFIG] BATCH_SIZE: {temporary.BATCH_SIZE}")
     print(f"[CONFIG] DYNAMIC_GPU_LAYERS: {temporary.DYNAMIC_GPU_LAYERS}")
     
+    # Load filter mode (optional key with default based on Gradio version)
+    default_filter = "gradio3" if temporary.GRADIO_VERSION and temporary.GRADIO_VERSION.startswith('3.') else "gradio5"
+    temporary.FILTER_MODE = model_settings.get("filter_mode", default_filter)
+    print(f"[CONFIG] Filter mode: {temporary.FILTER_MODE}")
+    
     # Load model list from the configured folder
     temporary.AVAILABLE_MODELS = get_available_models()
     print(f"[CONFIG] Found {len(temporary.AVAILABLE_MODELS)} models in {temporary.MODEL_FOLDER}")
@@ -277,6 +283,7 @@ def save_config():
             "use_python_bindings": temporary.USE_PYTHON_BINDINGS,
             "layer_allocation_mode": getattr(temporary, 'LAYER_ALLOCATION_MODE', 'SRAM_ONLY'),
             "vulkan_enabled": getattr(temporary, 'VULKAN_AVAILABLE', False),
+            "filter_mode": getattr(temporary, 'FILTER_MODE', 'gradio3'),
         }
     }
 
@@ -286,6 +293,7 @@ def save_config():
     print(f"[SAVE]   Model folder: {config['model_settings']['model_dir']}")
     print(f"[SAVE]   Model name: {config['model_settings']['model_name']}")
     print(f"[SAVE]   Selected CPU: {config['model_settings']['selected_cpu']}")
+    print(f"[SAVE]   Filter mode: {config['model_settings']['filter_mode']}")
     
     with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=4, ensure_ascii=False)

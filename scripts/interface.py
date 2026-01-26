@@ -258,39 +258,11 @@ def format_response(output: str) -> str:
             except:
                 pass  # silently skip invalid languages
     
-   
-    # Common basic normalization
-    clean_output = re.sub(r' {2,}', ' ', clean_output)        # reduce multiple spaces to 1
+    # 5. Common basic normalization
+    clean_output = re.sub(r' {2,}', ' ', clean_output)  # reduce multiple spaces to 1
     
-    if GRADIO_VERSION.startswith('3.'):
-        # Aggressive cleanup for Gradio 3 + Qt WebEngine (old Windows)
-        clean_output = clean_output.replace('<p>', '\n')          # <p> → single newline
-        clean_output = clean_output.replace('</p>', '\n')           # drop closing tag
-        clean_output = clean_output.replace('\n\n\n\r', '\n\r')
-        clean_output = clean_output.replace('\n\n\n\t', '\n\t')
-        clean_output = clean_output.replace('\r\n\n\n', '\r\n')
-        clean_output = clean_output.replace('\t\n\n\n', '\t\n')
-        clean_output = clean_output.replace('\n\r\n', '\n')
-        clean_output = clean_output.replace('\n\n\r', '\r')
-        clean_output = clean_output.replace('\n\n\t', '\t')
-        clean_output = clean_output.replace('\r\n\n', '\r')
-        clean_output = clean_output.replace('\t\n\n', '\t')
-        clean_output = clean_output.replace('\n\r', '\r')
-        clean_output = clean_output.replace('\n\t', '\t')
-        clean_output = clean_output.replace('\r\n', '\r')
-        clean_output = clean_output.replace('\t\n', '\t')
-
-    if GRADIO_VERSION.startswith('5'):
-        # Gentler cleanup for Gradio 4+ / 5+ (preserves more natural spacing)
-        clean_output = clean_output.replace('\n\n\n\r', '\n\r')
-        clean_output = clean_output.replace('\n\n\n\t', '\n\t')
-        clean_output = clean_output.replace('\r\n\n\n', '\r\n')
-        clean_output = clean_output.replace('\t\n\n\n', '\t\n')
-        clean_output = clean_output.replace('\n\n\r', '\n\r')
-        clean_output = clean_output.replace('\n\n\t', '\n\t')
-        clean_output = clean_output.replace('\r\n\n', '\r\n')
-        clean_output = clean_output.replace('\t\n\n', '\t\n')
-        clean_output = clean_output.replace('\n\n\n', '\n\n')
+    # 6. Apply the configurable output filter (replaces hardcoded Gradio version checks)
+    clean_output = apply_output_filter(clean_output)
         
     clean_output = clean_output.strip()
     
@@ -299,6 +271,146 @@ def format_response(output: str) -> str:
         return '\n'.join(formatted) + '\n\n' + clean_output
     
     return clean_output
+
+# ============================================================================
+# OUTPUT FILTERING FUNCTIONS
+# ============================================================================
+
+def get_filter_text_for_display():
+    """Get the current filter as displayable/editable text."""
+    if temporary.FILTER_MODE == "custom":
+        # Load from custom file
+        custom_path = Path(temporary.CUSTOM_FILTER_PATH)
+        if custom_path.exists():
+            try:
+                return custom_path.read_text(encoding='utf-8')
+            except Exception as e:
+                print(f"[FILTER] Error reading custom filter: {e}")
+        # Fallback to active filter
+        return filter_list_to_text(temporary.ACTIVE_FILTER)
+    else:
+        # Return the preset filter
+        preset = temporary.FILTER_PRESETS.get(temporary.FILTER_MODE, [])
+        return filter_list_to_text(preset)
+
+def filter_list_to_text(filter_list):
+    """Convert filter list to editable text format."""
+    lines = []
+    for find, replace in filter_list:
+        # Escape special characters for display
+        find_escaped = repr(find)[1:-1]  # Remove outer quotes from repr
+        replace_escaped = repr(replace)[1:-1]
+        lines.append(f"{find_escaped} -> {replace_escaped}")
+    return "\n".join(lines)
+
+def text_to_filter_list(text):
+    """Parse editable text format back to filter list."""
+    filter_list = []
+    for line in text.strip().split('\n'):
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if ' -> ' in line:
+            parts = line.split(' -> ', 1)
+            if len(parts) == 2:
+                # Unescape the strings
+                try:
+                    find = parts[0].encode().decode('unicode_escape')
+                    replace = parts[1].encode().decode('unicode_escape')
+                    filter_list.append((find, replace))
+                except Exception as e:
+                    print(f"[FILTER] Error parsing line '{line}': {e}")
+    return filter_list
+
+def load_filter_preset(preset_name):
+    """Load a filter preset and return the text for display."""
+    if preset_name == "User":
+        # Load custom filter
+        temporary.FILTER_MODE = "custom"
+        custom_path = Path(temporary.CUSTOM_FILTER_PATH)
+        if custom_path.exists():
+            try:
+                text = custom_path.read_text(encoding='utf-8')
+                temporary.ACTIVE_FILTER = text_to_filter_list(text)
+                return text, f"Loaded custom filter ({len(temporary.ACTIVE_FILTER)} rules)"
+            except Exception as e:
+                return "", f"Error loading custom filter: {e}"
+        else:
+            return "", "No custom filter saved yet. Edit and click Save."
+    
+    elif preset_name == "Light":
+        temporary.FILTER_MODE = "gradio5"
+        preset = temporary.FILTER_PRESETS.get("gradio5", [])
+        temporary.ACTIVE_FILTER = preset.copy()
+        text = filter_list_to_text(preset)
+        return text, f"Loaded Light filter (Gradio 5 style, {len(preset)} rules)"
+    
+    elif preset_name == "Full":
+        temporary.FILTER_MODE = "gradio3"
+        preset = temporary.FILTER_PRESETS.get("gradio3", [])
+        temporary.ACTIVE_FILTER = preset.copy()
+        text = filter_list_to_text(preset)
+        return text, f"Loaded Full filter (Gradio 3 style, {len(preset)} rules)"
+    
+    return "", "Unknown preset"
+
+def save_custom_filter(filter_text):
+    """Save the current filter text as a custom filter."""
+    try:
+        # Parse and validate
+        filter_list = text_to_filter_list(filter_text)
+        
+        # Save to file
+        custom_path = Path(temporary.CUSTOM_FILTER_PATH)
+        custom_path.parent.mkdir(parents=True, exist_ok=True)
+        custom_path.write_text(filter_text, encoding='utf-8')
+        
+        # Update runtime state
+        temporary.FILTER_MODE = "custom"
+        temporary.ACTIVE_FILTER = filter_list
+        
+        # Save mode to persistent.json
+        settings.save_config()
+        
+        return f"Custom filter saved ({len(filter_list)} rules)"
+    except Exception as e:
+        return f"Error saving filter: {e}"
+
+def initialize_filter_from_config():
+    """Initialize the filter based on saved config or Gradio version."""
+    filter_mode = getattr(temporary, 'FILTER_MODE', None)
+    
+    if filter_mode == "custom":
+        # Load custom filter
+        custom_path = Path(temporary.CUSTOM_FILTER_PATH)
+        if custom_path.exists():
+            try:
+                text = custom_path.read_text(encoding='utf-8')
+                temporary.ACTIVE_FILTER = text_to_filter_list(text)
+                print(f"[FILTER] Loaded custom filter ({len(temporary.ACTIVE_FILTER)} rules)")
+                return
+            except Exception as e:
+                print(f"[FILTER] Error loading custom filter: {e}")
+    
+    # Default based on Gradio version
+    if temporary.GRADIO_VERSION and temporary.GRADIO_VERSION.startswith('3.'):
+        temporary.FILTER_MODE = "gradio3"
+        temporary.ACTIVE_FILTER = temporary.FILTER_PRESETS.get("gradio3", []).copy()
+    else:
+        temporary.FILTER_MODE = "gradio5"
+        temporary.ACTIVE_FILTER = temporary.FILTER_PRESETS.get("gradio5", []).copy()
+    
+    print(f"[FILTER] Using {temporary.FILTER_MODE} filter ({len(temporary.ACTIVE_FILTER)} rules)")
+
+def apply_output_filter(text):
+    """Apply the active filter to output text."""
+    if not temporary.ACTIVE_FILTER:
+        return text
+    
+    for find, replace in temporary.ACTIVE_FILTER:
+        text = text.replace(find, replace)
+    
+    return text
 
 def get_initial_model_value():
     """Get initial model selection with proper fallback."""
@@ -393,7 +505,7 @@ def process_uploaded_files(files, loaded_files, models_loaded):
         loaded_files.insert(0, file)
     
     session_vectorstore = create_session_vectorstore(loaded_files)
-    context_injector.set_session_vectorstore(session_vectorstore)
+    temporary.context_injector.set_session_vectorstore(session_vectorstore)
     
     print("Updated loaded_files:", loaded_files)
     return f"Processed {min(len(new_files), available_slots)} new files.", loaded_files
@@ -709,17 +821,6 @@ def handle_model_load(model_name, ctx, batch, vram, gpu, cpu, threads, llm_state
             gr.update(),
             gr.update(interactive=False)
         )
-
-def handle_model_inspect(model_name):
-    """Handle model inspection."""
-    from scripts.models import inspect_model
-    import scripts.temporary as temporary
-    
-    if not model_name or model_name == "Select_a_model...":
-        return "Select a model to inspect."
-    
-    # Fixed: Pass all required arguments to inspect_model
-    return inspect_model(temporary.MODEL_FOLDER, model_name, temporary.VRAM_SIZE)
 
 def handle_model_inspect(model_name):
     """Handle model inspection."""
@@ -1432,16 +1533,20 @@ def launch_interface():
     from scripts import temporary, utility, models
     from scripts.temporary import (
         MODEL_NAME, SESSION_ACTIVE,
-        MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT,
+        MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, 
         MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
         VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
         ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
         REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
-        ATTACH_SLOT_OPTIONS
+        ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR,
+        context_injector
     )
 
     # ── Determine Gradio major version ──────────────────────────────────────
     is_gradio_3 = temporary.GRADIO_VERSION.startswith('3.')
+
+    # Output filtering
+    initialize_filter_from_config()
 
     # Common CSS rules (used by all versions)
     css_common = """
@@ -1751,6 +1856,45 @@ def launch_interface():
                             scale=20
                         )
                         exit_config = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], scale=1)
+
+            with gr.Tab("Filtering"):
+                with gr.Column(scale=1, elem_classes=["clean-elements"]):
+                    gr.Markdown("**Output Filtering Configuration**")
+                    gr.Markdown('''
+Configure how the AI response text is filtered/cleaned before display.
+- **User**: Your custom saved filter
+- **Light**: Minimal filtering (Gradio 5 style) - preserves more formatting
+- **Full**: Aggressive filtering (Gradio 3 style) - removes more whitespace
+
+Format: Each line is `find_pattern -> replace_pattern`
+Use `\\n` for newline, `\\r` for carriage return, `\\t` for tab
+Lines starting with `#` are comments
+                    ''')
+                    
+                    filter_text = gr.Textbox(
+                        label="Filter Rules",
+                        value=get_filter_text_for_display(),
+                        lines=15,
+                        max_lines=25,
+                        interactive=True,
+                        placeholder="# Each line: pattern -> replacement\\n\\n\\n\\n -> \\n\\n"
+                    )
+                    
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        filter_user_btn = gr.Button("User", variant="secondary", scale=1)
+                        filter_light_btn = gr.Button("Light", variant="secondary", scale=1)
+                        filter_full_btn = gr.Button("Full", variant="secondary", scale=1)
+                        filter_save_btn = gr.Button("💾 Save", variant="primary", scale=1)
+                    
+                    with gr.Row(elem_classes=["clean-elements"]):
+                        filter_status = gr.Textbox(
+                            value=f"Current filter: {temporary.FILTER_MODE} ({len(temporary.ACTIVE_FILTER)} rules)",
+                            label="Status",
+                            interactive=False,
+                            max_lines=1,
+                            scale=20
+                        )
+                        exit_filtering = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], scale=1)
 
         # ============================================================================
         # EVENT HANDLERS
@@ -2249,6 +2393,50 @@ def launch_interface():
                     config_global_status
                 ] + attach_slots + [attach_files]
             )
+
+        # Filtering tab event handlers
+        def load_user_filter():
+            text, status = load_filter_preset("User")
+            return text, status
+
+        def load_light_filter():
+            text, status = load_filter_preset("Light")
+            return text, status
+
+        def load_full_filter():
+            text, status = load_filter_preset("Full")
+            return text, status
+
+        filter_user_btn.click(
+            fn=load_user_filter,
+            inputs=[],
+            outputs=[filter_text, filter_status]
+        )
+        
+        filter_light_btn.click(
+            fn=load_light_filter,
+            inputs=[],
+            outputs=[filter_text, filter_status]
+        )
+        
+        filter_full_btn.click(
+            fn=load_full_filter,
+            inputs=[],
+            outputs=[filter_text, filter_status]
+        )
+        
+        filter_save_btn.click(
+            fn=save_custom_filter,
+            inputs=[filter_text],
+            outputs=[filter_status]
+        )
+        
+        exit_filtering.click(
+            fn=shutdown_program,
+            inputs=[states["llm"], states["models_loaded"],
+                    states["session_messages"], states["attached_files"]],
+            outputs=[]
+        )
 
         # Initial load
         demo.load(

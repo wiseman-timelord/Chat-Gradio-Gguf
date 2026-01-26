@@ -19,6 +19,50 @@ EMBEDDING_BACKEND = "sentence_transformers"  # Always sentence_transformers now
 GRADIO_VERSION = None
 LOADED_CONTEXT_SIZE = None
 
+# Output Filtering Configuration
+# filter_mode: "gradio3", "gradio5", or "custom"
+FILTER_MODE = "gradio3"  # Will be set based on GRADIO_VERSION on startup
+
+# Default filter definitions - these are the replacement chains
+FILTER_PRESETS = {
+    "gradio3": [
+        # Aggressive cleanup for Gradio 3 + Qt WebEngine (old Windows)
+        ("<p>", "\n"),
+        ("</p>", "\n"),
+        ("\n\n\n\r", "\n\r"),
+        ("\n\n\n\t", "\n\t"),
+        ("\r\n\n\n", "\r\n"),
+        ("\t\n\n\n", "\t\n"),
+        ("\n\r\n", "\n"),
+        ("\n\n\r", "\r"),
+        ("\n\n\t", "\t"),
+        ("\r\n\n", "\r"),
+        ("\t\n\n", "\t"),
+        ("\n\r", "\r"),
+        ("\n\t", "\t"),
+        ("\r\n", "\r"),
+        ("\t\n", "\t"),
+    ],
+    "gradio5": [
+        # Gentler cleanup for Gradio 4+ / 5+ (preserves more natural spacing)
+        ("\n\n\n\r", "\n\r"),
+        ("\n\n\n\t", "\n\t"),
+        ("\r\n\n\n", "\r\n"),
+        ("\t\n\n\n", "\t\n"),
+        ("\n\n\r", "\n\r"),
+        ("\n\n\t", "\n\t"),
+        ("\r\n\n", "\r\n"),
+        ("\t\n\n", "\t\n"),
+        ("\n\n\n", "\n\n"),
+    ],
+}
+
+# Current active filter (list of (find, replace) tuples)
+ACTIVE_FILTER = []
+
+# Custom filter file path
+CUSTOM_FILTER_PATH = "data/custom_filter.txt"
+
 # Configuration variables with defaults
 MODEL_FOLDER = "path/to/your/models"
 CONTEXT_SIZE = 32768
@@ -207,52 +251,48 @@ class ContextInjector:
             self.embedding = None
     
     def _embed_texts(self, texts):
-        """Embed a list of texts using the current embedding model."""
+        """Embed texts using sentence-transformers."""
         if self.embedding is None:
             return None
         
         try:
-            embeddings = self.embedding.encode(
-                texts,
-                convert_to_numpy=True,
-                show_progress_bar=False,
-                normalize_embeddings=False  # We normalize after for FAISS
-            )
+            embeddings = self.embedding.encode(texts, convert_to_numpy=True)
             return embeddings.astype('float32')
         except Exception as e:
             print(f"[RAG] Embedding error: {e}")
             return None
 
-    def add_files(self, file_paths):
-        """Chunk and index files for RAG retrieval."""
+    def set_session_vectorstore(self, file_paths):
+        """
+        Create vectorstore from file paths for RAG retrieval.
+        """
         if not file_paths:
+            self.file_index = None
+            self.file_chunks = []
             return
-            
+        
         self._ensure_embedding_model()
         
         if self.embedding is None:
-            print("[RAG] Cannot ingest files - embedding model unavailable")
+            print("[RAG] Cannot create vectorstore - embedding model unavailable")
             return
-        
-        # Use loaded context size for chunk sizing
-        effective_ctx = LOADED_CONTEXT_SIZE or CONTEXT_SIZE
-        chunk_size = effective_ctx // RAG_CHUNK_SIZE_DIVIDER
-        chunk_overlap = effective_ctx // RAG_CHUNK_OVERLAP_DIVIDER
-        
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            length_function=len,
-            separators=["\n\n", "\n", ". ", " ", ""]
-        )
         
         texts = []
         for path in file_paths:
             try:
-                loader = TextLoader(path, encoding='utf-8')
-                docs = loader.load()
-                for doc in docs:
-                    chunks = splitter.split_text(doc.page_content)
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
+                    # Use loaded context for chunk size calculation
+                    effective_ctx = LOADED_CONTEXT_SIZE or CONTEXT_SIZE
+                    chunk_size = effective_ctx // RAG_CHUNK_SIZE_DIVIDER
+                    chunk_overlap = effective_ctx // RAG_CHUNK_OVERLAP_DIVIDER
+                    
+                    splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        length_function=len
+                    )
+                    chunks = splitter.split_text(content)
                     texts.extend(chunks)
             except Exception as e:
                 print(f"[RAG] Error loading {path}: {e}")
