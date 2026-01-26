@@ -958,6 +958,13 @@ def create_config(backend: str, embedding_model: str) -> None:
     # Calculate optimal CPU threads (85% of available)
     optimal_threads = get_optimal_build_threads()
     
+    # Determine default filter mode based on Gradio version selection
+    # SELECTED_GRADIO is set during detect_version_selections()
+    if SELECTED_GRADIO.startswith('3.'):
+        default_filter_mode = "gradio3"
+    else:
+        default_filter_mode = "gradio5"
+    
     # Use model_settings format for compatibility with settings.py
     # Note: Constants like llama_cli_path, llama_bin_path, embedding_model, 
     # embedding_backend are stored in constants.ini, not here
@@ -985,6 +992,7 @@ def create_config(backend: str, embedding_model: str) -> None:
             "bleep_on_events": False,
             "use_python_bindings": True,
             "vulkan_enabled": vulkan_enabled,
+            "filter_mode": default_filter_mode,
         }
     }
     
@@ -994,6 +1002,7 @@ def create_config(backend: str, embedding_model: str) -> None:
         print_status("Configuration file created")
     except Exception as e:
         print_status(f"Failed to create config: {e}", False)
+
 
 def create_system_ini(platform: str, os_version: str, python_version: str, 
                      backend_type: str, embedding_model: str,
