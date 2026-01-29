@@ -2,7 +2,6 @@
 
 ### Status
 Beta - Release version works (at least on Windows), but things are still being worked on. Current developments for next version are...
-- Cleanup from overhaul from v1.02.0.
 - Finalize things, mainly rename configuration.py to configure.py.
 - Test and fix, on ubuntu 25.
 
@@ -693,12 +692,7 @@ project_root/
 └────── *
 ```
 
-# Development for v0.xx-xx-v1.00.00
-Now that the program is 100% made, I am tidying up, and finishing testing/bugfixing... 
-- Release v1.00.0 upcoming, which will be tested on, ubuntu 25 and windows 8.1, and 100% bugfixed.
-- Work on v1.01.0+ will maintain, Windows 7-11 and Ubuntu 22-25, compatibility, while new project Chat-Lightwave-Gguf, will be optimized towards windows 8-10, but use MS Edge WebView, and use lightwave instead of gradio, and limit operation to Windows 8.1-11, while waiting for AI to improve, then come back to Chat-Gradio-Gguf. Chat-Lightwave-Gguf will then allow to understand future upgrades for Chat-Gradio-Gguf, that I would later integrate selectively.
-- Optimization, then testing/bugfixing.
-- Re-implementation of Robot Voice Tts option (TTS not currently implemented).
+- Built in Tts tool notes.
 ```
 | Mode     | TTS engine       | Audio *player* |
 | -------- | ---------------- | -------------- |
@@ -707,11 +701,18 @@ Now that the program is 100% made, I am tidying up, and finishing testing/bugfix
 | PipeWire | `espeak-ng`      | `pw-play`      |
 ```
 
+# Development for v0.xx-xx-v1.00.00
+Now that the program is 100% made, I am tidying up, and finishing testing/bugfixing... 
+- Release v1.00.0 upcoming, which will be tested on, ubuntu 25 and windows 8.1, and 100% bugfixed.
+- Work on windows/ubuntu bugfixing.
+- Optimization, then testing/bugfixing.
+
+
 # Update Ideas
 1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
 2. Possibility of artifacts, the AI mentioned this, I want to see how feasable it is first.
-3. Actual web searches.
 4. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading).
+5. new project Chat-Lightwave-Gguf, will be optimized towards windows 8-10, but use MS Edge WebView, and use lightwave instead of gradio, and limit operation to Windows 8.1-11.
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
