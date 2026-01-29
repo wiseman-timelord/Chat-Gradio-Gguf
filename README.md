@@ -18,6 +18,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Qt-Web Custom Browser**: The interface uses Qt-Web with Gradio, it appears as a regular application, and means your default browser are untouched.  
 - **Comprihensive GPU Support**: Vulkan, with dropdown list in configuration selection supporting multi CPU/GPU setup.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, THINK, and Markdown formatting, and file attachments. 
+- **Text To Speech**: Using built-in Windows/Ubuntu speech capabilities, for basic TTS tool.
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
 - **Configurable Context**: Set model context to 8192-138072, and batch output to 256-8192.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
