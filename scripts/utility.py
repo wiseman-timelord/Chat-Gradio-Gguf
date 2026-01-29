@@ -8,13 +8,13 @@ from datetime import datetime
 from docx import Document
 from openpyxl import load_workbook
 from pptx import Presentation
-from .models import load_models, clean_content
-import scripts.settings as settings
-from .temporary import (
+import gradio as gr
+from scripts.inference import load_inference, clean_content
+import scripts.configuration as cfg
+from scripts.configuration import (
     TEMP_DIR, HISTORY_DIR, SESSION_FILE_FORMAT, ALLOWED_EXTENSIONS, 
     current_session_id, session_label
 )
-from . import temporary
 
 # Import search functions from tools module
 # NOTE: hybrid_search is DDG-based, web_search is comprehensive multi-source
@@ -27,7 +27,7 @@ from scripts.tools import (
 _nlp_model = None
 
 # NOTE: Platform-specific imports (win32com, pythoncom, pyttsx3) are imported
-# lazily inside the functions that need them. This is because temporary.PLATFORM
+# lazily inside the functions that need them. This is because cfg.PLATFORM
 # is not set until after the launcher parses command-line arguments.
 
 
@@ -37,11 +37,12 @@ _nlp_model = None
 
 def beep() -> None:
     """Play a notification beep if enabled."""
-    if not getattr(temporary, "BLEEP_ON_EVENTS", False):
+    # Fixed: was referencing 'temporary', changed to cfg
+    if not getattr(cfg, "BLEEP_ON_EVENTS", False):
         return
-    if temporary.PLATFORM == "windows":
+    if cfg.PLATFORM == "windows":
         _beep_windows()
-    elif temporary.PLATFORM == "linux":
+    elif cfg.PLATFORM == "linux":
         _beep_linux()
 
 
@@ -82,15 +83,15 @@ def _beep_linux() -> None:
 
 def has_vulkan_binary():
     """Check if Vulkan binary is available (VULKAN_CPU or VULKAN_VULKAN modes)"""
-    return temporary.BACKEND_TYPE in ["VULKAN_CPU", "VULKAN_VULKAN"]
+    return cfg.BACKEND_TYPE in ["VULKAN_CPU", "VULKAN_VULKAN"]
 
 def has_vulkan_wheel():
     """Check if Python wheel has Vulkan support (VULKAN_VULKAN mode only)"""
-    return temporary.BACKEND_TYPE == "VULKAN_VULKAN"
+    return cfg.BACKEND_TYPE == "VULKAN_VULKAN"
 
 def is_cpu_only():
     """Check if running in pure CPU mode (CPU_CPU mode)"""
-    return temporary.BACKEND_TYPE == "CPU_CPU"
+    return cfg.BACKEND_TYPE == "CPU_CPU"
 
 def short_path(path_str, max_len=44):
     """Truncate path to last max_len chars with ... prefix"""
@@ -145,29 +146,29 @@ def detect_cpu_config():
             "logical_cores": psutil.cpu_count(logical=True) or 1
         }
         
-        temporary.CPU_PHYSICAL_CORES = cpu_info["physical_cores"]
-        temporary.CPU_LOGICAL_CORES = cpu_info["logical_cores"]
+        cfg.CPU_PHYSICAL_CORES = cpu_info["physical_cores"]
+        cfg.CPU_LOGICAL_CORES = cpu_info["logical_cores"]
         
-        max_threads = temporary.CPU_LOGICAL_CORES
-        temporary.CPU_THREAD_OPTIONS = list(range(1, max_threads + 1))
+        max_threads = cfg.CPU_LOGICAL_CORES
+        cfg.CPU_THREAD_OPTIONS = list(range(1, max_threads + 1))
         
-        if temporary.CPU_THREADS is None or temporary.CPU_THREADS > max_threads:
-            temporary.CPU_THREADS = max(1, max_threads // 2)
+        if cfg.CPU_THREADS is None or cfg.CPU_THREADS > max_threads:
+            cfg.CPU_THREADS = max(1, max_threads // 2)
         
-        if "vulkan" in temporary.BACKEND_TYPE.lower():
-            temporary.CPU_THREADS = max(2, temporary.CPU_THREADS)
+        if "vulkan" in cfg.BACKEND_TYPE.lower():
+            cfg.CPU_THREADS = max(2, cfg.CPU_THREADS)
         
-        print(f"[CPU] Detected: {temporary.CPU_PHYSICAL_CORES} cores, "
-              f"{temporary.CPU_LOGICAL_CORES} threads")
-        print(f"[CPU] Current: {temporary.CPU_THREADS}")
+        print(f"[CPU] Detected: {cfg.CPU_PHYSICAL_CORES} cores, "
+              f"{cfg.CPU_LOGICAL_CORES} threads")
+        print(f"[CPU] Current: {cfg.CPU_THREADS}")
         
     except Exception as e:
-        temporary.set_status("CPU fallback", console=True)
+        cfg.set_status("CPU fallback", console=True)
         print(f"[CPU] Detection error: {e}")
-        temporary.CPU_PHYSICAL_CORES = 4
-        temporary.CPU_LOGICAL_CORES = 8
-        temporary.CPU_THREAD_OPTIONS = list(range(1, 9))
-        temporary.CPU_THREADS = 4
+        cfg.CPU_PHYSICAL_CORES = 4
+        cfg.CPU_LOGICAL_CORES = 8
+        cfg.CPU_THREAD_OPTIONS = list(range(1, 9))
+        cfg.CPU_THREADS = 4
 
 def get_available_gpus_windows():
     """Retrieve available GPUs on Windows using multiple methods."""
@@ -180,7 +181,7 @@ def get_available_gpus_windows():
         pass
     
     try:
-        temp_file = Path(temporary.TEMP_DIR) / "dxdiag.txt"
+        temp_file = Path(cfg.TEMP_DIR) / "dxdiag.txt"
         subprocess.run(f"dxdiag /t {temp_file}", shell=True, check=True)
         time.sleep(2)
         with open(temp_file, 'r') as f:
@@ -226,7 +227,7 @@ def calculate_optimal_gpu_layers(model_path, vram_mb, context_size):
 
 def get_available_gpus():
     """Get list of available GPUs based on platform."""
-    if temporary.PLATFORM == "windows":
+    if cfg.PLATFORM == "windows":
         return get_available_gpus_windows()
     else:
         return get_available_gpus_linux()
@@ -262,7 +263,7 @@ def get_cpu_info():
     try:
         cpu_info = []
         
-        if temporary.PLATFORM == "windows":
+        if cfg.PLATFORM == "windows":
             try:
                 output = subprocess.check_output("wmic cpu get name", shell=True).decode()
                 for line in output.split('\n'):
@@ -270,8 +271,8 @@ def get_cpu_info():
                     if line and 'Name' not in line:
                         cpu_info.append({
                             "label": line[:50],
-                            "cores": temporary.CPU_PHYSICAL_CORES,
-                            "threads": temporary.CPU_LOGICAL_CORES
+                            "cores": cfg.CPU_PHYSICAL_CORES,
+                            "threads": cfg.CPU_LOGICAL_CORES
                         })
             except:
                 pass
@@ -283,17 +284,17 @@ def get_cpu_info():
                 if model_match:
                     cpu_info.append({
                         "label": model_match.group(1).strip()[:50],
-                        "cores": temporary.CPU_PHYSICAL_CORES,
-                        "threads": temporary.CPU_LOGICAL_CORES
+                        "cores": cfg.CPU_PHYSICAL_CORES,
+                        "threads": cfg.CPU_LOGICAL_CORES
                     })
             except:
                 pass
         
         if not cpu_info:
             cpu_info.append({
-                "label": f"CPU ({temporary.CPU_PHYSICAL_CORES}c/{temporary.CPU_LOGICAL_CORES}t)",
-                "cores": temporary.CPU_PHYSICAL_CORES,
-                "threads": temporary.CPU_LOGICAL_CORES
+                "label": f"CPU ({cfg.CPU_PHYSICAL_CORES}c/{cfg.CPU_LOGICAL_CORES}t)",
+                "cores": cfg.CPU_PHYSICAL_CORES,
+                "threads": cfg.CPU_LOGICAL_CORES
             })
         
         return cpu_info
@@ -311,6 +312,8 @@ def get_nlp_model():
     """Get or initialize the spaCy NLP model."""
     global _nlp_model
     if _nlp_model is None:
+        if spacy is None:
+            return None  # Graceful fallback if spacy not installed
         try:
             _nlp_model = spacy.load("en_core_web_sm")
         except OSError:
@@ -374,18 +377,18 @@ def get_saved_sessions():
             continue
     
     sessions.sort(reverse=True)
-    return [s[1] for s in sessions[:temporary.MAX_HISTORY_SLOTS]]
+    return [s[1] for s in sessions[:cfg.MAX_HISTORY_SLOTS]]
 
 def save_session_history(messages, attached_files=None):
     """Save current session to history."""
     if not messages:
         return
     
-    session_id = temporary.current_session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
-    label = temporary.session_label or summarize_session(messages)
+    session_id = cfg.current_session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+    label = cfg.session_label or summarize_session(messages)
     
-    temporary.current_session_id = session_id
-    temporary.session_label = label
+    cfg.current_session_id = session_id
+    cfg.session_label = label
     
     filename = f"{session_id}.json"
     filepath = Path(HISTORY_DIR) / filename
@@ -542,11 +545,52 @@ def get_attached_files_summary(attached_files):
         summary_list.append(f"**{Path(file).name}** - {summary}")
     return "\n".join(summary_list)
 
+def eject_file(file_list, slot_index, is_attach=True):
+    """Eject a file from the specified slot."""
+    if 0 <= slot_index < len(file_list):
+        removed_file = file_list.pop(slot_index)
+        # Update global state
+        if is_attach:
+            cfg.session_attached_files = file_list
+        status_msg = f"Ejected {Path(removed_file).name}"
+        print(f"[FILES] {status_msg}")
+    else:
+        status_msg = "No file to eject"
+    
+    # Return updated file list and status, then UI updates happen via .then()
+    return file_list, status_msg
+    
+def update_file_slot_ui(file_list, is_attach=True):
+    """Update file slot UI components."""
+    import gradio as gr
+    import scripts.configuration as cfg
+    from pathlib import Path
+    
+    max_slots = cfg.MAX_POSSIBLE_ATTACH_SLOTS
+    current_max = cfg.MAX_ATTACH_SLOTS
+    button_updates = []
+    
+    for i in range(max_slots):
+        # Hide slots beyond current MAX_ATTACH_SLOTS setting
+        if i >= current_max:
+            button_updates.append(gr.update(value="", visible=False, variant="primary"))
+        elif i < len(file_list):
+            filename = Path(file_list[i]).name
+            short_name = filename[:36] + ".." if len(filename) > 38 else filename
+            button_updates.append(gr.update(value=short_name, visible=True, variant="primary"))
+        else:
+            button_updates.append(gr.update(value="", visible=False, variant="primary"))
+    
+    show_upload = len(file_list) < current_max if is_attach else True
+    button_updates.append(gr.update(visible=show_upload))
+    
+    return button_updates
+
 def load_and_chunk_documents(file_paths: list) -> list:
     """Load and chunk documents from a list of file paths for RAG."""
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain_community.document_loaders import TextLoader
-    from .temporary import CONTEXT_SIZE, RAG_CHUNK_SIZE_DIVIDER, RAG_CHUNK_OVERLAP_DIVIDER
+    from scripts.configuration import CONTEXT_SIZE, RAG_CHUNK_SIZE_DIVIDER, RAG_CHUNK_OVERLAP_DIVIDER
     documents = []
     try:
         chunk_size = CONTEXT_SIZE // (RAG_CHUNK_SIZE_DIVIDER if RAG_CHUNK_SIZE_DIVIDER != 0 else 4)
@@ -574,39 +618,70 @@ def delete_all_session_histories():
     return "All session histories deleted."
 
 def create_session_vectorstore(file_paths):
-    """Thin wrapper so interface.py can call the injector transparently."""
-    from scripts.temporary import context_injector
+    """Thin wrapper so display.py can call the injector transparently."""
+    from scripts.configuration import context_injector
     context_injector.set_session_vectorstore(file_paths)
+
+def process_attach_files(files, attached_files):
+    """Process uploaded files for attachment."""
+    if not files:
+        return "No files selected.", attached_files
+    status, updated_files = process_files(files, attached_files, cfg.MAX_ATTACH_SLOTS, is_attach=True)
+    # Update global state
+    cfg.session_attached_files = updated_files
+    return status, updated_files
 
 def process_files(files, existing_files, max_files, is_attach=True):
     """Process uploaded files for attach or vector, ensuring no duplicates and respecting max file limits."""
+    import gradio as gr
+    
+    print(f"[FILES] Raw input type: {type(files)}, value: {files}")
+    
     if not files:
         return "No files uploaded.", existing_files
 
+    # Handle Gradio file upload format - files can be list of file objects or dicts
     normalized_files = []
-    for f in files:
-        if f is None:
-            continue
-        if hasattr(f, 'name'):
-            file_path = f.name
-        elif isinstance(f, (str, Path)):
-            file_path = str(f)
-        elif isinstance(f, dict) and 'name' in f:
-            file_path = f['name']
-        else:
-            print(f"[FILES] Skipping unknown file format: {type(f)}")
-            continue
-        
-        if file_path and os.path.isfile(file_path):
-            normalized_files.append(file_path)
+    if isinstance(files, (list, tuple)):
+        for f in files:
+            if f is None:
+                continue
+            # Handle Gradio file object (has .name attribute) or dict
+            if hasattr(f, 'name'):
+                file_path = f.name
+            elif isinstance(f, (str, Path)):
+                file_path = str(f)
+            elif isinstance(f, dict):
+                # Gradio sometimes returns dict with 'name' or 'path' key
+                file_path = f.get('name') or f.get('path') or f.get('data')
+            else:
+                print(f"[FILES] Skipping unknown file format: {type(f)} - {f}")
+                continue
+            
+            if file_path and os.path.isfile(file_path):
+                normalized_files.append(str(file_path))
+                print(f"[FILES] Added file: {file_path}")
+            else:
+                print(f"[FILES] File not found or invalid: {file_path}")
+    elif isinstance(files, str):
+        # Single file path as string
+        if os.path.isfile(files):
+            normalized_files.append(files)
+    elif hasattr(files, 'name'):
+        # Single file object
+        normalized_files.append(files.name)
     
+    print(f"[FILES] Normalized {len(normalized_files)} files")
+
     if not normalized_files:
         return "No valid files to add.", existing_files
 
+    # Remove duplicates by filename (keep existing, replace with new)
     new_files = [f for f in normalized_files if f not in existing_files]
     if not new_files:
         return "No new files to add.", existing_files
 
+    # Remove any existing files with same filename as new ones
     for f in new_files:
         file_name = Path(f).name
         existing_files = [ef for ef in existing_files if Path(ef).name != file_name]
@@ -615,12 +690,15 @@ def process_files(files, existing_files, max_files, is_attach=True):
     processed_files = new_files[:available_slots]
     updated_files = processed_files + existing_files
 
+    # Update global state
     if is_attach:
-        temporary.session_attached_files = updated_files
+        cfg.session_attached_files = updated_files
     else:
-        temporary.session_vector_files = updated_files
+        # Vector files use different storage if needed
+        cfg.session_attached_files = updated_files  # Use same for now
 
-    status = f"Processed {len(processed_files)} new {'attach' if is_attach else 'vector'} files."
+    status = f"Attached {len(processed_files)} file(s)."
+    print(f"[FILES] Status: {status}, Total files: {len(updated_files)}")
     return status, updated_files
 
 

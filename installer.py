@@ -253,6 +253,7 @@ if PLATFORM == "windows":
         "pywin32==311",
         "tk==0.1.0",
         "pythonnet==3.0.5",
+        "pyttsx3>=2.90",  # Windows built-in TTS (SAPI)
     ])
 elif PLATFORM == "linux":
     BASE_REQ.extend([
@@ -989,7 +990,7 @@ def create_config(backend: str, embedding_model: str) -> None:
             "show_think_phase": False,
             "print_raw_output": False,
             "cpu_threads": optimal_threads,
-            "bleep_on_events": False,
+            "bleep_on_events": True,
             "use_python_bindings": True,
             "vulkan_enabled": vulkan_enabled,
             "filter_mode": default_filter_mode,

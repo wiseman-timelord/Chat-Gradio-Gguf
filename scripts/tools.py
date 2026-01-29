@@ -1,10 +1,14 @@
 # scripts/tools.py
 """
-Centralized tools module for web search and system sounds.
+Centralized tools module for web search, system sounds, and TTS.
 
 Search Tools:
 - DDG Hybrid Search: DDG snippets + full article fetching via newspaper
 - Web Search: Comprehensive multi-source web search with parallel page fetching
+
+TTS Tools:
+- Text-to-Speech using pyttsx3 (Windows) or espeak-ng (Linux)
+- Audio playback via built-in (Windows), paplay (PulseAudio), or pw-play (PipeWire)
 """
 
 import os
@@ -18,12 +22,10 @@ import re
 from urllib.parse import urlparse, urljoin, quote_plus
 from typing import List, Dict, Tuple, Optional, Any
 import time
+import tempfile
 
 # Lazy import to avoid circular dependency
-def _get_temporary():
-    import scripts.temporary as temporary
-    return temporary
-
+import scripts.configuration as cfg
 
 # =============================================================================
 # WEB SEARCH - COMPREHENSIVE MULTI-SOURCE SEARCH
@@ -198,20 +200,24 @@ class WebSearchEngine:
             is_news = any(kw in query.lower() for kw in news_keywords)
             
             if is_news:
-                raw_results = list(ddgs.news(query, region="wt-wt", safesearch="off",
-                                            timelimit="m", max_results=max_results))
-                for r in raw_results:
-                    results.append({
-                        'title': r.get('title', ''),
-                        'url': r.get('url', ''),
-                        'snippet': r.get('body', ''),
-                        'date': r.get('date', ''),
-                        'source': r.get('source', 'ddgs_news')
-                    })
-            else:
-                raw_results = list(ddgs.text(query, region="wt-wt", safesearch="off",
-                                            timelimit="m", max_results=max_results))
-                for r in raw_results:
+                # Use news search
+                try:
+                    ddg_results = list(ddgs.news(query, max_results=max_results))
+                    for r in ddg_results:
+                        results.append({
+                            'title': r.get('title', ''),
+                            'url': r.get('url', ''),
+                            'snippet': r.get('body', ''),
+                            'date': r.get('date', ''),
+                            'source': 'ddgs_news'
+                        })
+                except:
+                    pass
+            
+            # Always also do text search
+            try:
+                ddg_results = list(ddgs.text(query, max_results=max_results))
+                for r in ddg_results:
                     results.append({
                         'title': r.get('title', ''),
                         'url': r.get('href', ''),
@@ -219,6 +225,8 @@ class WebSearchEngine:
                         'date': '',
                         'source': 'ddgs_text'
                     })
+            except:
+                pass
             
             print(f"[WEB-SEARCH] DDGS API returned {len(results)} results")
             
@@ -227,588 +235,348 @@ class WebSearchEngine:
         
         return results
     
-    async def _fetch_page_async(self, session, url: str, timeout: int = 10) -> Tuple[str, str, bool]:
-        """
-        Asynchronously fetch a page and extract its content.
-        Returns: (url, content, success)
-        """
-        import aiohttp
-        from bs4 import BeautifulSoup
-        
+    def _fetch_page_content(self, url: str, timeout: int = 10) -> Optional[str]:
+        """Fetch and extract main content from a web page."""
         try:
-            headers = {
-                'User-Agent': self._get_user_agent(),
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5'
-            }
+            from newspaper import Article
             
-            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout),
-                                  allow_redirects=True, ssl=False) as response:
-                if response.status != 200:
-                    return (url, f"HTTP {response.status}", False)
+            article = Article(url)
+            article.download()
+            article.parse()
+            
+            if article.text and len(article.text) > 100:
+                content = article.text[:4000]
+                if len(article.text) > 4000:
+                    content += "\n[...content truncated...]"
                 
-                html = await response.text()
+                # Add publish date if available
+                if article.publish_date:
+                    content = f"[Published: {article.publish_date.strftime('%Y-%m-%d')}]\n{content}"
                 
-                # Try newspaper first for article extraction
-                try:
-                    from newspaper import Article
-                    article = Article(url)
-                    article.set_html(html)
-                    article.parse()
-                    
-                    if article.text and len(article.text) > 200:
-                        content = article.text
-                        if article.publish_date:
-                            content = f"[Published: {article.publish_date.strftime('%Y-%m-%d')}]\n{content}"
-                        return (url, content[:5000], True)
-                except:
-                    pass
+                return content
                 
-                # Fallback to BeautifulSoup extraction
-                soup = BeautifulSoup(html, 'lxml')
-                
-                # Remove unwanted elements
-                for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 
-                               'advertisement', 'iframe', 'noscript']):
-                    tag.decompose()
-                
-                # Try to find main content
-                main_content = None
-                for selector in ['article', 'main', '[role="main"]', '.article-body', 
-                               '.post-content', '.entry-content', '#content', '.content']:
-                    main_content = soup.select_one(selector)
-                    if main_content:
-                        break
-                
-                if main_content:
-                    text = main_content.get_text(separator='\n', strip=True)
-                else:
-                    text = soup.get_text(separator='\n', strip=True)
-                
-                # Clean up the text
-                lines = [line.strip() for line in text.split('\n') if line.strip()]
-                text = '\n'.join(lines)
-                
-                if len(text) > 200:
-                    return (url, text[:5000], True)
-                else:
-                    return (url, "Content too short", False)
-                    
-        except asyncio.TimeoutError:
-            return (url, "Timeout", False)
         except Exception as e:
-            return (url, str(e)[:100], False)
+            print(f"[WEB-SEARCH] Failed to fetch {url}: {e}")
+        
+        return None
     
-    async def _fetch_pages_parallel(self, urls: List[str], max_concurrent: int = 5) -> List[Tuple[str, str, bool]]:
-        """
-        Fetch multiple pages in parallel using aiohttp.
-        """
-        import aiohttp
+    def _fetch_pages_parallel(self, urls: List[str], max_workers: int = 4) -> Dict[str, str]:
+        """Fetch multiple pages in parallel."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         
-        results = []
-        connector = aiohttp.TCPConnector(limit=max_concurrent, ssl=False)
+        results = {}
         
-        async with aiohttp.ClientSession(connector=connector) as session:
-            tasks = [self._fetch_page_async(session, url) for url in urls]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_url = {executor.submit(self._fetch_page_content, url): url for url in urls}
             
-            # Handle exceptions
-            processed_results = []
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    processed_results.append((urls[i], str(result)[:100], False))
-                else:
-                    processed_results.append(result)
-            
-            return processed_results
+            for future in as_completed(future_to_url, timeout=30):
+                url = future_to_url[future]
+                try:
+                    content = future.result()
+                    if content:
+                        results[url] = content
+                except Exception as e:
+                    print(f"[WEB-SEARCH] Parallel fetch error for {url}: {e}")
+        
+        return results
     
-    def search(self, query: str, max_results: int = 12, deep_fetch: int = 6,
-              progress_callback=None) -> Dict:
+    def search(self, query: str, max_results: int = 12, deep_fetch: int = 6) -> Dict:
         """
-        Perform comprehensive web search.
-        
-        Phases:
-        1. Search Discovery: Get search results from multiple sources
-        2. Rank & Select: Score and rank results, select top for deep fetch
-        3. Deep Fetch: Fetch full content from top pages in parallel
-        4. Process & Merge: Extract, process, and merge all content
-        
-        Args:
-            query: Search query
-            max_results: Maximum search results to fetch
-            deep_fetch: Number of pages to deep fetch
-            progress_callback: Optional callback for progress updates
-        
-        Returns:
-            dict: {
-                'content': str - Combined search results for LLM context,
-                'metadata': {
-                    'type': 'web_search',
-                    'query': str,
-                    'total_results': int,
-                    'pages_fetched': int,
-                    'sources': list,
-                    'error': str or None
-                }
+        Perform comprehensive web search with dependency checking.
+        """
+        # Check dependencies
+        missing_deps = []
+        try:
+            import requests
+        except ImportError:
+            missing_deps.append("requests")
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError:
+            missing_deps.append("beautifulsoup4")
+        try:
+            from newspaper import Article
+        except ImportError:
+            missing_deps.append("newspaper3k")
+        try:
+            import lxml
+        except ImportError:
+            missing_deps.append("lxml")
+            
+        if missing_deps:
+            error_msg = f"Web Search requires missing packages: {', '.join(missing_deps)}. Install with: pip install {' '.join(missing_deps)}"
+            print(f"[WEB-SEARCH] {error_msg}")
+            return {
+                'content': f"Web search unavailable: {error_msg}",
+                'metadata': {'type': 'web_search', 'query': query, 'error': error_msg, 'sources': []}
             }
-        """
-        current_date = datetime.now().strftime("%B %d, %Y")
-        current_year = datetime.now().year
         
-        # Add current year for time-sensitive queries
-        news_keywords = ['news', 'latest', 'current', 'recent', 'today', 'breaking',
-                        'protests', 'election', 'war', 'crisis', 'update', 'happening']
-        is_news = any(kw in query.lower() for kw in news_keywords)
-        has_year = any(str(y) in query for y in range(2020, 2030))
+        # Phase 1: Gather search results from multiple sources
+        print(f"[WEB-SEARCH] Searching for: {query}")
         
-        search_query = f"{query} {current_year}" if is_news and not has_year else query
+        all_results = []
         
-        header = (
-            f"[Web Search Results - Comprehensive Multi-Source]\n"
-            f"[Current Date: {current_date}]\n"
-            f"[Query: {search_query}]\n"
-            f"[Mode: Multi-source search → Parallel deep fetch]\n\n"
-        )
+        # DDG HTML search
+        html_results = self._search_duckduckgo_html(query, max_results)
+        all_results.extend(html_results)
         
-        empty_result = {
-            'content': header,
+        # DDGS API search (supplement)
+        api_results = self._search_ddgs_api(query, max_results // 2)
+        all_results.extend(api_results)
+        
+        if not all_results:
+            return {
+                'content': f"No search results found for: {query}\n\nCheck your internet connection or try a different query.",
+                'metadata': {'type': 'web_search', 'query': query, 'error': 'No results', 'sources': []}
+            }
+        
+        # Deduplicate by URL
+        seen_urls = set()
+        unique_results = []
+        for r in all_results:
+            url = r.get('url', '')
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_results.append(r)
+        
+        # Phase 2: Score and rank results
+        query_words = set(query.lower().split())
+        scored_results = [(self._score_search_result(r, query_words), r) for r in unique_results]
+        scored_results.sort(key=lambda x: x[0], reverse=True)
+        
+        # Select top results for deep fetch
+        top_results = [r for _, r in scored_results[:deep_fetch]]
+        remaining_results = [r for _, r in scored_results[deep_fetch:max_results]]
+        
+        # Phase 3: Fetch full content from top results
+        urls_to_fetch = [r['url'] for r in top_results if r.get('url')]
+        fetched_content = self._fetch_pages_parallel(urls_to_fetch)
+        
+        # Phase 4: Build final content
+        content_parts = []
+        sources = []
+        
+        # Header
+        content_parts.append(f"═══════════════════════════════════════════════════════")
+        content_parts.append(f"WEB SEARCH RESULTS: {query}")
+        content_parts.append(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        content_parts.append(f"═══════════════════════════════════════════════════════\n")
+        
+        # Deep-fetched articles
+        for i, result in enumerate(top_results, 1):
+            url = result.get('url', '')
+            title = result.get('title', 'Untitled')
+            
+            sources.append({
+                'title': title,
+                'url': url,
+                'fetched': url in fetched_content,
+                'type': 'deep'
+            })
+            
+            content_parts.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            content_parts.append(f"📰 ARTICLE {i}: {title}")
+            content_parts.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            content_parts.append(f"URL: {url}")
+            
+            if url in fetched_content:
+                content_parts.append(f"\n{fetched_content[url]}\n")
+            else:
+                content_parts.append(f"\n{result.get('snippet', 'No content available')}\n")
+        
+        # Additional snippets
+        if remaining_results:
+            content_parts.append("\n───────────────────────────────────────────────────────")
+            content_parts.append("📋 ADDITIONAL SOURCES")
+            content_parts.append("───────────────────────────────────────────────────────")
+            
+            for i, result in enumerate(remaining_results, 1):
+                title = result.get('title', 'Untitled')
+                snippet = result.get('snippet', '')
+                url = result.get('url', '')
+                
+                sources.append({
+                    'title': title,
+                    'url': url,
+                    'fetched': False,
+                    'type': 'snippet'
+                })
+                
+                content_parts.append(f"\n[{i}] {title}")
+                content_parts.append(f"    {snippet[:200]}..." if len(snippet) > 200 else f"    {snippet}")
+                content_parts.append(f"    <{url}>")
+        
+        final_content = "\n".join(content_parts)
+        fetched_count = sum(1 for s in sources if s.get('fetched'))
+        
+        print(f"[WEB-SEARCH] Complete: {fetched_count} deep fetched, {len(remaining_results)} snippets")
+        
+        return {
+            'content': final_content,
             'metadata': {
                 'type': 'web_search',
-                'query': search_query,
-                'total_results': 0,
-                'pages_fetched': 0,
-                'sources': [],
+                'query': query,
+                'total_results': len(sources),
+                'deep_fetched': fetched_count,
+                'sources': sources,
                 'error': None
             }
         }
-        
-        try:
-            # ═══════════════════════════════════════════════════════════════════
-            # PHASE 1: Search Discovery - Get results from multiple sources
-            # ═══════════════════════════════════════════════════════════════════
-            print(f"[WEB-SEARCH] ══════════════════════════════════════════════════════")
-            print(f"[WEB-SEARCH] Phase 1: Search Discovery")
-            print(f"[WEB-SEARCH] Query: '{search_query}'")
-            
-            if progress_callback:
-                progress_callback(1, "Searching multiple sources...")
-            
-            all_results = []
-            
-            # Try DDG HTML scraping first (more comprehensive)
-            html_results = self._search_duckduckgo_html(search_query, max_results)
-            all_results.extend(html_results)
-            
-            # Supplement with DDGS API if needed
-            if len(all_results) < max_results // 2:
-                api_results = self._search_ddgs_api(search_query, max_results)
-                # Deduplicate by URL
-                existing_urls = {r['url'] for r in all_results}
-                for r in api_results:
-                    if r['url'] not in existing_urls:
-                        all_results.append(r)
-                        existing_urls.add(r['url'])
-            
-            if not all_results:
-                print("[WEB-SEARCH] No results found")
-                empty_result['content'] = header + "[No Results] Web search returned no results."
-                empty_result['metadata']['error'] = "No results found"
-                return empty_result
-            
-            print(f"[WEB-SEARCH] Total results: {len(all_results)}")
-            
-            # ═══════════════════════════════════════════════════════════════════
-            # PHASE 2: Rank & Select - Score results and select top for deep fetch
-            # ═══════════════════════════════════════════════════════════════════
-            print(f"[WEB-SEARCH] Phase 2: Ranking {len(all_results)} results")
-            
-            if progress_callback:
-                progress_callback(2, "Ranking and selecting best sources...")
-            
-            query_words = set(word.lower() for word in search_query.split() if len(word) > 3)
-            
-            scored_results = []
-            for result in all_results:
-                score = self._score_search_result(result, query_words)
-                scored_results.append((score, result))
-            
-            # Sort by score descending
-            scored_results.sort(key=lambda x: x[0], reverse=True)
-            
-            # Select top for deep fetch
-            top_results = [r for _, r in scored_results[:deep_fetch]]
-            remaining_results = [r for _, r in scored_results[deep_fetch:max_results]]
-            
-            print(f"[WEB-SEARCH] Selected {len(top_results)} for deep fetch:")
-            for i, r in enumerate(top_results, 1):
-                print(f"[WEB-SEARCH]   {i}. {r['title'][:50]}...")
-            
-            # ═══════════════════════════════════════════════════════════════════
-            # PHASE 3: Deep Fetch - Fetch full content from top pages in parallel
-            # ═══════════════════════════════════════════════════════════════════
-            print(f"[WEB-SEARCH] Phase 3: Deep fetching {len(top_results)} pages")
-            
-            if progress_callback:
-                progress_callback(3, f"Fetching {len(top_results)} pages in parallel...")
-            
-            urls_to_fetch = [r['url'] for r in top_results]
-            
-            # Run async fetch in a new event loop (compatible with sync context)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                fetch_results = loop.run_until_complete(
-                    self._fetch_pages_parallel(urls_to_fetch, max_concurrent=5)
-                )
-            finally:
-                loop.close()
-            
-            # ═══════════════════════════════════════════════════════════════════
-            # PHASE 4: Process & Merge - Combine all content
-            # ═══════════════════════════════════════════════════════════════════
-            print(f"[WEB-SEARCH] Phase 4: Processing and merging results")
-            
-            if progress_callback:
-                progress_callback(4, "Processing and merging content...")
-            
-            deep_content = []
-            sources = []
-            fetched_count = 0
-            
-            for i, (url, content, success) in enumerate(fetch_results):
-                result = top_results[i]
-                title = result['title']
-                snippet = result['snippet']
-                
-                source_info = {
-                    'title': title,
-                    'url': url,
-                    'fetched': success,
-                    'type': 'deep'
-                }
-                sources.append(source_info)
-                
-                if success:
-                    fetched_count += 1
-                    # Truncate content if too long
-                    if len(content) > 4000:
-                        content = content[:4000] + "\n[...truncated...]"
-                    
-                    deep_content.append(f"══════════════════════════════════════════════════════")
-                    deep_content.append(f"📰 PAGE {i+1}: {title}")
-                    deep_content.append(f"══════════════════════════════════════════════════════")
-                    deep_content.append(f"URL: {url}")
-                    deep_content.append(f"\n{content}\n")
-                    print(f"[WEB-SEARCH]   ✓ [{i+1}] {title[:40]}... ({len(content)} chars)")
-                else:
-                    # Use snippet as fallback
-                    deep_content.append(f"──────────────────────────────────────────────────────")
-                    deep_content.append(f"📋 PAGE {i+1} (snippet only): {title}")
-                    deep_content.append(f"──────────────────────────────────────────────────────")
-                    deep_content.append(f"URL: {url}")
-                    deep_content.append(f"\n{snippet}\n")
-                    print(f"[WEB-SEARCH]   ○ [{i+1}] {title[:40]}... (snippet only: {content})")
-            
-            # Add remaining results as snippets
-            snippet_content = []
-            if remaining_results:
-                snippet_content.append("\n──────────────────────────────────────────────────────")
-                snippet_content.append("📋 ADDITIONAL SOURCES (Search Snippets)")
-                snippet_content.append("──────────────────────────────────────────────────────")
-                
-                for i, result in enumerate(remaining_results, 1):
-                    title = result['title']
-                    snippet = result['snippet']
-                    url = result['url']
-                    date = result.get('date', '')
-                    
-                    sources.append({
-                        'title': title,
-                        'url': url,
-                        'fetched': False,
-                        'type': 'snippet'
-                    })
-                    
-                    date_str = f" ({date})" if date else ""
-                    snippet_content.append(f"\n[{i}] {title}{date_str}")
-                    snippet_content.append(f"    {snippet[:250]}..." if len(snippet) > 250 else f"    {snippet}")
-                    snippet_content.append(f"    <{url}>")
-            
-            # Combine all content
-            final_content = header
-            final_content += "\n".join(deep_content)
-            final_content += "\n".join(snippet_content)
-            
-            print(f"[WEB-SEARCH] ══════════════════════════════════════════════════════")
-            print(f"[WEB-SEARCH] Complete: {fetched_count} pages fetched, {len(remaining_results)} snippets")
-            print(f"[WEB-SEARCH] Total content: {len(final_content)} chars")
-            
-            return {
-                'content': final_content,
-                'metadata': {
-                    'type': 'web_search',
-                    'query': search_query,
-                    'total_results': len(all_results),
-                    'pages_fetched': fetched_count,
-                    'sources': sources,
-                    'error': None
-                }
-            }
-            
-        except Exception as e:
-            print(f"[WEB-SEARCH] Error: {e}")
-            import traceback
-            traceback.print_exc()
-            empty_result['content'] = header + f"[Search Error] {str(e)}"
-            empty_result['metadata']['error'] = str(e)
-            return empty_result
 
 
 # Global web search engine instance
 _web_search_engine = None
 
 def get_web_search_engine() -> WebSearchEngine:
-    """Get or create the global web search engine instance."""
+    """Get or create web search engine instance."""
     global _web_search_engine
     if _web_search_engine is None:
         _web_search_engine = WebSearchEngine()
     return _web_search_engine
 
 
-def web_search(query: str, max_results: int = 12, deep_fetch: int = 6,
-              progress_callback=None) -> dict:
+def web_search(query: str, max_results: int = 12, deep_fetch: int = 6) -> Dict:
     """
-    Perform comprehensive web search (convenience function).
-    
-    This is the main entry point for web search functionality.
-    Uses multiple search sources and parallel page fetching for comprehensive results.
+    Perform comprehensive web search.
     
     Args:
         query: Search query
-        max_results: Maximum search results to analyze
-        deep_fetch: Number of pages to fetch full content from
-        progress_callback: Optional callback for progress updates
-    
+        max_results: Maximum results to consider
+        deep_fetch: Number of pages to fetch full content
+        
     Returns:
-        dict: {
-            'content': str - Combined search results for LLM context,
-            'metadata': {
-                'type': 'web_search',
-                'query': str,
-                'total_results': int,
-                'pages_fetched': int,
-                'sources': list,
-                'error': str or None
-            }
-        }
+        Dict with 'content' and 'metadata'
     """
     engine = get_web_search_engine()
-    return engine.search(query, max_results, deep_fetch, progress_callback)
+    return engine.search(query, max_results, deep_fetch)
 
 
 def format_web_search_status_for_chat(search_metadata: dict) -> str:
-    """
-    Format web search metadata into a readable status string for the chat display.
-    
-    Args:
-        search_metadata: The 'metadata' dict from web_search
-        
-    Returns:
-        Formatted string showing search activity
-    """
+    """Format web search metadata for chat display."""
     if not search_metadata:
         return ""
     
     lines = []
-    search_type = search_metadata.get('type', 'unknown')
     query = search_metadata.get('query', '')
     sources = search_metadata.get('sources', [])
     error = search_metadata.get('error')
-    total_results = search_metadata.get('total_results', 0)
-    pages_fetched = search_metadata.get('pages_fetched', 0)
     
-    # Truncate long queries for display
     display_query = query[:80] + "..." if len(query) > 80 else query
     
-    if search_type == 'web_search':
-        if error:
-            lines.append(f"🌐 Web Search: \"{display_query}\" — ⚠️ {error}")
-        else:
-            deep_sources = [s for s in sources if s.get('type') == 'deep']
-            snippet_sources = [s for s in sources if s.get('type') == 'snippet']
-            
-            lines.append(f"🌐 Web Search: \"{display_query}\"")
-            lines.append(f"   📊 {total_results} results found")
-            lines.append(f"   📰 {pages_fetched}/{len(deep_sources)} pages deep-fetched")
-            if snippet_sources:
-                lines.append(f"   📋 {len(snippet_sources)} additional snippets")
-            
-            # Show domains of successfully fetched pages
-            for source in deep_sources:
-                if source.get('fetched'):
-                    url = source.get('url', '')
-                    try:
-                        domain = urlparse(url).netloc
-                        if domain.startswith('www.'):
-                            domain = domain[4:]
-                        lines.append(f"      ✓ {domain}")
-                    except:
-                        pass
+    if error:
+        lines.append(f"🌐 Web Search: \"{display_query}\" — ⚠️ {error}")
+    else:
+        deep_sources = [s for s in sources if s.get('type') == 'deep']
+        snippet_sources = [s for s in sources if s.get('type') == 'snippet']
+        fetched = sum(1 for s in deep_sources if s.get('fetched'))
+        
+        lines.append(f"🌐 Web Search: \"{display_query}\"")
+        lines.append(f"   📰 {fetched}/{len(deep_sources)} articles fetched")
+        if snippet_sources:
+            lines.append(f"   📋 {len(snippet_sources)} additional snippets")
+        
+        for source in deep_sources:
+            if source.get('fetched'):
+                url = source.get('url', '')
+                try:
+                    domain = urlparse(url).netloc.replace('www.', '')
+                    lines.append(f"      ✓ {domain}")
+                except:
+                    pass
     
     return "\n".join(lines)
 
 
 # =============================================================================
-# WEB SEARCH - DDG HYBRID (EXISTING IMPLEMENTATION)
+# HYBRID SEARCH (DDG + NEWSPAPER)
 # =============================================================================
 
-def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict:
+def hybrid_search(search_query: str, ddg_results: int = 8, deep_fetch: int = 4) -> Dict:
     """
-    Hybrid search: DDG pre-research followed by targeted deep article fetching.
-    
-    This provides the best of both worlds:
-    - DDG gives quick overview of many sources (breadth)
-    - Deep fetch gives full content from top sources (depth)
-    
-    Workflow:
-    1. DDG Pre-Search: Quick DDG search to discover sources with snippets
-    2. Analyze Results: Score and rank sources based on relevance
-    3. Deep Fetch: Extract full article content from top sources
-    4. Merge Results: Combine deep articles + DDG snippets
-    
-    Args:
-        query: Search query
-        ddg_results: Number of DDG results to fetch (default 8)
-        deep_fetch: Number of top results to deep fetch (default 4)
-    
-    Returns:
-        dict: {
-            'content': str - Combined search results for LLM context,
-            'metadata': {
-                'type': 'hybrid',
-                'query': str,
-                'ddg_count': int,
-                'deep_count': int,
-                'sources': list,
-                'error': str or None
-            }
-        }
+    Hybrid search: DDG snippets + newspaper deep fetch.
+    Checks for required dependencies before executing.
     """
-    from ddgs import DDGS
-    from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
-    from newspaper import Article
-    import requests.exceptions
-    
-    tmp = _get_temporary()
-    
-    print(f"[HYBRID] ══════════════════════════════════════════════════════")
-    print(f"[HYBRID] Starting hybrid search")
-    print(f"[HYBRID] Query: '{query}'")
-    print(f"[HYBRID] DDG results: {ddg_results}, Deep fetch: {deep_fetch}")
-    print(f"[HYBRID] ══════════════════════════════════════════════════════")
-    
-    current_date = datetime.now().strftime("%B %d, %Y")
-    current_year = datetime.now().year
-    
-    # Detect news/current events
-    news_keywords = [
-        'news', 'latest', 'current', 'recent', 'today', 'breaking',
-        'protests', 'uprising', 'election', 'war', 'crisis', 'conflict',
-        'headlines', 'developments', 'happening', 'update',
-        'january', 'february', 'march', 'april', 'may', 'june',
-        'july', 'august', 'september', 'october', 'november', 'december',
-        '2024', '2025', '2026', '2027'
-    ]
-    
-    query_lower = query.lower()
-    is_news_query = any(kw in query_lower for kw in news_keywords)
-    has_year = any(str(y) in query_lower for y in range(2020, 2030))
-    
-    search_query = f"{query} {current_year}" if is_news_query and not has_year else query
-    
-    header = (
-        f"[Hybrid Search Results - DDG Overview + Deep Articles]\n"
-        f"[Current Date: {current_date}]\n"
-        f"[Query: {search_query}]\n"
-        f"[Mode: DDG pre-research ({ddg_results} sources) → Deep fetch (top {deep_fetch} articles)]\n\n"
-    )
-    
-    empty_result = {
-        'content': header,
-        'metadata': {
-            'type': 'hybrid',
-            'query': search_query,
-            'ddg_count': 0,
-            'deep_count': 0,
-            'sources': [],
-            'error': None
-        }
-    }
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # PHASE 1: DDG Pre-Search - Get overview of available sources
-    # ═══════════════════════════════════════════════════════════════════════
-    print(f"[HYBRID] Phase 1: DDG Pre-Search")
-    
-    ddg_hits = []
+    # Check dependencies first
+    missing_deps = []
     try:
-        ddgs = DDGS(timeout=20)
+        from newspaper import Article
+    except ImportError:
+        missing_deps.append("newspaper3k")
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        missing_deps.append("duckduckgo-search")
+    
+    if missing_deps:
+        error_msg = f"Search requires missing packages: {', '.join(missing_deps)}. Install with: pip install {' '.join(missing_deps)}"
+        print(f"[HYBRID] {error_msg}")
+        return {
+            'content': f"Search unavailable: {error_msg}",
+            'metadata': {'type': 'hybrid', 'query': search_query, 'error': error_msg, 'sources': []}
+        }
+    
+    # Header
+    header = f"""═══════════════════════════════════════════════════════
+HYBRID SEARCH RESULTS: {search_query}
+Search Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+═══════════════════════════════════════════════════════
+
+"""
+    
+    # Phase 1: DDG search
+    print(f"[HYBRID] Phase 1: DDG search for '{search_query}'")
+    ddg_hits = []
+    
+    try:
+        ddgs = DDGS(timeout=15)
         
-        # Determine if this is a news query
-        if is_news_query:
-            print(f"[HYBRID]   Detected news query - using DDG news endpoint")
-            raw_results = list(ddgs.news(search_query, region="wt-wt", safesearch="off", 
-                                        timelimit="m", max_results=ddg_results))
-            for r in raw_results:
-                ddg_hits.append({
-                    'title': r.get('title', ''),
-                    'href': r.get('url', ''),
-                    'body': r.get('body', ''),
-                    'date': r.get('date', ''),
-                    'source': r.get('source', '')
-                })
-        else:
-            print(f"[HYBRID]   Using DDG text endpoint")
-            raw_results = list(ddgs.text(search_query, region="wt-wt", safesearch="off",
-                                        timelimit="m", max_results=ddg_results))
-            for r in raw_results:
-                ddg_hits.append({
-                    'title': r.get('title', ''),
-                    'href': r.get('href', ''),
-                    'body': r.get('body', ''),
-                    'date': '',
-                    'source': ''
-                })
+        # Check if news query
+        news_keywords = ['news', 'latest', 'current', 'recent', 'today', 'breaking']
+        is_news = any(kw in search_query.lower() for kw in news_keywords)
         
-        print(f"[HYBRID]   DDG returned {len(ddg_hits)} results")
+        if is_news:
+            try:
+                news_results = list(ddgs.news(search_query, max_results=ddg_results))
+                for r in news_results:
+                    ddg_hits.append({
+                        'title': r.get('title', ''),
+                        'href': r.get('url', ''),
+                        'body': r.get('body', ''),
+                        'date': r.get('date', ''),
+                        'source': r.get('source', '')
+                    })
+            except:
+                pass
         
-    except RatelimitException:
-        print("[HYBRID]   DDG rate limited")
-        empty_result['content'] = header + "[Rate Limited] DDG search temporarily unavailable."
-        empty_result['metadata']['error'] = "Rate limited"
-        return empty_result
-    except TimeoutException:
-        print("[HYBRID]   DDG timeout")
-        empty_result['content'] = header + "[Timeout] DDG search timed out."
-        empty_result['metadata']['error'] = "Timeout"
-        return empty_result
+        # Text search
+        text_results = list(ddgs.text(search_query, max_results=ddg_results))
+        for r in text_results:
+            ddg_hits.append({
+                'title': r.get('title', ''),
+                'href': r.get('href', ''),
+                'body': r.get('body', ''),
+                'date': '',
+                'source': ''
+            })
+        
+        print(f"[HYBRID]   Found {len(ddg_hits)} DDG results")
+        
     except Exception as e:
         print(f"[HYBRID]   DDG error: {e}")
-        empty_result['content'] = header + f"[Search Error] {e}"
-        empty_result['metadata']['error'] = str(e)
-        return empty_result
+        return {
+            'content': f"Search failed: DuckDuckGo search error ({str(e)}). Check your internet connection.",
+            'metadata': {'type': 'hybrid', 'query': search_query, 'error': str(e), 'sources': []}
+        }
     
     if not ddg_hits:
-        print("[HYBRID]   No DDG results")
-        empty_result['content'] = header + "[No Results] DDG returned no results."
-        return empty_result
+        return {
+            'content': f"No search results found for: {search_query}\n\nThe search engine returned no results. The query may be too specific or there may be connectivity issues.",
+            'metadata': {'type': 'hybrid', 'query': search_query, 'error': 'No results', 'sources': []}
+        }
     
-    # ═══════════════════════════════════════════════════════════════════════
-    # PHASE 2: Analyze DDG Results - Rank and select top sources for deep fetch
-    # ═══════════════════════════════════════════════════════════════════════
-    print(f"[HYBRID] Phase 2: Analyzing DDG results for deep fetch candidates")
+    # Phase 2: Score and rank
+    print(f"[HYBRID] Phase 2: Ranking {len(ddg_hits)} results")
     
-    # Score sources based on relevance indicators
     scored_hits = []
     query_words = set(search_query.lower().split())
     
@@ -817,19 +585,16 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
         title_lower = hit['title'].lower()
         body_lower = hit['body'].lower()
         
-        # Score based on query word matches
         for word in query_words:
-            if len(word) > 3:  # Skip short words
+            if len(word) > 3:
                 if word in title_lower:
                     score += 3
                 if word in body_lower:
                     score += 1
         
-        # Bonus for news sources (usually more relevant for current events)
         if hit.get('date'):
             score += 2
         
-        # Bonus for reputable domains
         url = hit.get('href', '').lower()
         reputable = ['reuters', 'bbc', 'npr', 'guardian', 'nytimes', 'washingtonpost', 
                      'aljazeera', 'apnews', 'wikipedia', '.gov', '.edu', 'britannica']
@@ -838,21 +603,13 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
         
         scored_hits.append((score, hit))
     
-    # Sort by score descending
     scored_hits.sort(key=lambda x: x[0], reverse=True)
     
-    # Select top N for deep fetch
     deep_fetch_candidates = [hit for score, hit in scored_hits[:deep_fetch]]
     remaining_ddg = [hit for score, hit in scored_hits[deep_fetch:]]
     
-    print(f"[HYBRID]   Selected {len(deep_fetch_candidates)} for deep fetch")
-    for i, hit in enumerate(deep_fetch_candidates, 1):
-        print(f"[HYBRID]     {i}. {hit['title'][:50]}...")
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # PHASE 3: Deep Fetch - Get full article content from top sources
-    # ═══════════════════════════════════════════════════════════════════════
-    print(f"[HYBRID] Phase 3: Deep fetching top {len(deep_fetch_candidates)} articles")
+    # Phase 3: Deep fetch
+    print(f"[HYBRID] Phase 3: Deep fetching {len(deep_fetch_candidates)} articles")
     
     deep_results = []
     deep_sources = []
@@ -864,8 +621,6 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
         date = hit.get('date', '')
         source = hit.get('source', '')
         
-        print(f"[HYBRID]   [{i}/{len(deep_fetch_candidates)}] Fetching: {title[:40]}...")
-        
         source_info = {'title': title, 'url': url, 'fetched': False, 'type': 'deep'}
         article_content = ""
         
@@ -875,7 +630,7 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
             article.parse()
             
             if article.text and len(article.text) > 100:
-                article_content = article.text[:3000]  # More content for deep fetch
+                article_content = article.text[:3000]
                 if len(article.text) > 3000:
                     article_content += "\n[...truncated...]"
                 if article.publish_date:
@@ -883,12 +638,10 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
                 elif date:
                     article_content = f"[Date: {date}]\n{article_content}"
                 source_info['fetched'] = True
-                print(f"[HYBRID]     ✓ Fetched {len(article_content)} chars")
             else:
-                print(f"[HYBRID]     ○ Article too short, using snippet")
                 article_content = snippet
         except Exception as e:
-            print(f"[HYBRID]     ✗ Failed: {e}")
+            print(f"[HYBRID] Failed to fetch {url}: {e}")
             article_content = snippet
         
         deep_sources.append(source_info)
@@ -901,15 +654,10 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
             deep_results.append(f"Source: {source}")
         deep_results.append(f"\n{article_content or snippet}\n")
     
-    # ═══════════════════════════════════════════════════════════════════════
-    # PHASE 4: Merge Results - Combine deep articles + DDG snippets
-    # ═══════════════════════════════════════════════════════════════════════
-    print(f"[HYBRID] Phase 4: Merging results")
-    
+    # Phase 4: Merge
     ddg_sources = []
     ddg_summaries = []
     
-    # Add remaining DDG results as quick reference
     if remaining_ddg:
         ddg_summaries.append("\n──────────────────────────────────────────────────────")
         ddg_summaries.append("📋 ADDITIONAL SOURCES (DDG Snippets)")
@@ -928,7 +676,6 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
             ddg_summaries.append(f"    {body[:200]}..." if len(body) > 200 else f"    {body}")
             ddg_summaries.append(f"    <{url}>")
     
-    # Combine all
     all_sources = deep_sources + ddg_sources
     fetched_count = sum(1 for s in all_sources if s.get('fetched', False))
     
@@ -937,7 +684,6 @@ def hybrid_search(query: str, ddg_results: int = 8, deep_fetch: int = 4) -> dict
     final_content += "\n".join(ddg_summaries)
     
     print(f"[HYBRID] Complete: {fetched_count} deep fetched, {len(ddg_sources)} DDG snippets")
-    print(f"[HYBRID] Total content: {len(final_content)} chars")
     
     return {
         'content': final_content,
@@ -1006,3 +752,559 @@ def format_search_status_for_chat(search_metadata: dict) -> str:
         return format_web_search_status_for_chat(search_metadata)
     
     return "\n".join(lines)
+
+
+# =============================================================================
+# TTS (TEXT-TO-SPEECH) FUNCTIONS
+# =============================================================================
+
+# TTS thread management
+_tts_lock = threading.Lock()
+_tts_thread = None
+_tts_stop_flag = threading.Event()
+
+
+def detect_tts_engine() -> str:
+    """
+    Detect available TTS engine based on platform.
+    
+    Returns:
+        str: "pyttsx3" for Windows, "espeak-ng" for Linux, "none" if unavailable
+    """
+    
+    
+    if cfg.PLATFORM == "windows":
+        try:
+            import pyttsx3
+            return "pyttsx3"
+        except ImportError:
+            return "none"
+    
+    elif cfg.PLATFORM == "linux":
+        try:
+            result = subprocess.run(
+                ["espeak-ng", "--version"],
+                capture_output=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return "espeak-ng"
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass
+        return "none"
+    
+    return "none"
+
+
+def detect_audio_backend() -> str:
+    """
+    Detect audio backend for playback.
+    
+    Returns:
+        str: "windows", "pipewire", "pulseaudio", or "none"
+    """
+    
+    
+    if cfg.PLATFORM == "windows":
+        return "windows"
+    
+    # Check PipeWire first (newer Ubuntu 24+)
+    try:
+        result = subprocess.run(["pw-play", "--version"], capture_output=True, timeout=5)
+        if result.returncode == 0:
+            return "pipewire"
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    
+    # Check PulseAudio (Ubuntu 22-23)
+    try:
+        result = subprocess.run(["paplay", "--version"], capture_output=True, timeout=5)
+        if result.returncode == 0:
+            return "pulseaudio"
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    
+    return "none"
+
+
+def get_tts_voices() -> List[Dict[str, str]]:
+    """
+    Get available TTS voices.
+    
+    Returns:
+        List of dicts with 'id', 'name', 'language' keys
+    """
+    
+    engine = getattr(cfg, 'TTS_ENGINE', None) or detect_tts_engine()
+    
+    if engine == "pyttsx3":
+        try:
+            import pyttsx3
+            tts = pyttsx3.init()
+            voices = tts.getProperty('voices')
+            voice_list = []
+            for v in voices:
+                # Safely extract attributes - pyttsx3 Voice objects don't have 'languages' attribute
+                lang = "unknown"
+                if hasattr(v, 'languages') and v.languages:
+                    try:
+                        lang = v.languages[0] if isinstance(v.languages, (list, tuple)) else str(v.languages)
+                    except (IndexError, TypeError):
+                        lang = "unknown"
+                
+                # Safely get name
+                name = "Unknown Voice"
+                if hasattr(v, 'name') and v.name:
+                    name = str(v.name).strip()
+                    # Clean up Microsoft Desktop voices for better display
+                    if "Microsoft" in name and "Desktop" in name:
+                        name = name.replace("Desktop", "").strip()
+                
+                # Safely get id (fallback to name if id missing)
+                voice_id = name
+                if hasattr(v, 'id') and v.id:
+                    voice_id = str(v.id)
+                
+                display = f"{name} ({lang})"
+                voice_list.append({
+                    'id': voice_id,
+                    'name': display,
+                    'language': lang
+                })
+            
+            tts.stop()  # Clean up engine to prevent locks
+            return voice_list
+            
+        except Exception as e:
+            print(f"[TTS] pyttsx3 voice enumeration failed: {e}")
+            import traceback
+            traceback.print_exc()
+            
+    elif engine == "espeak-ng":
+        return _get_espeak_voices()
+    
+    return []
+
+
+def _get_pyttsx3_voices() -> List[Dict[str, str]]:
+    """Get voices from pyttsx3 (Windows SAPI)."""
+    voices = []
+    try:
+        import pyttsx3
+        engine = pyttsx3.init()
+        for voice in engine.getProperty('voices'):
+            # Extract language properly
+            lang = voice.languages[0] if hasattr(voice, 'languages') and voice.languages else "en_US"
+            name = voice.name.strip()
+            # Clean up Microsoft Desktop voices for better display
+            if "Microsoft" in name and "Desktop" in name:
+                name = name.replace("Desktop", "").strip()
+            display = f"{name} ({lang})"
+            voices.append({
+                'id': voice.id,
+                'name': display,
+                'language': lang
+            })
+        engine.stop()
+    except Exception as e:
+        print(f"[TTS] Error getting pyttsx3 voices: {e}")
+    return voices
+
+
+def _get_espeak_voices() -> List[Dict[str, str]]:
+    """Get voices from espeak-ng (Linux)."""
+    voices = []
+    try:
+        result = subprocess.run(
+            ["espeak-ng", "--voices"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            for line in lines[1:]:  # Skip header
+                parts = line.split()
+                if len(parts) >= 4:
+                    lang = parts[1] if len(parts) > 1 else "en"
+                    name = parts[3] if len(parts) > 3 else parts[1]
+                    voices.append({
+                        'id': name,
+                        'name': name,
+                        'language': lang
+                    })
+    except Exception as e:
+        print(f"[TTS] Error getting espeak-ng voices: {e}")
+    
+    if not voices:
+        voices.append({'id': 'en', 'name': 'English (default)', 'language': 'en'})
+    
+    return voices
+
+
+def get_voice_choices() -> List[str]:
+    """Get voice names for UI dropdown."""
+    voices = get_tts_voices()
+    if not voices:
+        return ["No voices available"]
+    return [v['name'] for v in voices]
+
+
+def get_voice_id_by_name(voice_name: str) -> Optional[str]:
+    """Get voice ID from display name."""
+    voices = get_tts_voices()
+    for voice in voices:
+        if voice['name'] == voice_name:
+            return voice['id']
+    return None
+
+
+def get_output_devices() -> List[Dict[str, str]]:
+    """Get available audio output devices - platform aware, with friendly names.
+    
+    On Windows: pyttsx3 always uses the system default playback device.
+    The dropdown shows options for clarity, but selection is ignored.
+    """
+    
+    # Handle Windows first to ensure consistent config value
+    if cfg.PLATFORM == "windows":
+        # Windows TTS (pyttsx3) always plays to the current system default device
+        # Return single entry that matches expected config value "Default Sound Device"
+        return [{'id': 'default', 'name': 'Default Sound Device'}]
+    
+    # Linux: enumerate actual devices
+    devices = [{'id': 'default', 'name': 'Default / System Default'}]
+    
+    # Check PipeWire first (newer Ubuntu 24+)
+    try:
+        result = subprocess.run(["pw-play", "--version"], capture_output=True, timeout=5)
+        if result.returncode == 0:
+            return devices  # For now, just return default for PipeWire to avoid complexity
+    except:
+        pass
+    
+    # Check PulseAudio (Ubuntu 22-23)
+    try:
+        result = subprocess.run(
+            ["pactl", "list", "short", "sinks"],
+            capture_output=True, text=True, timeout=6
+        )
+        if result.returncode == 0:
+            for line in result.stdout.strip().splitlines():
+                if line.strip():
+                    parts = line.split('\t')
+                    if len(parts) >= 2:
+                        dev_id = parts[1]
+                        name = dev_id  # fallback to sink name
+                        
+                        # Attempt to get friendly description
+                        try:
+                            info_run = subprocess.run(
+                                ["pactl", "list", "sinks"],
+                                capture_output=True, text=True, timeout=5
+                            )
+                            blocks = info_run.stdout.split('\n\n')
+                            for block in blocks:
+                                if dev_id in block and "Description:" in block:
+                                    for ln in block.splitlines():
+                                        if "Description:" in ln:
+                                            name = ln.split("Description:", 1)[1].strip()
+                                            break
+                                    break
+                        except:
+                            pass
+                        
+                        devices.append({'id': dev_id, 'name': name})
+    except Exception as e:
+        print(f"[TTS] Linux device detection failed: {e}")
+    
+    # Deduplicate by name (case-insensitive) and sort alphabetically
+    seen = set()
+    unique = []
+    for d in devices:
+        key = d['name'].lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(d)
+    
+    return sorted(unique, key=lambda d: d['name'])
+
+def get_output_device_choices() -> List[str]:
+    """Get output device names for UI dropdown."""
+    devices = get_output_devices()
+    return [d['name'] for d in devices]
+
+
+def get_sample_rate_choices() -> List[int]:
+    """Get available sample rate options."""
+    return [44100, 48000]
+
+
+def speak_text(text: str, voice_id: Optional[str] = None,
+               output_device: Optional[str] = None,  # This parameter is now optional
+               sample_rate: Optional[int] = None) -> bool:
+    """
+    Speak text using TTS (non-blocking).
+    Uses shared sound settings if output_device/sample_rate not provided.
+    """
+    global _tts_thread
+    
+
+    if not getattr(cfg, 'TTS_ENABLED', False):
+        return False
+
+    engine = getattr(cfg, 'TTS_ENGINE', None) or detect_tts_engine()
+    if engine == "none":
+        print("[TTS] No TTS engine available")
+        return False
+
+    # Use shared sound settings as fallback
+    if output_device is None:
+        output_device = cfg.SOUND_OUTPUT_DEVICE
+    if sample_rate is None:
+        sample_rate = cfg.SOUND_SAMPLE_RATE
+
+    # Stop any ongoing speech
+    stop_speaking()
+
+    # Start in background
+    _tts_stop_flag.clear()
+    _tts_thread = threading.Thread(
+        target=_speak_thread,
+        args=(text, engine, voice_id, output_device, sample_rate),
+        daemon=True
+    )
+    _tts_thread.start()
+
+    return True
+
+
+def _speak_thread(text: str, engine: str, voice_id: Optional[str],
+                  output_device: Optional[str], sample_rate: int):
+    """Background thread for TTS."""
+    with _tts_lock:
+        try:
+            if engine == "pyttsx3":
+                _speak_pyttsx3(text, voice_id)
+            elif engine == "espeak-ng":
+                _speak_espeak(text, voice_id, output_device, sample_rate)
+        except Exception as e:
+            print(f"[TTS] Speech error: {e}")
+
+
+def _speak_pyttsx3(text: str, voice_id: Optional[str]):
+    try:
+        import pyttsx3
+        engine = pyttsx3.init()
+        
+        if voice_id:
+            engine.setProperty('voice', voice_id)
+        
+        engine.setProperty('rate', 175)
+        
+        
+        if cfg.PLATFORM == "windows" and cfg.SOUND_OUTPUT_DEVICE != 'default':
+            print("[TTS] Note: On Windows, pyttsx3 ALWAYS uses the system default audio device — selected output ignored.")
+        
+        engine.say(text)
+        engine.runAndWait()
+        engine.stop()
+    except Exception as e:
+        print(f"[TTS] pyttsx3 error: {e}")
+
+
+def _speak_espeak(text: str, voice_id: Optional[str],
+                  output_device: Optional[str], sample_rate: int):
+    """Speak using espeak-ng (Linux)."""
+    
+    temp_dir = Path(cfg.TEMP_DIR)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_wav = temp_dir / "tts_output.wav"
+
+    try:
+        # Build espeak-ng command - FIXED: no trailing spaces
+        cmd = ["espeak-ng"]
+        
+        if voice_id:
+            cmd.extend(["-v", voice_id])
+        
+        cmd.extend(["-w", str(temp_wav), text])
+        
+        if _tts_stop_flag.is_set():
+            return
+        
+        result = subprocess.run(cmd, capture_output=True, timeout=60)
+        
+        if result.returncode != 0:
+            print(f"[TTS] espeak-ng error: {result.stderr.decode()}")
+            return
+        
+        if _tts_stop_flag.is_set():
+            return
+        
+        # Play audio - FIXED: proper device handling without trailing spaces
+        backend = detect_audio_backend()
+        
+        if backend == "pipewire":
+            play_cmd = ["pw-play"]
+            if output_device and output_device != 'default':
+                play_cmd.extend(["--target", output_device])
+            play_cmd.append(str(temp_wav))
+        elif backend == "pulseaudio":
+            play_cmd = ["paplay"]
+            if output_device and output_device != 'default':
+                play_cmd.extend(["--device=" + output_device])  # No space after =
+            play_cmd.append(str(temp_wav))
+        else:
+            print("[TTS] No audio backend available")
+            return
+        
+        subprocess.run(play_cmd, timeout=120)
+        
+    except subprocess.TimeoutExpired:
+        print("[TTS] Speech timed out")
+    except Exception as e:
+        print(f"[TTS] espeak-ng playback error: {e}")
+    finally:
+        try:
+            if temp_wav.exists():
+                temp_wav.unlink()
+        except:
+            pass
+
+
+def stop_speaking():
+    """Stop any ongoing TTS playback."""
+    global _tts_thread
+    
+    _tts_stop_flag.set()
+    
+    if _tts_thread and _tts_thread.is_alive():
+        _tts_thread.join(timeout=1.0)
+
+
+def is_speaking() -> bool:
+    """Check if TTS is currently active."""
+    global _tts_thread
+    return _tts_thread is not None and _tts_thread.is_alive()
+
+
+def initialize_tts():
+    """Initialize TTS system. Called during startup."""
+    
+    engine = detect_tts_engine()
+    backend = detect_audio_backend()
+    
+    cfg.TTS_ENGINE = engine
+    cfg.TTS_AUDIO_BACKEND = backend
+    
+    print(f"[TTS] Engine: {engine}")
+    print(f"[TTS] Audio Backend: {backend}")
+    
+    # Set default voice - ensure something is always selected on fresh install
+    voices = get_tts_voices()
+    if voices:
+        if not cfg.TTS_VOICE or cfg.TTS_VOICE_NAME not in [v['name'] for v in voices]:
+            cfg.TTS_VOICE = voices[0]['id']
+            cfg.TTS_VOICE_NAME = voices[0]['name']
+            print(f"[TTS] Default Voice set to: {voices[0]['name']}")
+        else:
+            print(f"[TTS] Voice from config: {cfg.TTS_VOICE_NAME}")
+    else:
+        cfg.TTS_VOICE = None
+        cfg.TTS_VOICE_NAME = "No voices available"
+        print("[TTS] No voices detected")
+    
+    return engine != "none"
+
+
+def get_tts_status() -> str:
+    """Get TTS status string for display."""
+    
+    
+    engine = getattr(cfg, 'TTS_ENGINE', 'none')
+    enabled = getattr(cfg, 'TTS_ENABLED', False)
+    
+    if engine == "none":
+        return "TTS: Not Available"
+    elif enabled:
+        voice = getattr(cfg, 'TTS_VOICE_NAME', 'Default')
+        return f"TTS: ON ({voice})"
+    else:
+        return f"TTS: OFF ({engine})"
+
+
+def speak_last_response(session_messages: list) -> str:
+    """
+    Speak the last AI response from session.
+    
+    Args:
+        session_messages: List of message dicts
+        
+    Returns:
+        Status message
+    """
+    
+    
+    if not getattr(cfg, 'TTS_ENABLED', False):
+        return "TTS is disabled"
+    
+    if not session_messages:
+        return "No messages to speak"
+    
+    # Find last assistant message
+    last_response = None
+    for msg in reversed(session_messages):
+        if msg.get('role') == 'assistant':
+            last_response = msg.get('content', '')
+            break
+    
+    if not last_response:
+        return "No AI response to speak"
+    
+    # Aggressive cleaning optimized for TTS
+    text = last_response
+    
+    # Remove markdown code blocks completely
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    
+    # Remove inline code
+    text = re.sub(r'`[^`]+`', '', text)
+    
+    # Remove HTML-like tags
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Remove markdown links but keep text: [text](url) → text
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    
+    # Remove images and other markdown junk
+    text = re.sub(r'!\[.*?\]\([^)]+\)', '', text)
+    
+    # Remove emphasis markers but keep the words
+    text = re.sub(r'(\*\*|\*|_|\~\~|`)', '', text)
+    
+    # Replace multiple symbols with space or nothing
+    text = re.sub(r'([#*•→⇒★☆]|[-=]{2,})', ' ', text)
+    
+    # Normalize punctuation (keep , . ! ? ; : and quotes)
+    text = re.sub(r'[^\w\s.,!?;:\'\"()-]', ' ', text)
+    
+    # Collapse multiple spaces/newlines
+    text = re.sub(r'\s+', ' ', text)
+    text = text.strip()
+    
+    if not text:
+        return "Response has no speakable content after cleaning"
+    
+    # Truncate very long responses (TTS engines often struggle above ~4000–5000 chars)
+    if len(text) > 4500:
+        text = text[:4500] + "... Response truncated for speech."
+    
+    voice_id = getattr(cfg, 'TTS_VOICE', None)
+    output_device = getattr(cfg, 'TTS_OUTPUT_DEVICE', None)
+    sample_rate = getattr(cfg, 'TTS_SAMPLE_RATE', 44100)
+    
+    if speak_text(text, voice_id, output_device, sample_rate):
+        return "Speaking response..."
+    else:
+        return "Failed to start speech"

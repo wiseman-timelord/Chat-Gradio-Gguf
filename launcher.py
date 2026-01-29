@@ -22,9 +22,9 @@ logging.basicConfig = lambda *_, **__: None
 import sys, argparse, time
 from pathlib import Path
 from scripts.utility import short_path
-import scripts.temporary as temporary
-from scripts.settings import load_config
-from scripts.interface import launch_interface
+import scripts.configuration as cfg
+from scripts.configuration import load_config
+from scripts.display import launch_display
 from scripts.utility import detect_cpu_config
 
 def parse_args():
@@ -35,14 +35,14 @@ def parse_args():
 def initialize_platform_settings():
     """Initialize platform-specific settings with validation."""
     valid_backends = ["CPU_CPU", "VULKAN_CPU", "VULKAN_VULKAN"]
-    if temporary.BACKEND_TYPE not in valid_backends:
-        print(f"Warning: Invalid backend_type '{temporary.BACKEND_TYPE}', defaulting to CPU_CPU")
-        temporary.BACKEND_TYPE = "CPU_CPU"
-        temporary.VULKAN_AVAILABLE = False
+    if cfg.BACKEND_TYPE not in valid_backends:
+        print(f"Warning: Invalid backend_type '{cfg.BACKEND_TYPE}', defaulting to CPU_CPU")
+        cfg.BACKEND_TYPE = "CPU_CPU"
+        cfg.VULKAN_AVAILABLE = False
 
     # Vulkan VRAM optimisation
-    if temporary.BACKEND_TYPE in ("VULKAN_CPU", "VULKAN_VULKAN"):
-        if temporary.PLATFORM == "windows":
+    if cfg.BACKEND_TYPE in ("VULKAN_CPU", "VULKAN_VULKAN"):
+        if cfg.PLATFORM == "windows":
             os.environ["GGML_CUDA_NO_PINNED"] = "1"
             os.environ["GGML_VK_NO_PIPELINE_CACHE"] = "0"
             print("[Vulkan] GGML_CUDA_NO_PINNED=1   (frees ~300 MB VRAM)")
@@ -54,29 +54,29 @@ def initialize_platform_settings():
             print("[Vulkan] Exported GGML_VK_NO_PIPELINE_CACHE=0")
 
     # Set platform-specific paths
-    if temporary.PLATFORM == "windows":
-        if "VULKAN" in temporary.BACKEND_TYPE:
-            temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
-    elif temporary.PLATFORM == "linux":
-        if "VULKAN" in temporary.BACKEND_TYPE:
-            temporary.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
+    if cfg.PLATFORM == "windows":
+        if "VULKAN" in cfg.BACKEND_TYPE:
+            cfg.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli.exe"
+    elif cfg.PLATFORM == "linux":
+        if "VULKAN" in cfg.BACKEND_TYPE:
+            cfg.LLAMA_CLI_PATH = "data/llama-vulkan-bin/llama-cli"
     else:
-        raise ValueError(f"Unsupported platform: {temporary.PLATFORM}")
+        raise ValueError(f"Unsupported platform: {cfg.PLATFORM}")
 
-    print(f"Script mode `{temporary.PLATFORM}` with backend `{temporary.BACKEND_TYPE}`")
+    print(f"Script mode `{cfg.PLATFORM}` with backend `{cfg.BACKEND_TYPE}`")
 
 def shutdown_program(llm_state, models_loaded_state, session_log, attached_files):
     """Gracefully shutdown the program, saving current session if active."""
     from scripts.utility import save_session_history
-    from scripts.models import unload_models
+    from scripts.inference import unload_models
     
-    temporary.set_status("Shutting down...")
+    cfg.set_status("Shutting down...")
     
     # Save current session if active and has content
-    if temporary.SESSION_ACTIVE and session_log:
+    if cfg.SESSION_ACTIVE and session_log:
         try:
             save_session_history(session_log, attached_files)
-            print(f"Session saved to history: {temporary.session_label}")
+            print(f"Session saved to history: {cfg.session_label}")
         except Exception as e:
             print(f"Error saving session: {str(e)}")
     
@@ -115,38 +115,38 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
 
 def shutdown_platform():
     """Platform-specific cleanup procedures."""
-    if temporary.PLATFORM == "windows":
+    if cfg.PLATFORM == "windows":
         try:
             import pythoncom
             pythoncom.CoUninitialize()
         except:
             pass
-    print(f"Cleaned up {temporary.PLATFORM} resources")
+    print(f"Cleaned up {cfg.PLATFORM} resources")
 
 def setup_directories():
     """Setup and create required directories."""
     script_dir = Path(__file__).parent.resolve()
     os.chdir(script_dir)
     
-    temporary.DATA_DIR = str(script_dir / "data")
-    temporary.HISTORY_DIR = str(script_dir / "data/history")
-    temporary.TEMP_DIR = str(script_dir / "data/temp")
+    cfg.DATA_DIR = str(script_dir / "data")
+    cfg.HISTORY_DIR = str(script_dir / "data/history")
+    cfg.TEMP_DIR = str(script_dir / "data/temp")
     
     # Create required directories
-    for dir_path in [temporary.DATA_DIR, temporary.HISTORY_DIR, temporary.TEMP_DIR]:
+    for dir_path in [cfg.DATA_DIR, cfg.HISTORY_DIR, cfg.TEMP_DIR]:
         Path(dir_path).mkdir(parents=True, exist_ok=True)
     
     return script_dir
 
 def print_configuration():
-    """Print current configuration settings."""
+    """Print current configuration cfg."""
     print("\nConfiguration:")
-    print(f"  Backend: {temporary.BACKEND_TYPE}")
-    print(f"  Model: {temporary.MODEL_NAME or 'None'}")
-    print(f"  Context Size: {temporary.CONTEXT_SIZE}")
-    print(f"  VRAM Allocation: {temporary.VRAM_SIZE} MB")
-    print(f"  CPU Threads: {temporary.CPU_THREADS}")
-    print(f"  GPU Layers: {getattr(temporary, 'GPU_LAYERS', 'Auto')}")
+    print(f"  Backend: {cfg.BACKEND_TYPE}")
+    print(f"  Model: {cfg.MODEL_NAME or 'None'}")
+    print(f"  Context Size: {cfg.CONTEXT_SIZE}")
+    print(f"  VRAM Allocation: {cfg.VRAM_SIZE} MB")
+    print(f"  CPU Threads: {cfg.CPU_THREADS}")
+    print(f"  GPU Layers: {getattr(cfg, 'GPU_LAYERS', 'Auto')}")
 
 def preload_auxiliary_models():
     """Pre-load spaCy and sentence-transformers before main model to avoid memory conflicts."""
@@ -181,9 +181,9 @@ def preload_auxiliary_models():
         os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU mode
         
         # Now trigger the lazy load
-        temporary.context_injector._ensure_embedding_model()
+        cfg.context_injector._ensure_embedding_model()
         
-        if temporary.context_injector.embedding:
+        if cfg.context_injector.embedding:
             print("[INIT] OK Embedding model pre-loaded from cache")
         else:
             print("[INIT] WARN Embedding model not available (RAG disabled)")
@@ -196,16 +196,24 @@ def main():
     try:
         print("`main` Function Started.")
         
+        # Load system constants from INI FIRST (installer-generated)
+        from scripts.configuration import load_system_ini
+        load_system_ini()
+        
+        # NOW initialize TTS after platform/backend constants are loaded
+        from scripts.tools import initialize_tts
+        initialize_tts()    
+        
         # Parse command-line arguments and initialize platform
         args = parse_args()
-        temporary.PLATFORM = args.platform
-
-        # Load system constants from INI FIRST (installer-generated)
-        from scripts.settings import load_system_ini
-        load_system_ini()
+        cfg.PLATFORM = args.platform
 
         # Load user settings from JSON (model, context, etc.)
         load_config()
+        
+        # Initialize TTS AFTER load_config so we can set defaults if config is empty
+        from scripts.tools import initialize_tts
+        initialize_tts()
 
         # Then initialize platform settings (paths, validation)
         initialize_platform_settings()
@@ -213,26 +221,26 @@ def main():
         # Setup directories and paths
         script_dir = setup_directories()
         print(f"Working directory: {short_path(script_dir)}")
-        print(f"Data Directory: {short_path(temporary.DATA_DIR)}")
-        print(f"Session History: {short_path(temporary.HISTORY_DIR)}")
-        print(f"Temp Directory: {short_path(temporary.TEMP_DIR)}")
+        print(f"Data Directory: {short_path(cfg.DATA_DIR)}")
+        print(f"Session History: {short_path(cfg.HISTORY_DIR)}")
+        print(f"Temp Directory: {short_path(cfg.TEMP_DIR)}")
         
         # Initialize CPU configuration
         detect_cpu_config()
-        print(f"CPU Configuration: {temporary.CPU_PHYSICAL_CORES} physical cores, "
-              f"{temporary.CPU_LOGICAL_CORES} logical cores")
+        print(f"CPU Configuration: {cfg.CPU_PHYSICAL_CORES} physical cores, "
+              f"{cfg.CPU_LOGICAL_CORES} logical cores")
         
         # Print final configuration
-        temporary.set_status("Config loaded")
+        cfg.set_status("Config loaded")
         print_configuration()
         
         # Pre-load auxiliary models to avoid memory conflicts
-        print("\n[INIT] Pre-loading auxiliary models...")
+        print("\n[INIT] Pre-loading auxiliary inference...")
         preload_auxiliary_models()
         
-        # Launch interface
-        print("\nLaunching Gradio Interface...")
-        launch_interface()
+        # Launch display
+        print("\nLaunching Gradio display...")
+        launch_display()
         
     except Exception as e:
         print(f"Fatal error in launcher: {str(e)}")

@@ -30,8 +30,8 @@ SYSTEM_INFO = {}
 
 # Required script files
 REQUIRED_SCRIPTS = [
-    "browser.py", "interface.py", "models.py", 
-    "prompts.py", "settings.py", "temporary.py", "utility.py"
+    "browser.py", "display.py", "inference.py", 
+    "inference.py", "cfg.py", "cfg.py", "utility.py"
 ]
 
 # Required directories (matching installer DIRECTORIES)
@@ -357,7 +357,7 @@ def test_browser_setup() -> bool:
                        capture_output=True, timeout=10, check=True)
         print_status("Gradio import OK")
     except:
-        print_status("Gradio import FAILED - interface will not work", False)
+        print_status("Gradio import FAILED - display will not work", False)
         return False
     
     # 2. Expected WebEngine exists?
