@@ -1,7 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
 ### Status
-Beta - It works, but thngs are still being worked out. Current developments are...
+Beta - Release version works (at least on Windows), but thngs are still being worked on. Current developments for next version are...
 - Overhaul of interface. 
 - Re-implementation of TTS.
 - Lots of fixing things.
