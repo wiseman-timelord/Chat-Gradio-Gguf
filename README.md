@@ -2,7 +2,8 @@
 
 ### Status
 Beta - Release version works (at least on Windows), but things are still being worked on. Current developments for next version are...
-- Cleanup and finalizing for overhaul from v1.02.0
+- Cleanup from overhaul from v1.02.0.
+- Finalize things, mainly rename configuration.py to configure.py.
 - Test and fix, on ubuntu 25.
 
 ## Description
