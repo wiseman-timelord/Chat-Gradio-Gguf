@@ -668,12 +668,10 @@ project_root/
 │ └── project_banner.jpg
 ├── scripts/
 │ └── browser.py
-│ └── interface.py
-│ └── models.py
-│ └── prompts.py
-│ └── settings.py
+│ └── display.py
+│ └── inference.py
+│ └── configuration.py
 │ └── tools.py
-│ └── temporary.py
 │ └── utlity.py
 ```
 - Installed/Temporary files...
