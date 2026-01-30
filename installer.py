@@ -959,16 +959,17 @@ def create_config(backend: str, embedding_model: str) -> None:
     # Calculate optimal CPU threads (85% of available)
     optimal_threads = get_optimal_build_threads()
     
-    # Determine default filter mode based on Gradio version selection
-    # SELECTED_GRADIO is set during detect_version_selections()
-    if SELECTED_GRADIO.startswith('3.'):
-        default_filter_mode = "gradio3"
+    # Platform-specific defaults for sound/TTS settings
+    # Windows uses "Default Sound Device", Linux uses "default"
+    if PLATFORM == "windows":
+        default_sound_device = "Default Sound Device"
     else:
-        default_filter_mode = "gradio5"
+        default_sound_device = "default"
     
     # Use model_settings format for compatibility with settings.py
     # Note: Constants like llama_cli_path, llama_bin_path, embedding_model, 
-    # embedding_backend are stored in constants.ini, not here
+    # embedding_backend, vulkan_enabled, and filter_mode are stored in or determined 
+    # from constants.ini, not stored in the user-modifiable persistent.json
     config = {
         "model_settings": {
             "layer_allocation_mode": layer_mode,
@@ -992,8 +993,13 @@ def create_config(backend: str, embedding_model: str) -> None:
             "cpu_threads": optimal_threads,
             "bleep_on_events": True,
             "use_python_bindings": True,
-            "vulkan_enabled": vulkan_enabled,
-            "filter_mode": default_filter_mode,
+            # Sound and TTS configuration - must match keys used in configuration.py save_config()
+            "sound_output_device": default_sound_device,
+            "sound_sample_rate": 44100,
+            "tts_enabled": False,
+            "tts_voice": None,
+            "tts_voice_name": None,
+            "max_tts_length": 4500,
         }
     }
     
@@ -1003,7 +1009,6 @@ def create_config(backend: str, embedding_model: str) -> None:
         print_status("Configuration file created")
     except Exception as e:
         print_status(f"Failed to create config: {e}", False)
-
 
 def create_system_ini(platform: str, os_version: str, python_version: str, 
                      backend_type: str, embedding_model: str,

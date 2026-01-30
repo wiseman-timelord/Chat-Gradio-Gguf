@@ -3,7 +3,7 @@
 
 # Set terminal configuration (Linux/Unix method)
 echo -ne "\033]0;Chat-Gradio-Gguf\007"
-printf '\e[8;30;80t'
+printf '\e[8;25;80t'
 
 # Change to script directory
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
@@ -42,16 +42,11 @@ main_menu() {
     echo ""
     echo ""
     echo ""
-    echo ""
-    echo ""
     echo "    1. Run Main Program"
     echo ""
     echo "    2. Run Installation"
     echo ""
     echo "    3. Run Validation"
-    echo ""
-    echo ""
-    echo ""
     echo ""
     echo ""
     echo ""

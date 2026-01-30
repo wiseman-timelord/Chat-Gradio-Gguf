@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 REM ==== Static Configuration ====
 set "TITLE=Chat-Gradio-Gguf"
 title %TITLE%
-mode con cols=80 lines=30
+mode con cols=80 lines=25
 powershell -noprofile -command "& { $w = $Host.UI.RawUI; $b = $w.BufferSize; $b.Height = 6000; $w.BufferSize = $b; }"
 
 :: DP0 TO SCRIPT BLOCK
@@ -51,16 +51,11 @@ echo.
 echo.
 echo.
 echo.
-echo.
-echo.
-echo.
 echo     1. Run Main Program
 echo.
 echo     2. Run Installation
 echo.
 echo     3. Run Validation
-echo.
-echo.
 echo.
 echo.
 echo.
