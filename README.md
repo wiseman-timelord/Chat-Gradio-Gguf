@@ -528,7 +528,7 @@ Now that the program is 100% made, I am tidying up, and finishing testing/bugfix
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
 - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - The binaries used for interference with models.
-- [Claude.AI](https://claude.ai/chat), [Kimi K2](https://www.kimi.com), [Grok3Beta](https://x.com/i/grok), [Deepseek R1/3](https://www.deepseek.com/), [Perplexity](https://www.perplexity.ai) - Paid/Free AI Platforms. 
+- [Claude Sonnet/Opus](https://claude.ai/chat), [Kimi K2/K2.5](https://www.kimi.com), [XAI Grok](https://x.com/i/grok), [Deepseek R1/3](https://www.deepseek.com/), [Perplexity](https://www.perplexity.ai) - Paid/Free AI Platforms. 
 - Python Libraries - Python libraries change, so no specific details, check the installer preview if interested.
 
 ## License
