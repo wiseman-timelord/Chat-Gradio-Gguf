@@ -529,7 +529,7 @@ Now that the program is 100% made, I am tidying up, and finishing testing/bugfix
 Thanks to all the following teams, for the use of their software/platforms...
 - [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - The binaries used for interference with models.
 - [Claude Sonnet/Opus](https://claude.ai/chat), [Kimi K2/K2.5](https://www.kimi.com), [XAI Grok](https://x.com/i/grok), [Deepseek R1/3](https://www.deepseek.com/), [Perplexity](https://www.perplexity.ai) - Paid/Free AI Platforms. 
-- Python Libraries - Python libraries change, so no specific details, check the installer preview if interested.
+- Python Libraries - More main libraries used need listing here.
 
 ## License
 This repository features **Wiseman-Timelord's Glorified License** in the file `.\Licence.txt`, in short, if you wish to use most of the code, then you should fork, or, if you want to use a section of the code from one of the scripts, as an example, to make something work you mostly already have implemented, then go ahead, but, do not claim, my vanilla or =>50% of my, releases as your own work`.
