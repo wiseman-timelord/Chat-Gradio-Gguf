@@ -42,9 +42,6 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The Settings page, for configuration of, GUI, Filters (v1.02.1)...
 ![image_missing](media/settings_page.jpg)
 
-- The Filtering page, for configuration of model output filter settings...
-![image_missing](media/filtering_page.jpg)
-
 - The collapseable Left/Right Panel on the Interaction page (click the `<->` button)...
 ![image_missing](media/conversation_expand.jpg)
 
