@@ -50,7 +50,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The dynamic progress indication replaces the user input box upon submission...
 ![image_missing](media/dynamic_progress.jpg)
 
-- Startup looks like this in the terminal/console (ignore warnings) (v0.98.2)...
+- Startup looks like this in the terminal/console (ignore warnings) (v1.02.1)...
 <details>
     
     ===============================================================================
@@ -59,95 +59,79 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     Starting Chat-Gradio-Gguf...
     Activated: `.venv`
-    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1_r2\.venv\Lib\site-pack
-    ages\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is
-     deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.02.1\.venv\Lib\site-package
+    s\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is de
+    precated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
       warnings.warn(
     `main` Function Started.
     [INI] Platform: windows
     [INI] Backend: VULKAN_CPU
     [INI] Vulkan: True
-    [INI] Embedding Model: BAAI/bge-small-en-v1.5
-    [INI] Embedding Backend: sentence_transformers
-    [INI] Llama CLI Path: data/llama-vulkan-bin/llama-cli.exe
-    [INI] Llama Bin Path: data/llama-vulkan-bin
+    [INI] Embedding Model: BAAI/bge-base-en-v1.5
+    [INI] Gradio Version: 3.50.2
     [INI] OS Version: 8.1
     [INI] Windows Version: 8.1
-    [CONFIG] Model folder: F:/LargeModels/Size_Little_3b-4b/Qwen3-4B-abliterated-GGU
-    F
-    [CONFIG] Context: 8192, VRAM: 8192MB, Temp: 0.66
-    [CONFIG] Layer allocation: VRAM_SRAM
-    [CONFIG] UI: History=12, Attach=6, Height=1000
-    [CONFIG] SELECTED_GPU: Radeon (TM) RX 470 Graphics
-    [CONFIG] SELECTED_CPU: AMD Ryzen 9 3900X 12-Core Processor (12 cores, 24 threads
-    )
-    [CONFIG] MMAP: True
-    [CONFIG] MLOCK: False
-    [CONFIG] BATCH_SIZE: 1024
-    [CONFIG] DYNAMIC_GPU_LAYERS: True
-    [MODELS] Scanning directory: ...\Size_Little_3b-4b\Qwen3-4B-abliterated-GGUF
-    [MODELS] V Found 1 models:
-    [MODELS]   - Qwen3-4B-abliterated-q6_k_m.gguf
-    [CONFIG] Found 1 models in F:/LargeModels/Size_Little_3b-4b/Qwen3-4B-abliterated
-    -GGUF
-    [CONFIG] Saved model name: Qwen3-4B-abliterated-q6_k_m.gguf
-    [CONFIG] Model 'Qwen3-4B-abliterated-q6_k_m.gguf' found and selected
+    [INI] TTS section not found - will detect at runtime
+    [TTS] Engine: pyttsx3
+    [TTS] Audio Backend: windows
+    [TTS] Default Voice set to: Microsoft David  - English (United States) (en-US)
+    [MODELS] Scanning directory: models
+    [MODELS] ? No .gguf files found in models
+    [CONFIG] Auto-selected secondary GPU: Radeon (TM) RX 470 Graphics
+    [CONFIG] Loaded -> Model: Select_a_model... | CPU: Auto-Select
     Configuration loaded
-    [CONFIG] ==================== Load Complete ====================
+    [TTS] Engine: pyttsx3
+    [TTS] Audio Backend: windows
+    [TTS] Default Voice set to: Microsoft David  - English (United States) (en-US)
     [Vulkan] GGML_CUDA_NO_PINNED=1   (frees ~300 MB VRAM)
     [Vulkan] GGML_VK_NO_PIPELINE_CACHE=0  (cached SPIR-V pipelines)
     Script mode `windows` with backend `VULKAN_CPU`
-    Working directory: ...\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1_r2
-    Data Directory: ...-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1_r2\data
-    Session History: ...Gguf\Chat-Gradio-Gguf-0.98.1_r2\data\history
-    Temp Directory: ...io-Gguf\Chat-Gradio-Gguf-0.98.1_r2\data\temp
+    Working directory: ...les\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.02.1
+    Data Directory: ...hat-Gradio-Gguf\Chat-Gradio-Gguf-1.02.1\data
+    Session History: ...io-Gguf\Chat-Gradio-Gguf-1.02.1\data\history
+    Temp Directory: ...radio-Gguf\Chat-Gradio-Gguf-1.02.1\data\temp
     [CPU] Detected: 12 cores, 24 threads
     [CPU] Current: 20
     CPU Configuration: 12 physical cores, 24 logical cores
     
     Configuration:
       Backend: VULKAN_CPU
-      Model: Qwen3-4B-abliterated-q6_k_m.gguf
+      Model: Select_a_model...
       Context Size: 8192
       VRAM Allocation: 8192 MB
       CPU Threads: 20
       GPU Layers: 0
     
-    [INIT] Pre-loading auxiliary models...
+    [INIT] Pre-loading auxiliary inference...
     [INIT] OK spaCy model pre-loaded
-    [RAG] Cache directory: C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1
-    _r2\data\embedding_cache
-    [RAG] Attempting to load (offline): BAAI/bge-small-en-v1.5
-    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-0.98.1_r2\.venv\Lib\site-pack
-    ages\huggingface_hub\file_download.py:942: FutureWarning: `resume_download` is d
-    eprecated and will be removed in version 1.0.0. Downloads always resume when pos
-    sible. If you want to force a new download, use `force_download=True`.
+    [RAG] Loading embedding model: BAAI/bge-base-en-v1.5
+    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.02.1\.venv\Lib\site-package
+    s\huggingface_hub\file_download.py:942: FutureWarning: `resume_download` is depr
+    ecated and will be removed in version 1.0.0. Downloads always resume when possib
+    le. If you want to force a new download, use `force_download=True`.
       warnings.warn(
-    [RAG] Successfully loaded: BAAI/bge-small-en-v1.5
+    [RAG] Embedding model loaded successfully
     [INIT] OK Embedding model pre-loaded from cache
     
-    Launching Gradio Interface...
+    Launching Gradio display...
+    [FILTER] Using gradio3 filter (15 rules)
+    [FILTER] Using gradio3 filter (15 rules)
+    [MODELS] Scanning directory: models
+    [MODELS] ? No .gguf files found in models
     [BROWSER] Starting Gradio server in background...
     [BROWSER] Waiting for Gradio server at http://localhost:7860...
     Running on local URL:  http://localhost:7860
     
     To create a public link, set `share=True` in `launch()`.
-    IMPORTANT: You are using gradio version 3.50.2, however version 4.44.1 is availa
-    ble, please upgrade.
-    --------
     [BROWSER] Gradio server is ready
     [BROWSER] Launching at http://localhost:7860/?__theme=dark
     [BROWSER] Platform: windows, Windows Version: 8.1
     [BROWSER] Windows 8.1 detected - using Qt5 WebEngine
     [BROWSER] Loading URL: http://localhost:7860/?__theme=dark
     [BROWSER] Qt5 WebEngine window created
-    Updating model list with new_dir: F:/LargeModels/Size_Little_3b-4b/Qwen3-4B-abli
-    terated-GGUF
-    [MODELS] Scanning directory: ...\Size_Little_3b-4b\Qwen3-4B-abliterated-GGUF
-    [MODELS] V Found 1 models:
-    [MODELS]   - Qwen3-4B-abliterated-q6_k_m.gguf
-    Choices returned: ['Qwen3-4B-abliterated-q6_k_m.gguf'], Setting value to: Qwen3-
-    4B-abliterated-q6_k_m.gguf
+    [MODELS] Scanning directory: models
+    [MODELS] ? No .gguf files found in models
+    [MODEL] Dropdown updated | choices=1 models | selected=Select_a_model...
 
 </details>
 
