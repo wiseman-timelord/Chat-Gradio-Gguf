@@ -272,27 +272,29 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     ==================================================
     
     System: windows 8.1
-    Python: 3.11.0
+    Python: 3.11.0 (Expected: 3.11.0)
     Backend: VULKAN_CPU
     Embedding: BAAI/bge-base-en-v1.5
     Gradio: 3.50.2, Qt: 5
     
     === Directory Validation ===
-      V data
-      V scripts
-      V models
-      V data/history
-      V data/temp
-      V data/vectors
-      V data/embedding_cache
+      V data (writable)
+      V scripts (writable)
+      V models (writable)
+      V data/history (writable)
+      V data/temp (writable)
+      V data/vectors (writable)
+      V data/embedding_cache (writable)
+    
+    === Root Files Validation ===
+      V launcher.py
     
     === Script Files Validation ===
       V browser.py
-      V interface.py
-      V models.py
-      V prompts.py
-      V settings.py
-      V temporary.py
+      V display.py
+      V inference.py
+      V tools.py
+      V configuration.py
       V utility.py
     
     === Configuration Validation ===
@@ -300,7 +302,11 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
       V persistent.json valid
     
     === Virtual Environment Validation ===
+      V Python version matches: 3.11.0
       V Virtual environment OK
+    
+    === Vulkan Availability Check ===
+      V Vulkan runtime found in registry
     
     === Backend Binary Validation ===
       V llama-cli found: llama-cli.exe
@@ -331,6 +337,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
       V pywin32
       V tk
       V pythonnet
+      V Gradio version matches: 3.50.2
     
     === Optional Library Validation ===
       V PyPDF2 (optional)
@@ -343,9 +350,10 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     === Embedding Model Validation ===
       V Embedding model verified (BAAI/bge-base-en-v1.5)
+      V Backend: sentence_transformers
     
     === Gradio & Custom Browser Check ===
-      Expected: Gradio 3.50.2, PyQt5 WebEngine
+      Expected: Qt5 (PyQt5 WebEngine)
       V Gradio import OK
       V PyQt5 WebEngine import OK
     
@@ -353,18 +361,21 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
       Validation Summary
     ==================================================
       directories: V PASS
+      root_files: V PASS
       scripts: V PASS
       config: V PASS
       venv: V PASS
+      vulkan: V PASS
       llama_cli: V PASS
       core_libs: V PASS
       spacy: V PASS
       embedding: V PASS
       browser: V PASS
     
-      Result: 9/9 checks passed
+      Result: 11/11 checks passed
       V
     All validations passed!
+      Installation is complete and ready to use.
     
     Press Enter to exit...
         
