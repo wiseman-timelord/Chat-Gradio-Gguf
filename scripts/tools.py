@@ -798,29 +798,53 @@ def detect_tts_engine() -> str:
 
 def detect_audio_backend() -> str:
     """
-    Detect audio backend for playback.
+    Detect audio backend for playback with functional testing.
     
     Returns:
-        str: "windows", "pipewire", "pulseaudio", or "none"
+        str: "pipewire", "pulseaudio", "alsa", or "none"
     """
-    
     
     if cfg.PLATFORM == "windows":
         return "windows"
     
-    # Check PipeWire first (newer Ubuntu 24+)
+    # Check PipeWire - must be actually running, not just installed
     try:
-        result = subprocess.run(["pw-play", "--version"], capture_output=True, timeout=5)
+        # Test if pipewire daemon is accessible
+        result = subprocess.run(
+            ["pw-cli", "info", "0"], 
+            capture_output=True, 
+            timeout=3
+        )
         if result.returncode == 0:
             return "pipewire"
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     
-    # Check PulseAudio (Ubuntu 22-23)
+    # Check PulseAudio (or PipeWire-Pulse compatibility)
     try:
-        result = subprocess.run(["paplay", "--version"], capture_output=True, timeout=5)
+        result = subprocess.run(
+            ["pactl", "info"], 
+            capture_output=True, 
+            timeout=3
+        )
         if result.returncode == 0:
+            # Check if it's actually PipeWire pretending to be Pulse
+            output = result.stdout.decode()
+            if "PipeWire" in output:
+                return "pipewire"
             return "pulseaudio"
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    
+    # Check ALSA
+    try:
+        result = subprocess.run(
+            ["aplay", "--version"], 
+            capture_output=True, 
+            timeout=3
+        )
+        if result.returncode == 0:
+            return "alsa"
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     
@@ -912,8 +936,26 @@ def _get_pyttsx3_voices() -> List[Dict[str, str]]:
 
 
 def _get_espeak_voices() -> List[Dict[str, str]]:
-    """Get voices from espeak-ng (Linux)."""
+    """Get voices from espeak-ng (Linux) - only returns actually installed voices."""
+    import os
+    
     voices = []
+    
+    # Locate espeak-ng voices directory (varies by distro/install method)
+    voice_search_paths = [
+        "/usr/lib/x86_64-linux-gnu/espeak-ng-data/voices",  # Ubuntu 22.04+
+        "/usr/lib/espeak-ng-data/voices",                   # Older Debian/Ubuntu
+        "/usr/share/espeak-ng-data/voices",                 # Some distros
+        "/usr/local/lib/espeak-ng-data/voices",             # Manual install
+        "/opt/local/share/espeak-ng-data/voices",           # MacPorts
+    ]
+    
+    voices_path = None
+    for path in voice_search_paths:
+        if os.path.isdir(path):
+            voices_path = path
+            break
+    
     try:
         result = subprocess.run(
             ["espeak-ng", "--voices"],
@@ -921,23 +963,79 @@ def _get_espeak_voices() -> List[Dict[str, str]]:
             text=True,
             timeout=10
         )
+        
         if result.returncode == 0:
             lines = result.stdout.strip().split('\n')
+            
             for line in lines[1:]:  # Skip header
-                parts = line.split()
+                if not line.strip():
+                    continue
+                
+                # Parse space-delimited columns
+                # Format: Pty Language Age/Gender VoiceName File Other...
+                parts = [p.strip() for p in line.split() if p.strip()]
+                
                 if len(parts) >= 4:
-                    lang = parts[1] if len(parts) > 1 else "en"
-                    name = parts[3] if len(parts) > 3 else parts[1]
-                    voices.append({
-                        'id': name,
-                        'name': name,
-                        'language': lang
-                    })
+                    lang_code = parts[1]      # e.g., "en", "en-gb", "en-westmidlands"
+                    voice_name = parts[3]     # e.g., "default", "british", "west_midlands"
+                    # priority = parts[0]     # Priority number
+                    # age_gender = parts[2]   # M/F/-
+                    # voice_file = parts[4] if len(parts) > 4 else lang_code
+                    
+                    # Validate voice actually exists on filesystem
+                    voice_exists = False
+                    if voices_path:
+                        # Check direct file: /voices/en-gb
+                        direct_path = os.path.join(voices_path, lang_code)
+                        if os.path.exists(direct_path):
+                            voice_exists = True
+                        else:
+                            # Check subdirectory variant: /voices/en/westmidlands
+                            if '-' in lang_code:
+                                base_lang = lang_code.split('-')[0]
+                                variant = lang_code[len(base_lang)+1:]
+                                variant_path = os.path.join(voices_path, base_lang, variant)
+                                if os.path.exists(variant_path):
+                                    voice_exists = True
+                        
+                        # Also check if it's a known special case (like 'en' is always valid)
+                        if not voice_exists and lang_code in ('en', 'en-gb', 'en-us', 'default'):
+                            voice_exists = True
+                    else:
+                        # Can't verify, assume it exists
+                        voice_exists = True
+                    
+                    if voice_exists:
+                        # Format display name nicely
+                        if voice_name.lower() == 'default':
+                            display_name = f"Default {lang_code.upper()}"
+                        else:
+                            formatted = voice_name.replace('_', ' ').title()
+                            display_name = f"{formatted} ({lang_code})"
+                        
+                        voices.append({
+                            'id': lang_code,        # Use language code for -v parameter
+                            'name': display_name,
+                            'language': lang_code
+                        })
+                        
     except Exception as e:
         print(f"[TTS] Error getting espeak-ng voices: {e}")
+        import traceback
+        traceback.print_exc()
     
+    # Fallback if no voices found or error occurred
     if not voices:
-        voices.append({'id': 'en', 'name': 'English (default)', 'language': 'en'})
+        voices.append({
+            'id': 'en', 
+            'name': 'English (default)', 
+            'language': 'en'
+        })
+        voices.append({
+            'id': 'en-gb', 
+            'name': 'British English (en-gb)', 
+            'language': 'en-gb'
+        })
     
     return voices
 
@@ -959,80 +1057,25 @@ def get_voice_id_by_name(voice_name: str) -> Optional[str]:
     return None
 
 
-def get_output_devices() -> List[Dict[str, str]]:
-    """Get available audio output devices - platform aware, with friendly names.
+def get_output_devices():
+    """Get available audio output devices.
     
-    On Windows: pyttsx3 always uses the system default playback device.
-    The dropdown shows options for clarity, but selection is ignored.
+    Returns only the system default device for both Windows and Linux.
+    This ensures compatibility with USB audio devices when set as system default.
     """
     
-    # Handle Windows first to ensure consistent config value
     if cfg.PLATFORM == "windows":
-        # Windows TTS (pyttsx3) always plays to the current system default device
-        # Return single entry that matches expected config value "Default Sound Device"
         return [{'id': 'default', 'name': 'Default Sound Device'}]
     
-    # Linux: enumerate actual devices
-    devices = [{'id': 'default', 'name': 'Default / System Default'}]
-    
-    # Check PipeWire first (newer Ubuntu 24+)
-    try:
-        result = subprocess.run(["pw-play", "--version"], capture_output=True, timeout=5)
-        if result.returncode == 0:
-            return devices  # For now, just return default for PipeWire to avoid complexity
-    except:
-        pass
-    
-    # Check PulseAudio (Ubuntu 22-23)
-    try:
-        result = subprocess.run(
-            ["pactl", "list", "short", "sinks"],
-            capture_output=True, text=True, timeout=6
-        )
-        if result.returncode == 0:
-            for line in result.stdout.strip().splitlines():
-                if line.strip():
-                    parts = line.split('\t')
-                    if len(parts) >= 2:
-                        dev_id = parts[1]
-                        name = dev_id  # fallback to sink name
-                        
-                        # Attempt to get friendly description
-                        try:
-                            info_run = subprocess.run(
-                                ["pactl", "list", "sinks"],
-                                capture_output=True, text=True, timeout=5
-                            )
-                            blocks = info_run.stdout.split('\n\n')
-                            for block in blocks:
-                                if dev_id in block and "Description:" in block:
-                                    for ln in block.splitlines():
-                                        if "Description:" in ln:
-                                            name = ln.split("Description:", 1)[1].strip()
-                                            break
-                                    break
-                        except:
-                            pass
-                        
-                        devices.append({'id': dev_id, 'name': name})
-    except Exception as e:
-        print(f"[TTS] Linux device detection failed: {e}")
-    
-    # Deduplicate by name (case-insensitive) and sort alphabetically
-    seen = set()
-    unique = []
-    for d in devices:
-        key = d['name'].lower()
-        if key not in seen:
-            seen.add(key)
-            unique.append(d)
-    
-    return sorted(unique, key=lambda d: d['name'])
+    # Linux - return only default, detection done at runtime by backend
+    return [{'id': 'default', 'name': 'Default Sound Device'}]
 
-def get_output_device_choices() -> List[str]:
-    """Get output device names for UI dropdown."""
+def get_output_device_choices():
+    """Get output device choices as (display_name, device_id) tuples for UI dropdown."""
     devices = get_output_devices()
-    return [d['name'] for d in devices]
+    # Return list of tuples: (display_name, device_id)
+    # This allows Gradio to show the description but return the technical ID
+    return [(d['name'], d['id']) for d in devices]
 
 
 def get_sample_rate_choices() -> List[int]:
@@ -1063,6 +1106,10 @@ def speak_text(text: str, voice_id: Optional[str] = None,
         output_device = cfg.SOUND_OUTPUT_DEVICE
     if sample_rate is None:
         sample_rate = cfg.SOUND_SAMPLE_RATE
+
+    # Normalize: "Default Sound Device" means use system default (None for backend)
+    if output_device == "Default Sound Device":
+        output_device = "default"
 
     # Stop any ongoing speech
     stop_speaking()
@@ -1115,63 +1162,186 @@ def _speak_pyttsx3(text: str, voice_id: Optional[str]):
 
 def _speak_espeak(text: str, voice_id: Optional[str],
                   output_device: Optional[str], sample_rate: int):
-    """Speak using espeak-ng (Linux)."""
+    """Speak using espeak-ng (Linux) with fallback chain for audio backends.
+    Handles running as root by connecting to the user's PipeWire/PulseAudio session."""
     
     temp_dir = Path(cfg.TEMP_DIR)
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_wav = temp_dir / "tts_output.wav"
 
+    # Detect if running as root and prepare environment
+    env = os.environ.copy()
+    original_uid = os.getuid()
+    
+    if original_uid == 0:  # Running as root
+        # Try to get the sudo user's UID (who invoked sudo)
+        sudo_uid = os.environ.get('SUDO_UID')
+        sudo_user = os.environ.get('SUDO_USER')
+        
+        if sudo_uid:
+            target_uid = int(sudo_uid)
+            target_runtime = f"/run/user/{target_uid}"
+            
+            if os.path.exists(target_runtime):
+                print(f"[TTS] Running as root, switching to user {sudo_user} (UID {target_uid}) audio session")
+                env['XDG_RUNTIME_DIR'] = target_runtime
+                
+                # Also set PULSE_RUNTIME_PATH for PulseAudio compatibility
+                env['PULSE_RUNTIME_PATH'] = f"{target_runtime}/pulse"
+                env['PIPEWIRE_RUNTIME_DIR'] = target_runtime
+                
+                # For PipeWire socket
+                if os.path.exists(f"{target_runtime}/pipewire-0"):
+                    env['PIPEWIRE_RUNTIME_DIR'] = target_runtime
+            else:
+                print(f"[TTS] Warning: Running as root but cannot access user {target_uid} runtime dir")
+                print("[TTS] Hint: Run without sudo, or use 'sudo -E' to preserve environment")
+        else:
+            # Not run via sudo, try common user UID 1000
+            common_runtime = "/run/user/1000"
+            if os.path.exists(common_runtime) and os.path.exists(f"{common_runtime}/pulse"):
+                print(f"[TTS] Warning: Running as root, attempting to use UID 1000 audio session")
+                env['XDG_RUNTIME_DIR'] = common_runtime
+                env['PULSE_RUNTIME_PATH'] = f"{common_runtime}/pulse"
+
     try:
-        # Build espeak-ng command - FIXED: no trailing spaces
+        # Build espeak-ng command
         cmd = ["espeak-ng"]
         
-        if voice_id:
-            cmd.extend(["-v", voice_id])
+        voice_to_use = voice_id if voice_id else 'en'
+        cmd.extend(["-v", voice_to_use])
         
         cmd.extend(["-w", str(temp_wav), text])
         
         if _tts_stop_flag.is_set():
             return
         
-        result = subprocess.run(cmd, capture_output=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, timeout=60, env=env)
         
+        # If voice doesn't exist, fallback to 'en'
         if result.returncode != 0:
-            print(f"[TTS] espeak-ng error: {result.stderr.decode()}")
-            return
+            stderr_str = result.stderr.decode() if result.stderr else ""
+            if "voice does not exist" in stderr_str.lower() or "does not exist" in stderr_str.lower():
+                print(f"[TTS] Voice '{voice_to_use}' not installed, falling back to 'en'")
+                cmd = ["espeak-ng", "-v", "en", "-w", str(temp_wav), text]
+                result = subprocess.run(cmd, capture_output=True, timeout=60, env=env)
+                
+                if result.returncode != 0:
+                    print(f"[TTS] Fallback voice also failed: {result.stderr.decode()}")
+                    return
+            else:
+                print(f"[TTS] espeak-ng error: {stderr_str}")
+                return
         
         if _tts_stop_flag.is_set():
             return
         
-        # Play audio - FIXED: proper device handling without trailing spaces
-        backend = detect_audio_backend()
+        # Try playback backends in order of preference with fallback
+        temp_wav_str = str(temp_wav)
+        played = False
         
-        if backend == "pipewire":
-            play_cmd = ["pw-play"]
-            if output_device and output_device != 'default':
-                play_cmd.extend(["--target", output_device])
-            play_cmd.append(str(temp_wav))
-        elif backend == "pulseaudio":
-            play_cmd = ["paplay"]
-            if output_device and output_device != 'default':
-                play_cmd.extend(["--device=" + output_device])  # No space after =
-            play_cmd.append(str(temp_wav))
-        else:
-            print("[TTS] No audio backend available")
-            return
+        # Normalize device name - "Default Sound Device" should use system default
+        actual_device = None
+        if output_device and output_device != "default" and output_device != "Default Sound Device":
+            actual_device = output_device
+        # If it's "default" or "Default Sound Device", leave as None to use system default
         
-        subprocess.run(play_cmd, timeout=120)
+        # Attempt 1: PipeWire (native) - uses XDG_RUNTIME_DIR from env
+        try:
+            result = subprocess.run(
+                ["pw-play", temp_wav_str], 
+                capture_output=True, 
+                timeout=120,
+                check=True,
+                env=env  # Pass modified environment
+            )
+            played = True
+            print("[TTS] Playback via PipeWire")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            if isinstance(e, subprocess.CalledProcessError):
+                err_out = e.stderr.decode() if e.stderr else ""
+                if "Host is down" in err_out or "Connection refused" in err_out:
+                    print("[TTS] PipeWire not accessible (root audio session issue)")
+                else:
+                    print(f"[TTS] PipeWire error: {err_out}")
+            # Continue to fallback
         
+        # Attempt 2: PulseAudio (paplay) - uses PULSE_RUNTIME_PATH from env
+        if not played:
+            try:
+                play_cmd = ["paplay"]
+                if actual_device and actual_device not in ["default", "Default Sound Device"]:
+                    play_cmd.extend(["--device=" + actual_device])
+                
+                play_cmd.append(temp_wav_str)
+                
+                result = subprocess.run(
+                    play_cmd, 
+                    timeout=120, 
+                    check=True, 
+                    env=env,  # Pass modified environment
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.PIPE
+                )
+                played = True
+                print("[TTS] Playback via PulseAudio (paplay)")
+            except subprocess.CalledProcessError as e:
+                err_out = e.stderr.decode() if e.stderr else "Unknown error"
+                if "Connection refused" in err_out:
+                    print("[TTS] PulseAudio not accessible (connection refused)")
+                else:
+                    print(f"[TTS] PulseAudio error: {err_out}")
+            except FileNotFoundError:
+                pass  # paplay not installed
+        
+        # Attempt 3: ALSA (aplay) - may not work if PipeWire is blocking the device
+        if not played:
+            try:
+                play_cmd = ["aplay", "-q"]
+                if actual_device:
+                    play_cmd.extend(["-D", actual_device])
+                else:
+                    play_cmd.extend(["-D", "default"])
+                
+                play_cmd.append(temp_wav_str)
+                
+                result = subprocess.run(
+                    play_cmd, 
+                    timeout=120, 
+                    check=True,
+                    env=env,
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.PIPE
+                )
+                played = True
+                print("[TTS] Playback via ALSA (aplay)")
+            except subprocess.CalledProcessError as e:
+                err_out = e.stderr.decode() if e.stderr else "Unknown error"
+                if "Host is down" in err_out:
+                    print("[TTS] ALSA blocked by PipeWire (root cannot access ALSA when PipeWire is active)")
+                else:
+                    print(f"[TTS] ALSA error: {err_out}")
+        
+        if not played:
+            print("[TTS] ERROR: All audio backends failed")
+            if original_uid == 0:
+                print("[TTS] CAUSE: Running as root without audio session access")
+                print("[TTS] FIX: Run without sudo, or use: sudo -E ./Chat-Gradio-Gguf.sh")
+            else:
+                print("[TTS] Please check your audio system is running")
+                
     except subprocess.TimeoutExpired:
         print("[TTS] Speech timed out")
     except Exception as e:
         print(f"[TTS] espeak-ng playback error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         try:
             if temp_wav.exists():
                 temp_wav.unlink()
         except:
             pass
-
 
 def stop_speaking():
     """Stop any ongoing TTS playback."""
@@ -1203,13 +1373,25 @@ def initialize_tts():
     
     # Set default voice - ensure something is always selected on fresh install
     voices = get_tts_voices()
+    voice_names = [v['name'] for v in voices]
+    
     if voices:
-        if not cfg.TTS_VOICE or cfg.TTS_VOICE_NAME not in [v['name'] for v in voices]:
+        # Check if saved voice is still valid (exists in current system)
+        if (not cfg.TTS_VOICE or 
+            not cfg.TTS_VOICE_NAME or 
+            cfg.TTS_VOICE_NAME not in voice_names):
+            
+            # Reset to first available voice
             cfg.TTS_VOICE = voices[0]['id']
             cfg.TTS_VOICE_NAME = voices[0]['name']
             print(f"[TTS] Default Voice set to: {voices[0]['name']}")
         else:
-            print(f"[TTS] Voice from config: {cfg.TTS_VOICE_NAME}")
+            # Verify the ID matches the name (paranoid check)
+            for v in voices:
+                if v['name'] == cfg.TTS_VOICE_NAME:
+                    cfg.TTS_VOICE = v['id']  # Ensure ID is current
+                    break
+            print(f"[TTS] Voice from config: {cfg.TTS_VOICE_NAME} ({cfg.TTS_VOICE})")
     else:
         cfg.TTS_VOICE = None
         cfg.TTS_VOICE_NAME = "No voices available"

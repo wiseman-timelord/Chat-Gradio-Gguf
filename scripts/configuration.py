@@ -198,7 +198,7 @@ SELECTED_CPU = "Auto-Select"
 # =============================================================================
 # Sound Hardware Configuration (shared by Bleep and TTS)
 # =============================================================================
-SOUND_OUTPUT_DEVICE = "default"        # Selected audio output device
+SOUND_OUTPUT_DEVICE = "Default Sound Device"        # Selected audio output device
 SOUND_SAMPLE_RATE = 44100              # Audio sample rate (44100 or 48000)
 SOUND_SAMPLE_RATE_OPTIONS = [44100, 48000]  # Available sample rates
 

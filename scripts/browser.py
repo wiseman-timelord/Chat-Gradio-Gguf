@@ -12,7 +12,7 @@ import sys
 import time
 import threading
 import scripts.configuration as cfg
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
+
 
 # Global reference to Qt application and signal handler for shutdown
 _qt_app = None
@@ -168,21 +168,48 @@ def _launch_qt5_browser(url, title, width, height, frameless, maximized):
     _qt_app.exec_()
     print("[BROWSER] Qt5 event loop exited")
 
-
 def _launch_qt6_browser(url, title, width, height, frameless, maximized):
     """Launch browser using PyQt6 + Qt6 WebEngine (Windows 10/11, Ubuntu 22-25)"""
     global _qt_app, _qt_browser, _signal_handler
     import os
     import scripts.configuration as cfg
 
-    # Linux: Set Chromium flags for sandbox issues (especially when running as root)
+    # Linux: Set Chromium flags for sandbox issues and GPU rendering
     if cfg.PLATFORM == 'linux':
+        # Base flags for sandbox
         if os.geteuid() == 0:
             print("[BROWSER] Running as root - disabling Chromium sandbox")
-            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--no-sandbox --disable-gpu-sandbox"
+            chromium_flags = "--no-sandbox --disable-gpu-sandbox"
         else:
-            # Even non-root may need this on some Ubuntu systems
-            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu-sandbox"
+            chromium_flags = "--disable-gpu-sandbox"
+        
+        # CRITICAL: Disable GPU to prevent segfault on systems without proper GL/Vulkan support
+        # This forces software rendering which is slower but universally compatible
+        chromium_flags += " --disable-gpu --disable-software-rasterizer --disable-features=GpuProcessSurface,CanvasOopRasterization"
+        
+        # PERFORMANCE FIX: Disable features that cause startup delays and unnecessary background activity
+        chromium_flags += " --no-first-run --disable-default-apps --disable-background-timer-throttling"
+        chromium_flags += " --disable-features=Translate,InterestFeedContentSuggestions,MediaRouter,OptimizationHints,OptimizationGuideModelDownloading,AutofillServerCommunication,PasswordManager"
+        chromium_flags += " --disable-sync --disable-component-extensions-with-background-pages"
+        chromium_flags += " --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"
+        
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = chromium_flags
+        
+        # Force software rendering backend
+        os.environ["QTWEBENGINE_DISABLE_GPU"] = "1"
+        os.environ["QT_QUICK_BACKEND"] = "software"
+        
+        # Force X11 platform to avoid Wayland issues (Ubuntu 25.04 compatibility)
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        
+        # CRITICAL FIX: Disable Qt platform theme integration to prevent DBus timeouts
+        os.environ["QT_QPA_PLATFORMTHEME"] = ""
+        os.environ["QT_QPA_DISABLE_SESSION_MANAGER"] = "1"
+        os.environ["QT_LOGGING_RULES"] = "qt.qpa.*=false;qt.webengine.*=false"
+        
+        print(f"[BROWSER] GPU acceleration disabled, using software rendering")
+        print(f"[BROWSER] DBus integration disabled to prevent startup delays")
+        print(f"[BROWSER] Chromium flags: {chromium_flags}")
 
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -220,12 +247,14 @@ def _launch_qt6_browser(url, title, width, height, frameless, maximized):
     if frameless:
         _qt_browser.setWindowFlags(Qt.WindowType.FramelessWindowHint)
 
-    # Configure web engine settings
+    # Configure web engine settings for performance
     settings = _qt_browser.settings()
     settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
     settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
     settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
-    settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, True)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, False)  # Disable plugins for speed
+    settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, False)  # Disable WebGL in software mode
+    settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, False)  # Disable 2D canvas accel
 
     _qt_browser.resize(width, height)
 

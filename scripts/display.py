@@ -80,7 +80,7 @@ from scripts.tools import (
 
 
 def messages_to_tuples(messages):
-    """Convert internal message dicts → Gradio tuple format with nice labels"""
+    """Convert internal message dicts → Gradio tuple format with labels."""
     if not messages:
         return []
     
@@ -88,7 +88,7 @@ def messages_to_tuples(messages):
     i = 0
     while i < len(messages):
         msg = messages[i]
-        # Clean content to remove any existing AI-Chat: prefixes before adding our own
+        # Clean content to remove any existing prefixes before adding our own
         content = re.sub(r'^AI-Chat:\s*\n?', '', msg.get('content', '').strip(), flags=re.MULTILINE)
         content = re.sub(r'^User:\s*\n?', '', content, flags=re.MULTILINE)
         content = content.strip()
@@ -108,7 +108,7 @@ def messages_to_tuples(messages):
                 tuples.append((display_content, None))
                 
         elif msg.get('role') == 'assistant' and (i == 0 or messages[i-1].get('role') != 'user'):
-            # Rare orphan assistant message - clean and format
+            # Orphan assistant message - clean and format
             content = re.sub(r'^AI-Chat:\s*\n?', '', content, flags=re.MULTILINE).strip()
             display_content = f"AI-Chat:\n{content}" if content else "AI-Chat:"
             tuples.append((None, display_content))
@@ -117,8 +117,9 @@ def messages_to_tuples(messages):
     
     return tuples
 
+
 def tuples_to_messages(tuples):
-    """Convert Gradio 3.x tuple format back to message dict list."""
+    """Convert Gradio tuple format back to message dict list."""
     if not tuples:
         return []
     
@@ -135,13 +136,31 @@ def tuples_to_messages(tuples):
     
     return messages
 
+
 def get_chatbot_output(session_tuples, session_messages):
-    """Return correct format for Chatbot based on Gradio version."""
+    """
+    Return correct format for Chatbot based on Gradio version.
+    Ensures labels are visible in all versions.
+    """
     if cfg.GRADIO_VERSION.startswith('3.'):
+        # Gradio 3.x: Use tuple format directly
         return session_tuples
     else:
-        # Gradio 4.x/5.x uses messages format directly
-        return session_messages
+        # Gradio 4.x/5.x: Convert tuples (which have labels) to messages format
+        # This preserves the "User:" and "AI-Chat:" labels in the content
+        messages_with_labels = []
+        for user_tuple, bot_tuple in session_tuples:
+            if user_tuple:
+                # Keep the "User:\n" prefix in the content for display
+                clean_user = re.sub(r'^User:\s*\n?', '', user_tuple, flags=re.MULTILINE).strip()
+                display_user = f"User:\n{clean_user}" if clean_user else "User:"
+                messages_with_labels.append({'role': 'user', 'content': display_user})
+            if bot_tuple:
+                # Keep the "AI-Chat:\n" prefix in the content for display
+                clean_bot = re.sub(r'^AI-Chat:\s*\n?', '', bot_tuple, flags=re.MULTILINE).strip()
+                display_bot = f"AI-Chat:\n{clean_bot}" if clean_bot else "AI-Chat:"
+                messages_with_labels.append({'role': 'assistant', 'content': display_bot})
+        return messages_with_labels
 
 # Functions...
 def update_cpu_select():
@@ -1281,10 +1300,9 @@ def update_tts_voice(voice_name):
 
 
 def update_sound_output_device(device_name):
-    """Update the selected audio output device (shared by Bleep and TTS)."""
-    import scripts.configuration as cfg
-    cfg.SOUND_OUTPUT_DEVICE = device_name
-    return f"Output device set to: {device_name}"
+    """Deprecated - device selection now uses system default only."""
+    cfg.SOUND_OUTPUT_DEVICE = "Default Sound Device"
+    return "Audio output: Default Sound Device"
 
 
 def update_sound_sample_rate(sample_rate):
@@ -1735,6 +1753,10 @@ def conversation_display(
             bot_display = f"AI-Chat:\n{clean_response}"
             session_tuples[-1] = (session_tuples[-1][0], bot_display)
             
+            # For Gradio 4/5, we also need to update session_messages with label
+            if not cfg.GRADIO_VERSION.startswith('3.'):
+                session_messages[-1]['content'] = bot_display
+            
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
                 gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled, tts_enabled)),
@@ -1932,6 +1954,16 @@ def launch_display():
     # Output filtering
     initialize_filter_from_config()
 
+    # Output filtering
+    initialize_filter_from_config()
+
+    # Determine Gradio major version for CSS parameter placement
+    try:
+        gradio_ver_parts = gr.__version__.split('.')
+        is_gradio_6_plus = int(gradio_ver_parts[0]) >= 6
+    except:
+        is_gradio_6_plus = False  # Safe fallback for older versions or unusual version strings	
+	
     # Common CSS rules (used by all versions)
     css_common = """
     .scrollable { overflow-y: auto }
@@ -1969,11 +2001,15 @@ def launch_display():
     if is_gradio_3:
         final_css += css_gradio3_fixes
 
+    # Prepare Blocks kwargs - CSS stays in Blocks for Gradio 5.x, moves to launch() for 6+
+    blocks_kwargs = {
+        "title": "Chat-Gradio-Gguf"
+    }
+    if not is_gradio_6_plus:
+        blocks_kwargs["css"] = final_css.strip()
+
     # ── Main display ──────────────────────────────────────────────────────
-    with gr.Blocks(
-        title="Chat-Gradio-Gguf",
-        css=final_css.strip()
-    ) as demo:
+    with gr.Blocks(**blocks_kwargs) as demo:
         cfg.demo = demo
         model_folder_state = gr.State(cfg.MODEL_FOLDER)
 
@@ -2155,29 +2191,22 @@ def launch_display():
                             interactive=True
                         )
                     
-                    # Row 4: Sound Hardware
+                    # Row 4: Sound Hardware - Unified default for both platforms
                     with gr.Row():
-                        # Handle Windows vs Linux sound device initialization
                         if cfg.PLATFORM == "windows":
-                            # Force Windows to use default, ignore saved Linux device names
-                            windows_sound_choice = "Default Sound Device"
-                            cfg.SOUND_OUTPUT_DEVICE = windows_sound_choice
-                            sound_choices = [windows_sound_choice]
-                            sound_value = windows_sound_choice
-                            sound_interactive = False
+                            system_label = "Windows Audio"
                         else:
-                            sound_choices = get_output_device_choices()
-                            # Ensure saved value is valid, fallback to "default" if not in list
-                            sound_value = cfg.SOUND_OUTPUT_DEVICE if cfg.SOUND_OUTPUT_DEVICE in sound_choices else (sound_choices[0] if sound_choices else "default")
-                            sound_interactive = True
-                        
-                        sound_output_device = gr.Dropdown(
-                            choices=sound_choices,
-                            label="Audio Output Device" if cfg.PLATFORM != "windows" else "Audio Output (Default Only)",
-                            value=sound_value,
-                            interactive=sound_interactive,
-                            allow_custom_value=(cfg.PLATFORM != "windows")  # Only allow custom on Linux
+                            # Show detected backend for Linux
+                            backend = getattr(cfg, 'TTS_AUDIO_BACKEND', 'unknown')
+                            system_label = f"Linux Audio ({backend})"
+
+                        sound_output_display = gr.Textbox(
+                            label=f"Audio Output ({system_label})",
+                            value="Default Sound Device",
+                            interactive=False,
+                            max_lines=1
                         )
+
                         sound_sample_rate = gr.Dropdown(
                             choices=[str(r) for r in cfg.SOUND_SAMPLE_RATE_OPTIONS],
                             label="Sample Rate (Hz)",
@@ -2670,12 +2699,6 @@ def launch_display():
         )
 
         # Sound hardware handlers
-        sound_output_device.change(
-            fn=update_sound_output_device,
-            inputs=[sound_output_device],
-            outputs=[config_status]
-        )
-
         sound_sample_rate.change(
             fn=update_sound_sample_rate,
             inputs=[sound_sample_rate],
@@ -3002,7 +3025,7 @@ def launch_display():
             fn=unified_save_wrapper,
             inputs=[
                 layer_allocation_radio, cpu_select, cpu_threads, gpu_select, vram_size,
-                sound_output_device, sound_sample_rate,
+                sound_output_display, sound_sample_rate,
                 model_folder_textbox, model_dropdown,
                 ctx_size, batch_size, temperature, repeat_penalty,
                 tts_voice, tts_max_len,
@@ -3017,7 +3040,7 @@ def launch_display():
             fn=unified_save_wrapper,
             inputs=[
                 layer_allocation_radio, cpu_select, cpu_threads, gpu_select, vram_size,
-                sound_output_device, sound_sample_rate,
+                sound_output_display, sound_sample_rate,
                 model_folder_textbox, model_dropdown,
                 ctx_size, batch_size, temperature, repeat_penalty,
                 tts_voice, tts_max_len,
@@ -3162,15 +3185,22 @@ def launch_display():
     # Enable queue for generator/streaming support
     demo.queue()
 
+    # Build launch kwargs - CSS moved to launch() for Gradio 6+ compatibility
+    launch_kwargs = {
+        "server_name": "localhost",
+        "server_port": 7860,
+        "show_error": True,
+        "share": False,
+        "inbrowser": False,
+        "prevent_thread_lock": True
+    }
+    
+    # Gradio 6.0+ moved css parameter to launch() - add it there for 6+ to suppress warning
+    if is_gradio_6_plus:
+        launch_kwargs["css"] = final_css.strip()
+    
     gradio_thread = threading.Thread(
-        target=lambda: demo.launch(
-            server_name="localhost",
-            server_port=7860,
-            show_error=True,
-            share=False,
-            inbrowser=False,
-            prevent_thread_lock=True
-        ),
+        target=lambda: demo.launch(**launch_kwargs),
         daemon=True
     )
     gradio_thread.start()
