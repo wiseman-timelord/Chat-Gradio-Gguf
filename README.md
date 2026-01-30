@@ -152,11 +152,6 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
        3) Compile CPU Binaries / Compile CPU Wheel
        4) Compile Vulkan Binaries / Compile Vulkan Wheel
     
-    Embedding Model...
-       a) Bge-Small-En v1.5 (Fastest - 132MB)
-       b) Bge-Base-En v1.5 (Regular - 425MB)
-       c) Bge-Large-En v1.5 (Quality - 1.35GB)
-    
     ===============================================================================
     Selection; Backend=1-4, Embed=a-c, TTS=d/e/f, Abandon=A; (e.g. 2be):
 
