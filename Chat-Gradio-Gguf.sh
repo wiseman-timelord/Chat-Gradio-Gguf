@@ -138,7 +138,7 @@ run_validation() {
         read -p "Press Enter to continue..."
         return
     fi
-    python3 ./validater.py linux
+    python3 ./inspector.py linux
     if [ $? -ne 0 ]; then
         echo "Error during validation"
         read -p "Press Enter to continue..."

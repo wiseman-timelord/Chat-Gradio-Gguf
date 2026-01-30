@@ -146,7 +146,7 @@ echo Running Library Validation...
 call .\.venv\Scripts\activate.bat
 echo Activated: `.venv`
 
-python.exe .\validater.py windows
+python.exe .\inspector.py windows
 
 call .\.venv\Scripts\deactivate.bat
 echo DeActivated: `.venv`
