@@ -515,9 +515,9 @@ project_root/
 
 # Development for v1.00.00+
 Now that the program is 100% made, I am tidying up, and finishing testing/bugfixing... 
-- Work on windows/ubuntu bugfixing.
 - Optimization, then testing/bugfixing.
 - Rename configuration.py to configure.py or config.py.
+- More work on filtering output. Specifically enhancing the "Light" filter for Qt6, as currently its got too many blank lines.
 
 # Update Ideas
 1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
