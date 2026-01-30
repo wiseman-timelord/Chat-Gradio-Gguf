@@ -258,7 +258,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- Validation of Installation (v1.00.0)..
+- Validation of Installation (v1.02.2)..
 <details>
     
     ===============================================================================
