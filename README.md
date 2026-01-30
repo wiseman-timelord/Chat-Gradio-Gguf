@@ -509,7 +509,6 @@ project_root/
 
 # Development for v1.00.00+
 Now that the program is 100% made, I am tidying up, and finishing testing/bugfixing... 
-- Release v1.00.0 upcoming, which will be tested on, ubuntu 25 and windows 8.1, and 100% bugfixed.
 - Work on windows/ubuntu bugfixing.
 - Optimization, then testing/bugfixing.
 - Rename configuration.py to configure.py or config.py.
