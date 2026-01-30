@@ -1,9 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
 ### Status
-Beta - Release version works (at least on Windows), but things are still being worked on. Current developments for next version are...
-- Finalize things, mainly rename configuration.py to configure.py.
-- Test and fix, on ubuntu 25.
+Beta - Release version works (last tested on Ubuntu 25).
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration. One thing to mention though, is that because a goal of the project is to make a Chatbot compatible as it is, therefore compromises had to be made, and it may not have all the latest versions of things, more the most widely compatible versions of things, so some features are not as good as they could be, but also, this program serves as a valuable reference for what needs to be used on what OS, albeit it, as a personal project it could be streamlined/enhanced/customized to your own likings later.   
@@ -509,12 +507,12 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 ```
 
-# Development for v0.xx-xx-v1.00.00
+# Development for v1.00.00+
 Now that the program is 100% made, I am tidying up, and finishing testing/bugfixing... 
 - Release v1.00.0 upcoming, which will be tested on, ubuntu 25 and windows 8.1, and 100% bugfixed.
 - Work on windows/ubuntu bugfixing.
 - Optimization, then testing/bugfixing.
-
+- Rename configuration.py to configure.py or config.py.
 
 # Update Ideas
 1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
