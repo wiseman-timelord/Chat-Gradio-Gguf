@@ -1535,9 +1535,19 @@ def install_coqui_tts():
     print_status("Installing Coqui TTS with codec support...")
     
     try:
-        # CRITICAL: Use [codec] extra to install torchcodec dependency
+        # Install torchaudio FIRST with CPU index to match existing CPU-only torch
+        # Without --index-url, pip pulls the CUDA build which requires libtorch_cuda.so
+        print_status("Installing torchaudio (CPU-only to match torch)...")
+        if not pip_install_with_retry(pip_exe, "torchaudio",
+                                       ["--index-url", "https://download.pytorch.org/whl/cpu"],
+                                       max_retries=10, initial_delay=5.0):
+            print_status("torchaudio installation failed", False)
+            sys.exit(1)
+        print_status("torchaudio (CPU) installed")
+        
+        # Now install coqui-tts[codec] - torchaudio is already satisfied so pip won't replace it
         result = subprocess.run(
-            [pip_exe, "install", "coqui-tts[codec]", "torchaudio"],
+            [pip_exe, "install", "coqui-tts[codec]"],
             capture_output=True, text=True, timeout=600
         )
         
@@ -1592,10 +1602,73 @@ if not os.path.exists("{temp_wav_safe}"):
 print("[COQUI] Model test passed")
 '''
         else:
+            # Linux: espeak-ng is installed system-wide via apt (libespeak-ng1, espeak-ng)
+            # When running as sudo, we must explicitly point phonemizer to the system libraries
+            # because the root env may not have the same library search paths as the user
             download_script = f'''
 import os
 import sys
+import subprocess
+
+# Locate system espeak-ng for phonemizer (critical when running as sudo/root)
+espeak_lib = None
+espeak_exe = None
+
+# Find libespeak-ng.so from ldconfig (works even under sudo)
+try:
+    result = subprocess.run(["ldconfig", "-p"], capture_output=True, text=True)
+    for line in result.stdout.splitlines():
+        if "libespeak-ng.so.1" in line and "=>" in line:
+            espeak_lib = line.split("=>")[-1].strip()
+            break
+except Exception:
+    pass
+
+# Fallback: check common library paths directly
+if not espeak_lib:
+    for candidate in [
+        "/usr/lib/x86_64-linux-gnu/libespeak-ng.so.1",
+        "/usr/lib/libespeak-ng.so.1",
+        "/usr/lib/aarch64-linux-gnu/libespeak-ng.so.1",
+        "/usr/local/lib/libespeak-ng.so.1",
+    ]:
+        if os.path.exists(candidate):
+            espeak_lib = candidate
+            break
+
+# Find espeak-ng executable
+for candidate in ["/usr/bin/espeak-ng", "/usr/local/bin/espeak-ng"]:
+    if os.path.exists(candidate):
+        espeak_exe = candidate
+        break
+
+if not espeak_lib:
+    print("[FATAL] libespeak-ng.so.1 not found on system")
+    print("[FATAL] Install with: sudo apt install libespeak-ng1 espeak-ng")
+    sys.exit(1)
+
+if not espeak_exe:
+    print("[FATAL] espeak-ng executable not found on system")
+    sys.exit(1)
+
+# Determine espeak-ng-data path from the executable location
+espeak_data = None
+for candidate in ["/usr/lib/x86_64-linux-gnu/espeak-ng-data", "/usr/share/espeak-ng-data", "/usr/local/lib/espeak-ng-data"]:
+    if os.path.isdir(candidate):
+        espeak_data = candidate
+        break
+
+os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = espeak_lib
+os.environ["PHONEMIZER_ESPEAK_PATH"] = espeak_exe
+if espeak_data:
+    os.environ["ESPEAK_DATA_PATH"] = espeak_data
+
+print(f"[COQUI] espeak-ng lib: {{espeak_lib}}")
+print(f"[COQUI] espeak-ng exe: {{espeak_exe}}")
+print(f"[COQUI] espeak-ng data: {{espeak_data or 'auto'}}")
+
 os.environ["TTS_HOME"] = "{tts_model_dir_safe}"
+
 from TTS.api import TTS
 print("[COQUI] Loading model...")
 tts = TTS(model_name="tts_models/en/vctk/vits", progress_bar=True)
