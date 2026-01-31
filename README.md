@@ -152,8 +152,42 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
        3) Compile CPU Binaries / Compile CPU Wheel
        4) Compile Vulkan Binaries / Compile Vulkan Wheel
     
+    Embedding Model...
+       a) Bge-Small-En v1.5 (Fastest - 132MB)
+       b) Bge-Base-En v1.5 (Regular - 425MB)
+       c) Bge-Large-En v1.5 (Quality - 1.35GB)
+    
     ===============================================================================
-    Selection; Backend=1-4, Embed=a-c, TTS=d/e/f, Abandon=A; (e.g. 2be):
+    Selection; Backend=1-4, Embed=a-c, Abandon=A; (e.g. 2b):
+
+</details>
+
+- The TTS Install menu  (v1.03.0)...
+<details>
+    
+    ===============================================================================
+        Chat-Gradio-Gguf - TTS Configuration
+    ===============================================================================
+    
+    TTS Engine...
+       1) Built-In TTS (pyttsx3/espeak-ng)
+       2) Coqui TTS (Higher quality, larger download ~1.4GB)
+    
+    If Coqui TTS, Select Voice...
+       a) British (Male/Female)
+       b) American (Male/Female)
+       c) Scottish
+       d) Irish
+       e) Indian
+       f) Canadian
+       g) South African
+       h) Welsh
+       i) Northern Irish
+       j) Australian
+       k) New Zealand
+    
+    ===============================================================================
+    Selection; TTS=1-2, Voice=a-k, Abandon=A; (e.g. 1 or 2b):
 
 </details>
 
