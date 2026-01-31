@@ -69,6 +69,64 @@ EMBEDDING_MODELS = {
     }
 }
 
+COQUI_VOICES = {
+    "a": {
+        "id": "p243",
+        "display": "British (Male/Female)",
+        "accent": "british"
+    },
+    "b": {
+        "id": "p230",
+        "display": "American (Male/Female)",
+        "accent": "american"
+    },
+    "c": {
+        "id": "p234",
+        "display": "Scottish",
+        "accent": "scottish"
+    },
+    "d": {
+        "id": "p245",
+        "display": "Irish",
+        "accent": "irish"
+    },
+    "e": {
+        "id": "p248",
+        "display": "Indian",
+        "accent": "indian"
+    },
+    "f": {
+        "id": "p302",
+        "display": "Canadian",
+        "accent": "canadian"
+    },
+    "g": {
+        "id": "p323",
+        "display": "South African",
+        "accent": "south_african"
+    },
+    "h": {
+        "id": "p253",
+        "display": "Welsh",
+        "accent": "welsh"
+    },
+    "i": {
+        "id": "p292",
+        "display": "Northern Irish",
+        "accent": "northern_irish"
+    },
+    "j": {
+        "id": "p303",
+        "display": "Australian",
+        "accent": "australian"
+    },
+    "k": {
+        "id": "p316",
+        "display": "New Zealand",
+        "accent": "new_zealand"
+    },
+}
+
 # Platform detection windows / linux
 PLATFORM = None
 
@@ -86,6 +144,13 @@ def print_status(message: str, success: bool = True) -> None:
     status = "[✓]" if success else "[✗]"
     print(f"{status} {message}")
     time.sleep(1 if success else 3)
+
+def short_path(path, max_len=44):
+    """Truncate path for display - installer standalone version"""
+    path = str(path)
+    if len(path) <= max_len:
+        return path
+    return "..." + path[-max_len:]
 
 def detect_cpu_features() -> dict:
     """Detect CPU SIMD features accurately."""
@@ -945,31 +1010,20 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
                 pass
 
 def create_config(backend: str, embedding_model: str) -> None:
-    """Create persistent.json configuration file (variables only)"""
+    """Create persistent.json configuration file"""
     config_path = BASE_DIR / "data" / "persistent.json"
     
     vulkan_enabled = "vulkan" in backend.lower()
-    
-    # Set layer_allocation_mode based on install route:
-    # - Vulkan routes (2, 4): VRAM_SRAM (enables VRAM dropdown for GPU inference)
-    # - CPU-only routes (1, 3): SRAM_ONLY (CPU-only inference)
     layer_mode = "VRAM_SRAM" if vulkan_enabled else "SRAM_ONLY"
     default_vram = 8192 if vulkan_enabled else 0
     
-    # Calculate optimal CPU threads (85% of available)
     optimal_threads = get_optimal_build_threads()
     
-    # Platform-specific defaults for sound/TTS settings
-    # Windows uses "Default Sound Device", Linux uses "default"
     if PLATFORM == "windows":
         default_sound_device = "Default Sound Device"
     else:
         default_sound_device = "default"
     
-    # Use model_settings format for compatibility with settings.py
-    # Note: Constants like llama_cli_path, llama_bin_path, embedding_model, 
-    # embedding_backend, vulkan_enabled, and filter_mode are stored in or determined 
-    # from constants.ini, not stored in the user-modifiable persistent.json
     config = {
         "model_settings": {
             "layer_allocation_mode": layer_mode,
@@ -993,7 +1047,6 @@ def create_config(backend: str, embedding_model: str) -> None:
             "cpu_threads": optimal_threads,
             "bleep_on_events": True,
             "use_python_bindings": True,
-            # Sound and TTS configuration - must match keys used in configuration.py save_config()
             "sound_output_device": default_sound_device,
             "sound_sample_rate": 44100,
             "tts_enabled": False,
@@ -1004,20 +1057,23 @@ def create_config(backend: str, embedding_model: str) -> None:
     }
     
     try:
-        with open(config_path, "w") as f:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w", encoding='utf-8') as f:
             json.dump(config, f, indent=4)
         print_status("Configuration file created")
     except Exception as e:
         print_status(f"Failed to create config: {e}", False)
+        sys.exit(1)  # Fail hard if config can't be created
 
 def create_system_ini(platform: str, os_version: str, python_version: str, 
                      backend_type: str, embedding_model: str,
                      windows_version: str = None, vulkan_available: bool = False,
-                     llama_cli_path: str = None, llama_bin_path: str = None):
-    """Create constants.ini with platform, version, and compatibility information."""
+                     llama_cli_path: str = None, llama_bin_path: str = None,
+                     tts_engine: str = "builtin", coqui_voice_id: str = None,
+                     coqui_voice_accent: str = None):
+    """Create constants.ini with platform, version, TTS, and compatibility information."""
     global SELECTED_GRADIO, SELECTED_QTWEB
     
-    # Ensure version selections are populated
     if not SELECTED_GRADIO:
         detect_version_selections()
     
@@ -1034,7 +1090,6 @@ def create_system_ini(platform: str, os_version: str, python_version: str,
             f.write(f"embedding_model = {embedding_model}\n")
             f.write(f"embedding_backend = sentence_transformers\n")
             f.write(f"vulkan_available = {str(vulkan_available).lower()}\n")
-            # Add version compatibility info for main program
             f.write(f"gradio_version = {SELECTED_GRADIO}\n")
             f.write(f"qt_version = {qt_version}\n")
             if llama_cli_path:
@@ -1043,6 +1098,15 @@ def create_system_ini(platform: str, os_version: str, python_version: str,
                 f.write(f"llama_bin_path = {llama_bin_path}\n")
             if platform == "windows" and windows_version:
                 f.write(f"windows_version = {windows_version}\n")
+            
+            # TTS Configuration Section
+            f.write("\n[tts]\n")
+            f.write(f"tts_type = {tts_engine}\n")
+            if tts_engine == "coqui" and coqui_voice_id:
+                f.write(f"coqui_voice_id = {coqui_voice_id}\n")
+                f.write(f"coqui_voice_accent = {coqui_voice_accent or 'british'}\n")
+                f.write(f"coqui_model = tts_models/en/vctk/vits\n")
+            
         print_status("System information file created")
         return True
     except Exception as e:
@@ -1391,6 +1455,184 @@ except Exception as e:
         print_status(f"Verification error: {e}", False)
         return False
 
+def select_tts_options():
+    """Display TTS configuration menu and return selection.
+    
+    Only shows menu for compatible OS versions:
+    - Windows 8.1, 10, 11
+    - Ubuntu 24, 25
+    
+    For incompatible OS (Windows 7-8, Ubuntu 22-23), automatically
+    returns built-in TTS without showing the menu.
+    """
+    
+    # Check OS compatibility
+    if not is_coqui_compatible():
+        # Incompatible OS - use built-in TTS automatically
+        if PLATFORM == "windows":
+            print(f"[TTS] Windows {WINDOWS_VERSION} detected - using Built-in TTS (pyttsx3)")
+        else:
+            print(f"[TTS] Ubuntu {OS_VERSION} detected - using Built-in TTS (espeak-ng)")
+        return "builtin", None
+    
+    # Clear screen and show header
+    print_header("TTS Configuration")
+    
+    print("TTS Engine...")
+    print("   1) Built-In TTS (pyttsx3/espeak-ng)")
+    print("   2) Coqui TTS (Higher quality, larger download ~1.4GB)")
+    print()
+    
+    print("If Coqui TTS, Select Voice...")
+    for key, voice in COQUI_VOICES.items():
+        print(f"   {key}) {voice['display']}")
+    print()
+    
+    width = 79
+    print("=" * width)
+    prompt = "Selection; TTS=1-2, Voice=a-k, Abandon=A; (e.g. 1 or 2b): "
+    
+    while True:
+        raw_choice = input(prompt).strip()
+        
+        # Check for Abandon BEFORE lowercasing (capital A only)
+        if raw_choice == "A":
+            print("Abandoning installation...")
+            sys.exit(0)
+        
+        choice = raw_choice.lower().replace(" ", "").replace("-", "")
+        
+        if choice == "1":
+            return "builtin", None
+        
+        elif len(choice) >= 2 and choice[0] == "2" and choice[1] in COQUI_VOICES:
+            voice_key = choice[1]
+            voice_info = COQUI_VOICES[voice_key]
+            return "coqui", voice_info
+        
+        elif choice == "2":
+            print("Coqui TTS requires a voice selection (a-k).")
+            prompt = "Selection; TTS=1-2, Voice=a-k, Abandon=A; (e.g. 1 or 2b): "
+            continue
+        
+        else:
+            print("Invalid selection. Enter 1 for Built-In, or 2 + voice letter (e.g. 2b) for Coqui.")
+            prompt = "Selection; TTS=1-2, Voice=a-k, Abandon=A; (e.g. 1 or 2b): "
+
+def install_coqui_tts():
+    """Install Coqui TTS (Idiap fork) with codec support and download VCTK model.
+    
+    Fails hard on any error - no fallback. Requires torchcodec for audio IO.
+    """
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("pip.exe" if PLATFORM == "windows" else "pip"))
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / ("python.exe" if PLATFORM == "windows" else "python"))
+    
+    if PLATFORM == "windows":
+        if not install_espeak_ng_windows():
+            print_status("CRITICAL: espeak-ng installation failed", False)
+            sys.exit(1)
+    
+    print_status("Installing Coqui TTS with codec support...")
+    
+    try:
+        # CRITICAL: Use [codec] extra to install torchcodec dependency
+        result = subprocess.run(
+            [pip_exe, "install", "coqui-tts[codec]", "torchaudio"],
+            capture_output=True, text=True, timeout=600
+        )
+        
+        if result.returncode != 0:
+            error_detail = result.stderr[-800:] if len(result.stderr) > 800 else result.stderr
+            print_status(f"Coqui TTS pip install failed: {error_detail}", False)
+            sys.exit(1)
+        
+        print_status("Coqui TTS package installed")
+        
+        tts_model_dir = BASE_DIR / "data" / "tts_models"
+        tts_model_dir.mkdir(parents=True, exist_ok=True)
+        
+        print_status("Downloading Coqui VCTK voice model (~1.4GB)...")
+        
+        tts_model_dir_safe = str(tts_model_dir).replace("\\", "/")
+        temp_wav_safe = str(TEMP_DIR / "tts_test.wav").replace("\\", "/")
+        
+        if PLATFORM == "windows":
+            espeak_local_path = str(BASE_DIR / "data" / "espeak-ng").replace("\\", "/")
+            
+            # CRITICAL: Use {{ and }} inside the f-string so the generated script has { and }
+            download_script = f'''
+import os
+import sys
+
+local_espeak = r"{espeak_local_path}"
+os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = os.path.join(local_espeak, "libespeak-ng.dll")
+os.environ["PHONEMIZER_ESPEAK_PATH"] = os.path.join(local_espeak, "espeak-ng.exe")
+os.environ["ESPEAK_DATA_PATH"] = os.path.join(local_espeak, "espeak-ng-data")
+
+if not os.path.exists(os.environ["PHONEMIZER_ESPEAK_LIBRARY"]):
+    print("[FATAL] espeak-ng DLL not found at " + os.environ["PHONEMIZER_ESPEAK_LIBRARY"])
+    sys.exit(1)
+if not os.path.exists(os.environ["PHONEMIZER_ESPEAK_PATH"]):
+    print("[FATAL] espeak-ng executable not found at " + os.environ["PHONEMIZER_ESPEAK_PATH"])
+    sys.exit(1)
+
+print("[COQUI] espeak-ng verified")
+
+os.environ["TTS_HOME"] = "{tts_model_dir_safe}"
+
+from TTS.api import TTS
+print("[COQUI] Loading model...")
+tts = TTS(model_name="tts_models/en/vctk/vits", progress_bar=True)
+print("[COQUI] Testing synthesis...")
+tts.tts_to_file(text="Installation test successful.", file_path="{temp_wav_safe}", speaker="p243")
+
+if not os.path.exists("{temp_wav_safe}"):
+    print("[FATAL] Test file not created")
+    sys.exit(1)
+print("[COQUI] Model test passed")
+'''
+        else:
+            download_script = f'''
+import os
+import sys
+os.environ["TTS_HOME"] = "{tts_model_dir_safe}"
+from TTS.api import TTS
+print("[COQUI] Loading model...")
+tts = TTS(model_name="tts_models/en/vctk/vits", progress_bar=True)
+print("[COQUI] Testing synthesis...")
+tts.tts_to_file(text="Installation test successful.", file_path="{temp_wav_safe}", speaker="p243")
+if not os.path.exists("{temp_wav_safe}"):
+    print("[FATAL] Test file not created")
+    sys.exit(1)
+print("[COQUI] Test passed")
+'''
+        
+        temp_script = TEMP_DIR / "download_tts_model.py"
+        with open(temp_script, 'w', encoding='utf-8') as f:
+            f.write(download_script)
+        
+        # Run the download script without capture_output to see progress
+        result = subprocess.run([python_exe, str(temp_script)], timeout=1800)
+        temp_script.unlink(missing_ok=True)
+        
+        test_wav = TEMP_DIR / "tts_test.wav"
+        if test_wav.exists():
+            test_wav.unlink(missing_ok=True)
+        
+        if result.returncode != 0:
+            print_status("Coqui model verification failed (see errors above)", False)
+            sys.exit(1)
+        
+        print_status("Coqui TTS installed and verified")
+        return True
+        
+    except subprocess.TimeoutExpired:
+        print_status("Coqui TTS installation timed out", False)
+        sys.exit(1)
+    except Exception as e:
+        print_status(f"Coqui TTS installation error: {e}", False)
+        sys.exit(1)
+        
 def install_qt_webengine() -> bool:
     """
     Install Qt WebEngine for custom browser.
@@ -2334,18 +2576,155 @@ def select_backend_and_embedding():
             sys.exit(0)
         choice = choice.replace(" ", "").replace("-", "")
 
+def is_coqui_compatible() -> bool:
+    """Check if current OS supports Coqui TTS.
+    
+    Coqui TTS requires:
+    - Windows 8.1, 10, or 11
+    - Ubuntu 24 or 25
+    
+    Returns:
+        bool: True if Coqui TTS is supported on this OS
+    """
+    if PLATFORM == "windows":
+        # WINDOWS_VERSION is detected earlier in install()
+        # Valid versions: "8.1", "10", "11"
+        # Invalid versions: "7", "8"
+        if WINDOWS_VERSION in ["8.1", "10", "11"]:
+            return True
+        return False
+    
+    elif PLATFORM == "linux":
+        # OS_VERSION contains Ubuntu version like "24.04", "24.10", "25.04"
+        # We need Ubuntu 24.x or 25.x
+        try:
+            if OS_VERSION:
+                major_version = int(OS_VERSION.split('.')[0])
+                if major_version >= 24:
+                    return True
+        except (ValueError, AttributeError, IndexError):
+            pass
+        return False
+    
+    return False
+
+def install_espeak_ng_windows():
+    """Extract espeak-ng to project data folder. Fails hard if extraction fails."""
+    import platform
+    import urllib.request
+    import shutil
+    
+    espeak_dir = BASE_DIR / "data" / "espeak-ng"
+    espeak_exe = espeak_dir / "espeak-ng.exe"
+    espeak_dll = espeak_dir / "libespeak-ng.dll"
+    
+    print_status("Installing espeak-ng (Coqui dependency)...")
+    
+    if espeak_dll.exists() and espeak_exe.exists():
+        try:
+            result = subprocess.run([str(espeak_exe), "--version"], capture_output=True, timeout=5)
+            if result.returncode == 0:
+                print_status("espeak-ng verified")
+                return True
+        except:
+            shutil.rmtree(espeak_dir, ignore_errors=True)
+    
+    espeak_dir.mkdir(parents=True, exist_ok=True)
+    
+    is_64bit = platform.machine().endswith('64')
+    msi_url = "https://github.com/espeak-ng/espeak-ng/releases/download/1.51/espeak-ng-X64.msi" if is_64bit else "https://github.com/espeak-ng/espeak-ng/releases/download/1.51/espeak-ng-X86.msi"
+    msi_filename = "espeak-ng-X64.msi" if is_64bit else "espeak-ng-X86.msi"
+    
+    msi_path = TEMP_DIR / msi_filename
+    extract_dir = TEMP_DIR / "espeak_extract"
+    
+    try:
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir)
+        
+        urllib.request.urlretrieve(msi_url, str(msi_path))
+        
+        if not msi_path.exists():
+            print_status("ERROR: espeak-ng download failed", False)
+            sys.exit(1)
+        
+        # Extract using msiexec /a (administrative extraction, no system install)
+        result = subprocess.run(
+            ["msiexec", "/a", str(msi_path), "/qn", f"TARGETDIR={str(extract_dir)}"],
+            capture_output=True, timeout=120
+        )
+        
+        if result.returncode not in [0, 3010]:
+            # Try 7z fallback
+            try:
+                result = subprocess.run(
+                    ["7z", "x", str(msi_path), f"-o{str(extract_dir)}", "-y"],
+                    capture_output=True, timeout=60
+                )
+                if result.returncode != 0:
+                    print_status(f"ERROR: Extraction failed: {result.stderr.decode()[:200]}", False)
+                    sys.exit(1)
+            except FileNotFoundError:
+                print_status("ERROR: msiexec failed and 7z not available", False)
+                sys.exit(1)
+        
+        # Find extracted files
+        source_dir = None
+        for root, dirs, files in os.walk(extract_dir):
+            if "espeak-ng.exe" in files:
+                source_dir = Path(root)
+                break
+        
+        if not source_dir:
+            print_status("ERROR: espeak-ng.exe not found in extracted MSI", False)
+            sys.exit(1)
+        
+        # Copy to project folder
+        for item in source_dir.iterdir():
+            dest = espeak_dir / item.name
+            if item.is_dir():
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.copytree(item, dest)
+            else:
+                shutil.copy2(item, dest)
+        
+        # Verify critical files
+        if not espeak_dll.exists():
+            print_status("ERROR: libespeak-ng.dll missing after extraction", False)
+            sys.exit(1)
+        if not espeak_exe.exists():
+            print_status("ERROR: espeak-ng.exe missing after extraction", False)
+            sys.exit(1)
+        
+        msi_path.unlink(missing_ok=True)
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir, ignore_errors=True)
+        
+        print_status(f"espeak-ng installed ({len(list(espeak_dir.glob('**/*')))} files)")
+        return True
+        
+    except subprocess.TimeoutExpired:
+        print_status("ERROR: espeak-ng installation timed out", False)
+        sys.exit(1)
+    except Exception as e:
+        print_status(f"ERROR: espeak-ng installation failed: {e}", False)
+        sys.exit(1)
+    finally:
+        if msi_path.exists():
+            msi_path.unlink(missing_ok=True)
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir, ignore_errors=True)
+
 # Main install flow
 def install():
     global WINDOWS_VERSION, OS_VERSION
     
-    # Version compatibility check FIRST
     if not check_version_compatibility():
         sys.exit(1)
 
-    # Detect Python/Gradio/Qt versions for display
     detect_version_selections()
     
-    # Clean temp directories at start (handles leftover from failed builds)
     if TEMP_DIR.exists():
         try:
             shutil.rmtree(TEMP_DIR, ignore_errors=True)
@@ -2357,10 +2736,8 @@ def install():
         except:
             pass
     
-    # Create temp dir
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Create venv and install py-cpuinfo early for CPU detection
     if not create_venv():
         print_status("Virtual environment failed", False)
         sys.exit(1)
@@ -2373,12 +2750,13 @@ def install():
     if PLATFORM == "windows" and WINDOWS_VERSION == "8.1":
         print("Detected Windows 8.1 - Using Qt5 WebEngine")
     
-    # Get system info before creating config
     os_version = "unknown"
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     windows_version = None
     vulkan_available = False
     
+    # IMPORTANT: Detect OS version BEFORE TTS selection
+    # This is needed for is_coqui_compatible() to work
     if PLATFORM == "windows":
         WINDOWS_VERSION = detect_windows_version() or "unknown"
         os_version = WINDOWS_VERSION
@@ -2389,7 +2767,17 @@ def install():
         os_version = OS_VERSION
         vulkan_available = is_vulkan_installed()
 
+    # Page 1: Backend and Embedding
     backend, embedding_model = select_backend_and_embedding()
+    
+    # Page 2: TTS Configuration (only shown on compatible OS)
+    tts_engine, coqui_voice = select_tts_options()
+    
+    coqui_voice_id = None
+    coqui_voice_accent = None
+    if tts_engine == "coqui" and coqui_voice:
+        coqui_voice_id = coqui_voice['id']
+        coqui_voice_accent = coqui_voice['accent']
     
     print_header("Installation")
     if PLATFORM == "windows":
@@ -2401,10 +2789,13 @@ def install():
     print(f"Installing {APP_NAME} on {os_display} with Python {py_ver}")
     print(f"  Route: {backend}")
     print(f"  Llama.Cpp {LLAMACPP_TARGET_VERSION}, Gradio {SELECTED_GRADIO}, Qt-Web {SELECTED_QTWEB}")
-
-    print(f"Embedding model: {embedding_model}")
+    print(f"  Embedding: {embedding_model}")
     
-    # Determine backend_type
+    if tts_engine == "coqui" and coqui_voice:
+        print(f"  TTS: Coqui - {coqui_voice['display']}")
+    else:
+        print(f"  TTS: Built-in (pyttsx3/espeak-ng)")
+    
     if backend in ["Download CPU Wheel / Default CPU Wheel", "Compile CPU Binaries / Compile CPU Wheel"]:
         backend_type = "CPU_CPU"
         vulkan_available = False
@@ -2418,12 +2809,10 @@ def install():
         backend_type = "CPU_CPU"
         vulkan_available = False
 
-    # Create directories
     create_directories(backend)
     
     info = BACKEND_OPTIONS[backend]
     
-    # Create constants.ini early
     create_system_ini(
         platform=PLATFORM,
         os_version=os_version,
@@ -2433,23 +2822,23 @@ def install():
         windows_version=windows_version,
         vulkan_available=vulkan_available,
         llama_cli_path=info["cli_path"],
-        llama_bin_path=info["dest"]
+        llama_bin_path=info["dest"],
+        tts_engine=tts_engine,
+        coqui_voice_id=coqui_voice_id,
+        coqui_voice_accent=coqui_voice_accent
     )
     
-    # Install system dependencies BEFORE checking build tools
     if PLATFORM == "linux":
         if not install_linux_system_dependencies(backend):
             print_status("System dependencies installation failed", False)
             sys.exit(1)
     
-    # Install Python dependencies
     if not install_python_deps(backend):
         print_status("Python dependencies failed", False)
         sys.exit(1)
 
     install_optional_file_support()
 
-    # Initialize embedding cache
     if not initialize_embedding_cache(embedding_model):
         print_status("CRITICAL: Embedding model required by RAG", False)
         sys.exit(1)
@@ -2458,7 +2847,11 @@ def install():
     if not spacy_ok:
         print_status("WARNING: spaCy model download failed - session labeling may not work", False)
 
-    # Download/compile backend
+    # Install Coqui TTS if selected (only possible on compatible OS)
+    if tts_engine == "coqui":
+        if not install_coqui_tts():
+            sys.exit(1)
+
     if not download_extract_backend(backend):
         print_status("Backend download failed", False)
         sys.exit(1)

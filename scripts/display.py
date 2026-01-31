@@ -66,7 +66,8 @@ from scripts.tools import (
     format_search_status_for_chat, web_search, format_web_search_status_for_chat,
     get_voice_choices, get_output_device_choices, get_sample_rate_choices,
     speak_last_response, stop_speaking, get_tts_status, initialize_tts,
-    get_voice_id_by_name, speak_text
+    get_voice_id_by_name, speak_text,
+    synthesize_last_response, play_tts_audio
 )
 
 
@@ -1806,9 +1807,6 @@ def conversation_display(
     cleared_files = []
     cfg.session_attached_files = []
     
-    # Beep to notify user response is complete
-    beep()
-
     # Auto-speak response if TTS is enabled
     if tts_enabled:
         # Calculate TTS phase indices based on whether search was enabled
@@ -1819,7 +1817,8 @@ def conversation_display(
             tts_gen_phase = 9
             tts_play_phase = 10
         
-        # Show Generating TTS phase
+        # Show Generating TTS phase while synthesis runs
+        print("[TTS] Generating speech from response...")
         yield (
             get_chatbot_output(session_tuples, session_messages),
             session_messages,
@@ -1831,11 +1830,15 @@ def conversation_display(
             [],
             "speaking",
             llm_state,
-            models_loaded_state,  # Return state value
+            models_loaded_state,
             tts_enabled
         )
         
-        # Show Playing TTS phase before blocking call
+        # BLOCKING: Synthesize audio (this takes time - progress stays on "Generating TTS")
+        wav_path = synthesize_last_response(session_messages)
+        
+        # Switch to Playing TTS phase
+        print("[TTS] Playing speech audio...")
         yield (
             get_chatbot_output(session_tuples, session_messages),
             session_messages,
@@ -1847,11 +1850,17 @@ def conversation_display(
             [],
             "speaking",
             llm_state,
-            models_loaded_state,  # Return state value
+            models_loaded_state,
             tts_enabled
         )
         
-        speak_last_response(session_messages)
+        # BLOCKING: Play the audio (progress stays on "Playing TTS")
+        if wav_path:
+            play_tts_audio(wav_path)
+        print("[TTS] Speech playback complete")
+    
+    # Beep AFTER TTS completes (or immediately if TTS disabled)
+    beep()
     
     # Final yield - with state values returned directly
     yield (

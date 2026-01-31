@@ -150,6 +150,10 @@ INPUT_LINES = 27
 VRAM_OPTIONS = [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536]
 CTX_OPTIONS = [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072]
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096, 8096]
+TTS_TYPE = "builtin"                     # TTS type: "builtin" or "coqui"
+COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243")
+COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british")
+COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name
 TEMP_OPTIONS = [0.0, 0.1, 0.25, 0.33, 0.5, 0.66, 0.75, 1.0]
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 HISTORY_SLOT_OPTIONS = [4, 8, 10, 12, 16]
@@ -211,6 +215,10 @@ TTS_AUDIO_BACKEND = "none"             # Audio backend: "windows", "pulseaudio",
 TTS_VOICE = None                       # Selected voice ID
 TTS_VOICE_NAME = None                  # Selected voice display name
 MAX_TTS_LENGTH = 4500
+TTS_TYPE = "builtin"                     # TTS type: "builtin" or "coqui"
+COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243")
+COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british")
+COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name
 
 # Arrays
 session_attached_files = []
@@ -578,6 +586,7 @@ def load_system_ini():
         global PLATFORM, BACKEND_TYPE, VULKAN_AVAILABLE, EMBEDDING_MODEL_NAME
         global EMBEDDING_BACKEND, GRADIO_VERSION, LLAMA_CLI_PATH, LLAMA_BIN_PATH
         global OS_VERSION, WINDOWS_VERSION, TTS_ENGINE, TTS_AUDIO_BACKEND
+        global TTS_TYPE, COQUI_VOICE_ID, COQUI_VOICE_ACCENT, COQUI_MODEL
         
         PLATFORM = system.get('platform')
         BACKEND_TYPE = system.get('backend_type', 'CPU_CPU')
@@ -603,15 +612,29 @@ def load_system_ini():
         else:
             WINDOWS_VERSION = None
         
-        # Load TTS constants from INI (set during install)
+        # Load TTS configuration
         if 'tts' in config:
             tts_section = config['tts']
-            TTS_ENGINE = tts_section.get('tts_engine', 'none')
-            TTS_AUDIO_BACKEND = tts_section.get('tts_audio_backend', 'none')
-            print(f"[INI] TTS Engine: {TTS_ENGINE}")
-            print(f"[INI] TTS Audio Backend: {TTS_AUDIO_BACKEND}")
+            TTS_TYPE = tts_section.get('tts_type', 'builtin')
+            
+            if TTS_TYPE == "coqui":
+                COQUI_VOICE_ID = tts_section.get('coqui_voice_id', 'p243')
+                COQUI_VOICE_ACCENT = tts_section.get('coqui_voice_accent', 'british')
+                COQUI_MODEL = tts_section.get('coqui_model', 'tts_models/en/vctk/vits')
+                print(f"[INI] TTS Type: Coqui")
+                print(f"[INI] Coqui Voice: {COQUI_VOICE_ID} ({COQUI_VOICE_ACCENT})")
+                print(f"[INI] Coqui Model: {COQUI_MODEL}")
+            else:
+                print(f"[INI] TTS Type: Built-in (pyttsx3/espeak-ng)")
+            
+            # Legacy support for old INI format
+            if 'tts_engine' in tts_section:
+                TTS_ENGINE = tts_section.get('tts_engine', 'none')
+            if 'tts_audio_backend' in tts_section:
+                TTS_AUDIO_BACKEND = tts_section.get('tts_audio_backend', 'none')
         else:
             print("[INI] TTS section not found - will detect at runtime")
+            TTS_TYPE = "builtin"
         
         return True
         

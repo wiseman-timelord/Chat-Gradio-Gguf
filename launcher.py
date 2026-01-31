@@ -200,10 +200,6 @@ def main():
         from scripts.configuration import load_system_ini
         load_system_ini()
         
-        # NOW initialize TTS after platform/backend constants are loaded
-        from scripts.tools import initialize_tts
-        initialize_tts()    
-        
         # Parse command-line arguments and initialize platform
         args = parse_args()
         cfg.PLATFORM = args.platform
@@ -211,7 +207,7 @@ def main():
         # Load user settings from JSON (model, context, etc.)
         load_config()
         
-        # Initialize TTS AFTER load_config so we can set defaults if config is empty
+        # Initialize TTS AFTER load_config so saved voice selection is respected
         from scripts.tools import initialize_tts
         initialize_tts()
 
