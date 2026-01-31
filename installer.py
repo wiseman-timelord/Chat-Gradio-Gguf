@@ -448,7 +448,7 @@ def get_dynamic_requirements() -> list:
     if SELECTED_GRADIO == "3.50.2":
         requirements.append("gradio==3.50.2")
     else:
-        requirements.append("gradio>=5.49.1")
+        requirements.append("gradio==5.49.1")
     
     return requirements
 

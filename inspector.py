@@ -76,8 +76,12 @@ def load_constants_ini() -> bool:
             'qt_version': config.get('system', 'qt_version', fallback='6'),
         }
         
-        if PLATFORM == 'windows':
-            SYSTEM_INFO['windows_version'] = config.get('system', 'windows_version', fallback=None)
+        # TTS configuration from [tts] section
+        SYSTEM_INFO['tts_type'] = config.get('tts', 'tts_type', fallback='builtin')
+        if SYSTEM_INFO['tts_type'] == 'coqui':
+            SYSTEM_INFO['coqui_voice_id'] = config.get('tts', 'coqui_voice_id', fallback=None)
+            SYSTEM_INFO['coqui_voice_accent'] = config.get('tts', 'coqui_voice_accent', fallback=None)
+            SYSTEM_INFO['coqui_model'] = config.get('tts', 'coqui_model', fallback='tts_models/en/vctk/vits')
             
         # Validate required keys exist
         required_keys = ['platform', 'backend_type', 'python_version']
@@ -94,6 +98,183 @@ def load_constants_ini() -> bool:
         return True
     except Exception as e:
         print(f"ERROR reading constants.ini: {e}")
+        return False
+
+def test_tts() -> bool:
+    """Verify TTS installation matches constants.ini [tts] section.
+    
+    Validates based on tts_type:
+    - builtin: pyttsx3 importable (Windows) or espeak-ng binary present (Linux)
+    - coqui:   TTS package importable, espeak-ng available, model directory exists
+    """
+    print("\n=== TTS Validation ===")
+    
+    tts_type = SYSTEM_INFO.get('tts_type', 'builtin')
+    
+    if PLATFORM == "windows":
+        venv_py = VENV_DIR / "Scripts" / "python.exe"
+    else:
+        venv_py = VENV_DIR / "bin" / "python"
+    
+    if not venv_py.exists():
+        print_status("Python executable missing", False)
+        return False
+    
+    print(f"  TTS engine: {tts_type}")
+    
+    # --- Built-in TTS validation ---
+    if tts_type == "builtin":
+        if PLATFORM == "windows":
+            # Windows built-in uses pyttsx3 (SAPI)
+            try:
+                result = subprocess.run(
+                    [str(venv_py), "-c", "import pyttsx3; print('OK')"],
+                    capture_output=True, text=True, timeout=15
+                )
+                if result.returncode == 0 and "OK" in result.stdout:
+                    print_status("pyttsx3 (Built-in TTS) available")
+                    return True
+                else:
+                    print_status("pyttsx3 import failed", False)
+                    return False
+            except subprocess.TimeoutExpired:
+                print_status("pyttsx3 check timed out", False)
+                return False
+            except Exception as e:
+                print_status(f"pyttsx3 check error: {e}", False)
+                return False
+        else:
+            # Linux built-in uses espeak-ng system binary
+            try:
+                result = subprocess.run(
+                    ["espeak-ng", "--version"],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0:
+                    version_out = result.stdout.strip() or result.stderr.strip()
+                    print_status(f"espeak-ng available ({version_out})")
+                    return True
+                else:
+                    print_status("espeak-ng returned error", False)
+                    return False
+            except FileNotFoundError:
+                print_status("espeak-ng not found (install: sudo apt install espeak-ng)", False)
+                return False
+            except Exception as e:
+                print_status(f"espeak-ng check error: {e}", False)
+                return False
+    
+    # --- Coqui TTS validation ---
+    elif tts_type == "coqui":
+        success = True
+        
+        # 1. Check espeak-ng dependency (required by Coqui's phonemizer)
+        if PLATFORM == "windows":
+            espeak_dir = BASE_DIR / "data" / "espeak-ng"
+            espeak_dll = espeak_dir / "libespeak-ng.dll"
+            espeak_exe = espeak_dir / "espeak-ng.exe"
+            
+            if espeak_dll.exists() and espeak_exe.exists():
+                print_status("espeak-ng (local) found")
+            else:
+                missing = []
+                if not espeak_dll.exists():
+                    missing.append("libespeak-ng.dll")
+                if not espeak_exe.exists():
+                    missing.append("espeak-ng.exe")
+                print_status(f"espeak-ng missing: {', '.join(missing)}", False)
+                success = False
+        else:
+            # Linux: espeak-ng installed system-wide via apt
+            espeak_found = False
+            try:
+                result = subprocess.run(
+                    ["espeak-ng", "--version"],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0:
+                    espeak_found = True
+            except FileNotFoundError:
+                pass
+            
+            if espeak_found:
+                print_status("espeak-ng (system) found")
+            else:
+                print_status("espeak-ng not found (install: sudo apt install libespeak-ng1 espeak-ng)", False)
+                success = False
+            
+            # Also check for libespeak-ng.so (needed by phonemizer at runtime)
+            lib_found = False
+            try:
+                result = subprocess.run(
+                    ["ldconfig", "-p"], capture_output=True, text=True, timeout=10
+                )
+                if "libespeak-ng.so" in result.stdout:
+                    lib_found = True
+            except Exception:
+                pass
+            
+            if not lib_found:
+                # Fallback: check common paths directly
+                for candidate in [
+                    "/usr/lib/x86_64-linux-gnu/libespeak-ng.so.1",
+                    "/usr/lib/libespeak-ng.so.1",
+                    "/usr/lib/aarch64-linux-gnu/libespeak-ng.so.1",
+                    "/usr/local/lib/libespeak-ng.so.1",
+                ]:
+                    if os.path.exists(candidate):
+                        lib_found = True
+                        break
+            
+            if lib_found:
+                print_status("libespeak-ng shared library found")
+            else:
+                print_status("libespeak-ng.so not found (install: sudo apt install libespeak-ng1)", False)
+                success = False
+        
+        # 2. Check Coqui TTS package is importable
+        try:
+            result = subprocess.run(
+                [str(venv_py), "-c", "from TTS.api import TTS; print('OK')"],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                print_status("Coqui TTS package importable")
+            else:
+                print_status("Coqui TTS package import failed", False)
+                if result.stderr:
+                    print(f"    {result.stderr.strip()[:200]}")
+                success = False
+        except subprocess.TimeoutExpired:
+            print_status("Coqui TTS import timed out", False)
+            success = False
+        except Exception as e:
+            print_status(f"Coqui TTS import error: {e}", False)
+            success = False
+        
+        # 3. Check tts_models directory exists with content
+        tts_model_dir = BASE_DIR / "data" / "tts_models"
+        if tts_model_dir.exists():
+            model_files = list(tts_model_dir.rglob("*.pth")) + list(tts_model_dir.rglob("*.json"))
+            if len(model_files) > 0:
+                print_status(f"TTS model directory present ({len(model_files)} files)")
+            else:
+                print_status("TTS model directory empty (model not downloaded)", False)
+                success = False
+        else:
+            print_status("TTS model directory missing (data/tts_models)", False)
+            success = False
+        
+        # 4. Report configured voice
+        voice_id = SYSTEM_INFO.get('coqui_voice_id')
+        voice_accent = SYSTEM_INFO.get('coqui_voice_accent')
+        if voice_id:
+            print_status(f"Configured voice: {voice_id} ({voice_accent or 'unknown'})")
+        
+        return success
+    
+    else:
+        print_status(f"Unknown tts_type in constants.ini: {tts_type}", False)
         return False
 
 def get_python_minor_version() -> int:
@@ -701,7 +882,13 @@ def main():
     print(f"Python: {SYSTEM_INFO['python_version']} (Expected: {SYSTEM_INFO.get('python_version', 'N/A')})")
     print(f"Backend: {SYSTEM_INFO['backend_type']}")
     print(f"Embedding: {SYSTEM_INFO['embedding_model']}")
-    print(f"Gradio: {SYSTEM_INFO['gradio_version']}, Qt: {SYSTEM_INFO['qt_version']}\n")
+    tts_display = SYSTEM_INFO.get('tts_type', 'builtin')
+    if tts_display == 'coqui':
+        voice_accent = SYSTEM_INFO.get('coqui_voice_accent', '')
+        tts_display = f"Coqui ({voice_accent})" if voice_accent else "Coqui"
+    else:
+        tts_display = "Built-in"
+    print(f"Gradio: {SYSTEM_INFO['gradio_version']}, Qt: {SYSTEM_INFO['qt_version']}, TTS: {tts_display}\n")
     
     results = {
         "directories": test_directories(),
@@ -720,6 +907,7 @@ def main():
         results["spacy"] = test_spacy_model()
         results["embedding"] = test_embedding_model()
         results["browser"] = test_browser_setup()
+        results["tts"] = test_tts()
         
         if PLATFORM == "linux":
             results["linux_packages"] = test_linux_system_packages()
