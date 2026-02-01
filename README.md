@@ -42,6 +42,9 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The Settings page, for configuration of, GUI, Filters (v1.02.1)...
 ![image_missing](media/settings_page.jpg)
 
+- The About/Debug Info page, displaying useful information...
+![image_missing](media/about_page.jpg)
+
 - The collapseable Left/Right Panel on the Interaction page (click the `<->` button)...
 ![image_missing](media/conversation_expand.jpg)
 
@@ -188,102 +191,6 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
     ===============================================================================
     Selection; TTS=1-2, Voice=a-k, Abandon=A; (e.g. 1 or 2b):
-
-</details>
-
-- Installation for option 2b on Windows 8.1 (v1.02.1)..
-<details>
-    
-    ===============================================================================
-        Chat-Gradio-Gguf - Installation
-    ===============================================================================
-    
-    Installing Chat-Gradio-Gguf on Windows 8.1 with Python 3.11
-      Route: Download Vulkan Bin / Default CPU Wheel
-      Llama.Cpp b7688, Gradio 3.50.2, Qt-Web v5
-    Embedding model: BAAI/bge-base-en-v1.5
-    [V] Verified directory: data
-    [V] Verified directory: scripts
-    [V] Verified directory: models
-    [V] Verified directory: data/history
-    [V] Verified directory: data/temp
-    [V] Verified directory: data/vectors
-    [V] Verified directory: data/embedding_cache
-    [V] Using project temp path: C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-
-    1.02.1\data\temp
-    [V] System information file created
-    [V] Installing Python dependencies...
-    [V] Installing base packages (Gradio 3.50.2)...
-      [1/21] Installing numpy<2... OK
-      [2/21] Installing requests... OK
-      [3/21] Installing pyperclip... OK
-      [4/21] Installing spacy... OK
-      [5/21] Installing psutil... OK
-      [6/21] Installing ddgs... OK
-      [7/21] Installing langchain-community... OK
-      [8/21] Installing faiss-cpu... OK
-      [9/21] Installing langchain... OK
-      [10/21] Installing pygments... OK
-      [11/21] Installing lxml... OK
-      [12/21] Installing lxml_html_clean... OK
-      [13/21] Installing tokenizers... OK
-      [14/21] Installing beautifulsoup4... OK
-      [15/21] Installing aiohttp... OK
-      [16/21] Installing pywin32... OK
-      [17/21] Installing tk... OK
-      [18/21] Installing pythonnet... OK
-      [19/21] Installing pyttsx3... OK
-      [20/21] Installing newspaper4k... OK
-      [21/21] Installing gradio... OK
-    [V] Base packages installed
-    [V] Installing embedding backend (torch + sentence-transformers)...
-    [V] Installing PyTorch 2.2.2 (CPU-only) for Python 3.11...
-    [V] PyTorch 2.2.2 (CPU) installed
-    [V] Installing transformers==4.41.2...
-    [V] transformers installed
-    [V] Installing sentence-transformers==3.0.1...
-    [V] sentence-transformers installed
-    [V] Embedding backend verified
-    [V] Installing Qt WebEngine for custom browser...
-    [V] Windows 8.1 - installing PyQt5 + Qt5 WebEngine...
-    [V] Qt5 WebEngine installed
-    [V] Installing pre-built llama-cpp-python (CPU)...
-    [V] Pre-built wheel installed
-    [V] Python dependencies installed successfully
-    [V] Installing optional file format support...
-    [V]   Installed PyPDF2
-    [V]   Installed python-docx
-    [V]   Installed openpyxl
-    [V]   Installed python-pptx
-    [V] Initializing embedding cache for BAAI/bge-base-en-v1.5...
-    Embedding Initialization Output...
-        Importing torch...
-        torch version: 2.2.2+cpu
-        CUDA available: False (should be False)
-        Importing sentence_transformers...
-        Loading model: BAAI/bge-base-en-v1.5
-        Testing embedding...
-        SUCCESS: Model loaded, dimension: 768
-    [V] Embedding cache initialized
-    [V] Downloading spaCy language model...
-    Downloading spaCy model: [==============================] 100% (12.2MB/12.2MB) -
-     Complete
-    [V] Installing spaCy model...
-    [V] spaCy model installed
-    [V] Downloading backend binaries...
-    Downloading backend: [==============================] 100% (36.4MB/36.4MB) - Com
-    plete
-    [V] Extracting backend...
-    Extracting: [=========================] 100% (43.0B/43.0B)
-    [V] Backend ready
-    [V] Configuration file created
-    [V] Installation complete!
-    
-    Run the launcher to start Chat-Gradio-Gguf
-    
-    [V] Cleaned up compilation temp folder
-    DeActivated: `.venv`
-    Press any key to continue . . .
 
 </details>
 
@@ -472,7 +379,9 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
       Build flags: GGML_VULKAN=1, GGML_AVX2=ON, GGML_AVX=ON, GGML_FMA=ON, GGML_F16C=ON, LLAMA_CURL=OFF, GGML_OPENMP=ON
     [✓] Cloning llama-cpp-python v0.3.16...
     [✓] Building wheel (this takes a while)...
-      ERROR: pip's dependency resolver does not currently take into account all the                                                                                   -- Warning: ccache not found - consider installing it for faster compilation o                                                                                  [1/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARE                                                                                  [2/97] cd /tmp/tmpms7_l_al/build/vendor/llama.cpp/ggml/src/ggml-vulkan && /usr                                                                                  [3/97] cd /tmp/tmpms7_l_al/build/vendor/llama.cpp/ggml/src/ggml-vulkan && /usr                                                                                  [4/97] cd /tmp/tmpms7_l_al/build/vendor/llama.cpp/ggml/src/ggml-vulkan && /usr                                                                                  [5/97] cd /tmp/tmpms7_l_al/build/vendor/llama.cpp/ggml/src/ggml-vulkan && /usr                                                                                  [6/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BUILD -DGGML_COMMIT=\"4227c9be\" -                                                                                  [7/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BUILD -DGGML_COMMIT=\"4227c9be\" -                                                                                  [8/97] /usr/bin/x86_64-linux-gnu-gcc -DGGML_BUILD -DGGML_COMMIT=\"4227c9be\" -                                                                                  [9/97] cd /tmp/tmpms7_l_al/build/vendor/llama.cpp/ggml/src/ggml-vulkan/vulkan-                                                                                  [10/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [11/97] /usr/bin/x86_64-linux-gnu-g++   -O3 -DNDEBUG -fPIC -Wmissing-declarati                                                                                  [12/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [13/97] /usr/bin/x86_64-linux-gnu-g++   -O3 -DNDEBUG -MD -MT vendor/llama.cpp/                                                                                  [14/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [15/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [16/97] /usr/bin/x86_64-linux-gnu-gcc -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [17/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BUILD -DGGML_COMMIT=\"4227c9be\"                                                                                   [18/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [19/97] /usr/bin/x86_64-linux-gnu-g++   -O3 -DNDEBUG -MD -MT vendor/llama.cpp/                                                                                  [20/97] : && /usr/bin/x86_64-linux-gnu-g++ -O3 -DNDEBUG -Wl,--dependency-file=                                                                                  [21/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BUILD -DGGML_COMMIT=\"4227c9be\"                                                                                   [22/97] : && /usr/bin/x86_64-linux-gnu-g++ -O3 -DNDEBUG -Wl,--dependency-file=                                                                                  [23/97] /usr/bin/x86_64-linux-gnu-g++   -O3 -DNDEBUG -MD -MT vendor/llama.cpp/                                                                                  [24/97] /usr/bin/x86_64-linux-gnu-g++   -O3 -DNDEBUG -MD -MT vendor/llama.cpp/                                                                                  [25/97] : && /usr/bin/x86_64-linux-gnu-g++ -O3 -DNDEBUG -Wl,--dependency-file=                                                                                  [26/97] : && /usr/bin/x86_64-linux-gnu-g++ -O3 -DNDEBUG -Wl,--dependency-file=                                                                                  [27/97] /usr/bin/x86_64-linux-gnu-gcc -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [28/97] /usr/bin/x86_64-linux-gnu-gcc -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [29/97] /usr/bin/x86_64-linux-gnu-gcc -DGGML_BUILD -DGGML_COMMIT=\"4227c9be\"                                                                                   [30/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [31/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [32/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BUILD -DGGML_COMMIT=\"4227c9be\"                                                                                   [33/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [34/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [35/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [36/97] cd /tmp/tmpms7_l_al/build/vendor/llama.cpp/ggml/src/ggml-vulkan/vulkan                                                                                  [1/2] Building CXX object CMakeFiles/vulkan-shaders-gen.dir/vulkan-shaders-gen                                                                                  [37/97] cd /tmp/tmpms7_l_al/build/vendor/llama.cpp/ggml/src/ggml-vulkan/vulkan                                                                                  [38/97] cd /tmp/tmpms7_l_al/build/vendor/llama.cpp/ggml/src/ggml-vulkan && /us                                                                                  [39/97] /usr/bin/x86_64-linux-gnu-gcc -DGGML_BUILD -DGGML_COMMIT=\"4227c9be\"                                                                                   [40/97] : && /usr/bin/x86_64-linux-gnu-g++ -fPIC -O3 -DNDEBUG  -Wl,--dependenc                                                                                  [41/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [42/97] : && /usr/bin/x86_64-linux-gnu-g++ -fPIC -O3 -DNDEBUG  -Wl,--dependenc                                                                                  [44/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [45/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [46/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [47/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [48/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [49/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [50/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [51/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [52/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [53/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [54/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_BUILD -DGGM                                                                                  [55/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [56/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [57/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [58/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [59/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [60/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [61/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [62/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [63/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [64/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [65/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [66/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [67/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [68/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [69/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [70/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [71/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [72/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [73/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [74/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [75/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [76/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [77/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [78/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [79/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [80/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [81/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [82/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [83/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [84/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [85/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [86/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [87/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [88/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_SHARED -DGGML_SHARED -DGG                                                                                  [89/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [90/97] /usr/bin/x86_64-linux-gnu-g++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHAR                                                                                  [91/97] : && /usr/bin/x86_64-linux-gnu-g++ -fPIC -O3 -DNDEBUG  -Wl,--dependenc                                                                                  [92/97] : && /usr/bin/x86_64-linux-gnu-g++ -fPIC -O3 -DNDEBUG  -Wl,--dependenc                                                                                  [93/97] : && /usr/bin/x86_64-linux-gnu-g++ -fPIC -O3 -DNDEBUG  -Wl,--dependenc                                                                                  [94/97] : && /usr/bin/x86_64-linux-gnu-g++ -fPIC -O3 -DNDEBUG  -Wl,--dependenc                                                                                  [95/97] : && /usr/bin/cmake -E rm -f vendor/llama.cpp/common/libcommon.a && /u                                                                                  [96/97] : && /usr/bin/x86_64-linux-gnu-g++ -O3 -DNDEBUG -Wl,--dependency-file=                                                                                  -- Installing: /tmp/tmpms7_l_al/wheel/platlib/lib/cmake/ggml/ggml-version.cmak  -- Installing: /tmp/tmpms7_l_al/wheel/platlib/lib/cmake/llama/llama-config.cma  -- Installing: /tmp/tmpms7_l_al/wheel/platlib/lib/cmake/llama/llama-version.cm                                                                                  -- Installing: /home/mastar/Programs/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.03.0/                                                                                  -- Installing: /home/mastar/Programs/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.03.0/                                                                                  -- Installing: /home/mastar/Programs/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.03.0/                                                                                  -- Installing: /home/mastar/Programs/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.03.0/                                                                                  -- Installing: /home/mastar/Programs/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.03.0/                                                                                  -- Installing: /home/mastar/Programs/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.03.0/                                                                                  Building wheel for llama_cpp_python (pyproject.toml): finished with status 'do                                                                                  Installing collected packages: diskcache, llama_cpp_python
+    (...)
+    
+    (...)
     [✓] llama-cpp-python built and installed
     [✓] Python dependencies installed successfully
     [✓] Installing optional file format support...
@@ -802,7 +711,7 @@ Now that the program is 100% made, I am tidying up, and finishing testing/bugfix
 - Rename configuration.py to configure.py or config.py.
 - More work on filtering output. Specifically enhancing the "Light" filter for Qt6, as currently its got too many blank lines.
 - Build options on Ubuntu 3/4 on first menu, are currently broken. Download install through 1/2 on first menu work ok, and all options work fine on Windows, but needs to be fixed for Ubuntu.
-- Issues with Large Embedding model, I dont advise use of Large model anyhow, it needs, 1.5GB file size but main thing 4GB System RAM, with CPU inference and consistently either is, SLOWER or CRASHING. The code was assessed and updated with Kimi K2.5.
+- Issues with Large Embedding model, I dont advise use of Large model anyhow, it needs, 1.5GB file size but main thing 4GB System RAM, with CPU inference and consistently either is, SLOWER or CRASHING. The code was assessed and updated with Kimi K2.5, yet issues remain, it works mostly on Windows, but can still fail and is unreliable.
 
 # Update Ideas
 1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
