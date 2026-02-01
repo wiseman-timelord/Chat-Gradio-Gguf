@@ -309,11 +309,17 @@ class ContextInjector:
         self.file_chunks = []           # Chunks from attached files
         self.temp_chunks = []           # Chunks from large pasted inputs
         self._model_load_attempted = False
+        self._embedding_dim = None      # Track dimension for validation
+        self._model_name = None         # Track which model was loaded
     
     def _ensure_embedding_model(self):
         """Initialize embedding model on first use with proper cache path (fully offline)."""
-        if self._model_load_attempted:
-            return
+        if self._model_load_attempted and self.embedding is not None:
+            return  # Already loaded successfully
+        
+        # Reset attempt flag if previous load failed (allows retry with different model)
+        if self.embedding is None:
+            self._model_load_attempted = False
         
         self._model_load_attempted = True
         
@@ -334,34 +340,73 @@ class ContextInjector:
             
             # Try loading from cache first
             model_name = EMBEDDING_MODEL_NAME
+            self._model_name = model_name
             
             # Check if model exists in cache
             model_cache_path = cache_dir / model_name.replace("/", "_")
             
+            print(f"[RAG] Loading embedding model: {model_name}")
+            
             if model_cache_path.exists():
-                print(f"[RAG] Loading embedding model from cache: {model_cache_path}")
+                print(f"[RAG] Loading from cache: {model_cache_path}")
                 self.embedding = SentenceTransformer(str(model_cache_path))
             else:
                 # Try loading by name (will use HF cache)
-                print(f"[RAG] Loading embedding model: {model_name}")
+                print(f"[RAG] Downloading/loading to: {cache_dir}")
                 self.embedding = SentenceTransformer(model_name, cache_folder=str(cache_dir))
             
-            print(f"[RAG] Embedding model loaded successfully")
+            # Validate model loaded and get dimension
+            if self.embedding is None:
+                raise RuntimeError("Model loading returned None")
+            
+            # Test embedding to validate dimension and catch OOM early
+            test_embedding = self.embedding.encode(["test"], convert_to_numpy=True, show_progress_bar=False)
+            self._embedding_dim = test_embedding.shape[1]
+            
+            print(f"[RAG] Embedding model loaded successfully (dim={self._embedding_dim})")
             
         except Exception as e:
             print(f"[RAG] Failed to load embedding model: {e}")
+            print(f"[RAG] Tried model: {EMBEDDING_MODEL_NAME}")
+            print(f"[RAG] If using 'large' model, ensure you have ~2GB free RAM")
             self.embedding = None
+            self._embedding_dim = None
+            # Reset flag so we can try again later (e.g., if user fixes memory issue)
+            self._model_load_attempted = False
     
-    def _embed_texts(self, texts):
+    def _embed_texts(self, texts, batch_size=32):
         """Create embeddings for a list of texts using sentence-transformers."""
         if self.embedding is None:
             return None
         
+        if not texts:
+            return None
+        
         try:
-            embeddings = self.embedding.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+            # Process in batches to avoid OOM with large models
+            embeddings = self.embedding.encode(
+                texts, 
+                convert_to_numpy=True, 
+                show_progress_bar=False,
+                batch_size=batch_size  # Limit batch size for large models
+            )
+            
+            # Validate embeddings aren't empty or NaN
+            if embeddings is None or embeddings.size == 0:
+                print("[RAG] Warning: Empty embeddings returned")
+                return None
+            
+            # Check for NaN or all-zero vectors (indicates model failure)
+            if np.isnan(embeddings).any() or not np.any(embeddings):
+                print("[RAG] Warning: Invalid embeddings (NaN or all zeros)")
+                return None
+            
             return embeddings.astype(np.float32)
         except Exception as e:
             print(f"[RAG] Embedding error: {e}")
+            # If OOM, suggest using smaller model
+            if "out of memory" in str(e).lower() or "unable to allocate" in str(e).lower():
+                print(f"[RAG] Memory error - consider using smaller embedding model (current: {EMBEDDING_MODEL_NAME})")
             return None
 
     def set_session_vectorstore(self, file_paths):
@@ -397,19 +442,34 @@ class ContextInjector:
             except Exception as e:
                 print(f"[RAG] Error loading {path}: {e}")
         
-        if texts:
-            # Create embeddings using sentence-transformers
-            embeddings = self._embed_texts(texts)
-            
-            if embeddings is None:
-                print("[RAG] Failed to create embeddings")
-                return
+        if not texts:
+            self.file_index = None
+            self.file_chunks = []
+            return
+        
+        # Create embeddings using sentence-transformers with batching for large models
+        embeddings = self._embed_texts(texts, batch_size=16)  # Smaller batch for large models
+        
+        if embeddings is None:
+            print("[RAG] Failed to create embeddings - index not created")
+            self.file_index = None
+            self.file_chunks = []
+            return
+        
+        # Validate embedding dimension matches expected
+        if self._embedding_dim is None:
+            self._embedding_dim = embeddings.shape[1]
+        
+        if embeddings.shape[1] != self._embedding_dim:
+            print(f"[RAG] Dimension mismatch! Expected {self._embedding_dim}, got {embeddings.shape[1]}")
+            self.file_index = None
+            return
 
-            self.file_index = faiss.IndexFlatIP(embeddings.shape[1])
-            faiss.normalize_L2(embeddings)
-            self.file_index.add(embeddings)
-            self.file_chunks = texts
-            print(f"[RAG] Ingested {len(texts)} chunks from {len(file_paths)} files")
+        self.file_index = faiss.IndexFlatIP(self._embedding_dim)
+        faiss.normalize_L2(embeddings)
+        self.file_index.add(embeddings)
+        self.file_chunks = texts
+        print(f"[RAG] Ingested {len(texts)} chunks from {len(file_paths)} files (dim={self._embedding_dim})")
 
     def add_temporary_input(self, large_input_text):
         """
@@ -449,20 +509,28 @@ class ContextInjector:
         
         print(f"[RAG-TEMP] Split large input into {len(chunks)} chunks ({len(large_input_text)} chars)")
         
-        # Create embeddings using sentence-transformers
-        embeddings = self._embed_texts(chunks)
+        # Create embeddings using sentence-transformers with smaller batch for stability
+        embeddings = self._embed_texts(chunks, batch_size=16)
         
         if embeddings is None:
             print("[RAG-TEMP] Failed to create embeddings")
             return
         
+        # Validate dimension
+        if self._embedding_dim is None:
+            self._embedding_dim = embeddings.shape[1]
+        
+        if embeddings.shape[1] != self._embedding_dim:
+            print(f"[RAG-TEMP] Dimension mismatch! Expected {self._embedding_dim}, got {embeddings.shape[1]}")
+            return
+        
         # Create new temporary index
-        self.temp_index = faiss.IndexFlatIP(embeddings.shape[1])
+        self.temp_index = faiss.IndexFlatIP(self._embedding_dim)
         faiss.normalize_L2(embeddings)
         self.temp_index.add(embeddings)
         self.temp_chunks = chunks
         
-        print(f"[RAG-TEMP] Indexed {len(chunks)} chunks for retrieval")
+        print(f"[RAG-TEMP] Indexed {len(chunks)} chunks for retrieval (dim={self._embedding_dim})")
 
     def clear_temporary_input(self):
         """Clear temporary input chunks (called after response generation)."""
@@ -498,7 +566,7 @@ class ContextInjector:
             return None
         
         # Embed the query using sentence-transformers
-        q_vec = self._embed_texts([query])
+        q_vec = self._embed_texts([query], batch_size=1)  # Single query, batch size 1
         if q_vec is None:
             return None
         

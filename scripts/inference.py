@@ -711,11 +711,12 @@ def unload_models(llm_state, models_loaded_state):
             time.sleep(0.3)
         
         cfg.set_status("Unloaded", console=True)
+        cfg.GPU_LAYERS = 0
         cfg.LOADED_CONTEXT_SIZE = None
         return "Model unloaded successfully.", None, False
         
     except Exception as e:
-        import scripts.configuration as cfg
+        # REMOVED: import scripts.configuration as cfg  <-- This was causing the error
         cfg.GPU_LAYERS = 0
         tb = traceback.format_exc()
         
