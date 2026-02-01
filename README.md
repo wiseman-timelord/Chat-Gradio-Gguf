@@ -689,19 +689,27 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 ```
 
 ### Useful Info
-- Internet research Tools (v0.99.6+)...
+- Research Tools configuration scales to Context Length...
 ```
 DDG Search = Faster DuckDuckGo research.
 Web Search = Slower actual website reading research. 
-```
-- Research scaled to Context Length...
-```
+
 | Context | Multiplier | DDG Results | DDG Deep | Web Results | Web Deep |
 |---------|------------|-------------|----------|-------------|----------|
 | 16384   | 0.5x       | 4           | 2        | 6           | 3        |
 | 32768   | 1.0x       | 8           | 4        | 12          | 6        |
 | 65536   | 2.0x       | 16          | 8        | 24          | 12       |
 | 131072  | 4.0x       | 32          | 16       | 48          | 24       |
+```
+- The Large Embedding Model requires SIGNIFICANTLY more RAM...
+```
+| Specification          | Small (bge-small-en-v1.5) | Medium/Base (bge-base-en-v1.5) | Large (bge-large-en-v1.5) |
+| ---------------------- | ------------------------- | ------------------------------ | ------------------------- |
+| **Parameters**         | ~33M (33 million)         | ~109M (109 million)            | ~335M (335 million)       |
+| **Disk Size**          | ~130 MB                   | ~420 MB                        | ~1.3 GB (1,300 MB)        |
+| **RAM Required**       | 300–500 MB                | 1.0–1.5 GB                     | 3.0–4.5 GB\*              |
+| **Avg Speed**          | ~2,000 sent/sec           | ~800 sent/sec                  | ~150 sent/sec             |
+| **MTEB Score**\*       | ~62.0                     | ~63.5                          | ~64.5                     |
 ```
 
 ### Notation 
