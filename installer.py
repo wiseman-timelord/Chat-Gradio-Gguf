@@ -54,17 +54,17 @@ PROTECTED_DIRECTORIES = [
 EMBEDDING_MODELS = {
     "1": {
         "name": "BAAI/bge-small-en-v1.5",
-        "display": "Bge-Small-En v1.5 (Fastest - 132MB)",
+        "display": "Bge-Small-En v1.5 (Legacy/Fastest - 132MB)",
         "size_mb": 132
     },
     "2": {
         "name": "BAAI/bge-base-en-v1.5", 
-        "display": "Bge-Base-En v1.5 (Regular - 425MB)",
+        "display": "Bge-Base-En v1.5 (Recommended/Regular - 425MB)",
         "size_mb": 425
     },
     "3": {
         "name": "BAAI/bge-large-en-v1.5",
-        "display": "Bge-Large-En v1.5 (Quality - 1.35GB)", 
+        "display": "Bge-Large-En v1.5 (Huge/Slow/Buggy - 1.35GB)", 
         "size_mb": 1350
     }
 }
