@@ -2479,7 +2479,7 @@ def launch_display():
                 with gr.Group():
                     gr.Markdown("### Chat-Gradio-Gguf")
                     gr.HTML("""
-                        <p>A Windows/Linux Chatbot using Gradio and llama.cpp, by <a href="mailto:wiseman-timelord@mail.com">WiseMan-Time-Lord</a></p>
+                        <p>A Windows/Linux Chatbot using, Gradio and llama.cpp, by <a href="mailto:wiseman-timelord@mail.com">WiseMan-Time-Lord</a> at <a href="http://wisetime.rf.gd/">WiseTime.Rf.Gd</a></p>
                         
                         <p><strong>Where you may find, this and my other, programming projects on </strong> <a href="https://github.com/wiseman-timelord">GitHub</a></p>
                         
