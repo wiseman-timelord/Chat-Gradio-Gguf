@@ -801,6 +801,9 @@ Now that the program is 100% made, I am tidying up, and finishing testing/bugfix
 - Optimization, then testing/bugfixing.
 - Rename configuration.py to configure.py or config.py.
 - More work on filtering output. Specifically enhancing the "Light" filter for Qt6, as currently its got too many blank lines.
+- Build options on Ubuntu 3/4 on first menu, are currently broken. Download install through 1/2 on first menu work ok, and all options work fine on Windows, but needs to be fixed for Ubuntu.
+- Issues with Large Embedding model, I dont advise use of Large model anyhow, it needs, 1.5GB file size but main thing 4GB System RAM, with CPU inference and consistently either is, SLOWER or CRASHING.
+
 
 # Update Ideas
 1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
