@@ -273,6 +273,46 @@ def update_config_settings(ctx, batch, temp, repeat, vram, gpu, cpu, model, prin
     )
     return status_message
 
+def get_model_loaded_display(is_loaded):
+    """Return a gr.update for the model loaded indicator textbox."""
+    if is_loaded:
+        return gr.update(value="🟢 SO LOADED")
+    else:
+        return gr.update(value="🔴 NOT LOADED")
+
+def get_ini_display_text():
+    """Build display string of INI constants NOT shown on the Hardware/Models Config tab."""
+    lines = []
+    lines.append(f"Platform:  {getattr(cfg, 'PLATFORM', 'N/A')}")
+    lines.append(f"OS Version:  {getattr(cfg, 'OS_VERSION', 'N/A')}")
+    lines.append(f"Gradio Version:  {getattr(cfg, 'GRADIO_VERSION', 'N/A')}")
+    lines.append(f"Embedding Model:  {getattr(cfg, 'EMBEDDING_MODEL_NAME', 'N/A')}")
+    lines.append(f"Embedding Backend:  {getattr(cfg, 'EMBEDDING_BACKEND', 'N/A')}")
+    lines.append(f"Llama Bin Path:  {getattr(cfg, 'LLAMA_BIN_PATH', 'N/A')}")
+    lines.append(f"TTS Engine:  {getattr(cfg, 'TTS_ENGINE', 'N/A')}")
+    if getattr(cfg, 'TTS_TYPE', '') == "coqui":
+        lines.append(f"Coqui Voice ID:  {getattr(cfg, 'COQUI_VOICE_ID', 'N/A')}")
+        lines.append(f"Coqui Voice Accent:  {getattr(cfg, 'COQUI_VOICE_ACCENT', 'N/A')}")
+        lines.append(f"Coqui Model:  {getattr(cfg, 'COQUI_MODEL', 'N/A')}")
+    return "\n".join(lines)
+
+def get_debug_globals_text():
+    """Build display string of critical runtime globals NOT visible on Config/Settings tabs."""
+    lines = []
+    lines.append(f"LOADED_CONTEXT_SIZE:  {getattr(cfg, 'LOADED_CONTEXT_SIZE', 'N/A')}")
+    lines.append(f"GPU_LAYERS:  {getattr(cfg, 'GPU_LAYERS', 0)}")
+    lines.append(f"SESSION_ACTIVE:  {cfg.SESSION_ACTIVE}")
+    embedding_status = "Loaded" if (cfg.context_injector and cfg.context_injector.embedding is not None) else "Not loaded"
+    lines.append(f"EMBEDDING_MODEL:  {embedding_status}")
+    lines.append(f"USE_PYTHON_BINDINGS:  {getattr(cfg, 'USE_PYTHON_BINDINGS', 'N/A')}")
+    lines.append(f"MMAP:  {getattr(cfg, 'MMAP', 'N/A')}")
+    lines.append(f"MLOCK:  {getattr(cfg, 'MLOCK', 'N/A')}")
+    lines.append(f"CPU_PHYSICAL_CORES:  {getattr(cfg, 'CPU_PHYSICAL_CORES', 'N/A')}")
+    lines.append(f"CPU_LOGICAL_CORES:  {getattr(cfg, 'CPU_LOGICAL_CORES', 'N/A')}")
+    lines.append(f"INACTIVITY_TIMEOUT:  {getattr(cfg, 'INACTIVITY_TIMEOUT', 'N/A')}s")
+    lines.append(f"FILTER_MODE:  {getattr(cfg, 'FILTER_MODE', 'N/A')}")
+    return "\n".join(lines)
+
 def save_all_settings():
     """Save all configuration settings and return a status message."""
     cfg.save_config()
@@ -587,7 +627,8 @@ def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, c
             "❌ Error: No valid model selected. Choose a model first.",
             "❌ Error: No valid model selected. Choose a model first.",
             "❌ Error: No valid model selected. Choose a model first.",
-            gr.update(interactive=False)
+            gr.update(interactive=False),
+            get_model_loaded_display(False)
         )
 
     # Update temporary globals with current UI values
@@ -632,7 +673,8 @@ def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, c
             status_msg,  # interaction_global_status
             status_msg,  # config_status
             status_msg,  # filter_status
-            gr.update(interactive=input_interactive)
+            gr.update(interactive=input_interactive),
+            get_model_loaded_display(loaded)
         )
         
     except Exception as e:
@@ -645,7 +687,8 @@ def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, c
             status_msg,
             status_msg,
             status_msg,
-            gr.update(interactive=False)
+            gr.update(interactive=False),
+            get_model_loaded_display(False)
         )
 
 
@@ -661,7 +704,8 @@ def handle_unload_model(llm_state, models_loaded_state):
             "ℹ️ No model currently loaded.",
             "ℹ️ No model currently loaded.",
             "ℹ️ No model currently loaded.",
-            gr.update(interactive=False)
+            gr.update(interactive=False),
+            get_model_loaded_display(False)
         )
 
     try:
@@ -685,7 +729,8 @@ def handle_unload_model(llm_state, models_loaded_state):
             status_msg,  # interaction_global_status
             status_msg,  # config_status
             status_msg,  # filter_status
-            gr.update(interactive=input_interactive)
+            gr.update(interactive=input_interactive),
+            get_model_loaded_display(False)
         )
         
     except Exception as e:
@@ -698,7 +743,8 @@ def handle_unload_model(llm_state, models_loaded_state):
             status_msg,
             status_msg,
             status_msg,
-            gr.update(interactive=True)  # Assume still loaded on error
+            gr.update(interactive=True),  # Assume still loaded on error
+            get_model_loaded_display(True)
         )
 
 def handle_model_selection(model_name, model_folder_state):
@@ -1996,6 +2042,25 @@ def launch_display():
         line-height: 1.6;
     }
     .model-folder-row { gap: 8px !important; }
+    
+    /* NEW: Info box that matches textbox background color */
+    .info-textbox-match {
+        background-color: var(--input-background-fill) !important;
+        border: 1px solid var(--border-color-primary) !important;
+        border-radius: var(--radius-lg) !important;
+        padding: 12px 16px !important;
+        color: var(--body-text-color) !important;
+        font-family: sans-serif !important;
+        line-height: 1.6 !important;
+    }
+    .info-textbox-match a {
+        color: var(--link-text-color, #4aa8ff) !important;
+        text-decoration: none !important;
+        font-weight: bold;
+    }
+    .info-textbox-match a:hover {
+        text-decoration: underline !important;
+    }
     """
 
     # Aggressive spacing fixes — mostly needed for Gradio 3 + old Qt WebEngine
@@ -2248,7 +2313,7 @@ def launch_display():
                 with gr.Group():
                     gr.Markdown("### Model Configuration")
                     
-                    # Row 1: Model Folder + Model Selection
+                    # Row 1: Model Folder + Model Selection + Loaded Indicator
                     with gr.Row(elem_classes=["model-folder-row"]):
                         model_folder_textbox = gr.Textbox(
                             label="Model Folder",
@@ -2264,7 +2329,15 @@ def launch_display():
                             value=cfg.MODEL_NAME,
                             interactive=True,
                             elem_classes="model-select",
-                            scale=6
+                            scale=4
+                        )
+                        
+                        model_loaded_indicator = gr.Textbox(
+                            label="Model Loaded",
+                            value="🟢 SO LOADED" if cfg.MODELS_LOADED else "🔴 NOT LOADED",
+                            interactive=False,
+                            max_lines=1,
+                            scale=3
                         )
                     
                     # Row 3: Context + Batch
@@ -2322,6 +2395,9 @@ def launch_display():
                 # ── Program Options ─────────────────────────────────────────────────────────
                 with gr.Group():
                     gr.Markdown("### Program Options")
+                    # Gradio 3 notice: Session Log Height requires restart
+                    if cfg.GRADIO_VERSION and cfg.GRADIO_VERSION.startswith('3.'):
+                        gr.Markdown("*\\*\\* Requires restart after configuring UI components on, Gradio v3.x.x and Qt5-Web, installs*")
                     # Row 1: Attach slots and Log height
                     with gr.Row():
                         session_log_height = gr.Dropdown(
@@ -2396,6 +2472,53 @@ def launch_display():
                         scale=20
                     )
                     exit_filtering = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], scale=1)
+
+            with gr.Tab("About/Debug Info"):
+                
+                # ── Section A: Project Info ──────────────────────────────────────────────
+                with gr.Group():
+                    gr.Markdown("### Chat-Gradio-Gguf")
+                    gr.HTML("""
+                        <p>A Windows/Linux Chatbot using Gradio and llama.cpp, by <a href="mailto:wiseman-timelord@mail.com">WiseMan-Time-Lord</a></p>
+                        
+                        <p><strong>Where you may find, this and my other, programming projects on </strong> <a href="https://github.com/wiseman-timelord">GitHub</a></p>
+                        
+                        <p><strong>Support/Donate to assist in the continuation of my projects at, </strong> <a href="https://patreon.com/WiseManTimeLord">Patreon</a>, <a href="https://ko-fi.com/WiseManTimeLord">Ko-Fi</a></p>
+                    """, elem_classes=["info-textbox-match"])
+               
+                # ── Section B: INI Constants ──────────────────────────────────────────────
+                with gr.Group():
+                    gr.Markdown("### System Constants (from constants.ini)")
+                    ini_display = gr.Textbox(
+                        label="INI Values (read-only, set by installer)",
+                        value=get_ini_display_text(),
+                        lines=10,
+                        interactive=False
+                    )
+                
+                # ── Section C: Debug Globals ──────────────────────────────────────────────
+                with gr.Group():
+                    gr.Markdown("### Runtime Globals (Debug)")
+                    debug_display = gr.Textbox(
+                        label="Critical Globals (click Refresh to update)",
+                        value=get_debug_globals_text(),
+                        lines=10,
+                        interactive=False
+                    )
+                    refresh_debug_btn = gr.Button("🔄 Refresh Debug Info", variant="secondary")
+                
+                gr.Markdown("---")
+                
+                # ── FINAL ROW: Status + Exit ─────────────────────────────────────────────
+                with gr.Row():
+                    info_status = gr.Textbox(
+                        value="Info tab loaded",
+                        label="Status",
+                        interactive=False,
+                        max_lines=1,
+                        scale=20
+                    )
+                    exit_info = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], scale=1)
 
         
         # EVENT HANDLERS
@@ -2503,7 +2626,8 @@ def launch_display():
                 interaction_global_status,
                 config_status,
                 filter_status,
-                conversation_components["user_input"]
+                conversation_components["user_input"],
+                model_loaded_indicator
             ]
         )
 
@@ -2520,7 +2644,8 @@ def launch_display():
                 interaction_global_status,
                 config_status,
                 filter_status,
-                conversation_components["user_input"]
+                conversation_components["user_input"],
+                model_loaded_indicator
             ]
         )
         
@@ -2739,6 +2864,39 @@ def launch_display():
             outputs=[interaction_global_status]
         )
 
+        print_raw.change(
+            fn=lambda x: setattr(configuration, 'PRINT_RAW_OUTPUT', x) or f"Print raw output: {'ON' if x else 'OFF'}",
+            inputs=[print_raw],
+            outputs=[interaction_global_status]
+        )
+
+        session_log_height.change(
+            fn=lambda val: (
+                setattr(configuration, 'SESSION_LOG_HEIGHT', int(val)),
+                f"Session log height set to {int(val)}px (save & restart to apply)"
+            )[1],
+            inputs=[session_log_height],
+            outputs=[interaction_global_status]
+        )
+
+        max_attach_slots.change(
+            fn=lambda val: (
+                setattr(configuration, 'MAX_ATTACH_SLOTS', int(val)),
+                f"Max attachment slots set to {int(val)} (save & restart to apply)"
+            )[1],
+            inputs=[max_attach_slots],
+            outputs=[interaction_global_status]
+        )
+
+        max_history_slots.change(
+            fn=lambda val: (
+                setattr(configuration, 'MAX_HISTORY_SLOTS', int(val)),
+                f"Max history slots set to {int(val)} (save & restart to apply)"
+            )[1],
+            inputs=[max_history_slots],
+            outputs=[interaction_global_status]
+        )
+
         # Exit buttons - ensure models unloaded early in shutdown
         exit_interaction.click(
             fn=shutdown_program,
@@ -2759,6 +2917,23 @@ def launch_display():
             inputs=[states["llm"], states["models_loaded"],
                     states["session_messages"], states["attached_files"]],
             outputs=[]
+        )
+        
+        exit_info.click(
+            fn=shutdown_program,
+            inputs=[states["llm"], states["models_loaded"],
+                    states["session_messages"], states["attached_files"]],
+            outputs=[]
+        )
+
+        # Refresh debug info button handler
+        def refresh_debug_info():
+            return get_ini_display_text(), get_debug_globals_text(), "Debug info refreshed"
+
+        refresh_debug_btn.click(
+            fn=refresh_debug_info,
+            inputs=[],
+            outputs=[ini_display, debug_display, info_status]
         )
 
         # Panel toggles
@@ -3027,7 +3202,7 @@ def launch_display():
                 filter_result = save_custom_filter(filter_text_val)
                 result += f"\n{filter_result}"
             
-            return result, result, result
+            return result, result, result, result
 
         # Connect both save buttons to unified handler
         save_config_btn.click(
@@ -3042,7 +3217,7 @@ def launch_display():
                 max_history_slots, max_attach_slots, session_log_height,
                 filter_text
             ],
-            outputs=[interaction_global_status, config_status, filter_status]  # These are now all Textbox components
+            outputs=[interaction_global_status, config_status, filter_status, info_status]
         )
 
         save_all_btn.click(
@@ -3057,7 +3232,7 @@ def launch_display():
                 max_history_slots, max_attach_slots, session_log_height,
                 filter_text
             ],
-            outputs=[interaction_global_status, config_status, filter_status]  # These are now all Textbox components
+            outputs=[interaction_global_status, config_status, filter_status, info_status]
         )
 
         # Attach files handler (expanded view)
