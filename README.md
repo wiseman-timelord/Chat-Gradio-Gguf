@@ -572,7 +572,7 @@ GPU interference is done through (have a guess) Vulkan...
 
 ### Building Requirements 
 For compile options; If on PATH, ask AI how to check its on path, and as applicable fix...
-- [MSVC++ 2017-2022](https://visualstudio.microsoft.com/vs/older-downloads/) - MSVC with option, Desktop Development and CMake, enabled during install.
+- [MSVC++ 2017-2022](https://visualstudio.microsoft.com/vs/older-downloads/) - MSVC with option Desktop Development enabled during install.
 - [Git](https://git-scm.com/install/) - Github Program for cloning the sources from github, ensure its on PATH.
 - [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) - Need the Vulkan SDK to build for Vulkan.
 
