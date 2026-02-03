@@ -1569,23 +1569,45 @@ def install_coqui_tts():
         if PLATFORM == "windows":
             espeak_local_path = str(BASE_DIR / "data" / "espeak-ng").replace("\\", "/")
             
-            # CRITICAL: Use {{ and }} inside the f-string so the generated script has { and }
+            # CRITICAL FIX: Add espeak-ng directory to PATH so Windows can find DLL dependencies
+            # and set PHONEMIZER_ESPEAK_PATH to directory (not exe)
             download_script = f'''
 import os
 import sys
 
 local_espeak = r"{espeak_local_path}"
+
+# CRITICAL: Add espeak-ng directory to PATH FIRST
+# This allows Windows to find DLL dependencies when ctypes loads libespeak-ng.dll
+current_path = os.environ.get("PATH", "")
+if local_espeak not in current_path:
+    os.environ["PATH"] = local_espeak + os.pathsep + current_path
+
+# Set phonemizer environment variables
+# PHONEMIZER_ESPEAK_LIBRARY = path to the DLL file
+# PHONEMIZER_ESPEAK_PATH = path to the DIRECTORY (not the exe!)
 os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = os.path.join(local_espeak, "libespeak-ng.dll")
-os.environ["PHONEMIZER_ESPEAK_PATH"] = os.path.join(local_espeak, "espeak-ng.exe")
+os.environ["PHONEMIZER_ESPEAK_PATH"] = local_espeak
 os.environ["ESPEAK_DATA_PATH"] = os.path.join(local_espeak, "espeak-ng-data")
 
-if not os.path.exists(os.environ["PHONEMIZER_ESPEAK_LIBRARY"]):
-    print("[FATAL] espeak-ng DLL not found at " + os.environ["PHONEMIZER_ESPEAK_LIBRARY"])
+# Verify files exist
+dll_path = os.environ["PHONEMIZER_ESPEAK_LIBRARY"]
+exe_path = os.path.join(local_espeak, "espeak-ng.exe")
+data_path = os.environ["ESPEAK_DATA_PATH"]
+
+if not os.path.exists(dll_path):
+    print("[FATAL] espeak-ng DLL not found at " + dll_path)
     sys.exit(1)
-if not os.path.exists(os.environ["PHONEMIZER_ESPEAK_PATH"]):
-    print("[FATAL] espeak-ng executable not found at " + os.environ["PHONEMIZER_ESPEAK_PATH"])
+if not os.path.exists(exe_path):
+    print("[FATAL] espeak-ng executable not found at " + exe_path)
+    sys.exit(1)
+if not os.path.isdir(data_path):
+    print("[FATAL] espeak-ng data directory not found at " + data_path)
     sys.exit(1)
 
+print("[COQUI] espeak-ng directory added to PATH")
+print("[COQUI] espeak-ng DLL: " + dll_path)
+print("[COQUI] espeak-ng data: " + data_path)
 print("[COQUI] espeak-ng verified")
 
 os.environ["TTS_HOME"] = "{tts_model_dir_safe}"
@@ -1703,7 +1725,7 @@ print("[COQUI] Test passed")
         print_status("Coqui TTS installation timed out", False)
         sys.exit(1)
     except Exception as e:
-        print_status(f"Coqui TTS installation error: {e}", False)
+        print_status(f"Coqui TTS installation failed: {e}", False)
         sys.exit(1)
         
 def install_qt_webengine() -> bool:
