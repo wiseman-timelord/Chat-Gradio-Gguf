@@ -575,7 +575,7 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 - MSVC 2017-2019 - MSVC with option, Desktop Development and CMake, enabled during install.
 - MS Build Tools - Also for building, ensure its on PATH.
 - Git - Github Program for cloning the sources from github, ensure its on PATH.
-- Vulkan SDK - Cant remember but possibly need the Vulkan SDK to build for Vulkan.
+- [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) - Need the Vulkan SDK to build for Vulkan.
 
 ### Instructions (W = Windows, U = Ubuntu)...
 - Installation...
