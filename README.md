@@ -165,46 +165,17 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The TTS Install menu  (v1.03.0)...
+- The TTS Install menu  (v1.04.2)...
 <details>
     
-    ===============================================================================
-        Chat-Gradio-Gguf - TTS Configuration
-    ===============================================================================
-    
-    TTS Engine...
-       1) Built-In TTS (pyttsx3/espeak-ng)
-       2) Coqui TTS (Higher quality, larger download ~1.4GB)
-    
-    If Coqui TTS, Select Voice...
-       a) British (Male/Female)
-       b) American (Male/Female)
-       c) Scottish
-       d) Irish
-       e) Indian
-       f) Canadian
-       g) South African
-       h) Welsh
-       i) Northern Irish
-       j) Australian
-       k) New Zealand
-    
-    ===============================================================================
-    Selection; TTS=1-2, Voice=a-k, Abandon=A; (e.g. 1 or 2b):
-
-</details>
-
-- Install with Options 4c (compile, large), 2a (Corqui, British), on Ubuntu 25 (v1.03.2)
-<details>
-
     ===============================================================================
         Chat-Gradio-Gguf - Installation
     ===============================================================================
     
-    Installing Chat-Gradio-Gguf on Ubuntu 25.04 with Python 3.13
+    Installing Chat-Gradio-Gguf on Windows 10 with Python 3.12
       Route: Compile Vulkan Binaries / Compile Vulkan Wheel
       Llama.Cpp b7688, Gradio 5.49.1, Qt-Web v6
-      Embedding: BAAI/bge-large-en-v1.5
+      Embedding: BAAI/bge-base-en-v1.5
       TTS: Coqui - British (Male/Female)
     [✓] Verified directory: data
     [✓] Verified directory: scripts
@@ -213,156 +184,34 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     [✓] Verified directory: data/temp
     [✓] Verified directory: data/vectors
     [✓] Verified directory: data/embedding_cache
-    [✓] Using project temp path: /home/mastar/Programs/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.03.0/data/temp
+    [✓] Using build temp path: C:\temp_build
     [✓] System information file created
-    [✓] Installing Linux system dependencies...
-    Hit:1 http://gb.archive.ubuntu.com/ubuntu plucky InRelease                     
-    Hit:2 http://gb.archive.ubuntu.com/ubuntu plucky-updates InRelease             
-    Hit:3 http://security.ubuntu.com/ubuntu plucky-security InRelease
-    Hit:4 http://gb.archive.ubuntu.com/ubuntu plucky-backports InRelease  
-    Hit:5 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64  InRelease
-    Reading package lists... Done                                   
-    Reading package lists... Done
-    Building dependency tree... Done
-    Reading state information... Done
-    xvfb is already the newest version (2:21.1.16-1ubuntu1.2).
-    libespeak-ng1 is already the newest version (1.52.0+dfsg-4).
-    libegl1 is already the newest version (1.7.0-1build1).
-    libxkbcommon0 is already the newest version (1.7.0-2).
-    build-essential is already the newest version (12.12ubuntu1).
-    espeak-ng is already the newest version (1.52.0+dfsg-4).
-    libgl1 is already the newest version (1.7.0-1build1).
-    libffi-dev is already the newest version (3.4.7-1).
-    libssl-dev is already the newest version (3.4.1-1ubuntu4).
-    portaudio19-dev is already the newest version (19.6.0-1.2build3).
-    libxcb-cursor0 is already the newest version (0.1.5-1).
-    python3-dev is already the newest version (3.13.3-1).
-    Solving dependencies... Done
-    The following packages were automatically installed and are no longer required:
-      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
-      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
-      linux-modules-extra-6.14.0-23-generic
-      linux-modules-nvidia-570-6.14.0-23-generic
-      linux-objects-nvidia-570-6.14.0-23-generic
-      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
-      linux-tools-6.14.0-23-generic
-    Use 'sudo apt autoremove' to remove them.
-    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
-    [✓] Base dependencies installed
-    [✓] Installing Qt6 dependencies...
-    [✓]   Installed libxcb-cursor0
-    [✓]   Installed libxkbcommon0
-    [✓]   Installed libegl1
-    [✓]   Installed libgl1
-    [✓]   Installed libxcb-xinerama0
-    [✓]   Installed qt6-base-dev
-    [✓]   Installed libqt6webenginecore6
-    [✓]   Installed libqt6webenginewidgets6
-    [✓] Installing Vulkan development packages...
-    Reading package lists... Done
-    Building dependency tree... Done
-    Reading state information... Done
-    vulkan-tools is already the newest version (1.4.304.0+dfsg1-1).
-    Solving dependencies... Done
-    The following packages were automatically installed and are no longer required:
-      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
-      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
-      linux-modules-extra-6.14.0-23-generic
-      linux-modules-nvidia-570-6.14.0-23-generic
-      linux-objects-nvidia-570-6.14.0-23-generic
-      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
-      linux-tools-6.14.0-23-generic
-    Use 'sudo apt autoremove' to remove them.
-    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
-    [✓]   Installed vulkan-tools
-    Reading package lists... Done
-    Building dependency tree... Done
-    Reading state information... Done
-    libvulkan-dev is already the newest version (1.4.304.0-1).
-    Solving dependencies... Done
-    The following packages were automatically installed and are no longer required:
-      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
-      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
-      linux-modules-extra-6.14.0-23-generic
-      linux-modules-nvidia-570-6.14.0-23-generic
-      linux-objects-nvidia-570-6.14.0-23-generic
-      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
-      linux-tools-6.14.0-23-generic
-    Use 'sudo apt autoremove' to remove them.
-    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
-    [✓]   Installed libvulkan-dev
-    Reading package lists... Done
-    Building dependency tree... Done
-    Reading state information... Done
-    mesa-utils is already the newest version (9.0.0-2).
-    Solving dependencies... Done
-    The following packages were automatically installed and are no longer required:
-      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
-      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
-      linux-modules-extra-6.14.0-23-generic
-      linux-modules-nvidia-570-6.14.0-23-generic
-      linux-objects-nvidia-570-6.14.0-23-generic
-      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
-      linux-tools-6.14.0-23-generic
-    Use 'sudo apt autoremove' to remove them.
-    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
-    [✓]   Installed mesa-utils
-    Reading package lists... Done
-    Building dependency tree... Done
-    Reading state information... Done
-    glslang-tools is already the newest version (15.1.0-2).
-    Solving dependencies... Done
-    The following packages were automatically installed and are no longer required:
-      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
-      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
-      linux-modules-extra-6.14.0-23-generic
-      linux-modules-nvidia-570-6.14.0-23-generic
-      linux-objects-nvidia-570-6.14.0-23-generic
-      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
-      linux-tools-6.14.0-23-generic
-    Use 'sudo apt autoremove' to remove them.
-    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
-    [✓]   Installed glslang-tools
-    Reading package lists... Done
-    Building dependency tree... Done
-    Reading state information... Done
-    spirv-tools is already the newest version (2025.1~rc1-1).
-    Solving dependencies... Done
-    The following packages were automatically installed and are no longer required:
-      linux-headers-6.14.0-23 linux-headers-6.14.0-23-generic
-      linux-image-6.14.0-23-generic linux-modules-6.14.0-23-generic
-      linux-modules-extra-6.14.0-23-generic
-      linux-modules-nvidia-570-6.14.0-23-generic
-      linux-objects-nvidia-570-6.14.0-23-generic
-      linux-signatures-nvidia-6.14.0-23-generic linux-tools-6.14.0-23
-      linux-tools-6.14.0-23-generic
-    Use 'sudo apt autoremove' to remove them.
-    0 upgraded, 0 newly installed, 0 to remove and 347 not upgraded.
-    [✓]   Installed spirv-tools
-    [✓] Linux dependencies installed
     [✓] Installing Python dependencies...
     [✓] Installing base packages (Gradio 5.49.1)...
-      [1/18] Installing numpy<2... OK
-      [2/18] Installing requests... OK
-      [3/18] Installing pyperclip... OK
-      [4/18] Installing spacy... OK
-      [5/18] Installing psutil... OK
-      [6/18] Installing ddgs... OK
-      [7/18] Installing langchain-community... OK
-      [8/18] Installing faiss-cpu... OK
-      [9/18] Installing langchain... OK
-      [10/18] Installing pygments... OK
-      [11/18] Installing lxml... OK
-      [12/18] Installing lxml_html_clean... OK
-      [13/18] Installing tokenizers... OK
-      [14/18] Installing beautifulsoup4... OK
-      [15/18] Installing aiohttp... OK
-      [16/18] Installing pyvirtualdisplay... OK
-      [17/18] Installing newspaper4k... OK
-      [18/18] Installing gradio... OK
+      [1/21] Installing numpy<2... OK
+      [2/21] Installing requests... OK
+      [3/21] Installing pyperclip... OK
+      [4/21] Installing spacy... OK
+      [5/21] Installing psutil... OK
+      [6/21] Installing ddgs... OK
+      [7/21] Installing langchain-community... OK
+      [8/21] Installing faiss-cpu... OK
+      [9/21] Installing langchain... OK
+      [10/21] Installing pygments... OK
+      [11/21] Installing lxml... OK
+      [12/21] Installing lxml_html_clean... OK
+      [13/21] Installing tokenizers... OK
+      [14/21] Installing beautifulsoup4... OK
+      [15/21] Installing aiohttp... OK
+      [16/21] Installing pywin32... OK
+      [17/21] Installing tk... OK
+      [18/21] Installing pythonnet... OK
+      [19/21] Installing pyttsx3... OK
+      [20/21] Installing newspaper4k... OK
+      [21/21] Installing gradio... OK
     [✓] Base packages installed
     [✓] Installing embedding backend (torch + sentence-transformers)...
-    [✓] Installing PyTorch 2.4+ (CPU-only) for Python 3.13...
+    [✓] Installing PyTorch 2.4+ (CPU-only) for Python 3.12...
     [✓] PyTorch 2.4+ (CPU) installed
     [✓] Installing transformers>=4.42.0...
     [✓] transformers installed
@@ -370,69 +219,20 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     [✓] sentence-transformers installed
     [✓] Embedding backend verified
     [✓] Installing Qt WebEngine for custom browser...
-    [✓] Ubuntu 25.04 - installing PyQt6 + Qt6 WebEngine...
+    [✓] Windows 10 - installing PyQt6 + Qt6 WebEngine...
     [✓] Qt6 WebEngine installed
     [✓] Vulkan wheel build - checking Vulkan SDK...
     [✓] Vulkan SDK detected
     [✓] Building llama-cpp-python from source (10-20 minutes)
       Using 20 parallel build threads
       Build flags: GGML_VULKAN=1, GGML_AVX2=ON, GGML_AVX=ON, GGML_FMA=ON, GGML_F16C=ON, LLAMA_CURL=OFF, GGML_OPENMP=ON
+    [✓] Cleaning previous build artifacts...
     [✓] Cloning llama-cpp-python v0.3.16...
-    [✓] Building wheel (this takes a while)...
-    (...)
-    
-    (...)
-    [✓] llama-cpp-python built and installed
-    [✓] Python dependencies installed successfully
-    [✓] Installing optional file format support...
-    [✓]   Installed PyPDF2
-    [✓]   Installed python-docx
-    [✓]   Installed openpyxl
-    [✓]   Installed python-pptx
-    [✓] Initializing embedding cache for BAAI/bge-large-en-v1.5...
-    Embedding Initialization Output...
-        Importing torch...
-        torch version: 2.10.0+cpu
-        CUDA available: False (should be False)
-        Importing sentence_transformers...
-        Loading model: BAAI/bge-large-en-v1.5
-        Testing embedding...
-        SUCCESS: Model loaded, dimension: 1024
-    [✓] Embedding cache initialized
-    [✓] Downloading spaCy language model...
-    Downloading spaCy model: [==============================] 100% (12.2MB/12.2MB) - Complete
-    [✓] Installing spaCy model...
-    [✓] spaCy model installed
-    [✓] Installing Coqui TTS with codec support...
-    [✓] Installing torchaudio (CPU-only to match torch)...
-    [✓] torchaudio (CPU) installed
-    [✓] Coqui TTS package installed
-    [✓] Downloading Coqui VCTK voice model (~1.4GB)...
-    [COQUI] espeak-ng lib: /lib/x86_64-linux-gnu/libespeak-ng.so.1
-    [COQUI] espeak-ng exe: /usr/bin/espeak-ng
-    [COQUI] espeak-ng data: /usr/lib/x86_64-linux-gnu/espeak-ng-data
-    [COQUI] Loading model...
-    100%|███████████████████████████████████████| 148M/148M [00:28<00:00, 5.13MiB/s]
-    [COQUI] Testing synthesis...
-    [COQUI] Test passed
-    [✓] Coqui TTS installed and verified
-    [✓] Compiling llama.cpp binaries from source (15-30 minutes)...
-      Building with 20 of 24 threads (85%)
-    [✓] Cloning llama.cpp repository...
-      Resolving deltas: 100% (508/508), done..38 MiB | 3.91 MiB/s, done.
-    [✓] Repository cloned
-    [✓] Configuring build...
-    [✓] Building binaries...
-      [100%] Linking CXX executable ../../bin/llama-serverlama-server.dir/se
-    [✓] Copying binaries...
-    [✓] llama.cpp binaries compiled successfully
-    [✓] Configuration file created
-    [✓] Installation complete!
-    
-    Run the launcher to start Chat-Gradio-Gguf
-    
-    Deactivated: .venv
-    Press Enter to continue...
+    [✗] Build timed out
+    [✗] Python dependencies failed
+    [✓] Cleaned up compilation temp folder
+    DeActivated: `.venv`
+    Press any key to continue . . .
 
 </details>
 
