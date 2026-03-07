@@ -165,7 +165,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The TTS Install menu  (v1.04.2)...
+- The installation with compiling...(v1.04.2)
 <details>
     
     ===============================================================================
@@ -234,129 +234,6 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     DeActivated: `.venv`
     Press any key to continue . . .
 
-</details>
-
-- Validation of Installation (v1.02.2)..
-<details>
-    
-    ===============================================================================
-        Chat-Gradio-Gguf: Library Validation
-    ===============================================================================
-    
-    Running Library Validation...
-    Activated: `.venv`
-    ==================================================
-      Chat-Gradio-Gguf Validator (WINDOWS)
-    ==================================================
-    
-    System: windows 8.1
-    Python: 3.11.0 (Expected: 3.11.0)
-    Backend: VULKAN_CPU
-    Embedding: BAAI/bge-base-en-v1.5
-    Gradio: 3.50.2, Qt: 5
-    
-    === Directory Validation ===
-      V data (writable)
-      V scripts (writable)
-      V models (writable)
-      V data/history (writable)
-      V data/temp (writable)
-      V data/vectors (writable)
-      V data/embedding_cache (writable)
-    
-    === Root Files Validation ===
-      V launcher.py
-    
-    === Script Files Validation ===
-      V browser.py
-      V display.py
-      V inference.py
-      V tools.py
-      V configuration.py
-      V utility.py
-    
-    === Configuration Validation ===
-      V constants.ini valid (Backend: VULKAN_CPU)
-      V persistent.json valid
-    
-    === Virtual Environment Validation ===
-      V Python version matches: 3.11.0
-      V Virtual environment OK
-    
-    === Vulkan Availability Check ===
-      V Vulkan runtime found in registry
-    
-    === Backend Binary Validation ===
-      V llama-cli found: llama-cli.exe
-    
-    === Core Library Validation ===
-      V gradio
-      V numpy
-      V requests
-      V pyperclip
-      V spacy
-      V psutil
-      V ddgs
-      V langchain-community
-      V faiss-cpu
-      V langchain
-      V pygments
-      V lxml
-      V lxml_html_clean
-      V tokenizers
-      V beautifulsoup4
-      V aiohttp
-      V py-cpuinfo
-      V sentence-transformers
-      V torch
-      V transformers
-      V llama-cpp-python
-      V newspaper4k
-      V pywin32
-      V tk
-      V pythonnet
-      V Gradio version matches: 3.50.2
-    
-    === Optional Library Validation ===
-      V PyPDF2 (optional)
-      V python-docx (optional)
-      V openpyxl (optional)
-      V python-pptx (optional)
-    
-    === spaCy Model Validation ===
-      V en_core_web_sm model available
-    
-    === Embedding Model Validation ===
-      V Embedding model verified (BAAI/bge-base-en-v1.5)
-      V Backend: sentence_transformers
-    
-    === Gradio & Custom Browser Check ===
-      Expected: Qt5 (PyQt5 WebEngine)
-      V Gradio import OK
-      V PyQt5 WebEngine import OK
-    
-    ==================================================
-      Validation Summary
-    ==================================================
-      directories: V PASS
-      root_files: V PASS
-      scripts: V PASS
-      config: V PASS
-      venv: V PASS
-      vulkan: V PASS
-      llama_cli: V PASS
-      core_libs: V PASS
-      spacy: V PASS
-      embedding: V PASS
-      browser: V PASS
-    
-      Result: 11/11 checks passed
-      V
-    All validations passed!
-      Installation is complete and ready to use.
-    
-    Press Enter to exit...
-        
 </details>
 
 ## Hard Requirements
