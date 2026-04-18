@@ -3,7 +3,14 @@
 
 # Set terminal configuration (Linux/Unix method)
 echo -ne "\033]0;Chat-Gradio-Gguf\007"
-printf '\e[8;25;80t'
+printf '\e[8;25;82t'
+
+# Change to script dir#!/bin/bash
+# Script: `./Chat-Gradio-Gguf.sh`
+
+# Set terminal configuration (Linux/Unix method)
+echo -ne "\033]0;Chat-Gradio-Gguf\007"
+printf '\e[8;25;82t'
 
 # Change to script directory
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
@@ -46,7 +53,7 @@ main_menu() {
     echo ""
     echo "    2. Run Installation"
     echo ""
-    echo "    3. Run Validation"
+    echo ""
     echo ""
     echo ""
     echo ""
@@ -54,7 +61,7 @@ main_menu() {
     echo ""
     echo ""
     display_separator_thick
-    read -p "Selection; Menu Options = 1-3, Exit Bash = X: " choice
+    read -p "Selection; Menu Options = 1-2, Exit Bash = X: " choice
 }
 
 # Function to run main program
@@ -65,22 +72,22 @@ run_main_program() {
     display_separator_thick
     echo ""
     echo "Starting Chat-Gradio-Gguf..."
-    if [ -d ".venv" ]; then
-        source .venv/bin/activate
-        echo "Activated: .venv"
-    else
-        echo "Error: Virtual environment (.venv) not found"
+    # Call the venv Python directly - no activate/deactivate needed.
+    # Python resolves its own site-packages relative to its executable location,
+    # so the venv works correctly even when the project folder has been moved.
+    VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
+    if [ ! -f "$VENV_PYTHON" ]; then
+        echo "Error: Virtual environment not found at .venv/bin/python"
+        echo "Run installation first (option 2)."
         read -p "Press Enter to continue..."
         return
     fi
     export PYTHONUNBUFFERED=1
-    python3 ./launcher.py linux
+    "$VENV_PYTHON" ./launcher.py linux
     if [ $? -ne 0 ]; then
         echo "Error launching Chat-Gradio-Gguf"
         read -p "Press Enter to continue..."
     fi
-    deactivate
-    echo "Deactivated: .venv"
     unset PYTHONUNBUFFERED
 }
 
@@ -91,60 +98,12 @@ run_installation() {
     echo "    Chat-Gradio-Gguf: Installer"
     display_separator_thick
     echo ""
-    echo "Running Installer..."
-    sleep 1
-    rm -rf ./data
-    echo "Deleted: ./data"
-    if [ -d ".venv" ]; then
-        source .venv/bin/activate
-        deactivate
-        rm -rf .venv
-        echo "Deleted: .venv"
-    else
-        echo "No existing .venv to delete"
-    fi
-    echo ""
-    echo "Preparation Complete."
-    sleep 1
-    echo "Running Installer..."
-    sleep 3
-    clear
+
     python3 ./installer.py linux
     if [ $? -ne 0 ]; then
         echo "Error during installation"
         read -p "Press Enter to continue..."
     fi
-    if [ -d ".venv" ]; then
-        source .venv/bin/activate
-        deactivate
-        echo "Deactivated: .venv"
-        read -p "Press Enter to continue..."
-    fi
-}
-
-# Function to run validation
-run_validation() {
-    clear
-    display_separator_thick
-    echo "    Chat-Gradio-Gguf: Library Validation"
-    display_separator_thick
-    echo ""
-    echo "Running Library Validation..."
-    if [ -d ".venv" ]; then
-        source .venv/bin/activate
-        echo "Activated: .venv"
-    else
-        echo "Error: Virtual environment (.venv) not found"
-        read -p "Press Enter to continue..."
-        return
-    fi
-    python3 ./inspector.py linux
-    if [ $? -ne 0 ]; then
-        echo "Error during validation"
-        read -p "Press Enter to continue..."
-    fi
-    deactivate
-    echo "Deactivated: .venv"
     read -p "Press Enter to continue..."
 }
 
@@ -157,9 +116,6 @@ while true; do
             ;;
         2)
             run_installation
-            ;;
-        3)
-            run_validation
             ;;
         X|x)
             echo "Closing Chat-Gradio-Gguf..."

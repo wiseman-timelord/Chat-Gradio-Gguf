@@ -25,7 +25,7 @@ import time
 import tempfile
 
 # Lazy import to avoid circular dependency
-import scripts.configuration as cfg
+import scripts.configure as cfg
 
 # =============================================================================
 # WEB SEARCH - COMPREHENSIVE MULTI-SOURCE SEARCH

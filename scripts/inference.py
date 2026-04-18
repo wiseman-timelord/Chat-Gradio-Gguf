@@ -9,8 +9,8 @@ import re
 import json
 import traceback
 from pathlib import Path
-import scripts.configuration as cfg
-from scripts.configuration import (
+import scripts.configure as cfg
+from scripts.configure import (
     CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, MLOCK, handling_keywords, llm,
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED, CHAT_FORMAT_MAP,
@@ -45,7 +45,7 @@ Summarize the key information focusing on relevance and recency.""",
 
 def get_system_message(is_uncensored=False, is_nsfw=False, ddg_search_enabled=False,
                        is_reasoning=False, is_roleplay=False, is_code=False, is_moe=False,
-                       is_vision=False):
+                       is_vision=False, is_thinking_capable=False):
     """Build system message based on model characteristics."""
     if is_code or is_moe:
         return ""
@@ -64,6 +64,11 @@ def get_system_message(is_uncensored=False, is_nsfw=False, ddg_search_enabled=Fa
         system += " " + PROMPT_TEMPLATES["ddg_search"]
     if is_reasoning:
         system += " " + PROMPT_TEMPLATES["reasoning"]
+    elif is_thinking_capable:
+        # Qwen3/Qwen3.5 models can spontaneously output <think> blocks even when
+        # not intended as reasoning models.  Explicitly suppress this so the user
+        # gets clean, direct answers unless they have chosen a reasoning variant.
+        system += " " + PROMPT_TEMPLATES["no_reasoning"]
     if is_nsfw:
         system += " " + PROMPT_TEMPLATES["nsfw"]
     elif is_roleplay:
@@ -157,6 +162,10 @@ def get_model_settings(model_name):
     is_roleplay = any(keyword in model_name_lower for keyword in handling_keywords["roleplay"])
     is_moe = any(keyword in model_name_lower for keyword in handling_keywords["moe"])
     is_vision = any(keyword in model_name_lower for keyword in handling_keywords["vision"])
+    # Qwen3 / Qwen3.5 models can spontaneously use <think> tags even without an
+    # explicit reasoning prompt.  We track this so the system message can suppress
+    # thinking when the user has NOT chosen a dedicated reasoning model.
+    is_thinking_capable = any(keyword in model_name_lower for keyword in handling_keywords.get("thinking_capable", []))
     return {
         "category": "chat",
         "is_uncensored": is_uncensored,
@@ -166,6 +175,7 @@ def get_model_settings(model_name):
         "is_roleplay": is_roleplay,
         "is_moe": is_moe,
         "is_vision": is_vision,
+        "is_thinking_capable": is_thinking_capable,
         "detected_keywords": [kw for kw in handling_keywords if any(k in model_name_lower for k in handling_keywords[kw])]
     }
 
@@ -222,13 +232,15 @@ def get_model_metadata(model_path: str) -> dict:
     print("[META] Using filename-based defaults")
     name_lower = path.name.lower()
 
-    # Architecture mapping
+    # Architecture mapping (ORDER MATTERS - most specific first)
     arch_map = {
-        'qwen2.5': ('qwen2', 40, 131072),
-        'qwen2': ('qwen2', 32, 32768),
-        'qwen': ('qwen2', 40, 32768),
-        'llama': ('llama', 32, 32768),
-        'mistral': ('llama', 32, 32768),
+        'qwen3.5'  : ('qwen3', 36, 32768),   # Qwen3.5 family (0.8B–35B-A3B)
+        'qwen3'    : ('qwen3', 36, 32768),   # Qwen3 family
+        'qwen2.5'  : ('qwen2', 40, 131072),  # Qwen2.5 family
+        'qwen2'    : ('qwen2', 32, 32768),   # Qwen2 family
+        'qwen'     : ('qwen2', 40, 32768),   # Generic Qwen fallback
+        'llama'    : ('llama', 32, 32768),
+        'mistral'  : ('llama', 32, 32768),
     }
 
     for key, (arch, layers, ctx) in arch_map.items():
@@ -277,12 +289,31 @@ def get_model_layers(model_path: str) -> int:
             except (ValueError, TypeError):
                 continue
 
-    # Heuristic from filename
+    # Heuristic from filename (ORDER MATTERS - largest/most-specific patterns first
+    # to prevent short patterns matching inside larger ones, e.g. '7b' hitting '27b')
     name_lower = Path(model_path).name.lower()
     size_map = {
-        '3b': 26, '7b': 32, '8b': 32, '13b': 40, '14b': 40,
-        '20b': 48, '30b': 60, '32b': 64, '34b': 60, '40b': 60,
-        '70b': 80, '72b': 80, '120b': 120, '180b': 180
+        # Large dense / very large
+        '180b': 180, '120b': 120,
+        '72b' : 80,  '70b' : 80,
+        '40b' : 60,
+        # Qwen3.5-35B-A3B MoE and similar 35B models
+        '35b' : 48,
+        '34b' : 60,  '32b' : 64,  '30b' : 60,
+        # Qwen3.5-27B dense
+        '27b' : 60,
+        '20b' : 48,
+        '14b' : 40,  '13b' : 40,
+        # Jackrong Qwen3.5-9B distilled
+        '9b'  : 36,
+        # Qwen3.5-8B and similar (Qwen3 8B uses 36 layers)
+        '8b'  : 36,
+        '7b'  : 32,
+        # Qwen3.5-4B
+        '4b'  : 36,
+        '3b'  : 26,
+        # Small models (Qwen3.5-0.8B / 1.5B / 1.7B / 2B)
+        '2b'  : 28,  '1.7b': 28,  '1.5b': 28,  '0.8b': 28,
     }
 
     for pattern, count in size_map.items():
@@ -338,12 +369,12 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     """Load model with all necessary configuration."""
     # LOCAL IMPORTS to avoid circular import
     from scripts.utility import beep, short_path
-    from scripts.configuration import (
+    from scripts.configure import (
         CONTEXT_SIZE, BATCH_SIZE, MMAP, MLOCK, DYNAMIC_GPU_LAYERS,
         BACKEND_TYPE, CPU_THREADS, set_status, GPU_LAYERS,
         LOADED_CONTEXT_SIZE, MODEL_NAME, SELECTED_GPU
     )
-    from scripts.configuration import save_config
+    from scripts.configure import save_config
     from pathlib import Path
     import traceback
     import os
@@ -466,8 +497,14 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         model_lower = model.lower()
         
         try:
+            # Qwen3.5-VL detection (highest priority - before Qwen3-VL)
+            if "qwen3.5-vl" in model_lower or "qwen3.5vl" in model_lower:
+                from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+                chat_handler = Qwen25VLChatHandler(clip_model_path=str(mmproj_path))
+                set_status(f"Qwen3.5-VL mode with {mmproj_path.name}", console=True)
+            
             # Qwen3-VL detection (highest priority)
-            if "qwen3-vl" in model_lower or "qwen3vl" in model_lower:
+            elif "qwen3-vl" in model_lower or "qwen3vl" in model_lower:
                 from llama_cpp.llama_chat_format import Qwen25VLChatHandler
                 chat_handler = Qwen25VLChatHandler(clip_model_path=str(mmproj_path))
                 set_status(f"Qwen3-VL mode with {mmproj_path.name}", console=True)
@@ -595,7 +632,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         # ──────────────────────────────────────────────────────────────
         # [PHASE 7: SUCCESS HANDLER] Update global state ONLY on success
         # ──────────────────────────────────────────────────────────────
-        import scripts.configuration as cfg
+        import scripts.configure as cfg
         cfg.GPU_LAYERS = gpu_layers
         cfg.MODEL_NAME = model
         cfg.LOADED_CONTEXT_SIZE = effective_ctx
@@ -615,7 +652,7 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         return status_msg, True, new_llm, True
 
     except Exception as e:
-        import scripts.configuration as cfg
+        import scripts.configure as cfg
         cfg.GPU_LAYERS = 0
         tb = traceback.format_exc()
         err_msg = (
@@ -636,7 +673,7 @@ def calculate_single_model_gpu_layers_with_layers(
 ) -> int:
     """Conservative layer calculation with Vulkan safety margins."""
     from math import floor
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     if cfg.BACKEND_TYPE == "CPU_CPU" or available_vram <= 0 or num_layers <= 0:
         return 0
 
@@ -645,7 +682,7 @@ def calculate_single_model_gpu_layers_with_layers(
     arch = meta.get("general.architecture", "unknown")
 
     # Model overhead factors
-    factor = 1.15 if arch in ("qwen2", "qwen2.5", "qwen") else 1.20 if arch == "llama" else 1.25
+    factor = 1.15 if arch in ("qwen2", "qwen2.5", "qwen", "qwen3", "qwen3_5") else 1.20 if arch == "llama" else 1.25
     adjusted_mb = model_mb * factor
     layer_mb = adjusted_mb / num_layers
 
@@ -663,7 +700,8 @@ def calculate_single_model_gpu_layers_with_layers(
               f"(ctx:{context_reserve} batch:{batch_reserve} vk:{vulkan_overhead})")
     else:
         # Standard reserve for non-Vulkan
-        embedding_dim = {"llama": 4096, "qwen2": 5120, "qwen": 5120}.get(arch, 4096)
+        embedding_dim = {"llama": 4096, "qwen2": 5120, "qwen": 5120,
+                         "qwen3": 5120, "qwen3_5": 5120}.get(arch, 4096)
         graph_mb = 3 * (cfg.CONTEXT_SIZE / 1024) ** 2 * embedding_dim * 4 / 1024 / 1024
         reserve_mb = max(256, int(graph_mb * 1.2))
         usable_vram = max(0, available_vram - reserve_mb)
@@ -716,7 +754,7 @@ def unload_models(llm_state, models_loaded_state):
         return "Model unloaded successfully.", None, False
         
     except Exception as e:
-        # REMOVED: import scripts.configuration as cfg  <-- This was causing the error
+        # REMOVED: import scripts.configure as cfg  <-- This was causing the error
         cfg.GPU_LAYERS = 0
         tb = traceback.format_exc()
         
@@ -740,7 +778,7 @@ def unload_models(llm_state, models_loaded_state):
 
 def update_thinking_phase_constants():
     """Call this during initialization to set up thinking phase detection."""
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     # Standard thinking tags (like Qwen3)
     standard_opening = ["<think>"]
     standard_closing = ["</think>"]
@@ -879,7 +917,8 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
         is_roleplay=settings.get("is_roleplay", False),
         is_code=settings.get("is_code", False),
         is_moe=settings.get("is_moe", False),
-        is_vision=settings.get("is_vision", False)
+        is_vision=settings.get("is_vision", False),
+        is_thinking_capable=settings.get("is_thinking_capable", False),
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     # FIXED: Inject search results into system message with explicit instructions
@@ -1037,7 +1076,7 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
 
 def change_model(model_name):
     try:
-        from scripts.configuration import MODEL_FOLDER, VRAM_SIZE, MODELS_LOADED, llm
+        from scripts.configure import MODEL_FOLDER, VRAM_SIZE, MODELS_LOADED, llm
         status, models_loaded, llm_state = load_models(
             MODEL_FOLDER,
             model_name,

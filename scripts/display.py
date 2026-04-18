@@ -1,5 +1,6 @@
 # Script: `.\scripts\display.py`
 # Compatible with Gradio 3.50.2 for Qt5 WebEngine (Windows 7-8.1) support
+# Includes Qt WebEngine browser launcher (merged from browser.py)
 
 
 # Imports - display.py
@@ -11,6 +12,7 @@ import json
 import os
 import random
 import re
+import sys
 import threading
 import time
 import traceback
@@ -29,11 +31,11 @@ from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
 
 # Project imports - consolidated configuration
-import scripts.configuration as cfg
-from scripts.configuration import save_config
+import scripts.configure as cfg
+from scripts.configure import save_config
 
 # Commonly used constants (kept explicit for clarity & auto-complete)
-from scripts.configuration import (
+from scripts.configure import (
     MODEL_NAME, MODEL_FOLDER, SESSION_ACTIVE,
     MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT,
     CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
@@ -69,6 +71,241 @@ from scripts.tools import (
     get_voice_id_by_name, speak_text,
     synthesize_last_response, play_tts_audio
 )
+
+
+# BROWSER FUNCTIONS (merged from browser.py)
+# Custom Qt WebEngine browser window.
+# - Windows 7/8/8.1 : Qt5 WebEngine (PyQt5)
+# - Windows 10/11   : Qt6 WebEngine (PyQt6)
+# - Ubuntu 22-25    : Qt6 WebEngine (PyQt6)
+# Falls back to system default browser if Qt WebEngine is unavailable.
+
+_qt_app = None
+_qt_browser = None
+_signal_handler = None
+
+
+def close_browser():
+    """Close the Qt browser window from any thread (thread-safe)."""
+    global _signal_handler
+    if _signal_handler is not None:
+        try:
+            print("[BROWSER] Requesting close via signal...")
+            _signal_handler.request_close()
+        except Exception as e:
+            print(f"[BROWSER] Signal close failed: {e}")
+            if _qt_app is not None:
+                try:
+                    _qt_app.quit()
+                except:
+                    pass
+    else:
+        print("[BROWSER] No signal handler - attempting direct close")
+        if _qt_app is not None:
+            try:
+                _qt_app.quit()
+            except:
+                pass
+    print("[BROWSER] Close requested")
+
+
+def wait_for_gradio(url="http://localhost:7860", timeout=30):
+    """Wait for Gradio server to be fully ready."""
+    import requests
+    import time as _time
+    start_time = _time.time()
+    print(f"[BROWSER] Waiting for Gradio server at {url}...")
+    while _time.time() - start_time < timeout:
+        try:
+            response = requests.get(url, timeout=2)
+            if response.status_code == 200:
+                content = response.text.lower()
+                if 'gradio' in content or 'svelte' in content or '<script' in content:
+                    _time.sleep(1.5)
+                    print("[BROWSER] Gradio server is ready")
+                    return True
+        except requests.exceptions.RequestException:
+            pass
+        _time.sleep(0.5)
+    print("[BROWSER] Timeout waiting for Gradio server")
+    return False
+
+
+def launch_custom_browser(gradio_url="http://localhost:7860",
+                          frameless=False, width=1400, height=900,
+                          title="Chat-Gradio-Gguf", maximized=False):
+    """
+    Launch Gradio app in a Qt5 WebEngine window (PyQt5).
+    Qt5 is used on all supported platforms (Windows 7-11, Ubuntu 22-25).
+    Falls back to system default browser if PyQt5 WebEngine is unavailable.
+    """
+    print(f"[BROWSER] Launching at {gradio_url}")
+    print(f"[BROWSER] Platform: {cfg.PLATFORM}, Qt5 WebEngine")
+    try:
+        _launch_qt5_browser(gradio_url, title, width, height, frameless, maximized)
+    except ImportError as e:
+        print(f"[BROWSER] Qt5 WebEngine not available: {e}")
+        print("[BROWSER] Falling back to system browser")
+        import webbrowser
+        webbrowser.open(gradio_url)
+    except Exception as e:
+        print(f"[BROWSER] Qt5 WebEngine failed: {e}")
+        import traceback
+        traceback.print_exc()
+        print("[BROWSER] Falling back to system browser")
+        import webbrowser
+        webbrowser.open(gradio_url)
+
+
+def _launch_qt5_browser(url, title, width, height, frameless, maximized):
+    """Launch browser using PyQt5 + Qt5 WebEngine (Windows 7/8/8.1)."""
+    global _qt_app, _qt_browser, _signal_handler
+    from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage, QWebEngineSettings
+    from PyQt5.QtCore import QUrl, Qt, pyqtSignal, QObject
+
+    class CloseSignalHandler(QObject):
+        close_signal = pyqtSignal()
+        def __init__(self, app):
+            super().__init__()
+            self._app = app
+            self.close_signal.connect(self._do_close)
+        def _do_close(self):
+            print("[BROWSER] Close signal received in main thread")
+            if self._app:
+                self._app.quit()
+        def request_close(self):
+            self.close_signal.emit()
+
+    class CustomWebPage(QWebEnginePage):
+        def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+            if level == 2:
+                print(f"[JS ERROR]: {message}")
+
+    _qt_app = QApplication(sys.argv)
+    _signal_handler = CloseSignalHandler(_qt_app)
+    _qt_browser = QWebEngineView()
+    _qt_browser.setWindowTitle(title)
+    if frameless:
+        _qt_browser.setWindowFlags(Qt.FramelessWindowHint)
+    settings = _qt_browser.settings()
+    settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+    settings.setAttribute(QWebEngineSettings.LocalStorageEnabled, True)
+    settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
+    settings.setAttribute(QWebEngineSettings.PluginsEnabled, True)
+    page = CustomWebPage(_qt_browser)
+    _qt_browser.setPage(page)
+    _qt_browser.resize(width, height)
+    print(f"[BROWSER] Loading URL: {url}")
+    _qt_browser.setUrl(QUrl(url))
+    if maximized:
+        _qt_browser.showMaximized()
+    else:
+        _qt_browser.show()
+    print("[BROWSER] Qt5 WebEngine window created")
+    _qt_app.exec_()
+    print("[BROWSER] Qt5 event loop exited")
+
+
+def _launch_qt6_browser(url, title, width, height, frameless, maximized):
+    """
+    DEAD CODE — retained for reference only.
+    Qt6 (PyQt6) is no longer used. All platforms use Qt5 (_launch_qt5_browser).
+    This function is never called.
+    """
+    global _qt_app, _qt_browser, _signal_handler
+    import os as _os
+
+    # Windows: disable GPU acceleration when installer detected insufficient D3D support.
+    if cfg.PLATFORM == 'windows' and not getattr(cfg, 'GRAPHICS_ACCELERATION', True):
+        chromium_flags = (
+            "--disable-gpu "
+            "--disable-gpu-compositing "
+            "--disable-features=GpuProcessSurface,CanvasOopRasterization "
+            "--no-first-run "
+            "--disable-default-apps "
+            "--disable-background-timer-throttling "
+            "--disable-renderer-backgrounding"
+        )
+        _os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = chromium_flags
+        _os.environ["QTWEBENGINE_DISABLE_GPU"] = "1"
+        print("[BROWSER] Hardware GPU unavailable - software rendering enabled")
+        print(f"[BROWSER] Chromium flags: {chromium_flags}")
+
+    # Linux: Set Chromium flags for sandbox issues and GPU rendering.
+    if cfg.PLATFORM == 'linux':
+        if _os.geteuid() == 0:
+            print("[BROWSER] Running as root - disabling Chromium sandbox")
+            chromium_flags = "--no-sandbox --disable-gpu-sandbox"
+        else:
+            chromium_flags = "--disable-gpu-sandbox"
+        chromium_flags += (
+            " --disable-gpu --disable-software-rasterizer"
+            " --disable-features=GpuProcessSurface,CanvasOopRasterization"
+            " --no-first-run --disable-default-apps"
+            " --disable-background-timer-throttling"
+            " --disable-features=Translate,InterestFeedContentSuggestions,MediaRouter,"
+            "OptimizationHints,OptimizationGuideModelDownloading,"
+            "AutofillServerCommunication,PasswordManager"
+            " --disable-sync --disable-component-extensions-with-background-pages"
+            " --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"
+        )
+        _os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = chromium_flags
+        _os.environ["QTWEBENGINE_DISABLE_GPU"] = "1"
+        _os.environ["QT_QUICK_BACKEND"] = "software"
+        _os.environ["QT_QPA_PLATFORM"] = "xcb"
+        _os.environ["QT_QPA_PLATFORMTHEME"] = ""
+        _os.environ["QT_QPA_DISABLE_SESSION_MANAGER"] = "1"
+        _os.environ["QT_LOGGING_RULES"] = "qt.qpa.*=false;qt.webengine.*=false"
+        print("[BROWSER] GPU acceleration disabled, using software rendering")
+        print("[BROWSER] DBus integration disabled to prevent startup delays")
+        print(f"[BROWSER] Chromium flags: {chromium_flags}")
+
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
+    from PyQt6.QtCore import QUrl, Qt, QTimer, pyqtSignal, QObject
+
+    class CloseSignalHandler(QObject):
+        close_signal = pyqtSignal()
+        def __init__(self, app):
+            super().__init__()
+            self._app = app
+            self.close_signal.connect(self._do_close)
+        def _do_close(self):
+            print("[BROWSER] Close signal received in main thread")
+            if self._app:
+                self._app.quit()
+        def request_close(self):
+            self.close_signal.emit()
+
+    _qt_app = QApplication(sys.argv)
+    _signal_handler = CloseSignalHandler(_qt_app)
+    _qt_browser = QWebEngineView()
+    _qt_browser.setWindowTitle(title)
+    if frameless:
+        _qt_browser.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+    settings = _qt_browser.settings()
+    settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, False)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, False)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, False)
+    _qt_browser.resize(width, height)
+    if maximized:
+        _qt_browser.showMaximized()
+    else:
+        _qt_browser.show()
+
+    def load_url():
+        print(f"[BROWSER] Loading URL: {url}")
+        _qt_browser.setUrl(QUrl(url))
+
+    QTimer.singleShot(100, load_url)
+    print("[BROWSER] Qt6 WebEngine window created")
+    _qt_app.exec()
+    print("[BROWSER] Qt6 event loop exited")
 
 
 # GRADIO 3.x COMPATIBILITY LAYER
@@ -139,29 +376,8 @@ def tuples_to_messages(tuples):
 
 
 def get_chatbot_output(session_tuples, session_messages):
-    """
-    Return correct format for Chatbot based on Gradio version.
-    Ensures labels are visible in all versions.
-    """
-    if cfg.GRADIO_VERSION.startswith('3.'):
-        # Gradio 3.x: Use tuple format directly
-        return session_tuples
-    else:
-        # Gradio 4.x/5.x: Convert tuples (which have labels) to messages format
-        # This preserves the "User:" and "AI-Chat:" labels in the content
-        messages_with_labels = []
-        for user_tuple, bot_tuple in session_tuples:
-            if user_tuple:
-                # Keep the "User:\n" prefix in the content for display
-                clean_user = re.sub(r'^User:\s*\n?', '', user_tuple, flags=re.MULTILINE).strip()
-                display_user = f"User:\n{clean_user}" if clean_user else "User:"
-                messages_with_labels.append({'role': 'user', 'content': display_user})
-            if bot_tuple:
-                # Keep the "AI-Chat:\n" prefix in the content for display
-                clean_bot = re.sub(r'^AI-Chat:\s*\n?', '', bot_tuple, flags=re.MULTILINE).strip()
-                display_bot = f"AI-Chat:\n{clean_bot}" if clean_bot else "AI-Chat:"
-                messages_with_labels.append({'role': 'assistant', 'content': display_bot})
-        return messages_with_labels
+    """Return Gradio 3.x tuple format for the Chatbot component."""
+    return session_tuples
 
 # Functions...
 def update_cpu_select():
@@ -352,7 +568,7 @@ def format_response(output: str) -> str:
     from pygments import highlight
     from pygments.lexers import get_lexer_by_name
     from pygments.formatters import HtmlFormatter
-    from scripts.configuration import THINK_COLOR, GRADIO_VERSION
+    from scripts.configure import THINK_COLOR, GRADIO_VERSION
     
     formatted = []
     
@@ -617,7 +833,7 @@ def update_model_list(model_folder):
 
 def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, cpu_threads, llm_state, models_loaded_state):
     """Explicitly load the currently selected model with current cfg."""
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     from scripts.inference import load_inference, get_model_settings
     from scripts.utility import beep
     if not model_name or model_name in ["Select_a_model...", "No models found", " ", None]:
@@ -694,7 +910,7 @@ def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, c
 
 def handle_unload_model(llm_state, models_loaded_state):
     """Explicitly unload the currently loaded model."""
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     from scripts.inference import unload_models
     from scripts.utility import beep
     if not models_loaded_state or llm_state is None:
@@ -772,7 +988,7 @@ def browse_on_click(current_path):
         return current_path
 
 def save_rp_settings(rp_location, user_name, user_role, ai_npc, ai_npc_role):
-    from scripts import configuration
+    from scripts import configure
     cfg.RP_LOCATION = rp_location
     cfg.USER_PC_NAME = user_name
     cfg.USER_PC_ROLE = user_role
@@ -786,7 +1002,7 @@ def save_rp_settings(rp_location, user_name, user_role, ai_npc, ai_npc_role):
 
 def process_uploaded_files(files, loaded_files, models_loaded):
     from scripts.utility import create_session_vectorstore
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     import os
     print("Uploaded files:", files)
     if not models_loaded:
@@ -812,7 +1028,7 @@ def start_new_session(session_messages, attached_files, llm_state, models_loaded
     """
     Start a fresh session. Preserves model loaded state to prevent unnecessary reloads.
     """
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     from scripts.utility import save_session_history
 
     # 1. Save current session if it was active and has messages
@@ -1059,7 +1275,7 @@ def handle_customization_save(
             cfg.LAYER_ALLOCATION_MODE = layer_allocation_mode
         
         # Save to persistent.json
-        from scripts.configuration import save_config
+        from scripts.configure import save_config
         save_config()
         
         print(f"[SAVE] Settings saved: CTX={cfg.CONTEXT_SIZE}, Batch={cfg.BATCH_SIZE}, "
@@ -1300,7 +1516,7 @@ def extract_search_query(user_input: str) -> str:
 def toggle_tts_sound(current_state):
     """Toggle TTS Sound enabled/disabled."""
     import gradio as gr
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     new_state = not current_state
     cfg.TTS_ENABLED = new_state
 
@@ -1332,7 +1548,7 @@ def stop_tts_handler():
 
 def update_tts_voice(voice_name):
     """Update the selected TTS voice."""
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     
     # Get the voice ID from the name
     voice_id = get_voice_id_by_name(voice_name)
@@ -1340,7 +1556,7 @@ def update_tts_voice(voice_name):
     cfg.TTS_VOICE_NAME = voice_name
     
     # Update configuration
-    from scripts.configuration import save_config
+    from scripts.configure import save_config
     save_config()
     
     return f"Voice set to: {voice_name}"
@@ -1354,7 +1570,7 @@ def update_sound_output_device(device_name):
 
 def update_sound_sample_rate(sample_rate):
     """Update the audio sample rate (shared by Bleep and TTS)."""
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     cfg.SOUND_SAMPLE_RATE = int(sample_rate)
     return f"Sample rate set to: {sample_rate}"
 
@@ -1373,9 +1589,9 @@ def conversation_display(
     Uses tuple format for Chatbot display, message dicts internally.
     """
     import gradio as gr
-    from scripts import configuration, utility
+    from scripts import configure, utility
     from scripts.inference import get_model_settings, get_response_stream, load_models
-    from scripts.configuration import context_injector
+    from scripts.configure import context_injector
     from scripts.utility import read_file_content, filter_operational_content
     from pathlib import Path
     import time
@@ -1984,7 +2200,7 @@ def toggle_web_search(current_web_state, current_ddg_state):
 
 
 def launch_display():
-    """Launch the Gradio display – supports Gradio 3.50.2 (Qt5 WebEngine) and newer versions."""
+    """Launch the Gradio display – Gradio 3.50.2 with Qt5 WebEngine on all platforms."""
     global demo
     import tkinter as tk
     from tkinter import filedialog
@@ -1992,8 +2208,8 @@ def launch_display():
     import gradio as gr
     from pathlib import Path
     from launcher import shutdown_program
-    from scripts import configuration, utility, inference
-    from scripts.configuration import (
+    from scripts import configure, utility, inference
+    from scripts.configure import (
         MODEL_NAME, SESSION_ACTIVE,
         MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT,
         MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
@@ -2001,24 +2217,20 @@ def launch_display():
         ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
         REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
         ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR,
-        context_injector
+        context_injector, QT_VERSION
     )
-    # ── Determine Gradio major version ──────────────────────────────────────
-    is_gradio_3 = cfg.GRADIO_VERSION.startswith('3.')
+    
+    # Gradio 3.50.2 is fixed on all platforms — no version branching needed.
+    is_gradio_3 = True
+    is_gradio_6_plus = False
+
+    print(f"[DISPLAY] Qt Version: {QT_VERSION} (v{QT_VERSION})")
+    print(f"[DISPLAY] Gradio Version: {cfg.GRADIO_VERSION}")
+    print(f"[DISPLAY] Graphics Acceleration: {cfg.GRAPHICS_ACCELERATION}")
 
     # Output filtering
     initialize_filter_from_config()
 
-    # Output filtering
-    initialize_filter_from_config()
-
-    # Determine Gradio major version for CSS parameter placement
-    try:
-        gradio_ver_parts = gr.__version__.split('.')
-        is_gradio_6_plus = int(gradio_ver_parts[0]) >= 6
-    except:
-        is_gradio_6_plus = False  # Safe fallback for older versions or unusual version strings	
-	
     # Common CSS rules (used by all versions)
     css_common = """
     .scrollable { overflow-y: auto }
@@ -2063,24 +2275,21 @@ def launch_display():
     }
     """
 
-    # Aggressive spacing fixes — mostly needed for Gradio 3 + old Qt WebEngine
+    # Spacing fixes for Gradio 3 + Qt5 WebEngine
     css_gradio3_fixes = """
     /* Reduce extra blank lines and tight spacing issues in Qt WebEngine */
     .message p { margin-top: 0.3em !important; margin-bottom: 0.3em !important; }
     .message br + br { display: none !important; }
     """
 
-    # Final CSS: common + version-specific fixes
-    final_css = css_common
-    if is_gradio_3:
-        final_css += css_gradio3_fixes
+    # Final CSS: always include Gradio 3 fixes
+    final_css = css_common + css_gradio3_fixes
 
-    # Prepare Blocks kwargs - CSS stays in Blocks for Gradio 5.x, moves to launch() for 6+
+    # CSS always goes in Blocks kwargs (Gradio 3.x)
     blocks_kwargs = {
-        "title": "Chat-Gradio-Gguf"
+        "title": "Chat-Gradio-Gguf",
+        "css": final_css.strip()
     }
-    if not is_gradio_6_plus:
-        blocks_kwargs["css"] = final_css.strip()
 
     # ── Main display ──────────────────────────────────────────────────────
     with gr.Blocks(**blocks_kwargs) as demo:
@@ -2848,31 +3057,31 @@ def launch_display():
 
         # Max TTS length handler
         tts_max_len.change(
-            fn=lambda val: setattr(configuration, 'MAX_TTS_LENGTH', int(val)) or f"Max TTS length set to {int(val)} chars",
+            fn=lambda val: setattr(cfg, 'MAX_TTS_LENGTH', int(val)) or f"Max TTS length set to {int(val)} chars",
             inputs=[tts_max_len],
             outputs=[config_status]
         )
         show_think.change(
-            fn=lambda x: setattr(configuration, 'SHOW_THINK_PHASE', x) or f"Show thinking phase: {'ON' if x else 'OFF'}",
+            fn=lambda x: setattr(cfg, 'SHOW_THINK_PHASE', x) or f"Show thinking phase: {'ON' if x else 'OFF'}",
             inputs=[show_think],
             outputs=[interaction_global_status]
         )
 
         bleep_events.change(
-            fn=lambda x: setattr(configuration, 'BLEEP_ON_EVENTS', x) or f"Beep on events: {'ON' if x else 'OFF'}",
+            fn=lambda x: setattr(cfg, 'BLEEP_ON_EVENTS', x) or f"Beep on events: {'ON' if x else 'OFF'}",
             inputs=[bleep_events],
             outputs=[interaction_global_status]
         )
 
         print_raw.change(
-            fn=lambda x: setattr(configuration, 'PRINT_RAW_OUTPUT', x) or f"Print raw output: {'ON' if x else 'OFF'}",
+            fn=lambda x: setattr(cfg, 'PRINT_RAW_OUTPUT', x) or f"Print raw output: {'ON' if x else 'OFF'}",
             inputs=[print_raw],
             outputs=[interaction_global_status]
         )
 
         session_log_height.change(
             fn=lambda val: (
-                setattr(configuration, 'SESSION_LOG_HEIGHT', int(val)),
+                setattr(cfg, 'SESSION_LOG_HEIGHT', int(val)),
                 f"Session log height set to {int(val)}px (save & restart to apply)"
             )[1],
             inputs=[session_log_height],
@@ -2881,7 +3090,7 @@ def launch_display():
 
         max_attach_slots.change(
             fn=lambda val: (
-                setattr(configuration, 'MAX_ATTACH_SLOTS', int(val)),
+                setattr(cfg, 'MAX_ATTACH_SLOTS', int(val)),
                 f"Max attachment slots set to {int(val)} (save & restart to apply)"
             )[1],
             inputs=[max_attach_slots],
@@ -2890,7 +3099,7 @@ def launch_display():
 
         max_history_slots.change(
             fn=lambda val: (
-                setattr(configuration, 'MAX_HISTORY_SLOTS', int(val)),
+                setattr(cfg, 'MAX_HISTORY_SLOTS', int(val)),
                 f"Max history slots set to {int(val)} (save & restart to apply)"
             )[1],
             inputs=[max_history_slots],
@@ -3362,14 +3571,13 @@ def launch_display():
 
     # Launch with browser
     import threading
-    from scripts.browser import launch_custom_browser, wait_for_gradio
 
     print("[BROWSER] Starting Gradio server in background...")
 
     # Enable queue for generator/streaming support
     demo.queue()
 
-    # Build launch kwargs - CSS moved to launch() for Gradio 6+ compatibility
+    # Gradio 3.x launch kwargs — CSS is set in Blocks kwargs, not here
     launch_kwargs = {
         "server_name": "localhost",
         "server_port": 7860,
@@ -3378,11 +3586,7 @@ def launch_display():
         "inbrowser": False,
         "prevent_thread_lock": True
     }
-    
-    # Gradio 6.0+ moved css parameter to launch() - add it there for 6+ to suppress warning
-    if is_gradio_6_plus:
-        launch_kwargs["css"] = final_css.strip()
-    
+
     gradio_thread = threading.Thread(
         target=lambda: demo.launch(**launch_kwargs),
         daemon=True

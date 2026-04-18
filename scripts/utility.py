@@ -1,35 +1,57 @@
-# Script: `.\scripts\utility.py`
+# scripts/utility.py
 
-# Imports
+# Standard library imports (safe - no pydantic dependency)
 import tempfile
-import re, subprocess, json, time, random, psutil, shutil, os, zipfile, spacy, sys, PyPDF2
+import re
+import subprocess
+import json
+import time
+import random
+import psutil
+import shutil
+import os
+import zipfile
+import sys
 from pathlib import Path
 from datetime import datetime
+
+# Third-party imports (safe - no pydantic dependency)
 from docx import Document
 from openpyxl import load_workbook
 from pptx import Presentation
 import gradio as gr
+import PyPDF2
+
+# Project imports
 from scripts.inference import load_inference, clean_content
-import scripts.configuration as cfg
-from scripts.configuration import (
-    TEMP_DIR, HISTORY_DIR, SESSION_FILE_FORMAT, ALLOWED_EXTENSIONS, 
+import scripts.configure as cfg
+from scripts.configure import (
+    TEMP_DIR, HISTORY_DIR, SESSION_FILE_FORMAT, ALLOWED_EXTENSIONS,
     current_session_id, session_label
 )
 
 # Import search functions from tools module
-# NOTE: hybrid_search is DDG-based, web_search is comprehensive multi-source
 from scripts.tools import (
     hybrid_search, format_search_status_for_chat,
     web_search, format_web_search_status_for_chat
 )
 
-# Variables
+# =============================================================================
+# LAZY IMPORTS - spaCy and langchain imported only when needed
+# =============================================================================
 _nlp_model = None
 
 # NOTE: Platform-specific imports (win32com, pythoncom, pyttsx3) are imported
 # lazily inside the functions that need them. This is because cfg.PLATFORM
 # is not set until after the launcher parses command-line arguments.
 
+def _get_spacy():
+    """Lazy import spaCy to avoid pydantic compatibility issues at startup."""
+    try:
+        import spacy
+        return spacy
+    except ImportError:
+        return None
 
 # =============================================================================
 # BEEP FUNCTION (simple utility, doesn't belong in tools.py)
@@ -107,7 +129,7 @@ def filter_operational_content(text):
     text = re.sub(r'\nAI-Chat:\s*\n?', '\n', text)
     
     # Remove thinking/answer tags
-    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    text = re.sub(r' <think> .*? </think> ', '', text, flags=re.DOTALL)
     text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
     
     # Remove llama.cpp operational output patterns
@@ -309,11 +331,15 @@ def get_cpu_info():
 # =============================================================================
 
 def get_nlp_model():
-    """Get or initialize the spaCy NLP model."""
+    """Get or initialize the spaCy NLP model (lazy load)."""
     global _nlp_model
+    
+    # Lazy import spaCy
+    spacy = _get_spacy()
+    if spacy is None:
+        return None  # Graceful fallback if spacy not installed
+    
     if _nlp_model is None:
-        if spacy is None:
-            return None  # Graceful fallback if spacy not installed
         try:
             _nlp_model = spacy.load("en_core_web_sm")
         except OSError:
@@ -323,6 +349,7 @@ def get_nlp_model():
             except Exception as e:
                 print(f"[NLP] Failed to load spaCy model: {e}")
                 return None
+    
     return _nlp_model
 
 def summarize_session(messages):
@@ -341,6 +368,7 @@ def summarize_session(messages):
     
     text = first_user_msg[:500]
     
+    # Lazy load spaCy
     nlp = get_nlp_model()
     if nlp:
         try:
@@ -356,7 +384,7 @@ def summarize_session(messages):
             if candidates:
                 label = candidates[0][:40]
                 return label.strip()
-        except:
+        except Exception:
             pass
     
     words = text.split()[:6]
@@ -509,6 +537,7 @@ def summarize_document(file_path):
         with open(file_path, 'r', encoding='utf-8') as file:
             content = file.read()
         
+        # Lazy load spaCy
         nlp = get_nlp_model()
         if nlp is None:
             words = content.split()[:10]
@@ -563,7 +592,7 @@ def eject_file(file_list, slot_index, is_attach=True):
 def update_file_slot_ui(file_list, is_attach=True):
     """Update file slot UI components."""
     import gradio as gr
-    import scripts.configuration as cfg
+    import scripts.configure as cfg
     from pathlib import Path
     
     max_slots = cfg.MAX_POSSIBLE_ATTACH_SLOTS
@@ -588,9 +617,11 @@ def update_file_slot_ui(file_list, is_attach=True):
 
 def load_and_chunk_documents(file_paths: list) -> list:
     """Load and chunk documents from a list of file paths for RAG."""
+    # LAZY IMPORT: Import here to avoid Pydantic v2 loading at startup
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain_community.document_loaders import TextLoader
-    from scripts.configuration import CONTEXT_SIZE, RAG_CHUNK_SIZE_DIVIDER, RAG_CHUNK_OVERLAP_DIVIDER
+    
+    from scripts.configure import CONTEXT_SIZE, RAG_CHUNK_SIZE_DIVIDER, RAG_CHUNK_OVERLAP_DIVIDER
     documents = []
     try:
         chunk_size = CONTEXT_SIZE // (RAG_CHUNK_SIZE_DIVIDER if RAG_CHUNK_SIZE_DIVIDER != 0 else 4)
@@ -619,7 +650,7 @@ def delete_all_session_histories():
 
 def create_session_vectorstore(file_paths):
     """Thin wrapper so display.py can call the injector transparently."""
-    from scripts.configuration import context_injector
+    from scripts.configure import context_injector
     context_injector.set_session_vectorstore(file_paths)
 
 def process_attach_files(files, attached_files):
