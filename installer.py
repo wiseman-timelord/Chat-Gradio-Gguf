@@ -366,7 +366,7 @@ BASE_REQ = [
     "faiss-cpu>=1.8.0",
     "langchain>=0.3.18",            
     "pygments==2.17.2",
-    "lxml[html_clean]==6.0.2",
+    "lxml==6.0.2",
     "lxml_html_clean==0.4.3",
     "tokenizers==0.22.2",
     "beautifulsoup4>=4.12.0",       # HTML parsing for deep research
@@ -1524,6 +1524,7 @@ def install_linux_system_dependencies(backend: str) -> bool:
         print_status(f"System dependencies failed: {e}", False)
         return False
 
+# This version uses sequential installation of each package while explicitly providing the CPU index URL for all three. This ensures that pip always uses the same index and does not attempt to replace the CPU‑only torch wheel with a default PyPI version.
 def install_embedding_backend() -> bool:
     """
     Install torch + sentence-transformers for all platforms.
@@ -1540,61 +1541,54 @@ def install_embedding_backend() -> bool:
 
     py_minor = sys.version_info.minor
 
-    # Install PyTorch with correct version for Python
+    # Determine version strings
     if py_minor <= 11:
-        print_status(f"Installing PyTorch 2.2.2 (CPU-only) for Python 3.{py_minor}... ")
-        # Pre-install compatible dependencies for torch 2.2.2 to avoid resolver conflicts
+        torch_req = "torch==2.2.2+cpu"
+        transformers_version = "transformers==4.41.2"
+        sentence_transformers_version = "sentence-transformers==3.0.1"
+        # Pre-install compatible dependencies for torch 2.2.2
         pip_install_with_retry(pip_exe, "setuptools>=65.0.0,<70.0.0", max_retries=3)
         pip_install_with_retry(pip_exe, "networkx>=2.6,<3.0", max_retries=3)
         pip_install_with_retry(pip_exe, "sympy>=1.12,<1.13", max_retries=3)
-        
-        if not pip_install_with_retry(pip_exe, "torch==2.2.2+cpu", 
-                                       ["--index-url", "https://download.pytorch.org/whl/cpu",
-                                        "--upgrade-strategy", "only-if-needed"],
-                                       max_retries=10, initial_delay=5.0):
-            print_status("PyTorch installation failed after retries ", False)
-            return False
-        print_status("PyTorch 2.2.2 (CPU) installed ")
-        transformers_version = "transformers==4.41.2"
-        sentence_transformers_version = "sentence-transformers==3.0.1"
     else:
-        # Python 3.12+ needs newer torch
-        print_status(f"Installing PyTorch 2.4+ (CPU-only) for Python 3.{py_minor}... ")
-        # Pre-install compatible dependencies for torch 2.4+ on Python 3.12+
+        torch_req = "torch>=2.4.0"
+        transformers_version = "transformers>=4.42.0"
+        sentence_transformers_version = "sentence-transformers>=3.0.0"
+        # Pre-install compatible dependencies for torch 2.4+
         pip_install_with_retry(pip_exe, "setuptools>=68.0.0,<71.0.0", max_retries=3)
         pip_install_with_retry(pip_exe, "networkx>=3.0,<3.3", max_retries=3)
         pip_install_with_retry(pip_exe, "sympy>=1.12,<1.14", max_retries=3)
         pip_install_with_retry(pip_exe, "mpmath>=1.3.0,<1.4.0", max_retries=3)
-        
-        if not pip_install_with_retry(pip_exe, "torch>=2.4.0", 
-                                       ["--index-url", "https://download.pytorch.org/whl/cpu",
-                                        "--upgrade-strategy", "only-if-needed"],
-                                       max_retries=10, initial_delay=5.0):
-            print_status("PyTorch installation failed after retries ", False)
-            return False
-        print_status("PyTorch 2.4+ (CPU) installed ")
-        transformers_version = "transformers>=4.42.0"
-        sentence_transformers_version = "sentence-transformers>=3.0.0"
 
-    # Install transformers
-    print_status(f"Installing {transformers_version}... ")
-    if not pip_install_with_retry(pip_exe, transformers_version, 
-                                   ["--upgrade-strategy", "only-if-needed"],
-                                   max_retries=10, initial_delay=5.0):
-        print_status("transformers installation failed ", False)
+    # 1. Install PyTorch using the CPU index
+    cpu_index = "https://download.pytorch.org/whl/cpu"
+    print_status(f"Installing PyTorch (CPU) - {torch_req}...")
+    if not pip_install_with_retry(pip_exe, torch_req,
+                                  ["--index-url", cpu_index, "--upgrade-strategy", "only-if-needed"],
+                                  max_retries=10, initial_delay=5.0):
+        print_status("PyTorch installation failed", False)
         return False
-    print_status("transformers installed ")
+    print_status("PyTorch (CPU) installed")
 
-    # Install sentence-transformers
-    print_status(f"Installing {sentence_transformers_version}... ")
+    # 2. Install transformers from default PyPI
+    print_status(f"Installing {transformers_version}...")
+    if not pip_install_with_retry(pip_exe, transformers_version,
+                                  ["--upgrade-strategy", "only-if-needed"],
+                                  max_retries=10, initial_delay=5.0):
+        print_status("transformers installation failed", False)
+        return False
+    print_status("transformers installed")
+
+    # 3. Install sentence-transformers from default PyPI
+    print_status(f"Installing {sentence_transformers_version}...")
     if not pip_install_with_retry(pip_exe, sentence_transformers_version,
-                                   ["--upgrade-strategy", "only-if-needed"],
-                                   max_retries=10, initial_delay=5.0):
-        print_status("sentence-transformers installation failed ", False)
+                                  ["--upgrade-strategy", "only-if-needed"],
+                                  max_retries=10, initial_delay=5.0):
+        print_status("sentence-transformers installation failed", False)
         return False
-    print_status("sentence-transformers installed ")
+    print_status("sentence-transformers installed")
 
-    # Verify
+    # Verify installation
     verify_script = '''
 import sys, os
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -2109,7 +2103,7 @@ def pip_install_with_retry(pip_exe: str, package: str, extra_args: list = None,
         no_deps: If True, add --no-deps flag to skip dependency resolution (use with caution)
     """
     # Seconds of silence before we consider the process stalled.
-    INACTIVITY_TIMEOUT = 120
+    INACTIVITY_TIMEOUT = 300
 
     # pip output keywords worth surfacing to the user.
     _PROGRESS_KEYWORDS = (
