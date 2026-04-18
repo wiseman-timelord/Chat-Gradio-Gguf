@@ -136,32 +136,32 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The combined Info/Install menu  (v1.02.1)...
+- The combined Info/Install menu  (v1.10.3)...
 <details>
     
-    ===============================================================================
+    =================================================================================
         Chat-Gradio-Gguf - Configure Installation
-    ===============================================================================
+    =================================================================================
     
     System Detections...
-        CPU Features: AVX, AVX2, FMA, F16C, SSE3, SSSE3, SSE4_1, SSE4_2
-        Operating System: Windows 8.1
-        Optimal Python: 3.11; Vulkan Present: Yes
+        CPU Features: SSE3, SSSE3, SSE4_1
+        Operating System: Windows 10
+        Optimal Python: 3.12; Vulkan Present: No
         Build Tools: Git, CMake, MSVC, MSBuild
     
     Backend Options...
-       1) Download CPU Wheel / Default CPU Wheel
-       2) Download Vulkan Bin / Default CPU Wheel
+       1) Download CPU Binary / Default CPU Wheel
+       2) Download Vulkan Binary / Default CPU Wheel
        3) Compile CPU Binaries / Compile CPU Wheel
        4) Compile Vulkan Binaries / Compile Vulkan Wheel
     
-    Embedding Model...
-       a) Bge-Small-En v1.5 (Fastest - 132MB)
-       b) Bge-Base-En v1.5 (Regular - 425MB)
-       c) Bge-Large-En v1.5 (Quality - 1.35GB)
+    Install Size...
+       a) Small  ~135MB - Bge-Small-En v1.5 + pyttsx3/espeak-ng (built-in TTS)
+       b) Medium ~450MB - Bge-Base-En v1.5 + pyttsx3/espeak-ng (built-in TTS)
+       c) Large   ~2GB  - Bge-Base-En v1.5 + Coqui TTS (high quality voices)
     
-    ===============================================================================
-    Selection; Backend=1-4, Embed=a-c, Abandon=A; (e.g. 2b):
+    =================================================================================
+    Selection; Backend=1-4, Size=a-c, Abandon=A; (e.g. 2b):
 
 </details>
 
