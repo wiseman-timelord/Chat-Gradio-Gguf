@@ -20,63 +20,98 @@ _os.environ["HF_HUB_OFFLINE"] = "1"  # CRITICAL: Force fully offline mode
 _os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 # -----------------------------------------------------------------------------
-# PRE-IMPORT pydantic-v2-dependent libraries BEFORE the shim replaces pydantic.
+# COMPAT BLOCK — pydantic shim + pre-imports for pydantic-v2-dependent libs.
 #
-# Why: modern spaCy (3.5+) and sentence_transformers import pydantic v2 symbols
-# (field_validator, model_validator, etc.) at module load time.  The shim below
-# remaps sys.modules["pydantic"] to pydantic.v1 for Gradio 3.x compatibility,
-# which breaks those imports if they happen after the shim is applied.
+# On Windows, Gradio 3.x uses Python multiprocessing (spawn method) for its
+# internal queue, which re-executes this __main__ module in every worker
+# process.  The if __name__ == "__main__": guard below stops main() running
+# again, but this module-level code would otherwise print twice.
 #
-# Fix: load them now while the real pydantic v2 is still present.  Python caches
-# the result in sys.modules, so any later "import spacy" / "import
-# sentence_transformers" in display.py or utility.py just returns the cached
-# module — the shim has no effect on already-resolved references.
+# Strategy:
+#   • Use a sentinel env var (_CGUF_COMPAT_INIT) to suppress repeat output.
+#     Child processes inherit the env and stay silent.
+#   • The pydantic shim (sys.modules remapping) still executes in every
+#     process — child workers need it too if they touch pydantic-dependent libs.
+#   • Check pydantic version FIRST so all messages are context-aware.
 # -----------------------------------------------------------------------------
+_COMPAT_VERBOSE = _os.environ.get("_CGUF_COMPAT_INIT") != "1"
+
+# Step 1 — Detect pydantic version before any pre-imports so messages are
+#           accurate about whether a shim will actually be applied.
+_pydantic_major = 0
+_pydantic_version_str = "unknown"
+_pydantic_needs_shim = False
+try:
+    import pydantic as _pydantic
+    _pydantic_version_str = _pydantic.VERSION
+    _pydantic_major = int(_pydantic_version_str.split(".")[0])
+    _pydantic_needs_shim = _pydantic_major >= 2
+except Exception:
+    pass
+
+# Step 2 — Pre-load pydantic-v2-dependent libraries into sys.modules NOW.
+#
+#   pydantic v2 present: spaCy and sentence_transformers must be cached before
+#     the shim below remaps pydantic → pydantic.v1; otherwise their module-
+#     level "from pydantic import field_validator" would fail after the remap.
+#   pydantic v1 present: spaCy requires pydantic v2 and will always fail here;
+#     sentence_transformers is pre-loaded as a minor startup optimisation only.
+#   In both cases, all failures are caught and features degrade gracefully.
 try:
     import spacy as _spacy_preload
-    print(f"[COMPAT] spaCy {_spacy_preload.__version__} pre-loaded before pydantic shim")
+    if _COMPAT_VERBOSE:
+        _verb = "pre-loaded" if _pydantic_needs_shim else "loaded"
+        print(f"[COMPAT] spaCy {_spacy_preload.__version__} {_verb}")
 except Exception as _e:
-    print(f"[COMPAT] spaCy pre-load skipped (will retry later): {_e}")
+    if _COMPAT_VERBOSE:
+        if _pydantic_needs_shim:
+            print(f"[COMPAT] spaCy pre-load skipped ({type(_e).__name__}) — NLP uses word-split fallback")
+        else:
+            # pydantic v1: spaCy always fails here; this is expected and handled.
+            print(f"[COMPAT] NLP uses word-split fallback")
 
 try:
     import sentence_transformers as _st_preload
-    print(f"[COMPAT] sentence_transformers pre-loaded before pydantic shim")
+    if _COMPAT_VERBOSE:
+        print(f"[COMPAT] sentence_transformers loaded")
 except Exception as _e:
-    print(f"[COMPAT] sentence_transformers pre-load skipped (RAG may be unavailable): {_e}")
+    if _COMPAT_VERBOSE:
+        print(f"[COMPAT] sentence_transformers unavailable — RAG disabled ({type(_e).__name__})")
 
-# -----------------------------------------------------------------------------
-# Pydantic v1/v2 compatibility shim for Gradio 3.x
-# Gradio 3.50.2 requires Pydantic v1 APIs.
-# Applied AFTER the pydantic-v2-dependent pre-imports above.
-# -----------------------------------------------------------------------------
-try:
-    import pydantic as _pydantic
-    _pydantic_major = int(_pydantic.VERSION.split(".")[0])
-    if _pydantic_major >= 2:
-        try:
-            import pydantic.v1 as _pydantic_v1
-            # Remap both the top-level module and common sub-modules
-            _sys.modules["pydantic"] = _pydantic_v1
-            _sys.modules["pydantic.fields"] = _pydantic_v1.fields
-            _sys.modules["pydantic.main"] = _pydantic_v1.main
-            _sys.modules["pydantic.validators"] = _pydantic_v1.validators
-            _sys.modules["pydantic.types"] = _pydantic_v1.types
-            _sys.modules["pydantic.errors"] = _pydantic_v1.errors
-            _sys.modules["pydantic.networks"] = _pydantic_v1.networks
-            print(f"[COMPAT] Pydantic v{_pydantic_major} detected — applied v1 shim for Gradio 3.x")
-        except ImportError:
-            print(f"[COMPAT] WARNING: Pydantic v{_pydantic_major} detected but v1 compat layer missing.")
-            print("[COMPAT]   Gradio 3.x requires pydantic <2. Run: pip install 'pydantic <2'")
-except Exception as _e:
-    print(f"[COMPAT] Pydantic check skipped: {_e}")
+# Step 3 — Apply pydantic shim (if needed) or report installed state.
+#   This sys.modules remapping runs in every process (main + Gradio workers).
+if _pydantic_needs_shim:
+    try:
+        import pydantic.v1 as _pydantic_v1
+        _sys.modules["pydantic"]           = _pydantic_v1
+        _sys.modules["pydantic.fields"]    = _pydantic_v1.fields
+        _sys.modules["pydantic.main"]      = _pydantic_v1.main
+        _sys.modules["pydantic.validators"]= _pydantic_v1.validators
+        _sys.modules["pydantic.types"]     = _pydantic_v1.types
+        _sys.modules["pydantic.errors"]    = _pydantic_v1.errors
+        _sys.modules["pydantic.networks"]  = _pydantic_v1.networks
+        if _COMPAT_VERBOSE:
+            print(f"[COMPAT] Pydantic v{_pydantic_major} → v1 shim applied for Gradio 3.x")
+    except ImportError:
+        if _COMPAT_VERBOSE:
+            print(f"[COMPAT] WARNING: Pydantic v{_pydantic_major} found but v1 compat layer missing")
+            print("[COMPAT]   Run: pip install 'pydantic<2'")
+elif _pydantic_major > 0:
+    if _COMPAT_VERBOSE:
+        print(f"[COMPAT] Pydantic v{_pydantic_version_str} — Gradio 3.x compatible")
+
+# Mark done — child processes spawned by Gradio multiprocessing inherit this
+# and skip the print block above while still executing the shim itself.
+if _COMPAT_VERBOSE:
+    _os.environ["_CGUF_COMPAT_INIT"] = "1"
 
 # Disable Logging (before any library imports)
 # CRITICAL: Must import logging.config explicitly as it is a submodule
 import logging as _logging
 import logging.config as _logging_config
-_logging_config.dictConfig = lambda **__: None
-_logging_config.fileConfig = lambda **__: None
-_logging.basicConfig = lambda **__: None
+_logging_config.dictConfig = lambda *_, **__: None
+_logging_config.fileConfig = lambda *_, **__: None
+_logging.basicConfig = lambda *_, **__: None
 
 # =============================================================================
 # NOW safe to import other modules
@@ -226,8 +261,8 @@ def preload_auxiliary_models():
         print(f"[INIT] WARN spaCy pre-load failed: {e}")
 
     # 2. Pre-load sentence-transformers embedding model.
-    #    sentence_transformers itself was pre-loaded before the pydantic shim
-    #    (see top of file), so _ensure_embedding_model() is safe to call here.
+    #    sentence_transformers itself was loaded at startup (see COMPAT block at
+    #    top of file), so _ensure_embedding_model() is safe to call here.
     try:
         # Now trigger the lazy load of the actual embedding model weights
         cfg.context_injector._ensure_embedding_model()

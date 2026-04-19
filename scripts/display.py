@@ -23,7 +23,6 @@ from queue import Queue
 # Third-party
 import gradio as gr
 import pyperclip
-import spacy
 import tkinter as tk
 from tkinter import filedialog
 from pygments import highlight
