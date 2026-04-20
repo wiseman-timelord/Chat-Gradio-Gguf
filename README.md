@@ -385,8 +385,8 @@ project_root/
 
 # Development for v1.10.x Release
 There has been an overhaul, its almost working correctly, but some issues remain...
-1. The text needs to be selectable, and additionally a context window when right clicking on selected text, with, Copy Text, Select All, Select None.
-2. I cant select the text contents in the user input and the ai output, in the session log... 
+1.  I cant select the text contents in the user input and the ai output, in the session log. The text needs to be selectable, and additionally a context window when right clicking on selected text, with, Copy Text, Select All, Select None.
+2. The given complete prompt/response in the session log, should have little buttons on the edges.. 
 - we should have little copy icon on the bottom of sections of each individual complete prompts/responses shown in the session log. it should profile to the edge of the given complete prompt/response, so as to not be using up much page space, as is similar to modern AI chatbots. 
 - we could get a little edit icon next to it on the end of each of the user prompts too to copy, again similar to modern AI system, so as to be able to "go back" to editing that one, and if the user clicks save on a little button that will appear next to the other 2 buttons for "Save", then it will then remove all the prompts/responses after, and whatever data is attached to specifically them, and instead continue from the selected prompt, ignoring the prompts/responses that were more recent, as one can do on modern AI system. 
 ...be aware there is already something similar implemented for this the "Edit Previous" button, but that will only go back 1 interaction.
