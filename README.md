@@ -1,7 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
 ### Status
-Beta - Latest release v1.04.x was tested/fixed/improved for Windows 10. Latest pre-release v1.10.x not working currently, but will be a good rethink/refinement of some core components when released. Somewhat pushing towards a final version of v1.x I am 100% happy with, before looking towards v2 or other projects.
+Beta - Latest release v1.04.x was tested/fixed/improved for Windows 10. Working on the full release of v1.10.x, it will be a good rethink/refinement of some core components when released. Current page will be for the upcoming version. 
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration. One thing to mention though, is that because a goal of the project is to make a Chatbot compatible as it is, therefore compromises had to be made, and it may not have all the latest versions of things, more the most widely compatible versions of things, so some features are not as good as they could be, but also, this program serves as a valuable reference for what needs to be used on what OS, albeit it, as a personal project it could be streamlined/enhanced/customized to your own likings later.   
@@ -51,7 +51,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The dynamic progress indication replaces the user input box upon submission...
 ![image_missing](media/dynamic_progress.jpg)
 
-- Startup looks like this in the terminal/console (ignore warnings) (v1.02.1)...
+- Startup looks like this in the Command Prompt console (v1.10.6)...
 <details>
     
     ===============================================================================
@@ -59,81 +59,87 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     ===============================================================================
     
     Starting Chat-Gradio-Gguf...
-    Activated: `.venv`
-    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.02.1\.venv\Lib\site-package
-    s\transformers\utils\hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is de
-    precated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
-      warnings.warn(
+    [COMPAT] NLP uses word-split fallback
+    [COMPAT] sentence_transformers loaded
+    [COMPAT] Pydantic v1.10.21 — Gradio 3.x compatible
     `main` Function Started.
     [INI] Platform: windows
     [INI] Backend: VULKAN_CPU
     [INI] Vulkan: True
-    [INI] Embedding Model: BAAI/bge-base-en-v1.5
+    [INI] Graphics Acceleration: True
+    [INI] Qt Version: 5 (v5)
+    [INI] DX Feature Level: 0xb100
+    [INI] Embedding Model: BAAI/bge-small-en-v1.5
     [INI] Gradio Version: 3.50.2
-    [INI] OS Version: 8.1
-    [INI] Windows Version: 8.1
-    [INI] TTS section not found - will detect at runtime
-    [TTS] Engine: pyttsx3
-    [TTS] Audio Backend: windows
-    [TTS] Default Voice set to: Microsoft David  - English (United States) (en-US)
-    [MODELS] Scanning directory: models
-    [MODELS] ? No .gguf files found in models
-    [CONFIG] Auto-selected secondary GPU: Radeon (TM) RX 470 Graphics
-    [CONFIG] Loaded -> Model: Select_a_model... | CPU: Auto-Select
+    [INI] OS Version: 10
+    [INI] Windows Version: 10
+    [INI] TTS Type: Built-in (pyttsx3/espeak-ng)
+    [MODELS] Scanning directory: G:\LargeModels\Size_ittle_1b-2b
+    [MODELS] ✓ Found 9 models:
+    [MODELS]   - Benchmaxx-Llama-3.2-1B-Instruct.Q6_K.gguf
+    [MODELS]   - DeepSeek-V3-1B-Test-Q6_K.gguf
+    [MODELS]   - deepseek-v3-tiny-random.Q6_K.gguf
+    [MODELS]   - Dolphin3.0-Qwen2.5-0.5B-Q4_K_M.gguf
+    [MODELS]   - gemma-3-1b-thinking-v2-q6_k.gguf
+    [MODELS]   ... and 4 more
+    [CONFIG] Loaded -> Model: qwen1_5-0_5b-chat-q3_k_m.gguf | CPU: Auto-Select
     Configuration loaded
     [TTS] Engine: pyttsx3
     [TTS] Audio Backend: windows
-    [TTS] Default Voice set to: Microsoft David  - English (United States) (en-US)
+    [TTS] Voice from config: Microsoft Zira  - English (United States) (en-US) (HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-US_ZIRA_11.0)
     [Vulkan] GGML_CUDA_NO_PINNED=1   (frees ~300 MB VRAM)
     [Vulkan] GGML_VK_NO_PIPELINE_CACHE=0  (cached SPIR-V pipelines)
     Script mode `windows` with backend `VULKAN_CPU`
-    Working directory: ...les\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.02.1
-    Data Directory: ...hat-Gradio-Gguf\Chat-Gradio-Gguf-1.02.1\data
-    Session History: ...io-Gguf\Chat-Gradio-Gguf-1.02.1\data\history
-    Temp Directory: ...radio-Gguf\Chat-Gradio-Gguf-1.02.1\data\temp
+    Working directory: ...les\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.10.5
+    Data Directory: ...hat-Gradio-Gguf\Chat-Gradio-Gguf-1.10.5\data
+    Session History: ...io-Gguf\Chat-Gradio-Gguf-1.10.5\data\history
+    Temp Directory: ...radio-Gguf\Chat-Gradio-Gguf-1.10.5\data\temp
     [CPU] Detected: 12 cores, 24 threads
     [CPU] Current: 20
     CPU Configuration: 12 physical cores, 24 logical cores
     
     Configuration:
       Backend: VULKAN_CPU
-      Model: Select_a_model...
+      Model: qwen1_5-0_5b-chat-q3_k_m.gguf
       Context Size: 8192
       VRAM Allocation: 8192 MB
       CPU Threads: 20
       GPU Layers: 0
     
     [INIT] Pre-loading auxiliary inference...
-    [INIT] OK spaCy model pre-loaded
-    [RAG] Loading embedding model: BAAI/bge-base-en-v1.5
-    C:\LocalAI_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.02.1\.venv\Lib\site-package
-    s\huggingface_hub\file_download.py:942: FutureWarning: `resume_download` is depr
-    ecated and will be removed in version 1.0.0. Downloads always resume when possib
-    le. If you want to force a new download, use `force_download=True`.
-      warnings.warn(
-    [RAG] Embedding model loaded successfully
+    [INIT] WARN spaCy model not available (will use fallback)
+    [RAG] Loading embedding model: BAAI/bge-small-en-v1.5
+    [RAG] Downloading/loading to: C:\Inference_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.10.5\data\embedding_cache
+    Loading weights: 100%|███████████████████████████████████████████| 199/199 [00:00<00:00, 11004.75it/s]
+    BertModel LOAD REPORT from: BAAI/bge-small-en-v1.5
+    Key                     | Status     |  |
+    ------------------------+------------+--+-
+    embeddings.position_ids | UNEXPECTED |  |
+    
+    Notes:
+    - UNEXPECTED:   can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+    [RAG] Embedding model loaded successfully (dim=384)
     [INIT] OK Embedding model pre-loaded from cache
     
     Launching Gradio display...
+    [DISPLAY] Qt Version: 5 (v5)
+    [DISPLAY] Gradio Version: 3.50.2
+    [DISPLAY] Graphics Acceleration: True
     [FILTER] Using gradio3 filter (15 rules)
-    [FILTER] Using gradio3 filter (15 rules)
-    [MODELS] Scanning directory: models
-    [MODELS] ? No .gguf files found in models
+    IMPORTANT: You are using gradio version 3.50.2, however version 4.44.1 is available, please upgrade.
+    --------
+    [MODELS] Scanning directory: G:\LargeModels\Size_ittle_1b-2b
+    [MODELS] ✓ Found 9 models:
+    [MODELS]   - Benchmaxx-Llama-3.2-1B-Instruct.Q6_K.gguf
+    [MODELS]   - DeepSeek-V3-1B-Test-Q6_K.gguf
+    [MODELS]   - deepseek-v3-tiny-random.Q6_K.gguf
+    [MODELS]   - Dolphin3.0-Qwen2.5-0.5B-Q4_K_M.gguf
+    [MODELS]   - gemma-3-1b-thinking-v2-q6_k.gguf
+    [MODELS]   ... and 4 more
     [BROWSER] Starting Gradio server in background...
     [BROWSER] Waiting for Gradio server at http://localhost:7860...
     Running on local URL:  http://localhost:7860
     
-    To create a public link, set `share=True` in `launch()`.
-    [BROWSER] Gradio server is ready
-    [BROWSER] Launching at http://localhost:7860/?__theme=dark
-    [BROWSER] Platform: windows, Windows Version: 8.1
-    [BROWSER] Windows 8.1 detected - using Qt5 WebEngine
-    [BROWSER] Loading URL: http://localhost:7860/?__theme=dark
-    [BROWSER] Qt5 WebEngine window created
-    [MODELS] Scanning directory: models
-    [MODELS] ? No .gguf files found in models
-    [MODEL] Dropdown updated | choices=1 models | selected=Select_a_model...
-
 </details>
 
 - The combined Info/Install menu  (v1.10.3)...
@@ -240,12 +246,8 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - Windows 7-11 and/or ~Ubuntu 22-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
 - Python 3.9-3.13 - Requires [Python](https://www.python.org); AI warns me certain libraries wont work on Python 3.14, possibly Spacy. 
 - Llm Model - You will need a Large Language Model in GGUF format, check the models section for recommendations, but for quick start I advise one like [Qwen3-4B-abliterated-GGUF](https://huggingface.co/mradermacher/Qwen3-4B-abliterated-GGUF) for testing basic operation.
-- Suitable GPU - Gpu may be, Main or Compute, with VRam selection 4GB-64GB. It must have Vulkan capability/drivers. Ideally you want the GPU to cover all model layers for fast interference.
+- Suitable GPU - Gpu may be, Main or Compute, with VRam selection 4GB-64GB. Ideally you want the GPU to cover all model layers for fast interference.
 - System Ram - Your system ram must cover, the curren load and the size of the model layers not able to be covered by the GPU, plus smaller models like the embeddings model, plus the wheel if not built for Vulkan.
-
-### Graphics Requirements
-GPU interference is done through (have a guess) Vulkan...
-- Vulkan - For vulkan install options you must install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home).
 
 ### Building Requirements 
 For compile options; If on PATH, ask AI how to check its on path, and as applicable fix...
@@ -303,10 +305,10 @@ Web Search = Slower actual website reading research.
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
 - Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
-- The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know.
+- The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know. In other words, if the model has "i" in its label somewhere significant, then likely it is a iMatrix model, and you will need some other ChatBot that handles such things.
 - VRAM dropdown, 1GB to 64GB in steps, this should be your FREE ram available on the selected card, if you are using the card at the time then this is why we have for example, 6GB for a 8GB GPU in use, safely allowing 2GB for the system, while in compute more one would use for example, the full 8GB on the 8GB GPU.
 - I advise GPU can cover the Q6_K version, the Q6_K useually has negligable quality loss, while allowing good estimation of if the model will fit on a card, ie 8GB card will typically be mostly/completely cover a 7B/8B model in Q6_K compression, with a little extra to display the gradio interface, so the numbers somewhat relate with Q6_K when using same card as display.
-- We use a `1.125` additional to model size for layers to fit on VRAM,  the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`.
+- We used a `1.125` additional to model size for layers to fit on VRAM,  the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`. This possibly is not the case now.
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 - "Chat-Windows-Gguf" and "Chat-Linux-Gguf", is now "Chat-Gradio-Gguf", as yes, these dual-mode scripts used to be 2 different/same programs.
 - Through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files.
@@ -344,15 +346,13 @@ Web Search = Slower actual website reading research.
 project_root/
 │ Chat-Windows-Gguf.bat
 │ installer.py
-│ validater.py
 │ launcher.py
 ├── media/
 │ └── project_banner.jpg
 ├── scripts/
-│ └── browser.py
+│ └── configure.py
 │ └── display.py
 │ └── inference.py
-│ └── configuration.py
 │ └── tools.py
 │ └── utlity.py
 ```
@@ -368,6 +368,8 @@ project_root/
 └────── *
 ├── data/history
 └────── *
+├── scripts/
+│ └── __init__.py
 ├── .venv/
 └────── *
 ```
@@ -381,19 +383,16 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 ```
 
-# Development for v1.00.00+
-Now that the program is 100% made, I am tidying up, and finishing testing/bugfixing... 
-- Optimization, then testing/bugfixing.
-- Rename configuration.py to configure.py or config.py.
-- More work on filtering output. Specifically enhancing the "Light" filter for Qt6, as currently its got too many blank lines.
-- Build options on Ubuntu 3/4 on first menu, are currently broken. Download install through 1/2 on first menu work ok, and all options work fine on Windows, but needs to be fixed for Ubuntu.
-- Issues with Large Embedding model, I dont advise use of Large model anyhow, it needs, 1.5GB file size but main thing 4GB System RAM, with CPU inference and consistently either is, SLOWER or CRASHING. The code was assessed and updated with Kimi K2.5, yet issues remain, it works mostly on Windows, but can still fail and is unreliable.
+# Development for v1.10.x Release
+There has been an overhaul, its almost working correctly, but some issues remain...
+- I cant select the text contents in the user input and the ai output, in the session log. This text needs to be selectable, and additionally we should have little copy icon on the bottom of sections of each individual complete prompts/responses shown in the session log. it should profile to the edge of the given complete prompt/response, so as to not be using up much page space, as is similar to modern AI chatbots. Additionally if we could get a little edit icon next to it on the end of each of the user prompts too, again similar to modern AI system, so as to be able to "go back" to editing that one, and if the user clicks save on a little button that will appear next to the other 2 buttons for "Save", then it will then remove all the prompts/responses after, and whatever data is attached to specifically them, and instead continue from the selected prompt, ignoring the prompts/responses that were more recent, as one can do on modern AI system. Be aware there is already something similar implemented for this the "Edit Previous" button, but that will only go back 1 interaction.
+- the program needs to be compatible with the qwen 3.5/3.6 with/without hauhai/abliterated/ClaudeOpus enhancment handling.
 
 # Update Ideas
-1. Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
-2. Possibility of artifacts, the AI mentioned this, I want to see how feasable it is first.
-4. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading).
-5. new project Chat-Lightwave-Gguf, will be optimized towards windows 8-10, but use MS Edge WebView, and use lightwave instead of gradio, and limit operation to Windows 8.1-11.
+- Code Optimization / redistribution of code.
+- Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
+- Possibility of artifacts, the AI mentioned this, I want to see how feasable it is first.
+- Image reading (this would additionally require vllm, which could switch for such iterations involving image reading).
 
 ## Credits
 Thanks to all the following teams, for the use of their software/platforms...
