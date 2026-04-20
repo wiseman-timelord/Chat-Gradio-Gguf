@@ -2284,6 +2284,24 @@ def launch_display():
     .info-textbox-match a:hover {
         text-decoration: underline !important;
     }
+
+    /* === FIX: Enable text selection in chat messages === */
+    .message,
+    .message * {
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
+    }
+    /* Also ensure the parent scrollable container allows selection */
+    .scrollable {
+        user-select: text !important;
+        -webkit-user-select: text !important;
+    }
+    /* Restore the default right‑click context menu (no extra JS needed) */
+    .message {
+        -webkit-touch-callout: default !important;
+    }
     """
 
     # Spacing fixes for Gradio 3 + Qt5 WebEngine
