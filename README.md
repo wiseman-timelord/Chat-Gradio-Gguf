@@ -389,6 +389,7 @@ There has been an overhaul, its almost working correctly, but some issues remain
 - the program needs to be compatible with the qwen 3.5/3.6 with/without huihui/abliterated/ClaudeOpus/Heretic enhancment handling.
 
 # Update Ideas
+- It would be great to have a Auto/Quick/Think toggle, so as to have some pre-configured 1b model or the likes be able to do a quick assessment of, if the request is simple or complete, to then, disable think for simple tasks and enable think for complex tasks, and additionally we would want to have it assess context/batch lengths, if the user additionally has those set to auto. Other settings could also be determined through this auto feature pre-prompt system. Needs brainstorming.
 - Code Optimization / redistribution of code.
 - Thinking visualisation. The visualization of nodes and intersecting lines would be embedded in teh log, or what would be the best way to do this? for example instead of current think phase visualization.
 - Possibility of artifacts, the AI mentioned this, I want to see how feasable it is first.
