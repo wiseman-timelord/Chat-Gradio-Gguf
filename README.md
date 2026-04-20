@@ -386,7 +386,7 @@ project_root/
 # Development for v1.10.x Release
 There has been an overhaul, its almost working correctly, but some issues remain...
 - I cant select the text contents in the user input and the ai output, in the session log. This text needs to be selectable, and additionally we should have little copy icon on the bottom of sections of each individual complete prompts/responses shown in the session log. it should profile to the edge of the given complete prompt/response, so as to not be using up much page space, as is similar to modern AI chatbots. Additionally if we could get a little edit icon next to it on the end of each of the user prompts too, again similar to modern AI system, so as to be able to "go back" to editing that one, and if the user clicks save on a little button that will appear next to the other 2 buttons for "Save", then it will then remove all the prompts/responses after, and whatever data is attached to specifically them, and instead continue from the selected prompt, ignoring the prompts/responses that were more recent, as one can do on modern AI system. Be aware there is already something similar implemented for this the "Edit Previous" button, but that will only go back 1 interaction.
-- the program needs to be compatible with the qwen 3.5/3.6 with/without hauhai/abliterated/ClaudeOpus enhancment handling.
+- the program needs to be compatible with the qwen 3.5/3.6 with/without huihui/abliterated/ClaudeOpus/Heretic enhancment handling.
 
 # Update Ideas
 - Code Optimization / redistribution of code.
