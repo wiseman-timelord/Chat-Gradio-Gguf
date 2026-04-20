@@ -799,36 +799,48 @@ def get_initial_model_value():
 
 def update_model_list(model_folder):
     """Update model dropdown choices and set correct initial value from loaded config."""
-    
-    # Update folder if changed (safe even if same)
+
+    print(f"[MODEL-LIST] update_model_list called with folder='{model_folder}'")
+
+    # Update cfg.MODEL_FOLDER if the caller passed a different path
     if model_folder and model_folder.strip() and model_folder != cfg.MODEL_FOLDER:
         cfg.MODEL_FOLDER = model_folder
-        print(f"[MODEL] Folder updated to: {cfg.MODEL_FOLDER}")
-    
-    # Get current available models (uses cfg.MODEL_FOLDER)
+        print(f"[MODEL-LIST] cfg.MODEL_FOLDER updated to: {cfg.MODEL_FOLDER}")
+
+    # Scan directory
     available = get_available_models()
-    
-    choices = ["Select_a_model..."]
-    if available:
-        choices += available
+
+    # Separate real models from placeholder strings
+    PLACEHOLDERS = {"Select_a_model...", "No models found"}
+    real_models = [m for m in available if m not in PLACEHOLDERS]
+
+    # Build choices list
+    if real_models:
+        choices = ["Select_a_model..."] + real_models
     else:
         choices = ["No models found"]
-    
-    # Prefer loaded MODEL_NAME if still valid, otherwise fallback
-    selected_value = cfg.MODEL_NAME
-    if selected_value not in choices:
-        real_models = [m for m in available if m != "Select_a_model..."]
-        selected_value = real_models[0] if real_models else "Select_a_model..."
-        cfg.MODEL_NAME = selected_value  # keep globals in sync
-        print(f"[MODEL] Loaded model '{cfg.MODEL_NAME}' no longer exists → reset to '{selected_value}'")
-    
-    print(f"[MODEL] Dropdown updated | choices={len(choices)-1} models | selected={selected_value}")
-    
-    return gr.update(
-        choices=choices,
-        value=selected_value,
-        interactive=(selected_value != "Select_a_model..." and selected_value != "No models found")
-    )
+
+    # Keep saved MODEL_NAME if it is still present in the new list.
+    # Otherwise auto-select the first real model so the dropdown is immediately
+    # usable after the user picks a new folder.
+    saved = cfg.MODEL_NAME
+    if saved in real_models:
+        selected_value = saved
+    elif real_models:
+        selected_value = real_models[0]
+        cfg.MODEL_NAME = selected_value
+        print(f"[MODEL-LIST] Auto-selected first model: '{selected_value}'")
+    else:
+        selected_value = "No models found"
+        cfg.MODEL_NAME = "Select_a_model..."
+
+    # Keep the dropdown interactive whenever real models are available,
+    # regardless of which entry is currently selected.
+    interactive_val = len(real_models) > 0
+
+    print(f"[MODEL-LIST] Returning choices={len(choices)} items, value='{selected_value}', interactive={interactive_val}")
+
+    return gr.update(choices=choices, value=selected_value, interactive=interactive_val)
 
 def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, cpu_threads, llm_state, models_loaded_state):
     """Explicitly load the currently selected model with current cfg."""
@@ -2746,72 +2758,71 @@ def launch_display():
 
         # ── Browse button handler (works on ALL Gradio versions) ────────────────────
         def browse_and_update_folder(current_path):
-            """Open folder dialog, update path, refresh model list"""
+            """
+            Open folder dialog and update cfg.MODEL_FOLDER.
+            Returns path + status only — dropdown refresh is delegated to
+            .then(update_model_list) to match the proven demo.load chain pattern.
+            """
             import tkinter as tk
             from tkinter import filedialog
             from pathlib import Path
-            
+
+            print(f"[BROWSE] Handler called. current_path='{current_path}'")
+
             root = tk.Tk()
             root.withdraw()
-            
+            root.attributes('-topmost', True)   # float above Qt5 window
+
             initial_dir = current_path if Path(current_path).is_dir() else str(Path.home())
-            
+
             folder_path = filedialog.askdirectory(
                 title="Select Folder Containing GGUF Models",
                 initialdir=initial_dir,
                 mustexist=True
             )
-            
-            root.destroy()
-            
-            if not folder_path or folder_path == current_path:
-                return (
-                    current_path,
-                    gr.update(),
-                    gr.update(),
-                    "Folder selection unchanged.",
-                    "Folder selection unchanged.",
-                    "Folder selection unchanged."
-                )
-            
-            cfg.MODEL_FOLDER = str(Path(folder_path).resolve())
-            
-            available_models = get_available_models()
-            
-            # Build choices list consistent with update_model_list pattern
-            choices = ["Select_a_model..."]
-            if available_models and available_models != ["Select_a_model..."]:
-                choices.extend(available_models)
-                # Auto-select first real model found
-                new_value = available_models[0]
-                cfg.MODEL_NAME = new_value
-            else:
-                choices = ["No models found"]
-                new_value = "No models found"
-            
-            status = f"Folder updated: {short_path(folder_path)}\nFound {len(available_models)} models."
-            
-            return (
-                cfg.MODEL_FOLDER,
-                gr.update(choices=choices, value=new_value),
-                gr.update(value=new_value),
-                status,
-                status,
-                status
-            )
 
-        # Browse folder button handler (reuse existing function)
+            root.destroy()
+
+            print(f"[BROWSE] Dialog returned: '{folder_path}'")
+
+            if not folder_path:
+                print("[BROWSE] Cancelled — no folder chosen.")
+                status = "Folder selection cancelled."
+                return (current_path, current_path, status, status, status)
+
+            resolved = str(Path(folder_path).resolve())
+            cfg.MODEL_FOLDER = resolved
+            print(f"[BROWSE] cfg.MODEL_FOLDER set to: {cfg.MODEL_FOLDER}")
+
+            # Quick count for status; full scan runs in the .then(update_model_list)
+            try:
+                n = len(list(Path(resolved).glob("*.gguf")))
+            except Exception:
+                n = 0
+            status = f"Folder: {short_path(resolved)} — {n} model(s) found"
+            print(f"[BROWSE] Status: {status}")
+
+            # Returns: textbox value, state value, three status outputs (5 total)
+            return (cfg.MODEL_FOLDER, cfg.MODEL_FOLDER, status, status, status)
+
+        # Browse folder button:
+        #   Step 1 — open dialog, update cfg.MODEL_FOLDER, update textbox + state.
+        #   Step 2 — call update_model_list with the new state value to refresh
+        #            the dropdown choices (same fn used by demo.load chain).
         browse_folder_btn.click(
             fn=browse_and_update_folder,
             inputs=[model_folder_textbox],
             outputs=[
                 model_folder_textbox,
-                model_dropdown,
-                model_dropdown,
+                model_folder_state,
                 interaction_global_status,
                 config_status,
                 filter_status
             ]
+        ).then(
+            fn=update_model_list,
+            inputs=[model_folder_state],
+            outputs=[model_dropdown]
         )
 
         # Load model button handler
