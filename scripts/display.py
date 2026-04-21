@@ -1156,6 +1156,60 @@ def copy_last_response(session_messages):
         return "AI Response copied to clipboard (thinking phase excluded)."
     return "No response available to copy."
 
+def handle_inline_copy(action_str, session_messages):
+    """Triggered by JS inline copy button via hidden relay textbox.
+    action_str: 'user:<tuple_idx>'  or  'bot:<tuple_idx>'
+    tuple_idx → flat message index: user = idx*2, bot = idx*2+1
+    """
+    if not action_str or ':' not in action_str:
+        return "Nothing to copy.", ""
+    try:
+        role_part, idx_s = action_str.rsplit(':', 1)
+        tuple_idx = int(idx_s)
+    except (ValueError, AttributeError):
+        return "Copy error: bad format.", ""
+
+    msg_idx = tuple_idx * 2 if role_part == 'user' else tuple_idx * 2 + 1
+    if not session_messages or msg_idx >= len(session_messages):
+        return "Message not found.", ""
+
+    content = session_messages[msg_idx].get('content', '')
+    clean = re.sub(r'<[^>]+>', '', content).strip()
+    clean = re.sub(r'^(?:AI-Chat|User):\s*\n?', '', clean, flags=re.MULTILINE).strip()
+    try:
+        pyperclip.copy(clean)
+        label = "AI response" if role_part == 'bot' else "User message"
+        return f"{label} copied to clipboard.", ""
+    except Exception as e:
+        return f"Copy error: {e}", ""
+
+
+def handle_inline_edit(idx_str, session_messages):
+    """Triggered by JS inline edit button via hidden relay textbox.
+    idx_str: stringified tuple_idx — edit session from that user message onward.
+    Truncates history before it, loads the user text back into the input box.
+    """
+    if not idx_str:
+        return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "", False, ""
+    try:
+        tuple_idx = int(idx_str)
+    except ValueError:
+        return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "Edit error: invalid index.", False, ""
+
+    msg_idx = tuple_idx * 2
+    if msg_idx >= len(session_messages) or session_messages[msg_idx].get('role') != 'user':
+        return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "Edit target not found.", False, ""
+
+    user_content = session_messages[msg_idx].get('content', '')
+    user_content = re.sub(r'^User:\s*\n?', '', user_content, flags=re.MULTILINE).strip()
+
+    new_messages = session_messages[:msg_idx]
+    chatbot_out  = get_chatbot_output(messages_to_tuples(new_messages), new_messages)
+    has_ai       = any(m.get('role') == 'assistant' for m in new_messages)
+    status       = f"✏️ Editing from message {tuple_idx + 1} — edit the text above then Send Input."
+    return user_content, chatbot_out, new_messages, status, has_ai, ""
+
+
 def update_session_buttons():
     """Update session history buttons."""
     sessions = get_saved_sessions()[:cfg.MAX_HISTORY_SLOTS]
@@ -2302,6 +2356,52 @@ def launch_display():
     .message {
         -webkit-touch-callout: default !important;
     }
+
+    /* ── Inline per-message action buttons ───────────────────────────── */
+    .cguf-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 4px;
+        margin-top: 5px;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        pointer-events: none;
+    }
+    .cguf-hover:hover .cguf-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .cguf-btn {
+        background: rgba(38,40,58,0.88);
+        border: 1px solid rgba(255,255,255,0.13);
+        border-radius: 4px;
+        color: #9ba3b4;
+        cursor: pointer;
+        font-size: 11px;
+        padding: 2px 7px;
+        line-height: 1.4;
+        transition: background 0.12s, color 0.1s;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    .cguf-btn:hover {
+        background: rgba(68,76,112,0.95);
+        border-color: rgba(255,255,255,0.26);
+        color: #e0e6f4;
+    }
+    /* Diagnostic bar — set CGUF_DIAG=false in JS to hide after debugging */
+    #cguf-diag {
+        font-family: monospace;
+        font-size: 10px;
+        color: #777;
+        background: #0e0e14;
+        padding: 2px 8px;
+        border-radius: 3px;
+        display: none;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
     """
 
     # Spacing fixes for Gradio 3 + Qt5 WebEngine
@@ -2413,6 +2513,17 @@ def launch_display():
                             value="",
                             visible=False,
                             elem_classes=["progress-indicator"]
+                        )
+
+                        # Relay textboxes: JS writes here → .change() fires Python handlers.
+                        # elem_id puts an id on the wrapper div; JS finds the textarea inside.
+                        copy_action_box = gr.Textbox(
+                            value="", visible=False,
+                            elem_id="cguf-copy-action", label=""
+                        )
+                        edit_action_box = gr.Textbox(
+                            value="", visible=False,
+                            elem_id="cguf-edit-action", label=""
                         )
 
                         with gr.Row(elem_classes=["clean-elements"]):
@@ -3386,6 +3497,37 @@ def launch_display():
             outputs=[interaction_global_status]
         )
 
+        # ── Inline copy: triggered by JS through hidden relay textbox ───────────────
+        copy_action_box.change(
+            fn=handle_inline_copy,
+            inputs=[copy_action_box, states["session_messages"]],
+            outputs=[interaction_global_status, copy_action_box]
+        )
+
+        # ── Inline edit: triggered by JS through hidden relay textbox ───────────────
+        edit_action_box.change(
+            fn=handle_inline_edit,
+            inputs=[edit_action_box, states["session_messages"]],
+            outputs=[
+                conversation_components["user_input"],
+                conversation_components["session_log"],
+                states["session_messages"],
+                interaction_global_status,
+                states["has_ai_response"],
+                edit_action_box,
+            ]
+        ).then(
+            fn=lambda has_ai: update_action_buttons("waiting_for_input", has_ai),
+            inputs=[states["has_ai_response"]],
+            outputs=[
+                action_buttons["action"],
+                action_buttons["edit_previous"],
+                action_buttons["copy_response"],
+                action_buttons["cancel_input"],
+                action_buttons["cancel_response"],
+            ]
+        )
+
         # Save Settings button
         def unified_save_wrapper(
             # Hardware
@@ -3572,6 +3714,163 @@ def launch_display():
             ),
             inputs=[model_dropdown],
             outputs=[conversation_components["user_input"]]
+        )
+
+        # ── JS injection via demo.load _js ─────────────────────────────────────────
+        # IMPORTANT: gr.HTML <script> tags do NOT execute in Gradio 3.x because
+        # Svelte renders via innerHTML which blocks scripts (browser security).
+        # demo.load(fn=None, _js=...) is the ONLY correct way to run JS in Gradio 3.x.
+        #
+        # The JS does:
+        #   1. Defines window.cgufFire — relays events to hidden Gradio textboxes
+        #   2. injectButtons() — finds chatbot message elements, appends action rows
+        #   3. MutationObserver — re-injects after every chatbot update
+        #   4. Diagnostic bar — writes found selector info to #cguf-diag div
+        #
+        # SELECTOR NOTE: Gradio 3.50.2 Chatbot renders message wrappers with class
+        # "user" or "bot" as the outer div, and "message" on the inner content div.
+        # We try multiple patterns and log which one works in the #cguf-diag bar.
+        # Once confirmed, set CGUF_DIAG = false in the JS string below.
+        _CGUF_JS = """
+() => {
+    var CGUF_DIAG = false;
+
+    function log(msg) {
+        if (!CGUF_DIAG) return;
+        var el = document.getElementById('cguf-diag');
+        if (el) { el.style.display = 'block'; el.textContent = '[CGUF] ' + msg; }
+        console.log('[CGUF]', msg);
+    }
+
+    /* Fire a Gradio .change() event by writing to a hidden textbox.
+       Must use native property setter so Svelte/Gradio reactivity fires. */
+    window.cgufFire = function(elemId, value) {
+        var wrap = document.getElementById(elemId);
+        if (!wrap) { log('ERROR: #' + elemId + ' not in DOM'); return; }
+        var inp = wrap.querySelector('textarea') ||
+                  wrap.querySelector('input[type="text"]') ||
+                  wrap.querySelector('input');
+        if (!inp) { log('ERROR: no input inside #' + elemId); return; }
+        try {
+            var proto = inp.tagName === 'TEXTAREA'
+                ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+            setter.call(inp, value);
+            inp.dispatchEvent(new Event('input',  { bubbles: true }));
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+            log('OK ' + elemId + '=' + value);
+        } catch(e) {
+            log('ERROR setter: ' + e.message);
+        }
+    };
+
+    function makeBtn(emoji, title, elemId, payload) {
+        var b = document.createElement('button');
+        b.className = 'cguf-btn';
+        b.textContent = emoji;
+        b.title = title;
+        b.type = 'button';
+        b.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            window.cgufFire(elemId, payload);
+        });
+        return b;
+    }
+
+    /* Try several selector patterns used by different Gradio 3.x patch versions.
+       Log which one finds messages so we know the actual class names. */
+    var SEL_PAIRS = [
+        ['.scrollable .user .message',     '.scrollable .bot .message'],
+        ['.scrollable .message.user',      '.scrollable .message.bot'],
+        ['.scrollable .user-message',      '.scrollable .bot-message'],
+        ['.scrollable .user-row .message', '.scrollable .bot-row .message'],
+        ['.scrollable .user',              '.scrollable .bot'],
+        ['.wrap .user .message',           '.wrap .bot .message'],
+        ['.wrap .user',                    '.wrap .bot'],
+        ['[class*="user-message"]',        '[class*="bot-message"]'],
+    ];
+
+    function findMessages() {
+        for (var i = 0; i < SEL_PAIRS.length; i++) {
+            var us = document.querySelectorAll(SEL_PAIRS[i][0]);
+            var bs = document.querySelectorAll(SEL_PAIRS[i][1]);
+            if (us.length + bs.length > 0) {
+                log('sel[' + i + '] u=' + us.length + ' b=' + bs.length +
+                    ' [' + SEL_PAIRS[i][0] + ']');
+                return { users: Array.from(us), bots: Array.from(bs) };
+            }
+        }
+        /* Nothing found — dump class names of first 25 elements inside
+           .scrollable so we can add the correct selector */
+        var root = document.querySelector('.scrollable') ||
+                   document.querySelector('.wrap');
+        if (root) {
+            var dump = Array.from(root.querySelectorAll('*')).slice(0, 25)
+                .map(function(el) {
+                    return el.tagName.toLowerCase() +
+                           (el.className ? ('.' + String(el.className)
+                               .split(' ').join('.').slice(0, 60)) : '');
+                }).join(' | ');
+            log('No msgs. DOM dump: ' + dump.slice(0, 280));
+        } else {
+            log('.scrollable/.wrap not found in DOM at all');
+        }
+        return { users: [], bots: [] };
+    }
+
+    function injectButtons() {
+        var res = findMessages();
+
+        res.users.forEach(function(msg, i) {
+            if (msg.dataset.cguf) return;   /* already done */
+            msg.dataset.cguf = '1';
+            msg.classList.add('cguf-hover');
+            msg.style.position = 'relative';
+            var row = document.createElement('div');
+            row.className = 'cguf-actions';
+            row.appendChild(makeBtn('📋', 'Copy user message',
+                                    'cguf-copy-action', 'user:' + i));
+            row.appendChild(makeBtn('✏', 'Edit from here (removes later messages)',
+                                    'cguf-edit-action', String(i)));
+            msg.appendChild(row);
+        });
+
+        res.bots.forEach(function(msg, i) {
+            if (msg.dataset.cguf) return;
+            msg.dataset.cguf = '1';
+            msg.classList.add('cguf-hover');
+            msg.style.position = 'relative';
+            var row = document.createElement('div');
+            row.className = 'cguf-actions';
+            row.appendChild(makeBtn('📋', 'Copy AI response',
+                                    'cguf-copy-action', 'bot:' + i));
+            msg.appendChild(row);
+        });
+    }
+
+    /* MutationObserver: re-inject buttons whenever the chatbot re-renders */
+    var _deb = null;
+    var obs = new MutationObserver(function() {
+        clearTimeout(_deb);
+        _deb = setTimeout(injectButtons, 250);
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+
+    /* Staggered initial runs — Gradio may not have painted its first frame yet */
+    setTimeout(injectButtons, 800);
+    setTimeout(injectButtons, 2000);
+    setTimeout(injectButtons, 4000);
+
+    log('injector ready — waiting for messages');
+    return [];
+}
+"""
+        demo.load(
+            fn=None,
+            inputs=[],
+            outputs=[],
+            _js=_CGUF_JS
         )
 
         # Attach click handlers to session history buttons
