@@ -85,13 +85,28 @@ def get_reasoning_instruction():
 # MODEL METADATA & UTILITY FUNCTIONS (formerly models.py)
 # ============================================================================
 
-def get_chat_format(metadata):
-    """Determine the chat format based on the model's architecture."""
+def get_chat_format(metadata, model_name=""):
+    """Determine the chat format based on the model's architecture (and filename fallback).
+
+    Returns a chat-format string for llama-cpp-python, or None to let it
+    auto-select from the GGUF's embedded tokenizer.chat_template (preferred
+    for newer models such as GLM 4.x, Kimi K2, etc.).
+    """
     architecture = metadata.get('general.architecture', 'unknown')
     fmt = CHAT_FORMAT_MAP.get(architecture, 'llama-2')
-    # quick fix for the stale import problem
+
+    # Normalise stale alias that may appear from an old cached import
     if fmt == 'llama2':
         fmt = 'llama-2'
+
+    # ── Llama 3.x filename override ─────────────────────────────────────────
+    # All Llama generations (1, 2, 3, 3.x) share the same 'llama' GGUF arch key.
+    # Llama 3.x needs the 'llama-3' template; detect it via the filename.
+    if architecture == 'llama' and fmt == 'llama-2' and model_name:
+        name_lower = model_name.lower()
+        if any(k in name_lower for k in ('llama-3', 'llama3', 'llama_3')):
+            fmt = 'llama-3'
+
     return fmt
 
 def get_model_size(model_path: str) -> float:
@@ -136,7 +151,10 @@ def get_available_models():
 
     try:
         files = list(model_dir.glob("*.gguf"))
-        models = [f.name for f in files if f.is_file()]
+        # Exclude mmproj / clip projector files — they are loaded automatically
+        # alongside their parent model and must not appear in the model selector.
+        models = [f.name for f in files
+                  if f.is_file() and "mmproj" not in f.name.lower()]
         
         if models:
             print(f"[MODELS] ✓ Found {len(models)} models:")
@@ -154,29 +172,80 @@ def get_available_models():
         return ["Select_a_model..."]
 
 def get_model_settings(model_name):
+    """Derive behavioural flags from the model filename and (where available) its GGUF metadata."""
     model_name_lower = model_name.lower()
     is_uncensored = any(keyword in model_name_lower for keyword in handling_keywords["uncensored"])
-    is_reasoning = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
-    is_nsfw = any(keyword in model_name_lower for keyword in handling_keywords["nsfw"])
-    is_code = any(keyword in model_name_lower for keyword in handling_keywords["code"])
-    is_roleplay = any(keyword in model_name_lower for keyword in handling_keywords["roleplay"])
-    is_moe = any(keyword in model_name_lower for keyword in handling_keywords["moe"])
-    is_vision = any(keyword in model_name_lower for keyword in handling_keywords["vision"])
-    # Qwen3 / Qwen3.5 models can spontaneously use <think> tags even without an
-    # explicit reasoning prompt.  We track this so the system message can suppress
-    # thinking when the user has NOT chosen a dedicated reasoning model.
-    is_thinking_capable = any(keyword in model_name_lower for keyword in handling_keywords.get("thinking_capable", []))
+    is_reasoning  = any(keyword in model_name_lower for keyword in handling_keywords["reasoning"])
+    is_nsfw       = any(keyword in model_name_lower for keyword in handling_keywords["nsfw"])
+    is_code       = any(keyword in model_name_lower for keyword in handling_keywords["code"])
+    is_roleplay   = any(keyword in model_name_lower for keyword in handling_keywords["roleplay"])
+    is_moe        = any(keyword in model_name_lower for keyword in handling_keywords["moe"])
+    is_vision     = any(keyword in model_name_lower for keyword in handling_keywords["vision"])
+    is_thinking_capable = any(keyword in model_name_lower
+                               for keyword in handling_keywords.get("thinking_capable", []))
+
+    # ── Architecture / mmproj-based secondary checks ─────────────────────────
+    # Consult GGUF metadata for flags that filename keywords cannot reliably cover.
+    try:
+        import scripts.configure as _cfg
+        from pathlib import Path as _Path
+        model_path_str = str(_Path(_cfg.MODEL_FOLDER) / model_name)
+        meta = get_model_metadata(model_path_str)
+        arch = meta.get('general.architecture', '')
+
+        # MoE check — catches community GGUFs with non-obvious filenames
+        if not is_moe and arch in ('glm4moe', 'kimi'):
+            is_moe = True
+
+        # ── Universal-VL architecture check ───────────────────────────────────
+        # Certain model families are vision-language by default at the architecture
+        # level — every GGUF from these families ships with an mmproj file even when
+        # "vl" does not appear in the filename.  We promote is_vision to True when:
+        #   (a) the architecture belongs to a known universal-VL family, AND
+        #   (b) an mmproj file is actually present in the model folder.
+        # Condition (b) prevents false-positives for users who downloaded a text-only
+        # quant without the projector, or deliberately want text-only inference.
+        #
+        # Confirmed universal-VL families (architecture key -> reasoning):
+        #   qwen3 / qwen3_5  -- Qwen3.5 "Early fusion" VL foundation (all sizes)
+        #   qwen3moe / qwen3_5moe -- same, MoE variants
+        #   gemma4           -- Gemma 4 multimodal at launch
+        #   glm4             -- GLM-4V / GLM-4.6V-Flash / GLM-4.1V series
+        UNIVERSAL_VL_ARCHS = {
+            # Qwen3 / Qwen3.5 — all sizes, all variants (confirmed universal VL)
+            'qwen3', 'qwen3moe',
+            'qwen3_5', 'qwen3_5moe',    # underscore form
+            'qwen35', 'qwen35moe',       # confirmed live arch keys (no separator)
+            # Gemma 4 — multimodal at launch
+            'gemma4',
+            # GLM-4 dense vision variants
+            'glm4',
+        }
+        if not is_vision and arch in UNIVERSAL_VL_ARCHS:
+            mmproj = find_mmproj_file(model_path_str)
+            if mmproj:
+                is_vision = True
+                print(f"[SETTINGS] Auto-detected vision: arch={arch}, mmproj={_Path(mmproj).name}")
+
+    except Exception:
+        pass  # Metadata unavailable; keyword detection is sufficient
+
+    # GLM-Z1 reasoning variants are already caught by "z1" in reasoning keywords.
+    # Gemma 4 thinking is opt-in via <|think|> in the prompt, so NOT thinking_capable
+    # unless the model filename explicitly contains a reasoning/thinking keyword.
+
     return {
         "category": "chat",
         "is_uncensored": is_uncensored,
-        "is_reasoning": is_reasoning,
-        "is_nsfw": is_nsfw,
-        "is_code": is_code,
-        "is_roleplay": is_roleplay,
-        "is_moe": is_moe,
-        "is_vision": is_vision,
+        "is_reasoning":  is_reasoning,
+        "is_nsfw":       is_nsfw,
+        "is_code":       is_code,
+        "is_roleplay":   is_roleplay,
+        "is_moe":        is_moe,
+        "is_vision":     is_vision,
         "is_thinking_capable": is_thinking_capable,
-        "detected_keywords": [kw for kw in handling_keywords if any(k in model_name_lower for k in handling_keywords[kw])]
+        "detected_keywords": [kw for kw in handling_keywords
+                               if any(k in model_name_lower for k in handling_keywords[kw])]
     }
 
 def find_mmproj_file(model_path):
@@ -234,13 +303,50 @@ def get_model_metadata(model_path: str) -> dict:
 
     # Architecture mapping (ORDER MATTERS - most specific first)
     arch_map = {
-        'qwen3.5'  : ('qwen3', 36, 32768),   # Qwen3.5 family (0.8B–35B-A3B)
-        'qwen3'    : ('qwen3', 36, 32768),   # Qwen3 family
-        'qwen2.5'  : ('qwen2', 40, 131072),  # Qwen2.5 family
-        'qwen2'    : ('qwen2', 32, 32768),   # Qwen2 family
-        'qwen'     : ('qwen2', 40, 32768),   # Generic Qwen fallback
-        'llama'    : ('llama', 32, 32768),
-        'mistral'  : ('llama', 32, 32768),
+        # ── Qwen family ──────────────────────────────────────────────────────
+        # Qwen3.5: confirmed live GGUF arch key is 'qwen35' (no separator).
+        # 'qwen3_5' kept for forward-compat if any tools emit the underscore form.
+        'qwen3.5'   : ('qwen35',  32, 262144),  # Qwen3.5 filename prefix → qwen35 arch
+        'qwen3'     : ('qwen3',   36, 32768),   # Qwen3
+        'qwen2.5'   : ('qwen2',   40, 131072),  # Qwen2.5
+        'qwen2'     : ('qwen2',   32, 32768),   # Qwen2
+        'qwen'      : ('qwen2',   40, 32768),   # Generic Qwen fallback
+        # ── Gemma family (most specific first) ───────────────────────────────
+        'gemma-4'   : ('gemma4',  62, 131072),  # Gemma 4 31B (256K ctx) – approx 62 layers
+        'gemma4'    : ('gemma4',  62, 131072),
+        'gemma3n'   : ('gemma3n', 26, 131072),  # Gemma 3 Nano / on-device (E2B / E4B)
+        'gemma-3n'  : ('gemma3n', 26, 131072),
+        'gemma-3'   : ('gemma3',  62, 131072),  # Gemma 3 27B (131K ctx) – 62 layers
+        'gemma3'    : ('gemma3',  62, 131072),
+        'gemma'     : ('gemma3',  46, 32768),   # Generic Gemma fallback
+        # ── GLM family (most specific first) ─────────────────────────────────
+        # GLM-4.7-Flash / GLM-4V-Flash are small dense models (glm4 arch, ~9B)
+        'glm-4.7-flash' : ('glm4',    40, 131072),
+        'glm4.7-flash'  : ('glm4',    40, 131072),
+        'glm-4.6v'      : ('glm4',    40, 131072),
+        'glm4.6v'       : ('glm4',    40, 131072),
+        'glm-4.1v'      : ('glm4',    40, 131072),
+        'glm4.1v'       : ('glm4',    40, 131072),
+        # GLM 4.5/4.6/4.7/5 large MoE (355B, 93 layers, glm4moe arch)
+        'glm-4.7'   : ('glm4moe', 93, 131072),
+        'glm4.7'    : ('glm4moe', 93, 131072),
+        'glm-4.6'   : ('glm4moe', 93, 202752),
+        'glm4.6'    : ('glm4moe', 93, 202752),
+        'glm-4.5'   : ('glm4moe', 93, 131072),
+        'glm4.5'    : ('glm4moe', 93, 131072),
+        'glm-5'     : ('glm4moe', 93, 131072),
+        'glm5'      : ('glm4moe', 93, 131072),
+        # GLM 4 dense fallback (e.g. glm-4-9b-chat)
+        'glm-4'     : ('glm4',    40, 131072),
+        'glm4'      : ('glm4',    40, 131072),
+        'glm'       : ('glm4moe', 93, 131072),  # Generic GLM fallback
+        # ── Kimi family ──────────────────────────────────────────────────────
+        # Kimi K2 / K2.5 / K2.6 – ~1T param MoE (Moonshot AI)
+        'kimi-k2'   : ('kimi',    94, 131072),  # 94 layers (approx – metadata preferred)
+        'kimi'      : ('kimi',    94, 131072),
+        # ── Llama / Mistral family ────────────────────────────────────────────
+        'llama'     : ('llama',   32, 32768),
+        'mistral'   : ('llama',   32, 32768),
     }
 
     for key, (arch, layers, ctx) in arch_map.items():
@@ -274,6 +380,13 @@ def get_model_layers(model_path: str) -> int:
         f"{arch}.block_count",
         "llama.block_count",
         "qwen2.block_count",
+        "qwen3.block_count",
+        "qwen35.block_count",   # Qwen3.5 confirmed arch key
+        "glm4.block_count",
+        "glm4moe.block_count",
+        "gemma3.block_count",
+        "gemma4.block_count",
+        "kimi.block_count",
         "layers",
         "n_layers",
         "num_hidden_layers",
@@ -293,27 +406,30 @@ def get_model_layers(model_path: str) -> int:
     # to prevent short patterns matching inside larger ones, e.g. '7b' hitting '27b')
     name_lower = Path(model_path).name.lower()
     size_map = {
+        # Very large models
+        '355b': 93,   '180b': 180,  '120b': 120,
         # Large dense / very large
-        '180b': 180, '120b': 120,
-        '72b' : 80,  '70b' : 80,
+        '72b' : 80,   '70b' : 80,
         '40b' : 60,
-        # Qwen3.5-35B-A3B MoE and similar 35B models
+        # Qwen3.5-35B-A3B MoE and similar
         '35b' : 48,
-        '34b' : 60,  '32b' : 64,  '30b' : 60,
-        # Qwen3.5-27B dense
-        '27b' : 60,
+        '34b' : 60,   '32b' : 64,  '30b' : 60,
+        # Qwen3.5-27B dense / Gemma 3-27B / Gemma 4-31B
+        '31b' : 62,   '27b' : 62,
+        '26b' : 62,   # Gemma 4 26B-A4B
         '20b' : 48,
-        '14b' : 40,  '13b' : 40,
-        # Jackrong Qwen3.5-9B distilled
+        '14b' : 40,   '13b' : 40,
+        '12b' : 46,   # Gemma 3-12B (46 layers)
+        # Jackrong Qwen3.5-9B distilled / GLM-4V-Flash (9B)
         '9b'  : 36,
-        # Qwen3.5-8B and similar (Qwen3 8B uses 36 layers)
+        # Qwen3.5-8B / Qwen3-8B
         '8b'  : 36,
         '7b'  : 32,
-        # Qwen3.5-4B
-        '4b'  : 36,
+        # Qwen3.5-4B / Gemma 3-4B
+        '4b'  : 34,
         '3b'  : 26,
-        # Small models (Qwen3.5-0.8B / 1.5B / 1.7B / 2B)
-        '2b'  : 28,  '1.7b': 28,  '1.5b': 28,  '0.8b': 28,
+        # Gemma 3-1B (18 layers); Qwen3.5-2B / 1.7B / 1.5B / 0.8B
+        '2b'  : 28,   '1.7b': 28,  '1.5b': 28,  '1b'  : 18,  '0.8b': 28,
     }
 
     for pattern, count in size_map.items():
@@ -404,7 +520,25 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         return f"Cannot read model file: {e}", False, llm_state, models_loaded_state
 
     metadata = get_model_metadata(str(model_path))
-    chat_format = get_chat_format(metadata)
+
+    # ── Guard: reject mmproj / clip projector files selected as main model ──
+    # Projectors are loaded automatically via find_mmproj_file(); if the user
+    # accidentally selects one as the language model, llama.cpp would fail with
+    # "unknown model architecture: 'clip'".  Catch it here instead with a clear
+    # message.  We check (a) the GGUF metadata type field, (b) the architecture
+    # field (projectors embed arch='clip'), and (c) the filename as a last resort.
+    _meta_type = metadata.get('general.type', '')
+    _meta_arch = metadata.get('general.architecture', '')
+    if _meta_type == 'mmproj' or _meta_arch == 'clip' or 'mmproj' in model.lower():
+        _tip = (
+            f"'{model}' is a vision projector (mmproj) file — not a language model.\n"
+            "Projectors are paired automatically with their language model.\n"
+            "Select the main language-model GGUF from the same folder instead."
+        )
+        set_status("Load failed: mmproj selected as model", console=True, priority=True)
+        return f"Load failed: {_tip}", False, llm_state, models_loaded_state
+
+    chat_format = get_chat_format(metadata, model)
 
     # Check vision/reasoning flags
     model_settings = get_model_settings(model)
@@ -497,63 +631,124 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         model_lower = model.lower()
         
         try:
-            # Qwen3.5-VL detection (highest priority - before Qwen3-VL)
+            # ── Qwen VL variants (most-specific first) ────────────────────────
+            # All use Qwen25VLChatHandler; Qwen3-VL / Qwen3.5-VL are architecturally
+            # identical to Qwen2.5-VL from the chat-handler's perspective.
             if "qwen3.5-vl" in model_lower or "qwen3.5vl" in model_lower:
                 from llama_cpp.llama_chat_format import Qwen25VLChatHandler
                 chat_handler = Qwen25VLChatHandler(clip_model_path=str(mmproj_path))
                 set_status(f"Qwen3.5-VL mode with {mmproj_path.name}", console=True)
-            
-            # Qwen3-VL detection (highest priority)
+
             elif "qwen3-vl" in model_lower or "qwen3vl" in model_lower:
                 from llama_cpp.llama_chat_format import Qwen25VLChatHandler
                 chat_handler = Qwen25VLChatHandler(clip_model_path=str(mmproj_path))
                 set_status(f"Qwen3-VL mode with {mmproj_path.name}", console=True)
-            
-            # Qwen2.5-VL detection
+
             elif "qwen2.5-vl" in model_lower or "qwen2.5vl" in model_lower:
                 from llama_cpp.llama_chat_format import Qwen25VLChatHandler
                 chat_handler = Qwen25VLChatHandler(clip_model_path=str(mmproj_path))
                 set_status(f"Qwen2.5-VL mode with {mmproj_path.name}", console=True)
-            
-            # Apriel (LLaVA architecture)
+
+            # ── Gemma 3 / 4 multimodal ────────────────────────────────────────
+            # Gemma 4 and Gemma 3 both use the same Gemma3ChatHandler in recent
+            # llama-cpp-python (≥0.3.5).  Gemma 4 introduced mmproj support at
+            # launch; vision models carry an mmproj-*.gguf in the same directory.
+            elif any(k in model_lower for k in ("gemma-4", "gemma4", "gemma-3", "gemma3")):
+                try:
+                    from llama_cpp.llama_chat_format import Gemma3ChatHandler
+                    chat_handler = Gemma3ChatHandler(clip_model_path=str(mmproj_path))
+                    family = "Gemma 4" if any(k in model_lower for k in ("gemma-4", "gemma4")) else "Gemma 3"
+                    set_status(f"{family} vision mode with {mmproj_path.name}", console=True)
+                except ImportError:
+                    # Older llama-cpp-python builds may not have Gemma3ChatHandler yet;
+                    # fall back gracefully to the generic LLaVA handler.
+                    print("[VISION] Gemma3ChatHandler not found in this llama-cpp-python build, "
+                          "falling back to Llava15ChatHandler")
+                    from llama_cpp.llama_chat_format import Llava15ChatHandler
+                    chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
+                    set_status(f"Gemma vision (LLaVA fallback) with {mmproj_path.name}", console=True)
+
+            # ── GLM-4V variants (GLM-4.1V, GLM-4.6V-Flash, GLM-4.6V, etc.) ──
+            # GLM vision models use a dedicated projector (glm4v).  Handled by
+            # LLaVA 1.5 handler — GLM-4V-specific handler may not exist yet in
+            # llama-cpp-python, but the clip projector loads correctly with 1.5.
+            elif any(k in model_lower for k in ("glm-4v", "glm4v", "glm4.1v", "glm-4.1v",
+                                                  "glm4.6v", "glm-4.6v")):
+                from llama_cpp.llama_chat_format import Llava15ChatHandler
+                chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
+                set_status(f"GLM vision mode with {mmproj_path.name}", console=True)
+
+            # ── Apriel (LLaVA architecture) ───────────────────────────────────
             elif "apriel" in model_lower:
                 from llama_cpp.llama_chat_format import Llava15ChatHandler
                 chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
                 set_status(f"Apriel (LLaVA) mode with {mmproj_path.name}", console=True)
-            
-            # MiniCPM detection
+
+            # ── MiniCPM ───────────────────────────────────────────────────────
             elif "minicpm" in model_lower:
                 from llama_cpp.llama_chat_format import MiniCPMv26ChatHandler
                 chat_handler = MiniCPMv26ChatHandler(clip_model_path=str(mmproj_path))
                 set_status(f"MiniCPM mode with {mmproj_path.name}", console=True)
-            
-            # Moondream detection
+
+            # ── Moondream ─────────────────────────────────────────────────────
             elif "moondream" in model_lower:
                 from llama_cpp.llama_chat_format import MoondreamChatHandler
                 chat_handler = MoondreamChatHandler(clip_model_path=str(mmproj_path))
                 set_status(f"Moondream mode with {mmproj_path.name}", console=True)
-            
-            # LLaVA and QVQ detection
+
+            # ── LLaVA / QVQ ──────────────────────────────────────────────────
             elif "llava" in model_lower or "qvq" in model_lower:
                 from llama_cpp.llama_chat_format import Llava15ChatHandler
                 chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
                 set_status(f"LLaVA mode with {mmproj_path.name}", console=True)
-            
-            # Default to LLaVA handler
+
+            # ── Architecture-based fallback ───────────────────────────────────
+            # When no filename keyword matched, consult the GGUF metadata arch so
+            # that community models with non-standard names (e.g. "nsfwvision_v5",
+            # fine-tunes, merges) still receive the correct chat handler.
             else:
-                from llama_cpp.llama_chat_format import Llava15ChatHandler
-                chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
-                set_status(f"Default vision mode with {mmproj_path.name}", console=True)
-        
+                arch_key = metadata.get('general.architecture', '')
+                if arch_key in ('qwen3', 'qwen3_5', 'qwen3moe', 'qwen3_5moe', 'qwen35', 'qwen35moe'):
+                    # Qwen3 / Qwen3.5 VL (all sizes) — same handler as Qwen2.5-VL
+                    from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+                    chat_handler = Qwen25VLChatHandler(clip_model_path=str(mmproj_path))
+                    set_status(f"Qwen3.5 vision (arch fallback) with {mmproj_path.name}", console=True)
+                elif arch_key in ('gemma3', 'gemma3n', 'gemma4'):
+                    try:
+                        from llama_cpp.llama_chat_format import Gemma3ChatHandler
+                        chat_handler = Gemma3ChatHandler(clip_model_path=str(mmproj_path))
+                        set_status(f"Gemma vision (arch fallback) with {mmproj_path.name}", console=True)
+                    except ImportError:
+                        from llama_cpp.llama_chat_format import Llava15ChatHandler
+                        chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
+                        set_status(f"Gemma vision (LLaVA fallback) with {mmproj_path.name}", console=True)
+                elif arch_key in ('glm4', 'glm4moe'):
+                    from llama_cpp.llama_chat_format import Llava15ChatHandler
+                    chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
+                    set_status(f"GLM vision (arch fallback) with {mmproj_path.name}", console=True)
+                else:
+                    # True last resort — LLaVA 1.5 is compatible with most clip projectors
+                    from llama_cpp.llama_chat_format import Llava15ChatHandler
+                    chat_handler = Llava15ChatHandler(clip_model_path=str(mmproj_path))
+                    set_status(f"Default vision mode with {mmproj_path.name}", console=True)
+
         except Exception as e:
-            return f"Vision handler failed: {e}\nMake sure llama-cpp-python ≥0.3.2 is installed", False, llm_state, models_loaded_state
+            return (f"Vision handler failed: {e}\n"
+                    "Make sure llama-cpp-python ≥0.3.5 is installed for Gemma 3/4 vision support."),\
+                   False, llm_state, models_loaded_state
 
     # ────────────────────────────────────────────────────────────────
     # [PHASE 5: FINAL SAFETY CHECKS] Context/batch sizing + model load
     # ────────────────────────────────────────────────────────────────
-    n_ctx_train = metadata.get("llama.context_length", 32768)
-    n_vocab = metadata.get("tokenizer.ggml.model_count", 32000)
-    n_embd = metadata.get("llama.embedding_length", 4096)
+    arch = metadata.get("general.architecture", "unknown")
+    # Pull context/vocab/embedding from the correct arch-prefixed keys,
+    # falling back to the hard-coded 'llama.*' keys for backward compat.
+    n_ctx_train = (metadata.get(f"{arch}.context_length")
+                   or metadata.get("llama.context_length", 32768))
+    n_vocab     = (metadata.get("tokenizer.ggml.vocab_size")
+                   or metadata.get("tokenizer.ggml.model_count", 32000))
+    n_embd      = (metadata.get(f"{arch}.embedding_length")
+                   or metadata.get("llama.embedding_length", 4096))
 
     # CRITICAL: Cap context to model's trained limit (respect user setting)
     effective_ctx = min(CONTEXT_SIZE, n_ctx_train)
@@ -567,8 +762,13 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         "mmap": MMAP,
         "mlock": MLOCK,
         "verbose": True,
-        "chat_format": chat_format
     }
+    # Only set chat_format when we have an explicit value; None means "let
+    # llama-cpp-python auto-select from the GGUF's embedded chat template"
+    # (required for GLM 4.x, Kimi K2, and any other model that stores its
+    #  own tokenizer.chat_template inside the GGUF file).
+    if chat_format is not None:
+        kwargs["chat_format"] = chat_format
 
     # Backend-specific GPU layer configuration
     if BACKEND_TYPE == "VULKAN_VULKAN":
@@ -655,12 +855,37 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         import scripts.configure as cfg
         cfg.GPU_LAYERS = 0
         tb = traceback.format_exc()
-        err_msg = (
-            f"Error loading model: {e}\n"
-            f"GPU Layers: {gpu_layers}/{num_layers} | Batch: {kwargs.get('n_batch')}\n"
-            f"Context: {effective_ctx} (trained max: {n_ctx_train})\n"
-            f"{tb}"
+        err_str = str(e)
+
+        # ── Architecture-version guidance ─────────────────────────────────────
+        # When llama.cpp doesn't know an arch key, it raises "unknown model
+        # architecture: '<key>'" inside "Failed to load model from file".
+        # Give the user a direct, actionable message instead of a raw traceback.
+        _arch = metadata.get('general.architecture', '')
+        _QWEN35_ARCHS = ('qwen35', 'qwen3_5', 'qwen35moe', 'qwen3_5moe')
+        _is_arch_error = (
+            'unknown model architecture' in tb.lower()
+            or 'failed to load model from file' in err_str.lower()
         )
+        if _arch in _QWEN35_ARCHS and _is_arch_error:
+            err_msg = (
+                f"Load failed: llama.cpp is too old to support Qwen3.5 (arch='{_arch}').\n\n"
+                "Qwen3.5 support was added in llama.cpp b8076 (February 2026).\n"
+                "Your install uses a prebuilt wheel (v0.3.16) that bundles llama.cpp\n"
+                "from August 2025, which predates this architecture.\n\n"
+                "Fix: re-run installer.py and choose a COMPILE route (option 3 or 4).\n"
+                "The compile route fetches the latest llama.cpp source and builds a\n"
+                "wheel that supports qwen35 and all current architectures.\n\n"
+                f"GPU Layers: {gpu_layers}/{num_layers} | Batch: {kwargs.get('n_batch')}\n"
+                f"Context: {effective_ctx} (trained max: {n_ctx_train})"
+            )
+        else:
+            err_msg = (
+                f"Error loading model: {e}\n"
+                f"GPU Layers: {gpu_layers}/{num_layers} | Batch: {kwargs.get('n_batch')}\n"
+                f"Context: {effective_ctx} (trained max: {n_ctx_train})\n"
+                f"{tb}"
+            )
         print(err_msg)
         set_status("Model load failed", console=True, priority=True)
         return err_msg, False, None, False
@@ -681,8 +906,20 @@ def calculate_single_model_gpu_layers_with_layers(
     meta = get_model_metadata(model_path)
     arch = meta.get("general.architecture", "unknown")
 
-    # Model overhead factors
-    factor = 1.15 if arch in ("qwen2", "qwen2.5", "qwen", "qwen3", "qwen3_5") else 1.20 if arch == "llama" else 1.25
+    # Model overhead factors (Qwen is well-optimised; Llama slightly larger; others more conservative)
+    _qwen_archs   = ("qwen2", "qwen2.5", "qwen", "qwen3", "qwen3_5", "qwen35", "qwen35moe", "qwen3_5moe")
+    _llama_archs  = ("llama",)
+    _gemma_archs  = ("gemma3", "gemma3n", "gemma4")
+    _glm_archs    = ("glm4", "glm4moe", "chatglm")
+    _kimi_archs   = ("kimi",)
+    if arch in _qwen_archs:
+        factor = 1.15
+    elif arch in _llama_archs:
+        factor = 1.20
+    elif arch in _gemma_archs or arch in _glm_archs or arch in _kimi_archs:
+        factor = 1.20  # Gemma/GLM/Kimi well-characterised; same as Llama
+    else:
+        factor = 1.25
     adjusted_mb = model_mb * factor
     layer_mb = adjusted_mb / num_layers
 
@@ -699,9 +936,18 @@ def calculate_single_model_gpu_layers_with_layers(
         print(f"[GPU-LAYERS-VULKAN] VRAM {available_vram}MB, reserve {total_reserve}MB "
               f"(ctx:{context_reserve} batch:{batch_reserve} vk:{vulkan_overhead})")
     else:
-        # Standard reserve for non-Vulkan
-        embedding_dim = {"llama": 4096, "qwen2": 5120, "qwen": 5120,
-                         "qwen3": 5120, "qwen3_5": 5120}.get(arch, 4096)
+        # Embedding dimensions per architecture for KV-cache graph reserve estimate
+        embedding_dim = {
+            "llama"    : 4096,
+            "qwen2"    : 5120, "qwen"    : 5120,
+            "qwen3"    : 5120, "qwen3_5" : 5120,
+            "qwen35"   : 4096, "qwen35moe": 4096,  # Qwen3.5-9B hidden_size=4096
+            "gemma3"   : 3072, "gemma3n" : 1152,
+            "gemma4"   : 3840,
+            "glm4"     : 4096,
+            "glm4moe"  : 5120,
+            "kimi"     : 7168,
+        }.get(arch, 4096)
         graph_mb = 3 * (cfg.CONTEXT_SIZE / 1024) ** 2 * embedding_dim * 4 / 1024 / 1024
         reserve_mb = max(256, int(graph_mb * 1.2))
         usable_vram = max(0, available_vram - reserve_mb)

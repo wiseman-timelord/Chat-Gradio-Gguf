@@ -2725,10 +2725,8 @@ def launch_display():
                 
 
                 # Save button + status + exit
-                gr.Markdown("---")
                 with gr.Row():
                     save_config_btn = gr.Button("Save All Configuration", variant="primary", size="lg")
-                gr.Markdown("---")
                 with gr.Row():
                     config_status = gr.Textbox(
                         value="Configuration loaded",
@@ -2804,12 +2802,8 @@ def launch_display():
                     )
                 
                 # ── Save Button ─────────────────────────────────────────────────────────────
-                gr.Markdown("---")
-
                 with gr.Row():
                     save_all_btn = gr.Button("Save All Settings", variant="primary", size="lg")
-
-                gr.Markdown("---")
                 
                 # ── FINAL ROW: Status + Exit (IDENTICAL TO CONVERSATION TAB) ────────────────
                 with gr.Row():
@@ -2837,11 +2831,11 @@ def launch_display():
                
                 # ── Section B: INI Constants ──────────────────────────────────────────────
                 with gr.Group():
-                    gr.Markdown("### System Constants (from constants.ini)")
+                    gr.Markdown("### System Constants (constants.ini)")
                     ini_display = gr.Textbox(
                         label="INI Values (read-only, set by installer)",
                         value=get_ini_display_text(),
-                        lines=10,
+                        lines=6,
                         interactive=False
                     )
                 
@@ -2855,9 +2849,7 @@ def launch_display():
                         interactive=False
                     )
                     refresh_debug_btn = gr.Button("🔄 Refresh Debug Info", variant="secondary")
-                
-                gr.Markdown("---")
-                
+                1               
                 # ── FINAL ROW: Status + Exit ─────────────────────────────────────────────
                 with gr.Row():
                     info_status = gr.Textbox(

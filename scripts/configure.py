@@ -154,8 +154,8 @@ MAX_HISTORY_SLOTS = 12
 MAX_ATTACH_SLOTS = 6
 SESSION_LOG_HEIGHT = 650
 INPUT_LINES = 27
-VRAM_OPTIONS = [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536]
-CTX_OPTIONS = [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072]
+VRAM_OPTIONS = [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536, 65536, 98304]
+CTX_OPTIONS = [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072, 196608, 262144]
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096, 8096]
 TTS_TYPE = "builtin"                     # TTS type: "builtin" or "coqui"
 COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243")
@@ -281,31 +281,100 @@ STATUS_MESSAGES = {
 }
 
 CHAT_FORMAT_MAP = {
-    'qwen2'     : 'chatml',
-    'llama'     : 'llama-2',
-    'qwen3'     : 'chatml',
-    'qwen3moe'  : 'chatml',
-    'qwen3_5'   : 'chatml',   # Qwen3.5 dense (potential new GGUF arch key)
-    'qwen3_5moe': 'chatml',   # Qwen3.5 MoE A3B (potential new GGUF arch key)
-    'deepseek2' : 'deepseek',
-    'stablelm'  : 'chatml',
+    # ── Qwen family ───────────────────────────────────────────────────────────
+    'qwen2'      : 'chatml',
+    'qwen3'      : 'chatml',
+    'qwen3moe'   : 'chatml',
+    'qwen3_5'    : 'chatml',    # Qwen3.5 dense (underscore variant)
+    'qwen35'     : 'chatml',    # Qwen3.5 dense (confirmed live GGUF arch key)
+    'qwen3_5moe' : 'chatml',    # Qwen3.5 MoE A3B (underscore variant)
+    'qwen35moe'  : 'chatml',    # Qwen3.5 MoE A3B (no-separator variant)
+    # ── Llama family ──────────────────────────────────────────────────────────
+    # NOTE: Llama 3.x shares 'llama' arch key with Llama 1/2.
+    #       get_chat_format() detects Llama 3 via filename and overrides to 'llama-3'.
+    'llama'      : 'llama-2',
+    # ── DeepSeek family ───────────────────────────────────────────────────────
+    # DeepSeek V2/V3/R1/V3.2 all use the 'deepseek2' GGUF arch key.
+    # 'deepseek2' format is correct; 'deepseek' was the V1-only template.
+    'deepseek2'  : 'deepseek2',
+    # ── Gemma family ──────────────────────────────────────────────────────────
+    # Gemma 3 (GGUF arch: 'gemma3'), Gemma 3 Nano/on-device (arch: 'gemma3n'),
+    # and Gemma 4 (arch: 'gemma4') all use the same 'gemma' instruct template.
+    'gemma3'     : 'gemma',
+    'gemma3n'    : 'gemma',     # Gemma 3n / Gemma 3 Nano (E2B, E4B on-device)
+    'gemma4'     : 'gemma',
+    # ── GLM family ────────────────────────────────────────────────────────────
+    # GLM 4.x dense models (e.g. GLM-4-9B, GLM-4.7-Flash) → arch: 'glm4'
+    # GLM 4.5/4.6/4.7/5 MoE (355B) → arch: 'glm4moe'
+    # Legacy ChatGLM → arch: 'chatglm'
+    # All GLM models have a reliable tokenizer.chat_template embedded in GGUF,
+    # so pass None to let llama-cpp-python auto-select via the embedded template.
+    'glm4'       : None,
+    'glm4moe'    : None,
+    'chatglm'    : None,
+    # ── Kimi family ───────────────────────────────────────────────────────────
+    # Kimi K2 / K2.5 / K2.6 MoE (Moonshot AI) → arch: 'kimi'
+    # Use embedded GGUF template (kimi-k2 format may not be in all llama-cpp-python builds).
+    'kimi'       : None,
+    # ── Misc ──────────────────────────────────────────────────────────────────
+    'stablelm'   : 'chatml',
 }
 
 # Handling Keywords for Special Model Behaviors
 handling_keywords = {
     "code": ["code", "program", "dev", "copilot", "python", "powershell"],
-    "uncensored": ["uncensored", "unfiltered", "unbiased", "unlocked", "abliterat"],
-    "reasoning": ["reason", "r1", "think", "thinking"],
+
+    "uncensored": [
+        "uncensored", "unfiltered", "unbiased", "unlocked", "abliterat",
+        # ── Enhancement fine-tunes that produce uncensored / abliterated behaviour ──
+        "heretic",          # heretic.ai abliterated variants (any base model family)
+        "deeprefusal",      # Llama 3.x DeepRefusal anti-refusal fine-tunes
+        "deep-refusal",     # same, hyphenated filename variant
+        "claudeopus",       # ClaudeOpus-style jailbreak merges (e.g. Llama-3-ClaudeOpus-*)
+        "claude-opus",      # same, hyphenated filename variant
+    ],
+
+    "reasoning": [
+        "reason", "r1", "think", "thinking",
+        # ── Explicit reasoning-model name tokens ──
+        "z1",               # GLM-Z1 series (GLM reasoning / chain-of-thought models)
+    ],
+
     "nsfw": ["nsfw", "adult", "mature", "explicit", "lewd"],
     "roleplay": ["rpg", "role", "adventure"],
-    "moe": ["moe", "mixtral", "deepseek-v2", "gpt-oss", "harmony", "qwen2moe", "qwen2.5moe",
-            "dbrx", "arctic", "grok", "a3b", "a22b", "a14b"],
-    "vision": ["vision", "llava", "moondream", "minicpm", "qvq", "apriel",
-               "qwen3.5-vl", "qwen3.5vl", "qwen3-vl", "qwen3vl", "qwen2.5-vl"],
-    # Models that can spontaneously use <think> tags even without reasoning instructions.
-    # When not explicitly in reasoning mode, the no_reasoning directive is injected to
-    # suppress spurious thinking (applies to Qwen3 and Qwen3.5 families).
-    "thinking_capable": ["qwen3"],
+
+    "moe": [
+        "moe", "mixtral", "deepseek-v2", "gpt-oss", "harmony",
+        "qwen2moe", "qwen2.5moe",
+        "dbrx", "arctic", "grok", "a3b", "a22b", "a14b",
+        # GLM MoE families (355B – GLM-4.5/4.6/4.7/5)
+        "glm-4.5", "glm-4.6", "glm-4.7", "glm-5",
+        "glm4.5", "glm4.6", "glm4.7", "glm5",
+        # Kimi K2 / K2.5 / K2.6 (Moonshot AI ~1T MoE)
+        "kimi-k2", "kimi",
+    ],
+
+    "vision": [
+        "vision", "llava", "moondream", "minicpm", "qvq", "apriel",
+        # Qwen vision variants (existing)
+        "qwen3.5-vl", "qwen3.5vl", "qwen3-vl", "qwen3vl", "qwen2.5-vl",
+        # Gemma multimodal variants (Gemma 4 supports vision via mmproj)
+        "gemma3-vl", "gemma-3-vl", "gemma4-vl", "gemma-4-vl",
+        # GLM vision variants (e.g. GLM-4V-Flash, GLM-4.6V-Flash, GLM-4.1V)
+        "glm-4v", "glm4v", "glm4.1v", "glm-4.1v", "glm4.6v", "glm-4.6v",
+    ],
+
+    # Models that can spontaneously emit <think>…</think> blocks even without an
+    # explicit reasoning-mode instruction.  The no_reasoning directive is injected
+    # into the system prompt to suppress spurious thinking unless the user has
+    # selected a dedicated reasoning / thinking model.
+    "thinking_capable": [
+        # Qwen3 / Qwen3.5 family (existing)
+        "qwen3",
+        # GLM 4.7 and GLM 5 emit <think> natively in standard chat responses
+        "glm-4.7", "glm4.7",
+        "glm-5",   "glm5",
+    ],
 }
 
 # =============================================================================

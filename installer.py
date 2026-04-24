@@ -23,9 +23,24 @@ BASE_DIR = Path(__file__).parent
 VENV_DIR = BASE_DIR / ".venv"
 LLAMACPP_GIT_REPO = "https://github.com/ggml-org/llama.cpp.git"
 LLAMACPP_PYTHON_GIT_REPO = "https://github.com/abetlen/llama-cpp-python.git"
-LLAMACPP_PYTHON_VERSION = "v0.3.16"  # (check here for latest github.com/eswarthammana/llama-cpp-wheels/releases/)
-LLAMACPP_TARGET_VERSION = "b8502"
-DOWNLOAD_RELEASE_TAG = "b8502" 
+# llama-cpp-python version strategy:
+#   LLAMACPP_PYTHON_PREBUILT_VERSION — last version with CPU prebuilt wheels
+#     from eswarthammana (cpu-only, Win/Linux/Mac, cp38-cp313).
+#     eswarthammana stopped publishing after v0.3.16 (Aug 2025).
+#     v0.3.16 bundles llama.cpp from Aug 2025 → does NOT support qwen35
+#     (qwen35 was added Feb 2026, b8076).  Users who need qwen35/Qwen3.5
+#     models MUST use a compile route (options 3 or 4).
+LLAMACPP_PYTHON_PREBUILT_VERSION = "v0.3.16"
+#
+#   LLAMACPP_PYTHON_VERSION — resolved at install time to the latest GitHub
+#     release tag for abetlen/llama-cpp-python.  Compile routes clone this
+#     version so users always get current architecture support without
+#     needing to update the installer.  Falls back to a hardcoded minimum
+#     if the GitHub API is unreachable.
+LLAMACPP_PYTHON_VERSION = None          # resolved dynamically by get_latest_llamacpp_python_version()
+LLAMACPP_PYTHON_VERSION_FALLBACK = "v0.3.20"  # used when GitHub API is unreachable
+LLAMACPP_TARGET_VERSION = "b8882"
+DOWNLOAD_RELEASE_TAG = "b8882" 
 WIN_COMPILE_TEMP = Path("C:/temp_build")      # fixed Windows build folder (short path)
 LINUX_COMPILE_TEMP = None                       # Linux keeps using project-local temp
 _INSTALL_PROCESSES = set()
@@ -917,20 +932,31 @@ def prompt_build_threads() -> None:
         else:
             print("    Please enter 1 or 2.")
 
-def _get_prebuilt_wheel_url(mirror: str = "abetlen") -> str:
-    """Return a direct download URL for the pre-built llama-cpp-python wheel.
+def _get_prebuilt_wheel_urls() -> list:
+    """Return an ordered list of URLs/install-specs to try for llama-cpp-python.
 
-    mirror="abetlen"       → github.com/abetlen/llama-cpp-python  (primary)
-    mirror="eswarthammana" → github.com/eswarthammana/llama-cpp-wheels (fallback)
+    Strategy (tried in order):
+      1. eswarthammana mirror  — community CPU wheel builder; has cp38-cp313 for
+                                  all versions it covers (currently up to v0.3.16).
+      2. abetlen GitHub release — upstream; only CUDA/Metal builds, so this 404s
+                                  for CPU-only wheels but is tried cheaply anyway.
+      3. abetlen CPU index      — pip extra-index-url install spec; the index at
+                                  abetlen.github.io/llama-cpp-python/whl/cpu
+                                  sometimes carries newer CPU wheels.
+      4. PyPI --prefer-binary   — plain `pip install llama-cpp-python==VERSION`
+                                  with --prefer-binary: installs a binary wheel
+                                  from any index if one exists; does NOT fall
+                                  through to source compilation (fail fast).
 
-    The abetlen.github.io/whl index is intentionally NOT used — it is stale
-    and stops at v0.3.2.
-
-    Returns an empty string when no wheel exists for the current platform.
+    Returns a list of dicts:
+        {"type": "url",     "value": "<direct whl url>"}    — install from URL
+        {"type": "index",   "value": "<version spec>",
+         "extra_index": "<url>"}                            — pip install + index
+        {"type": "pypi",    "value": "<version spec>"}      — pip install PyPI
     """
     import platform as _plat
-    version = LLAMACPP_PYTHON_VERSION.lstrip("v")   # "v0.3.16" → "0.3.16"
-    py_tag  = _PY_TAG                                # e.g. "cp311"
+    version = LLAMACPP_PYTHON_PREBUILT_VERSION.lstrip("v")   # "v0.3.16" → "0.3.16"
+    py_tag  = _PY_TAG                                # e.g. "cp312"
 
     if PLATFORM == "windows":
         platform_tag = "win_amd64"
@@ -941,21 +967,100 @@ def _get_prebuilt_wheel_url(mirror: str = "abetlen") -> str:
         elif machine in ("aarch64", "arm64"):
             platform_tag = "linux_aarch64"
         else:
-            return ""
+            platform_tag = None
 
-    filename = f"llama_cpp_python-{version}-{py_tag}-{py_tag}-{platform_tag}.whl"
+    sources = []
+    filename = (f"llama_cpp_python-{version}-{py_tag}-{py_tag}-{platform_tag}.whl"
+                if platform_tag else None)
 
-    if mirror == "eswarthammana":
-        return (
-            f"https://github.com/eswarthammana/llama-cpp-wheels"
-            f"/releases/download/v{version}/{filename}"
+    # 1 — eswarthammana community mirror (CPU prebuilts; may not have latest version)
+    if filename:
+        sources.append({
+            "type": "url",
+            "label": f"eswarthammana mirror (v{version})",
+            "value": (f"https://github.com/eswarthammana/llama-cpp-wheels"
+                      f"/releases/download/v{version}/{filename}")
+        })
+
+    # 2 — abetlen GitHub release (covers CUDA/Metal; 404s for CPU-only, cheap to try)
+    if filename:
+        sources.append({
+            "type": "url",
+            "label": f"abetlen GitHub releases (v{version})",
+            "value": (f"https://github.com/abetlen/llama-cpp-python"
+                      f"/releases/download/v{version}/{filename}")
+        })
+
+    # 3 — abetlen CPU wheel index (maintained alongside the project)
+    sources.append({
+        "type": "index",
+        "label": f"abetlen CPU index (v{version})",
+        "value": f"llama-cpp-python=={version}",
+        "extra_index": "https://abetlen.github.io/llama-cpp-python/whl/cpu"
+    })
+
+    # 4 — PyPI --prefer-binary (any binary found on any index; no source compile)
+    sources.append({
+        "type": "pypi",
+        "label": f"PyPI binary (v{version}, --prefer-binary)",
+        "value": f"llama-cpp-python=={version}",
+    })
+
+    return sources
+    return sources
+
+
+def get_latest_llamacpp_python_version() -> str:
+    """Query GitHub API for the latest abetlen/llama-cpp-python release tag.
+
+    Returns the clean base tag string (e.g. "v0.3.20") on success,
+    stripping any backend-specific suffix that abetlen appends per CUDA/Metal
+    release variant (e.g. "v0.3.20-cu123" → "v0.3.20").
+
+    Falls back silently to LLAMACPP_PYTHON_VERSION_FALLBACK if the API is
+    unreachable or returns unexpected data.  No console output — callers
+    display the resolved version in context (e.g. in the menu label).
+
+    Uses only stdlib (urllib) so it works before the venv is populated.
+    """
+    global LLAMACPP_PYTHON_VERSION
+
+    # Already resolved — return cached value
+    if LLAMACPP_PYTHON_VERSION is not None:
+        return LLAMACPP_PYTHON_VERSION
+
+    api_url = "https://api.github.com/repos/abetlen/llama-cpp-python/releases/latest"
+    try:
+        import urllib.request, urllib.error, json as _json, re as _re
+        req = urllib.request.Request(
+            api_url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Chat-Gradio-Gguf-Installer/1.0",
+            }
         )
-    else:  # abetlen (primary)
-        return (
-            f"https://github.com/abetlen/llama-cpp-python"
-            f"/releases/download/v{version}/{filename}"
-        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+        tag = data.get("tag_name", "").strip()
+        if tag and tag.startswith("v"):
+            # abetlen publishes multiple GitHub release entries per version —
+            # one per CUDA variant (v0.3.20-cu121, -cu122, -cu123 …) plus
+            # -metal, -rocm, -sycl.  releases/latest returns whichever was
+            # pushed last (almost always a CUDA variant).  Strip the suffix:
+            # the source code at every v0.3.20-* tag is identical, and we
+            # compile ourselves with our own flags (Vulkan/CPU/AVX2/FMA etc.)
+            # so the backend suffix is irrelevant to us.
+            base_tag = _re.sub(
+                r'-(cu[0-9]+|metal|rocm[0-9.]*|sycl)$', '',
+                tag, flags=_re.IGNORECASE
+            )
+            LLAMACPP_PYTHON_VERSION = base_tag
+            return base_tag
+    except Exception:
+        pass  # Network/API failure — fall through to fallback below
 
+    LLAMACPP_PYTHON_VERSION = LLAMACPP_PYTHON_VERSION_FALLBACK
+    return LLAMACPP_PYTHON_VERSION_FALLBACK
 def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
     """Build llama-cpp-python from source with optimal CPU flags."""
     global _DID_COMPILATION
@@ -990,9 +1095,11 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
     if cpu_features.get("F16C"):
         build_flags["GGML_F16C"] = "ON"
     
-    # Minimal safe flags - do NOT disable LLAMA_BUILD_EXAMPLES or LLAMA_BUILD_SERVER
-    # as this causes CMake errors with mtmd/llava targets in v0.3.16
-    build_flags["LLAMA_CURL"] = "OFF"
+    # Minimal safe flags.
+    # Note: LLAMA_CURL was renamed to GGML_CURL in llama.cpp ~b7500+.
+    # Set both so the build works whether the bundled llama.cpp is old or new.
+    build_flags["GGML_CURL"] = "OFF"
+    build_flags["LLAMA_CURL"] = "OFF"   # legacy alias — safe to set on newer builds
     build_flags["GGML_OPENMP"] = "ON"
     
     # Build CMAKE_ARGS properly - use -D prefix for CMake
@@ -1040,8 +1147,10 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
                 if repo_dir.exists():
                     shutil.rmtree(repo_dir, ignore_errors=True)
         
-        print_status(f"Cloning llama-cpp-python {LLAMACPP_PYTHON_VERSION} (Python wrapper — bundles llama.cpp internally)...")
-        print(f"  Note: {LLAMACPP_PYTHON_VERSION} is the Python wrapper version, not a llama.cpp build tag.")
+        # Resolve version at compile time — may already be cached from the menu
+        compile_version = get_latest_llamacpp_python_version()
+        print_status(f"Cloning llama-cpp-python {compile_version} (Python wrapper — bundles llama.cpp internally)...")
+        print(f"  Note: {compile_version} is the Python wrapper version, not a llama.cpp build tag.")
         print(f"  This clones the wrapper + its llama.cpp submodule (~200-400 MB). Please wait...")
 
         # Clone specific release version with retry for network issues.
@@ -1058,7 +1167,7 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
 
             clone_proc = subprocess.Popen(
                 ["git", "clone", "--progress", "--depth", "1",
-                 "--branch", LLAMACPP_PYTHON_VERSION,
+                 "--branch", compile_version,
                  "--recurse-submodules", "--shallow-submodules",
                  LLAMACPP_PYTHON_GIT_REPO, str(repo_dir)],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -2296,28 +2405,69 @@ def install_python_deps(backend: str) -> bool:
         info = BACKEND_OPTIONS[backend]
         
         if not info.get("compile_wheel"):
-            # Download-only routes (options 1 & 2)
-            wheel_version = LLAMACPP_PYTHON_VERSION.lstrip("v")
-            wheel_url = _get_prebuilt_wheel_url("eswarthammana")
+            # Download-only routes (options 1 & 2) — try sources in priority order.
+            # No source compilation occurs here; if all prebuilt sources fail the
+            # user is directed to a compile route (options 3 or 4).
+            wheel_version = LLAMACPP_PYTHON_PREBUILT_VERSION.lstrip("v")
+            sources = _get_prebuilt_wheel_urls()
 
-            if not wheel_url:
-                print_status("No pre-built wheel available for this platform.", False)
+            if not sources:
+                print_status("No pre-built wheel sources available for this platform.", False)
                 print("  Re-run the installer and select option 3 or 4 to compile from source.")
                 return False
 
-            print_status(f"Installing pre-built llama-cpp-python {wheel_version} (CPU)...")
-            print(f"    {wheel_url}")
-            installed = pip_install_with_retry(
-                pip_exe, wheel_url,
-                max_retries=10, initial_delay=5.0
-            )
+            print_status(f"Installing llama-cpp-python {wheel_version} (CPU, trying {len(sources)} sources)...")
+            installed = False
 
-            if installed:
-                print_status(f"Pre-built llama-cpp-python {wheel_version} installed")
-            else:
-                print_status("Pre-built llama-cpp-python could not be installed.", False)
-                print("  Check your internet connection, or re-run the installer and")
-                print("  select option 3 or 4 to compile llama-cpp-python from source.")
+            for src in sources:
+                label = src.get("label", src["value"])
+                print(f"  Trying: {label}")
+
+                if src["type"] == "url":
+                    # Direct .whl URL — quick 404 check before full retry loop
+                    installed = pip_install_with_retry(
+                        pip_exe, src["value"],
+                        max_retries=2, initial_delay=3.0   # fail fast on 404
+                    )
+
+                elif src["type"] == "index":
+                    # pip install with an extra index URL
+                    installed = pip_install_with_retry(
+                        pip_exe, src["value"],
+                        extra_args=["--extra-index-url", src["extra_index"],
+                                    "--prefer-binary"],
+                        max_retries=3, initial_delay=5.0
+                    )
+
+                elif src["type"] == "pypi":
+                    # PyPI with --prefer-binary: uses any binary wheel available;
+                    # does NOT compile from source (pip exits non-zero if no binary found).
+                    installed = pip_install_with_retry(
+                        pip_exe, src["value"],
+                        extra_args=["--prefer-binary"],
+                        max_retries=3, initial_delay=5.0
+                    )
+
+                if installed:
+                    print_status(f"llama-cpp-python {wheel_version} installed via {label}")
+                    break
+                else:
+                    print(f"  Source unavailable: {label}")
+
+            if not installed:
+                print_status(f"llama-cpp-python {wheel_version} could not be installed from any prebuilt source.", False)
+                print()
+                print("  All prebuilt wheel sources were tried and failed.")
+                print(f"  The most likely cause: no prebuilt CPU wheel exists yet for v{wheel_version}.")
+                print(f"  (eswarthammana last published v0.3.16; abetlen CPU index may lag behind PyPI)")
+                print()
+                print("  Options:")
+                print("    1. Re-run the installer and select option 3 or 4 to compile from source.")
+                print("       Compilation takes 10-30 minutes but produces a wheel matched to your CPU.")
+                print(f"   2. Manually install an older compatible wheel:")
+                print(f"      pip install llama-cpp-python==0.3.16 --extra-index-url")
+                print(f"      https://abetlen.github.io/llama-cpp-python/whl/cpu")
+                print(f"      (Note: v0.3.16 does NOT support Qwen3.5/qwen35 architecture)")
                 return False
         else:
             build_flags = info.get("build_flags", {})
@@ -2946,15 +3096,27 @@ def select_backend_and_install_size():
             continue
         backend_opts.append(backend)
 
+    # Resolve compile-route wheel version (API call; cached after first call)
+    compile_ver = get_latest_llamacpp_python_version()
+    prebuilt_ver = LLAMACPP_PYTHON_PREBUILT_VERSION
+
+    def _wheel_label(backend_name: str) -> str:
+        """Return the wheel version annotation for a backend menu option."""
+        info = BACKEND_OPTIONS[backend_name]
+        if info.get("compile_wheel"):
+            return f"Wheel {compile_ver}"
+        else:
+            return f"Wheel {prebuilt_ver}"
+
     print("Backend Options...")
     for i, backend in enumerate(backend_opts, 1):
-        print(f"   {i}) {backend}")
+        print(f"   {i}) {backend} ({_wheel_label(backend)})")
 
     if not build_possible:
         print(f"   ---")
         for backend in all_backend_opts:
             if backend not in backend_opts:
-                print(f"   -) {backend} (Missing: {', '.join(missing_tools)})")
+                print(f"   -) {backend} ({_wheel_label(backend)}) (Missing: {', '.join(missing_tools)})")
 
     print()
 
