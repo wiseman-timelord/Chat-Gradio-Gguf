@@ -313,7 +313,9 @@ Web Search = Slower actual website reading research.
 - "Chat-Windows-Gguf" and "Chat-Linux-Gguf", is now "Chat-Gradio-Gguf", as yes, these dual-mode scripts used to be 2 different/same programs.
 - Through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files.
 
-### Models working (with gpt for comparrisson). 
+### Models working (with gpt for comparrisson).
+- Models newer than Qwen 3 will (at the current time/date) require to compile during install, this is due to a versioning difference between, the available pre-built wheels and the latest llama.cpp binary. Hope that makes sense. Either way, the models just keep getting better...
+
 | Model                                  | IFEval   | BBH      | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
 | Early GPT-4 (compare stats)            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
