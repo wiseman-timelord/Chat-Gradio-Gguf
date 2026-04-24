@@ -387,9 +387,10 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 ```
 
-# Development for v1.10.x Release
-There has been an overhaul, its almost working correctly, but some issues remain...
-1. the program needs to be compatible with the qwen 3.5/3.6 with/without huihui/abliterated/ClaudeOpus/Heretic enhancment handling.
+# Development for next release
+There has been an overhaul, its it seems to work correctly, the next plans are...
+1. Possibly more testing of newer models that are not Qwen 3.5.
+2. Testing/Bugfixing on Ubuntu 22.
 
 # Update Ideas
 - It would be great to have a Auto/Quick/Think toggle, so as to have some pre-configured 1b model or the likes be able to do a quick assessment of, if the request is simple or complete, to then, disable think for simple tasks and enable think for complex tasks, and additionally we would want to have it assess context/batch lengths, if the user additionally has those set to auto. Other settings could also be determined through this auto feature pre-prompt system. Needs brainstorming.
