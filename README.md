@@ -30,8 +30,11 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
 
 ### Preview
-- The Interaction page on Windows, showing the Web Search tool using the model Qwen3 4B Abliterated (v1.10.8)...
+- The Interaction page showing the Web Search tool. Windows using the model Qwen3 4B Abliterated (v1.10.8)...
 ![image_missing](media/conversation_page_windows.jpg)
+
+- The Y1400 Portrait display configuration optimally displaying text. Windows using the model Qwen3 4B Abliterated (v1.10.8)...
+![image_missing](media/expanded_portrait.jpg)
 
 - The Interaction page on Ubuntu, here showing the DDG Search tool, with Ubuntu Terminal in the background (v1.02.1)...
 ![image_missing](media/conversation_page_ubuntu.jpg)
@@ -301,6 +304,7 @@ Web Search = Slower actual website reading research.
 ```
 
 ### Notation 
+- Changing height of session log height as shown in media section requires restart of GUI, to re-initialize the complicated and fragile dynamic UI through browser fake GUI interface. 
 - Because of how the WT-Web interface works, there is ongoing issue with how sometimes lists of values in the configuration page are non-selectable; just select a different number in list first, then select number you want. Only way to fix this would be to drop older windows/ubuntu support.  
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
 - Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
