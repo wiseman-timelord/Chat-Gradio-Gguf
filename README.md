@@ -320,8 +320,8 @@ Web Search = Slower actual website reading research.
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
 | Early GPT-4 (compare stats)            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
 | Early GPT-4o (compare stats)           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
-| [Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B) | 91.5%    | N/A      | N/A      | 81.7% (Diamond) | N/A      | 82.5% (MMLU-Pro)  | N/A       |
-| [Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B) | 95.0%    | N/A      | N/A      | 85.5% (Diamond) | N/A      | 86.1% (MMLU-Pro)  | N/A       |
+| [Qwen3.5-9B](https://huggingface.co/Jackrong/Qwen3.5-9B-Claude-4.6-Opus-Reasoning-Distilled-GGUF) | 91.5%    | N/A      | N/A      | 81.7% (Diamond) | N/A      | 82.5% (MMLU-Pro)  | N/A       |
+| [Qwen3.5-27B](https://huggingface.co/Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF) | 95.0%    | N/A      | N/A      | 85.5% (Diamond) | N/A      | 86.1% (MMLU-Pro)  | N/A       |
 | [gpt-oss-20b](https://huggingface.co/unsloth/gpt-oss-20b-GGUF) (20B) | 84.1%  | 58.1%   | 96.0-98.7%   | 71.5%    | ~42.5%    | 85.3%           | N/A   |
 | [Qwen3-30B-A3B-GGUF](https://huggingface.co/mradermacher/Qwen3-30B-A3B-abliterated-GGUF) (30B-A3B) | N/A  | N/A   | 80.4%   | 65.8%   | 72.2%   | N/A           | N/A   |
 | **Qwen3-8B**       | ~83%     | 56.73%   | 60.80%   | 44.44%   | N/A      | 76.89%            | N/A       |
