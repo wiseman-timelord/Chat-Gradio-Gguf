@@ -1,6 +1,6 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 
-### Status - v1.10.9
+### Status
 Beta - Latest release v1.10.9 is recently completion of overhaul, and tested working with Qwen 3.5 on windows 10, however it turn out other models are now not working, so I'd, use a recent release for slightly older models or wait for next release for version that can run both newer/older models, as currently the newer models are my focus on implementing. Testing/bugfixing on Ubuntu needs to be checked/done, though past releases mention ubuntu testing/working phases.
 
 ## Description
