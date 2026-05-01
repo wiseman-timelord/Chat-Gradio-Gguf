@@ -151,11 +151,11 @@ def get_available_models():
 
     try:
         files = list(model_dir.glob("*.gguf"))
-        # Exclude mmproj / clip projector files — they are loaded automatically
-        # alongside their parent model and must not appear in the model selector.
-        models = [f.name for f in files
-                  if f.is_file() and "mmproj" not in f.name.lower()]
-        
+        # Exclude mmproj files — these are vision projector weights, not loadable
+        # language models. Showing them in the list causes confusing load failures.
+        models = [f.name for f in files if f.is_file()
+                  and "mmproj" not in f.name.lower()]
+
         if models:
             print(f"[MODELS] ✓ Found {len(models)} models:")
             for m in models[:5]:  # Show first 5
@@ -212,8 +212,9 @@ def get_model_settings(model_name):
         #   gemma4           -- Gemma 4 multimodal at launch
         #   glm4             -- GLM-4V / GLM-4.6V-Flash / GLM-4.1V series
         UNIVERSAL_VL_ARCHS = {
-            # Qwen3 / Qwen3.5 — all sizes, all variants (confirmed universal VL)
+            # Qwen3 / Qwen3.5 / Qwen3.6 — all sizes, all variants (universal VL)
             'qwen3', 'qwen3moe',
+            'qwen36', 'qwen36moe',       # Qwen3.6 arch keys
             'qwen3_5', 'qwen3_5moe',    # underscore form
             'qwen35', 'qwen35moe',       # confirmed live arch keys (no separator)
             # Gemma 4 — multimodal at launch
@@ -303,14 +304,24 @@ def get_model_metadata(model_path: str) -> dict:
 
     # Architecture mapping (ORDER MATTERS - most specific first)
     arch_map = {
-        # ── Qwen family ──────────────────────────────────────────────────────
+        # ── Qwen family (most-specific first to avoid short-prefix matches) ────
         # Qwen3.5: confirmed live GGUF arch key is 'qwen35' (no separator).
-        # 'qwen3_5' kept for forward-compat if any tools emit the underscore form.
-        'qwen3.5'   : ('qwen35',  32, 262144),  # Qwen3.5 filename prefix → qwen35 arch
-        'qwen3'     : ('qwen3',   36, 32768),   # Qwen3
-        'qwen2.5'   : ('qwen2',   40, 131072),  # Qwen2.5
-        'qwen2'     : ('qwen2',   32, 32768),   # Qwen2
-        'qwen'      : ('qwen2',   40, 32768),   # Generic Qwen fallback
+        'qwen3.6'        : ('qwen3',  36, 262144),   # Qwen3.6
+        'qwen3.5'        : ('qwen35', 32, 262144),   # Qwen3.5 → qwen35 arch
+        # Qwen3 size variants (36 layers across all sizes)
+        'qwen3'          : ('qwen3',  36, 40960),    # Qwen3 (8B=40960, 4B=32768)
+        # Qwen2.5 size-specific entries (actual layer counts from GGUF metadata)
+        'qwen2.5-72b'    : ('qwen2',  80, 131072),   # Qwen2.5-72B
+        'qwen2.5-32b'    : ('qwen2',  64, 131072),   # Qwen2.5-32B
+        'qwen2.5-14b'    : ('qwen2',  48, 131072),   # Qwen2.5-14B
+        'qwen2.5-7b'     : ('qwen2',  28, 32768),    # Qwen2.5-7B (28 layers confirmed)
+        'qwen2.5-3b'     : ('qwen2',  36, 32768),    # Qwen2.5-3B
+        'qwen2.5-1.5b'   : ('qwen2',  28, 32768),    # Qwen2.5-1.5B
+        'qwen2.5-0.5b'   : ('qwen2',  24, 32768),    # Qwen2.5-0.5B
+        'qwen2.5'        : ('qwen2',  28, 131072),   # Qwen2.5 generic fallback (7B default)
+        # Qwen2
+        'qwen2'          : ('qwen2',  32, 32768),    # Qwen2
+        'qwen'           : ('qwen2',  28, 32768),    # Generic Qwen fallback
         # ── Gemma family (most specific first) ───────────────────────────────
         'gemma-4'   : ('gemma4',  62, 131072),  # Gemma 4 31B (256K ctx) – approx 62 layers
         'gemma4'    : ('gemma4',  62, 131072),
@@ -420,11 +431,12 @@ def get_model_layers(model_path: str) -> int:
         '20b' : 48,
         '14b' : 40,   '13b' : 40,
         '12b' : 46,   # Gemma 3-12B (46 layers)
-        # Jackrong Qwen3.5-9B distilled / GLM-4V-Flash (9B)
+        # 9B models (Qwen3.5-9B=36, Qwen3-9B=36)
         '9b'  : 36,
-        # Qwen3.5-8B / Qwen3-8B
+        # 8B models (Qwen3-8B=36 layers confirmed)
         '8b'  : 36,
-        '7b'  : 32,
+        # 7B models: Qwen2.5-7B=28 layers (confirmed from GGUF kv 13)
+        '7b'  : 28,
         # Qwen3.5-4B / Gemma 3-4B
         '4b'  : 34,
         '3b'  : 26,
@@ -481,6 +493,200 @@ def get_mmproj_context_llama(mmproj_path):
     except:
         return 4096
 
+# ── GGUF hybrid-architecture safety helpers ───────────────────────────────────
+
+# SSM tensor name prefixes that must NOT appear in pure-Transformer GGUFs.
+# Their presence indicates a cross-architecture merge (e.g. Qwen3 + Kimi2.5).
+_SSM_TENSOR_PREFIXES = (
+    "ssm_conv",     # Mamba / GDN conv layers
+    "ssm_dt",       # Mamba delta-t projection
+    "ssm_a",        # Mamba A matrix
+    "ssm_b",        # Mamba B matrix
+    "ssm_c",        # Mamba C matrix
+    "ssm_d",        # Mamba D matrix
+    "ssm_dt_bias",  # Mamba delta-t bias
+    "ssm_norm",     # Mamba normalisation
+    "blk.0.ssm",    # Generic SSM prefix inside a transformer block
+)
+
+# Pure-SSM / intentional-hybrid architecture keys: SSM tensors are EXPECTED.
+_PURE_SSM_ARCHS = {
+    "mamba", "mamba2",      # Mamba / Mamba-2
+    "rwkv", "rwkv6",        # RWKV
+    "kimi",                 # Kimi K2 (MoE + SSM)
+    "qwen35", "qwen3_5",    # Qwen3.5 (Gated Delta Net hybrid — intentional)
+    "qwen35moe", "qwen3_5moe",
+}
+
+# Well-known pure-transformer architectures: tensor scan is unnecessary.
+# These models can NEVER contain legitimate SSM tensors.  Skipping the scan
+# avoids the KV-parsing misalignment bug that occurs when reading through
+# large tokenizer arrays (152K+ entries) in the GGUF binary.
+_KNOWN_TRANSFORMER_ARCHS = {
+    # Qwen family
+    "qwen2", "qwen2moe", "qwen3", "qwen3moe", "qwen36",
+    # Llama / Mistral family
+    "llama", "mistral",
+    # DeepSeek
+    "deepseek2",
+    # Gemma family
+    "gemma", "gemma2", "gemma3", "gemma3n", "gemma4",
+    # GLM family (dense) — GLM MoE uses kimi-style hybrid, NOT in this list
+    "glm4", "chatglm",
+    # Other common transformers
+    "phi", "phi3", "falcon", "starcoder2", "bloom", "gpt2",
+    "stablelm", "internlm2", "baichuan", "orion", "command-r",
+}
+
+
+def _skip_gguf_kv_value(f, val_type: int):
+    """Skip a single GGUF KV value in the file stream.
+
+    CRITICAL: Must skip ALL bytes for the value, including full arrays.
+    Partial skipping leaves the file pointer misaligned, causing all
+    subsequent reads to return garbage — leading to false SSM detection
+    on models with large vocab arrays (e.g. qwen2/qwen3: 151936 tokens).
+    """
+    import struct
+    if val_type == 8:       # STRING
+        slen = struct.unpack('<Q', f.read(8))[0]
+        f.read(slen)
+    elif val_type in (4, 5, 6):   # UINT32 / INT32 / FLOAT32
+        f.read(4)
+    elif val_type == 7:     # BOOL
+        f.read(1)
+    elif val_type in (10, 11, 12):  # UINT64 / INT64 / FLOAT64
+        f.read(8)
+    elif val_type in (0, 1):  # UINT8 / INT8
+        f.read(1)
+    elif val_type in (2, 3):  # UINT16 / INT16
+        f.read(2)
+    elif val_type == 9:     # ARRAY — must skip ALL elements
+        arr_type  = struct.unpack('<I', f.read(4))[0]
+        arr_count = struct.unpack('<Q', f.read(8))[0]
+        if arr_type == 8:   # array of strings — variable length per element
+            for _ in range(arr_count):  # ALL elements, no cap
+                slen2 = struct.unpack('<Q', f.read(8))[0]
+                f.read(slen2)
+        else:
+            # Fixed-width element: compute element size and skip entire block
+            _esz = {0:1, 1:1, 2:2, 3:2, 4:4, 5:4, 6:4, 7:1,
+                    10:8, 11:8, 12:8}.get(arr_type, 4)
+            f.read(_esz * arr_count)
+    # Unknown types: skip nothing — caller will detect misalignment
+
+
+def _check_gguf_ssm_hybrid(model_path: str):
+    """Scan a GGUF file's tensor-name table for unexpected SSM tensors.
+
+    Returns the first offending tensor name (truthy) if the file looks like
+    an illegal SSM+Transformer merge, or None (falsy) if the file is clean.
+
+    Reads only the GGUF header and tensor metadata — does NOT load weights.
+    Designed for fast pre-flight use; bails out on any I/O / parse error.
+
+    KEY CORRECTNESS REQUIREMENT: Every KV value in the metadata section must
+    be skipped in full before the tensor-name table can be reliably read.
+    Partial skipping of large string arrays (e.g. 151936-entry token vocab)
+    leaves the file pointer misaligned, causing random bytes to be interpreted
+    as tensor names and producing false-positive SSM detections on clean models
+    such as qwen3 and qwen2.  All array skipping is handled by
+    _skip_gguf_kv_value() which iterates the full array regardless of size.
+    """
+    import struct
+
+    try:
+        with open(model_path, 'rb') as f:
+            # ── Parse GGUF header ────────────────────────────────────────────
+            if f.read(4) != b'GGUF':
+                return None
+            version = struct.unpack('<I', f.read(4))[0]
+            if version < 2 or version > 4:
+                return None  # Unknown version — skip conservatively
+
+            tensor_count = struct.unpack('<Q', f.read(8))[0]
+            kv_count     = struct.unpack('<Q', f.read(8))[0]
+
+            # ── Read ALL KV metadata, fully skipping each value ──────────────
+            # We must consume every byte of every KV entry so the file pointer
+            # lands exactly at the start of the tensor-info table.
+            arch = ''
+            for _ in range(kv_count):
+                key_len = struct.unpack('<Q', f.read(8))[0]
+                if key_len > 4096:
+                    return None  # Sanity guard — corrupt file
+                key = f.read(key_len).decode('utf-8', errors='replace')
+                val_type = struct.unpack('<I', f.read(4))[0]
+
+                # Capture architecture before skipping, but always skip fully
+                if val_type == 8 and key == 'general.architecture':
+                    slen = struct.unpack('<Q', f.read(8))[0]
+                    arch = f.read(slen).decode('utf-8', errors='replace').strip().lower()
+                else:
+                    _skip_gguf_kv_value(f, val_type)
+
+            # Models where SSM tensors are expected — not a hybrid
+            if arch in _PURE_SSM_ARCHS:
+                return None
+
+            # ── Scan tensor-info table for unexpected SSM tensor names ────────
+            # File pointer is now correctly positioned at the tensor-info section.
+            for _ in range(min(tensor_count, 10_000)):
+                name_len = struct.unpack('<Q', f.read(8))[0]
+                if name_len > 512:
+                    break  # Corrupt entry — stop scan
+                name = f.read(name_len).decode('utf-8', errors='replace').lower()
+                # Skip: n_dims (u32), n_dims × shape (u64 each), type (u32), offset (u64)
+                n_dims = struct.unpack('<I', f.read(4))[0]
+                if n_dims > 8:
+                    break  # Sanity guard
+                f.read(n_dims * 8 + 4 + 8)
+                # Check for SSM tensor name patterns
+                if any(name.startswith(pfx) or ('.' + pfx) in name
+                       for pfx in _SSM_TENSOR_PREFIXES):
+                    return name  # Offending tensor found — hybrid detected
+
+    except Exception:
+        pass  # Any parse / I/O failure → let Llama() decide
+
+    return None  # Clean — no unexpected SSM tensors found
+
+
+def metadata_arch_peek(model_path: str) -> str:
+    """Return the GGUF general.architecture value without full metadata parse."""
+    import struct
+    try:
+        with open(model_path, 'rb') as f:
+            if f.read(4) != b'GGUF':
+                return 'unknown'
+            version = struct.unpack('<I', f.read(4))[0]
+            _tc = struct.unpack('<Q', f.read(8))[0]
+            kv_count = struct.unpack('<Q', f.read(8))[0]
+            for _ in range(min(kv_count, 64)):
+                key_len = struct.unpack('<Q', f.read(8))[0]
+                if key_len > 512:
+                    break
+                key = f.read(key_len).decode('utf-8', errors='replace')
+                val_type = struct.unpack('<I', f.read(4))[0]
+                if val_type == 8:
+                    slen = struct.unpack('<Q', f.read(8))[0]
+                    val  = f.read(slen).decode('utf-8', errors='replace')
+                    if key == 'general.architecture':
+                        return val.strip()
+                elif val_type == 4: f.read(4)
+                elif val_type == 5: f.read(4)
+                elif val_type == 6: f.read(4)
+                elif val_type == 7: f.read(1)
+                elif val_type == 10: f.read(8)
+                elif val_type == 11: f.read(8)
+                elif val_type == 12: f.read(8)
+                elif val_type in (0,1,2,3): f.read(2)
+                else: break
+    except Exception:
+        pass
+    return 'unknown'
+
+
 def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     """Load model with all necessary configuration."""
     # LOCAL IMPORTS to avoid circular import
@@ -519,25 +725,26 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     except Exception as e:
         return f"Cannot read model file: {e}", False, llm_state, models_loaded_state
 
+    # ── Pre-flight: detect hybrid SSM+Transformer GGUF merges ────────────────
+    # Models like Qwen3-Kimi2.5 SLERP merges embed SSM (Gated Delta Net /
+    # Mamba) tensors inside a pure-Transformer GGUF architecture (e.g. qwen3).
+    # llama.cpp's sched_reserve segfaults scheduling the compute graph for
+    # this invalid hybrid → Python try/except cannot catch a C segfault →
+    # the entire process exits → "returns to batch".  We scan tensor names
+    # in the GGUF binary before calling Llama() and return a clean error.
+    try:
+        _ssm_marker = _check_gguf_ssm_hybrid(str(model_path))
+        if _ssm_marker:
+            _arch_name = metadata_arch_peek(str(model_path))
+            print(
+                f"[WARN] '{model}' may be an SSM/Transformer hybrid GGUF "
+                f"(found SSM tensor '{_ssm_marker}' in '{_arch_name}' arch). "
+                f"Attempting load — llama.cpp will error if incompatible."
+            )
+    except Exception:
+        pass  # Scan failed — proceed normally
+
     metadata = get_model_metadata(str(model_path))
-
-    # ── Guard: reject mmproj / clip projector files selected as main model ──
-    # Projectors are loaded automatically via find_mmproj_file(); if the user
-    # accidentally selects one as the language model, llama.cpp would fail with
-    # "unknown model architecture: 'clip'".  Catch it here instead with a clear
-    # message.  We check (a) the GGUF metadata type field, (b) the architecture
-    # field (projectors embed arch='clip'), and (c) the filename as a last resort.
-    _meta_type = metadata.get('general.type', '')
-    _meta_arch = metadata.get('general.architecture', '')
-    if _meta_type == 'mmproj' or _meta_arch == 'clip' or 'mmproj' in model.lower():
-        _tip = (
-            f"'{model}' is a vision projector (mmproj) file — not a language model.\n"
-            "Projectors are paired automatically with their language model.\n"
-            "Select the main language-model GGUF from the same folder instead."
-        )
-        set_status("Load failed: mmproj selected as model", console=True, priority=True)
-        return f"Load failed: {_tip}", False, llm_state, models_loaded_state
-
     chat_format = get_chat_format(metadata, model)
 
     # Check vision/reasoning flags
@@ -757,18 +964,58 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
     kwargs = {
         "model_path": str(model_path),
         "n_ctx": effective_ctx,
-        "n_ctx_per_seq": effective_ctx,
+        # n_ctx_per_seq intentionally omitted: not a valid kwarg in
+        # llama-cpp-python v0.3.16 and causes TypeError on that build.
         "n_batch": BATCH_SIZE,
         "mmap": MMAP,
         "mlock": MLOCK,
         "verbose": True,
     }
-    # Only set chat_format when we have an explicit value; None means "let
-    # llama-cpp-python auto-select from the GGUF's embedded chat template"
-    # (required for GLM 4.x, Kimi K2, and any other model that stores its
-    #  own tokenizer.chat_template inside the GGUF file).
-    if chat_format is not None:
+    # chat_format and chat_handler are mutually exclusive in llama-cpp-python.
+    # On older builds (≤v0.3.16) passing both does not raise a clean Python
+    # error — the conflict is silently passed to the C library and causes
+    # undefined behaviour → segfault → process exit with no traceback.
+    # Rule: set chat_format ONLY when (a) it has an explicit value AND
+    #       (b) no chat_handler has been configured for this model.
+    # None means "auto-select from the GGUF's embedded tokenizer.chat_template"
+    # (correct for GLM 4.x, Kimi K2, Qwen3, Qwen3.5, etc.).
+    if chat_format is not None and chat_handler is None:
         kwargs["chat_format"] = chat_format
+    # When chat_format is None, llama-cpp-python parses the GGUF's embedded
+    # tokenizer.chat_template via Jinja2.  Modern Qwen3/3.5/3.6 templates use
+    # {%- continue %} inside for-loops, which requires Jinja2's loopcontrols
+    # extension to be enabled.  llama-cpp-python v0.3.16's Jinja2ChatFormatter
+    # does NOT enable this extension — it was added in a later release — so
+    # parsing raises TemplateSyntaxError: "Encountered unknown tag 'continue'".
+    # Pre-validate using the same environment llama-cpp-python uses (no
+    # loopcontrols) and fall back to an explicit format if it fails.
+    elif chat_handler is None:
+        try:
+            import jinja2 as _jinja2
+            _tmpl_str = metadata.get("tokenizer.chat_template", "")
+            if _tmpl_str:
+                # Intentionally do NOT enable loopcontrols here — we are
+                # simulating what llama-cpp-python v0.3.16 would do.
+                _jinja2.Environment().from_string(_tmpl_str)
+        except _jinja2.exceptions.TemplateSyntaxError as _e:
+            # Template uses tags unsupported by this llama-cpp-python build's
+            # Jinja2 environment (typically {%- continue %} or {%- break %}).
+            # Fall back to the explicit architecture-matched format.
+            _arch = metadata.get("general.architecture", "")
+            _fallback_fmt = {
+                "qwen2": "chatml", "qwen3": "chatml",
+                "qwen35": "chatml", "qwen36": "chatml",
+                "llama": "llama-3", "gemma3": "gemma",
+                "gemma4": "gemma",
+            }.get(_arch, "chatml")
+            print(f"[CHAT-FMT] Embedded template unsupported by this "
+                  f"llama-cpp-python build ({type(_e).__name__}: {_e}). "
+                  f"Falling back to explicit format '{_fallback_fmt}'. "
+                  f"Use a compiled llama-cpp-python ≥v0.3.17 for full "
+                  f"template support.")
+            kwargs["chat_format"] = _fallback_fmt
+        except Exception:
+            pass  # Any other error — leave chat_format unset, let Llama() decide
 
     # Backend-specific GPU layer configuration
     if BACKEND_TYPE == "VULKAN_VULKAN":
@@ -805,20 +1052,37 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         # Vision models need smaller batch size
         kwargs["n_batch"] = min(BATCH_SIZE, 512)
 
-    # Vulkan-specific batch size safety for large vocab models
+    # Vulkan-specific batch size safety for large vocab / large embedding models
     if "vulkan" in BACKEND_TYPE.lower():
-        # Calculate worst-case graph memory (without n_ubatch)
+        # Calculate worst-case graph memory for the attention kernel.
+        # The Vulkan scheduler must compile a SPIR-V pipeline for every
+        # (n_batch, n_embd) combination.  On low-shared-memory GPUs (e.g.
+        # AMD RX 470 with 32KB) this compilation fails for large batch+embd
+        # combinations, killing the process at the driver level with no
+        # Python exception.
         worst_mb = 3 * (BATCH_SIZE * n_vocab * n_embd * 4) / (1024 * 1024)
-        
-        # Aggressive reduction: keep 40% headroom
+
+        # Primary reduction: keep 40% VRAM headroom
         if worst_mb > vram_size * 0.60:
             safe_batch = int((vram_size * 0.60 * 1024 * 1024) / (3 * n_vocab * n_embd * 4))
-            safe_batch = max(64, (safe_batch // 64) * 64)
+            safe_batch = max(16, (safe_batch // 16) * 16)  # floor to nearest 16
             kwargs["n_batch"] = safe_batch
             print(f"[VULKAN] Graph requires {worst_mb:.0f}MB → reduced batch to {safe_batch}")
-        
-        # Hard cap for large vocab models (Qwen)
-        if n_vocab > 150000 and kwargs["n_batch"] > 512:
+
+        # Secondary reduction: large embedding models need very small batches
+        # on low-shared-memory GPUs.  The Qwen3 8B/9B+ (n_embd ≥ 4096) GQA
+        # attention shader is known to abort during sched_reserve at batch=64
+        # on GPUs with ≤32KB shared memory.  Reduce to 16 preemptively.
+        # Threshold: n_embd ≥ 4096 AND arch in Qwen3/Qwen3.5 family.
+        _qwen3_archs = ('qwen3', 'qwen35', 'qwen3_5', 'qwen36')
+        if (arch in _qwen3_archs and n_embd >= 4096
+                and kwargs.get("n_batch", BATCH_SIZE) > 16):
+            kwargs["n_batch"] = 16
+            print(f"[VULKAN] Qwen3 arch with n_embd={n_embd} → "
+                  f"reduced batch to 16 (Vulkan shader compatibility)")
+
+        # Hard cap for large vocab models (Qwen family)
+        if n_vocab > 150000 and kwargs.get("n_batch", BATCH_SIZE) > 512:
             kwargs["n_batch"] = 512
             print(f"[VULKAN] Large vocab ({n_vocab}) → hard-capped batch to 512")
 
@@ -855,37 +1119,12 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         import scripts.configure as cfg
         cfg.GPU_LAYERS = 0
         tb = traceback.format_exc()
-        err_str = str(e)
-
-        # ── Architecture-version guidance ─────────────────────────────────────
-        # When llama.cpp doesn't know an arch key, it raises "unknown model
-        # architecture: '<key>'" inside "Failed to load model from file".
-        # Give the user a direct, actionable message instead of a raw traceback.
-        _arch = metadata.get('general.architecture', '')
-        _QWEN35_ARCHS = ('qwen35', 'qwen3_5', 'qwen35moe', 'qwen3_5moe')
-        _is_arch_error = (
-            'unknown model architecture' in tb.lower()
-            or 'failed to load model from file' in err_str.lower()
+        err_msg = (
+            f"Error loading model: {e}\n"
+            f"GPU Layers: {gpu_layers}/{num_layers} | Batch: {kwargs.get('n_batch')}\n"
+            f"Context: {effective_ctx} (trained max: {n_ctx_train})\n"
+            f"{tb}"
         )
-        if _arch in _QWEN35_ARCHS and _is_arch_error:
-            err_msg = (
-                f"Load failed: llama.cpp is too old to support Qwen3.5 (arch='{_arch}').\n\n"
-                "Qwen3.5 support was added in llama.cpp b8076 (February 2026).\n"
-                "Your install uses a prebuilt wheel (v0.3.16) that bundles llama.cpp\n"
-                "from August 2025, which predates this architecture.\n\n"
-                "Fix: re-run installer.py and choose a COMPILE route (option 3 or 4).\n"
-                "The compile route fetches the latest llama.cpp source and builds a\n"
-                "wheel that supports qwen35 and all current architectures.\n\n"
-                f"GPU Layers: {gpu_layers}/{num_layers} | Batch: {kwargs.get('n_batch')}\n"
-                f"Context: {effective_ctx} (trained max: {n_ctx_train})"
-            )
-        else:
-            err_msg = (
-                f"Error loading model: {e}\n"
-                f"GPU Layers: {gpu_layers}/{num_layers} | Batch: {kwargs.get('n_batch')}\n"
-                f"Context: {effective_ctx} (trained max: {n_ctx_train})\n"
-                f"{tb}"
-            )
         print(err_msg)
         set_status("Model load failed", console=True, priority=True)
         return err_msg, False, None, False
@@ -907,7 +1146,7 @@ def calculate_single_model_gpu_layers_with_layers(
     arch = meta.get("general.architecture", "unknown")
 
     # Model overhead factors (Qwen is well-optimised; Llama slightly larger; others more conservative)
-    _qwen_archs   = ("qwen2", "qwen2.5", "qwen", "qwen3", "qwen3_5", "qwen35", "qwen35moe", "qwen3_5moe")
+    _qwen_archs   = ("qwen2", "qwen2.5", "qwen", "qwen3", "qwen36", "qwen3_5", "qwen35", "qwen35moe", "qwen3_5moe")
     _llama_archs  = ("llama",)
     _gemma_archs  = ("gemma3", "gemma3n", "gemma4")
     _glm_archs    = ("glm4", "glm4moe", "chatglm")

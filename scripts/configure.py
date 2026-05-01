@@ -10,7 +10,75 @@ from pathlib import Path
 import faiss
 import numpy as np
 
-# NOTE: langchain imports deferred to call sites — loading here triggers Pydantic v2 before the shim.
+# REMOVED: These imports cause Pydantic v2 to load before the v1 shim
+# from langchain_text_splitters import RecursiveCharacterTextSplitter
+# from langchain_community.document_loaders import TextLoader
+
+# =============================================================================
+# DEFAULT CONFIGURATION DICTIONARIES
+# =============================================================================
+
+DEFAULTS = {
+    "MODEL_FOLDER": "path/to/your/models",
+    "CONTEXT_SIZE": 32768,
+    "VRAM_SIZE": 8192,
+    "BATCH_SIZE": 1024,
+    "TEMPERATURE": 0.66,
+    "REPEAT_PENALTY": 1.0,
+    "DYNAMIC_GPU_LAYERS": True,
+    "MMAP": True,
+    "MLOCK": True,
+    "MAX_HISTORY_SLOTS": 10,
+    "MAX_ATTACH_SLOTS": 8,
+    "SESSION_LOG_HEIGHT": 650,
+    "INPUT_LINES": 27,
+    "PRINT_RAW_OUTPUT": False,
+    "SHOW_THINK_PHASE": False,
+    "CPU_ONLY_MODE": True,
+    "VRAM_OPTIONS": [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536],
+    "CTX_OPTIONS": [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072],
+    "BATCH_OPTIONS": [128, 256, 512, 1024, 2048, 4096, 8192],
+    "TEMP_OPTIONS": [0.0, 0.1, 0.25, 0.33, 0.5, 0.66, 0.75, 1.0],
+    "REPEAT_OPTIONS": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
+    "HISTORY_SLOT_OPTIONS": [4, 8, 10, 12, 16],
+    "ATTACH_SLOT_OPTIONS": [2, 4, 6, 8, 10],
+    "SESSION_LOG_HEIGHT_OPTIONS": [250, 450, 550, 600, 625, 650, 700, 800, 1000, 1400],
+}
+
+DEFAULT_CONFIG = {
+    "model_settings": {
+        "layer_allocation_mode": "SRAM_ONLY",
+        "model_dir": "path/to/your/models",
+        "model_name": "Select_a_model...",
+        "context_size": 32768,
+        "vram_size": 8192,
+        "temperature": 0.66,
+        "repeat_penalty": 1.0,
+        "llama_cli_path": None,
+        "llama_bin_path": None,
+        "selected_gpu": None,
+        "selected_cpu": None,
+        "mmap": True,
+        "mlock": True,
+        "n_batch": 1024,
+        "dynamic_gpu_layers": True,
+        "max_history_slots": 12,
+        "max_attach_slots": 6,
+        "session_log_height": 650,
+        "show_think_phase": False,
+        "print_raw_output": False,
+        "cpu_threads": None,
+        "bleep_on_events": False,
+        "use_python_bindings": True,
+        "filter_mode": "gradio3",  # Output filtering mode: gradio3, gradio5, or custom
+        # TTS Settings
+        "tts_enabled": False,
+        "tts_voice": None,
+        "tts_output_device": "default",
+        "tts_sample_rate": 44100,
+        "max_tts_length": 4500,
+    }
+}
 
 CONFIG_PATH = Path("data/persistent.json")
 
@@ -86,9 +154,13 @@ MAX_HISTORY_SLOTS = 12
 MAX_ATTACH_SLOTS = 6
 SESSION_LOG_HEIGHT = 650
 INPUT_LINES = 27
-VRAM_OPTIONS = [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536, 65536, 98304]
-CTX_OPTIONS = [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072, 196608, 262144]
+VRAM_OPTIONS = [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536]
+CTX_OPTIONS = [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072]
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096, 8096]
+TTS_TYPE = "builtin"                     # TTS type: "builtin" or "coqui"
+COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243")
+COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british")
+COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name
 TEMP_OPTIONS = [0.0, 0.1, 0.25, 0.33, 0.5, 0.66, 0.75, 1.0]
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 HISTORY_SLOT_OPTIONS = [4, 8, 10, 12, 16]
@@ -109,13 +181,13 @@ GPU_LAYERS = 0
 SELECTED_GPU = None
 STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True
-DATA_DIR = None          # Set by launcher.py
+DATA_DIR = None  # Will be set by launcher.py
 llm = None
-LLAMA_CLI_PATH = None    # Set from constants.ini
-LLAMA_BIN_PATH = None    # Set from constants.ini
+LLAMA_CLI_PATH = None  # will be set from constants.ini
+LLAMA_BIN_PATH = None  # will be set from constants.ini
 global_status = None
-_status_lock = None          # Tracks which operation has status priority
-_status_lock_message = ""    # Message to restore when lock releases
+_status_lock = None  # Tracks which operation has status priority
+_status_lock_message = ""  # Message to restore when lock releases 
 PRINT_RAW_OUTPUT = False
 SHOW_THINK_PHASE = False 
 BLEEP_ON_EVENTS = False
@@ -129,28 +201,32 @@ _inactivity_checker_thread = None
 _inactivity_checker_stop = False
 
 # CPU Configuration
-CPU_THREADS = None         # Auto-detected at startup
-CPU_THREAD_OPTIONS = []    # Populated by detect_cpu_config()
+CPU_THREADS = None  # Will be auto-detected
+CPU_THREAD_OPTIONS = []  # Will be populated with available thread counts
 CPU_PHYSICAL_CORES = 1
 CPU_LOGICAL_CORES = 1
 SELECTED_CPU = "Auto-Select"
 
 # =============================================================================
-# Sound / TTS Configuration
+# Sound Hardware Configuration (shared by Bleep and TTS)
 # =============================================================================
-SOUND_OUTPUT_DEVICE = "Default Sound Device"
-SOUND_SAMPLE_RATE = 44100
-SOUND_SAMPLE_RATE_OPTIONS = [44100, 48000]
-TTS_ENABLED = False
-TTS_ENGINE = "none"                    # "pyttsx3", "espeak-ng", or "none"
-TTS_AUDIO_BACKEND = "none"             # "windows", "pulseaudio", "pipewire", or "none"
-TTS_VOICE = None
-TTS_VOICE_NAME = None
+SOUND_OUTPUT_DEVICE = "Default Sound Device"        # Selected audio output device
+SOUND_SAMPLE_RATE = 44100              # Audio sample rate (44100 or 48000)
+SOUND_SAMPLE_RATE_OPTIONS = [44100, 48000]  # Available sample rates
+
+# =============================================================================
+# TTS (Text-to-Speech) Configuration
+# =============================================================================
+TTS_ENABLED = False                    # Master enable/disable for TTS
+TTS_ENGINE = "none"                    # Detected engine: "pyttsx3", "espeak-ng", "none"
+TTS_AUDIO_BACKEND = "none"             # Audio backend: "windows", "pulseaudio", "pipewire", "none"
+TTS_VOICE = None                       # Selected voice ID
+TTS_VOICE_NAME = None                  # Selected voice display name
 MAX_TTS_LENGTH = 4500
-TTS_TYPE = "builtin"                   # "builtin" or "coqui"
-COQUI_VOICE_ID = None                  # e.g. "p243"
-COQUI_VOICE_ACCENT = None              # e.g. "british"
-COQUI_MODEL = "tts_models/en/vctk/vits"
+TTS_TYPE = "builtin"                     # TTS type: "builtin" or "coqui"
+COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243")
+COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british")
+COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name
 
 # Arrays
 session_attached_files = []
@@ -206,13 +282,18 @@ STATUS_MESSAGES = {
 
 CHAT_FORMAT_MAP = {
     # ── Qwen family ───────────────────────────────────────────────────────────
-    'qwen2'      : 'chatml',
-    'qwen3'      : 'chatml',
-    'qwen3moe'   : 'chatml',
-    'qwen3_5'    : 'chatml',    # Qwen3.5 dense (underscore variant)
-    'qwen35'     : 'chatml',    # Qwen3.5 dense (confirmed live GGUF arch key)
-    'qwen3_5moe' : 'chatml',    # Qwen3.5 MoE A3B (underscore variant)
-    'qwen35moe'  : 'chatml',    # Qwen3.5 MoE A3B (no-separator variant)
+    # All modern Qwen GGUFs (Qwen2.x, Qwen3, Qwen3.5, Qwen3.6) ship with an
+    # embedded tokenizer.chat_template.  Forcing 'chatml' here overrides it and
+    # causes a post-init segfault in llama-cpp-python 0.3.x.  Use None to let
+    # llama-cpp-python auto-select from the GGUF's embedded template instead.
+    'qwen2'      : None,
+    'qwen3'      : None,
+    'qwen36'     : None,        # Qwen3.6
+    'qwen3moe'   : None,
+    'qwen3_5'    : None,        # Qwen3.5 dense (underscore variant)
+    'qwen35'     : None,        # Qwen3.5 dense (confirmed live GGUF arch key)
+    'qwen3_5moe' : None,        # Qwen3.5 MoE A3B
+    'qwen35moe'  : None,        # Qwen3.5 MoE A3B (no-separator variant)
     # ── Llama family ──────────────────────────────────────────────────────────
     # NOTE: Llama 3.x shares 'llama' arch key with Llama 1/2.
     #       get_chat_format() detects Llama 3 via filename and overrides to 'llama-3'.
@@ -293,8 +374,8 @@ handling_keywords = {
     # into the system prompt to suppress spurious thinking unless the user has
     # selected a dedicated reasoning / thinking model.
     "thinking_capable": [
-        # Qwen3 / Qwen3.5 family (existing)
-        "qwen3",
+        # Qwen3 / Qwen3.5 / Qwen3.6 family
+        "qwen3",    # matches qwen3, qwen3.5, qwen3.6, etc.
         # GLM 4.7 and GLM 5 emit <think> natively in standard chat responses
         "glm-4.7", "glm4.7",
         "glm-5",   "glm5",

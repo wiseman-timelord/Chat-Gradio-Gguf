@@ -1,29 +1,43 @@
-# launcher.py - Entry point for Chat-Gradio-Gguf.
+# launcher.py - The entry point of the scripts of the main program.
 
 # =============================================================================
-# COMPAT BLOCK — must run before ANY other imports.
-# Order: env vars → pydantic version detect → pydantic-v2-dependent pre-loads
-#        → pydantic shim → logging suppress → normal imports.
-# Gradio 3.x spawns worker processes that re-execute this module; the sentinel
-# env var (_CGUF_COMPAT_INIT) suppresses duplicate output while the shim still
-# runs in every process (workers need it too).
+# CRITICAL: Pydantic v1/v2 compatibility shim MUST be before ANY other imports
+# — with one exception: libraries that REQUIRE pydantic v2 must be pre-loaded
+#   here first. Once a module is cached in sys.modules, later "import X" calls
+#   return the cached copy and are unaffected by the shim that follows.
 # =============================================================================
 import sys as _sys
 import os as _os
 
-# Embedding cache paths — must be set before any HF/transformer import
+# Set embedding cache env vars FIRST before ANY imports
 _cache_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "data", "embedding_cache")
 _os.makedirs(_cache_dir, exist_ok=True)
 _os.environ["TRANSFORMERS_CACHE"] = _cache_dir
 _os.environ["HF_HOME"] = _os.path.dirname(_cache_dir)
 _os.environ["SENTENCE_TRANSFORMERS_HOME"] = _cache_dir
-_os.environ["CUDA_VISIBLE_DEVICES"] = ""   # Force CPU
-_os.environ["HF_HUB_OFFLINE"] = "1"        # Fully offline
+_os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU mode
+_os.environ["HF_HUB_OFFLINE"] = "1"  # CRITICAL: Force fully offline mode
 _os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
+# -----------------------------------------------------------------------------
+# COMPAT BLOCK — pydantic shim + pre-imports for pydantic-v2-dependent libs.
+#
+# On Windows, Gradio 3.x uses Python multiprocessing (spawn method) for its
+# internal queue, which re-executes this __main__ module in every worker
+# process.  The if __name__ == "__main__": guard below stops main() running
+# again, but this module-level code would otherwise print twice.
+#
+# Strategy:
+#   • Use a sentinel env var (_CGUF_COMPAT_INIT) to suppress repeat output.
+#     Child processes inherit the env and stay silent.
+#   • The pydantic shim (sys.modules remapping) still executes in every
+#     process — child workers need it too if they touch pydantic-dependent libs.
+#   • Check pydantic version FIRST so all messages are context-aware.
+# -----------------------------------------------------------------------------
 _COMPAT_VERBOSE = _os.environ.get("_CGUF_COMPAT_INIT") != "1"
 
-# Detect pydantic version first so pre-load messages are accurate
+# Step 1 — Detect pydantic version before any pre-imports so messages are
+#           accurate about whether a shim will actually be applied.
 _pydantic_major = 0
 _pydantic_version_str = "unknown"
 _pydantic_needs_shim = False
@@ -35,9 +49,14 @@ try:
 except Exception:
     pass
 
-# Pre-load pydantic-v2-dependent libs before the shim remaps pydantic → pydantic.v1.
-# spaCy and sentence_transformers use pydantic at module level; caching them now
-# means the remap doesn't break their already-resolved imports.
+# Step 2 — Pre-load pydantic-v2-dependent libraries into sys.modules NOW.
+#
+#   pydantic v2 present: spaCy and sentence_transformers must be cached before
+#     the shim below remaps pydantic → pydantic.v1; otherwise their module-
+#     level "from pydantic import field_validator" would fail after the remap.
+#   pydantic v1 present: spaCy requires pydantic v2 and will always fail here;
+#     sentence_transformers is pre-loaded as a minor startup optimisation only.
+#   In both cases, all failures are caught and features degrade gracefully.
 try:
     import spacy as _spacy_preload
     if _COMPAT_VERBOSE:
@@ -45,7 +64,11 @@ try:
         print(f"[COMPAT] spaCy {_spacy_preload.__version__} {_verb}")
 except Exception as _e:
     if _COMPAT_VERBOSE:
-        print(f"[COMPAT] NLP uses word-split fallback ({type(_e).__name__})")
+        if _pydantic_needs_shim:
+            print(f"[COMPAT] spaCy pre-load skipped ({type(_e).__name__}) — NLP uses word-split fallback")
+        else:
+            # pydantic v1: spaCy always fails here; this is expected and handled.
+            print(f"[COMPAT] NLP uses word-split fallback")
 
 try:
     import sentence_transformers as _st_preload
@@ -55,17 +78,18 @@ except Exception as _e:
     if _COMPAT_VERBOSE:
         print(f"[COMPAT] sentence_transformers unavailable — RAG disabled ({type(_e).__name__})")
 
-# Apply shim: remap pydantic → pydantic.v1 so Gradio 3.x works with pydantic v2 installed
+# Step 3 — Apply pydantic shim (if needed) or report installed state.
+#   This sys.modules remapping runs in every process (main + Gradio workers).
 if _pydantic_needs_shim:
     try:
         import pydantic.v1 as _pydantic_v1
-        _sys.modules["pydantic"]            = _pydantic_v1
-        _sys.modules["pydantic.fields"]     = _pydantic_v1.fields
-        _sys.modules["pydantic.main"]       = _pydantic_v1.main
-        _sys.modules["pydantic.validators"] = _pydantic_v1.validators
-        _sys.modules["pydantic.types"]      = _pydantic_v1.types
-        _sys.modules["pydantic.errors"]     = _pydantic_v1.errors
-        _sys.modules["pydantic.networks"]   = _pydantic_v1.networks
+        _sys.modules["pydantic"]           = _pydantic_v1
+        _sys.modules["pydantic.fields"]    = _pydantic_v1.fields
+        _sys.modules["pydantic.main"]      = _pydantic_v1.main
+        _sys.modules["pydantic.validators"]= _pydantic_v1.validators
+        _sys.modules["pydantic.types"]     = _pydantic_v1.types
+        _sys.modules["pydantic.errors"]    = _pydantic_v1.errors
+        _sys.modules["pydantic.networks"]  = _pydantic_v1.networks
         if _COMPAT_VERBOSE:
             print(f"[COMPAT] Pydantic v{_pydantic_major} → v1 shim applied for Gradio 3.x")
     except ImportError:
@@ -76,12 +100,13 @@ elif _pydantic_major > 0:
     if _COMPAT_VERBOSE:
         print(f"[COMPAT] Pydantic v{_pydantic_version_str} — Gradio 3.x compatible")
 
-# Mark done so child processes skip the print block (shim still executes)
+# Mark done — child processes spawned by Gradio multiprocessing inherit this
+# and skip the print block above while still executing the shim itself.
 if _COMPAT_VERBOSE:
     _os.environ["_CGUF_COMPAT_INIT"] = "1"
 
-# Suppress library logging before any further imports
-# logging.config must be explicitly imported — it is a submodule, not auto-loaded
+# Disable Logging (before any library imports)
+# CRITICAL: Must import logging.config explicitly as it is a submodule
 import logging as _logging
 import logging.config as _logging_config
 _logging_config.dictConfig = lambda *_, **__: None
@@ -89,10 +114,19 @@ _logging_config.fileConfig = lambda *_, **__: None
 _logging.basicConfig = lambda *_, **__: None
 
 # =============================================================================
-# Normal imports (pydantic shim now in place)
+# NOW safe to import other modules
 # =============================================================================
 import sys
-import os  # unaliased — functions below use `os`, not `_os`
+import os
+
+# Enable faulthandler IMMEDIATELY — before any C extension is imported.
+# Without this, a SIGSEGV (e.g. from llama-cpp-python's Jinja2 template parser
+# or an incompatible GGUF architecture) kills the process silently with no
+# traceback, and the batch menu loop restarts without any diagnostic output.
+# With faulthandler enabled, the C-level call stack is printed to stderr before
+# the process exits, making the crash source visible in the batch window.
+import faulthandler as _faulthandler
+_faulthandler.enable()                   # FIX: was only imported as _os above; functions below use `os` unaliased
 import argparse
 import time
 from pathlib import Path

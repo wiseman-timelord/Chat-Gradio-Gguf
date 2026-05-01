@@ -68,8 +68,7 @@ from scripts.tools import (
     get_voice_choices, get_output_device_choices, get_sample_rate_choices,
     speak_last_response, stop_speaking, get_tts_status, initialize_tts,
     get_voice_id_by_name, speak_text,
-    synthesize_last_response, play_tts_audio,
-    extract_search_query
+    synthesize_last_response, play_tts_audio
 )
 
 
@@ -207,13 +206,114 @@ def _launch_qt5_browser(url, title, width, height, frameless, maximized):
     print("[BROWSER] Qt5 event loop exited")
 
 
+def _launch_qt6_browser(url, title, width, height, frameless, maximized):
+    """
+    DEAD CODE — retained for reference only.
+    Qt6 (PyQt6) is no longer used. All platforms use Qt5 (_launch_qt5_browser).
+    This function is never called.
+    """
+    global _qt_app, _qt_browser, _signal_handler
+    import os as _os
+
+    # Windows: disable GPU acceleration when installer detected insufficient D3D support.
+    if cfg.PLATFORM == 'windows' and not getattr(cfg, 'GRAPHICS_ACCELERATION', True):
+        chromium_flags = (
+            "--disable-gpu "
+            "--disable-gpu-compositing "
+            "--disable-features=GpuProcessSurface,CanvasOopRasterization "
+            "--no-first-run "
+            "--disable-default-apps "
+            "--disable-background-timer-throttling "
+            "--disable-renderer-backgrounding"
+        )
+        _os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = chromium_flags
+        _os.environ["QTWEBENGINE_DISABLE_GPU"] = "1"
+        print("[BROWSER] Hardware GPU unavailable - software rendering enabled")
+        print(f"[BROWSER] Chromium flags: {chromium_flags}")
+
+    # Linux: Set Chromium flags for sandbox issues and GPU rendering.
+    if cfg.PLATFORM == 'linux':
+        if _os.geteuid() == 0:
+            print("[BROWSER] Running as root - disabling Chromium sandbox")
+            chromium_flags = "--no-sandbox --disable-gpu-sandbox"
+        else:
+            chromium_flags = "--disable-gpu-sandbox"
+        chromium_flags += (
+            " --disable-gpu --disable-software-rasterizer"
+            " --disable-features=GpuProcessSurface,CanvasOopRasterization"
+            " --no-first-run --disable-default-apps"
+            " --disable-background-timer-throttling"
+            " --disable-features=Translate,InterestFeedContentSuggestions,MediaRouter,"
+            "OptimizationHints,OptimizationGuideModelDownloading,"
+            "AutofillServerCommunication,PasswordManager"
+            " --disable-sync --disable-component-extensions-with-background-pages"
+            " --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"
+        )
+        _os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = chromium_flags
+        _os.environ["QTWEBENGINE_DISABLE_GPU"] = "1"
+        _os.environ["QT_QUICK_BACKEND"] = "software"
+        _os.environ["QT_QPA_PLATFORM"] = "xcb"
+        _os.environ["QT_QPA_PLATFORMTHEME"] = ""
+        _os.environ["QT_QPA_DISABLE_SESSION_MANAGER"] = "1"
+        _os.environ["QT_LOGGING_RULES"] = "qt.qpa.*=false;qt.webengine.*=false"
+        print("[BROWSER] GPU acceleration disabled, using software rendering")
+        print("[BROWSER] DBus integration disabled to prevent startup delays")
+        print(f"[BROWSER] Chromium flags: {chromium_flags}")
+
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
+    from PyQt6.QtCore import QUrl, Qt, QTimer, pyqtSignal, QObject
+
+    class CloseSignalHandler(QObject):
+        close_signal = pyqtSignal()
+        def __init__(self, app):
+            super().__init__()
+            self._app = app
+            self.close_signal.connect(self._do_close)
+        def _do_close(self):
+            print("[BROWSER] Close signal received in main thread")
+            if self._app:
+                self._app.quit()
+        def request_close(self):
+            self.close_signal.emit()
+
+    _qt_app = QApplication(sys.argv)
+    _signal_handler = CloseSignalHandler(_qt_app)
+    _qt_browser = QWebEngineView()
+    _qt_browser.setWindowTitle(title)
+    if frameless:
+        _qt_browser.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+    settings = _qt_browser.settings()
+    settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, False)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, False)
+    settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, False)
+    _qt_browser.resize(width, height)
+    if maximized:
+        _qt_browser.showMaximized()
+    else:
+        _qt_browser.show()
+
+    def load_url():
+        print(f"[BROWSER] Loading URL: {url}")
+        _qt_browser.setUrl(QUrl(url))
+
+    QTimer.singleShot(100, load_url)
+    print("[BROWSER] Qt6 WebEngine window created")
+    _qt_app.exec()
+    print("[BROWSER] Qt6 event loop exited")
+
+
 # GRADIO 3.x COMPATIBILITY LAYER
 
 # Gradio 3.x Chatbot uses list of tuples: [(user_msg, bot_msg), ...]
 # Gradio 4.x Chatbot uses list of dicts: [{"role": "user", "content": msg}, ...]
-#
-# Internal state uses message dicts (compatible with inference.py);
-# converted to/from tuple format for the Chatbot component.
+# 
+# We maintain internal state as message dicts for compatibility with inference.py
+# but convert to/from tuple format for the Chatbot component.
 
 
 def messages_to_tuples(messages):
@@ -359,6 +459,12 @@ def update_panel_on_mode_change(current_panel):
         gr.update(visible=history_visible),
         new_panel
     )
+
+def process_attach_files(files, attached_files):
+    """Process uploaded files for attachment."""
+    if not files:
+        return "No files selected.", attached_files
+    return process_files(files, attached_files, cfg.MAX_ATTACH_SLOTS, is_attach=True)
 
 def process_vector_files(files, vector_files, models_loaded):
     if not models_loaded:
@@ -1343,6 +1449,134 @@ def handle_cpu_threads_change(new_threads):
     """Handle CPU threads slider changes"""
     cfg.CPU_THREADS = int(new_threads)
     return f"CPU threads set to {new_threads}"
+
+def extract_search_query(user_input: str) -> str:
+    """
+    Extract a clean, focused search query from natural language user input.
+    Prioritizes substantive content over meta/discussion text.
+    """
+    import re
+    
+    original = user_input.strip()
+    
+    # Step 1: Split on fallback instructions (keep only the first part)
+    fallback_patterns = [
+        r'\s*if\s+(?:you\s+)?(?:cannot|can\'t|could\s+not).*$',  # "if you cannot..."
+        r'\s*if\s+that\s+fails.*$',  # "if that fails..."
+        r'\s*otherwise.*$',  # "otherwise..."
+        r'\s*alternatively.*$',  # "alternatively..."
+        r'\s+in\s+which\s+case.*$',  # "in which case..."
+        r'\s+if\s+not.*$',  # "if not..."
+    ]
+    
+    working_text = original
+    for pattern in fallback_patterns:
+        working_text = re.sub(pattern, '', working_text, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Step 2: Remove meta/development/testing preambles (CRITICAL FIX)
+    # These patterns remove "I am developing...", "Here is a test...", etc.
+    meta_patterns = [
+        r'^.*?(?:i\'?m?|i\s+am)\s+(?:developing|building|creating|working\s+on|testing)\s+(?:the|my|this)?\s*(?:internet\s+based\s+tools?|tools?|chatbot|ai|program|script|features?).*?(?:so\s+here|here)\s+(?:is|are|goes)\s*(?:a\s+)?(?:test|example).*?\n+',
+        r'^.*?(?::\s*\n+|\.\.\.\n+|,\s*so\s+here\s+is\s+a\s+test[:\s]*\n+)',
+        r'^(?:test|testing)[:\s-]+',
+        r'^.*?(?:just|simply)?\s*(?:trying\s+to|want\s+to|need\s+to)\s+test\s+.*?(?:please|find|search|look)',
+    ]
+    
+    query = working_text
+    for pattern in meta_patterns:
+        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
+    
+    # Step 3: If query is still mostly meta-text, look for the actual topic sentence
+    # The real query usually contains specific entities (Iran, 2026, etc.)
+    sentences = re.split(r'(?<=[.!?])\s+', query)
+    
+    # Score each sentence - prefer sentences with:
+    # - Proper nouns (capitalized words not at start)
+    # - Years/dates
+    # - Location names
+    # - Action words (find, search, what, tell me about)
+    best_sentence = ""
+    best_score = -1
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if len(sentence) < 10:
+            continue
+            
+        score = 0
+        
+        # Prefer sentences with capitalized words in the middle (proper nouns)
+        words = sentence.split()
+        for i, word in enumerate(words):
+            if i > 0 and word[0].isupper() and len(word) > 2:
+                score += 3  # Proper noun likely
+        
+        # Prefer sentences with years
+        if re.search(r'\b20\d\d\b', sentence):
+            score += 5
+        
+        # Prefer sentences with location indicators
+        location_words = ['iran', 'iraq', 'syria', 'ukraine', 'russia', 'china', 'protest', 'uprising', 'war', 'election', 'news']
+        for loc in location_words:
+            if loc in sentence.lower():
+                score += 4
+        
+        # Demerit for meta words
+        meta_words = ['chatbot', 'test', 'testing', 'developing', 'tool', 'feature', 'internet', 'based', 'i am', "i'm"]
+        for meta in meta_words:
+            if meta in sentence.lower():
+                score -= 2
+        
+        if score > best_score:
+            best_score = score
+            best_sentence = sentence
+    
+    # If we found a good substantive sentence, use it
+    if best_score > 0:
+        query = best_sentence
+    else:
+        # Fallback: if no good sentence found, use what we have but clean it
+        pass
+    
+    # Step 4: Remove common request wrappers
+    wrappers = [
+        r'^(?:can\s+you|could\s+you|would\s+you|will\s+you)?\s*(?:please\s+)?(?:search|find|look\s+up|research|google|check|investigate|tell\s+me)\s+(?:for\s+|about\s+|on\s+|into\s+)?',
+        r'^(?:what\s+(?:is|are)\s+(?:the\s+)?(?:latest|current|recent|new)\s+(?:news|information|updates|developments)\s+(?:on|about|regarding)\s+)',
+        r'^(?:find\s+(?:out\s+)?(?:what\s+you\s+can\s+)?(?:about\s+)?)',
+        r'^(?:i\s+(?:want|need|would\s+like)\s+(?:to\s+know\s+)?(?:about\s+)?)',
+    ]
+    
+    for pattern in wrappers:
+        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
+    
+    # Step 5: Clean up
+    query = query.strip()
+    query = re.sub(r'^["\']+', '', query)  # Remove leading quotes
+    query = re.sub(r'["\']+$', '', query)  # Remove trailing quotes
+    query = re.sub(r'\s+', ' ', query)  # Normalize whitespace
+    query = re.sub(r'[.!?]+$', '', query)  # Remove trailing punctuation
+    
+    # If query is empty or too short, use a keyword extraction fallback
+    if len(query) < 5:
+        # Extract all capitalized words and years from original
+        keywords = []
+        # Find capitalized phrases (proper nouns)
+        for match in re.finditer(r'\b[A-Z][a-zA-Z]{2,}\b', original):
+            word = match.group()
+            if word.lower() not in ['i', 'the', 'a', 'an', 'and', 'or', 'but', 'so', 'here', 'test']:
+                keywords.append(word)
+        # Find years
+        for match in re.finditer(r'\b20\d\d\b', original):
+            keywords.append(match.group())
+        
+        query = ' '.join(keywords[:6]) if keywords else original[:80]
+    
+    # Step 6: Truncate if too long
+    if len(query) > 80:
+        query = query[:80].rsplit(' ', 1)[0]
+    
+    print(f"[SEARCH-QUERY] Original: '{original[:60]}...' → Extracted: '{query}'")
+    return query
 
 def toggle_tts_sound(current_state):
     """Toggle TTS Sound enabled/disabled."""
@@ -2491,8 +2725,10 @@ def launch_display():
                 
 
                 # Save button + status + exit
+                gr.Markdown("---")
                 with gr.Row():
                     save_config_btn = gr.Button("Save All Configuration", variant="primary", size="lg")
+                gr.Markdown("---")
                 with gr.Row():
                     config_status = gr.Textbox(
                         value="Configuration loaded",
@@ -2568,8 +2804,12 @@ def launch_display():
                     )
                 
                 # ── Save Button ─────────────────────────────────────────────────────────────
+                gr.Markdown("---")
+
                 with gr.Row():
                     save_all_btn = gr.Button("Save All Settings", variant="primary", size="lg")
+
+                gr.Markdown("---")
                 
                 # ── FINAL ROW: Status + Exit (IDENTICAL TO CONVERSATION TAB) ────────────────
                 with gr.Row():
@@ -2597,11 +2837,11 @@ def launch_display():
                
                 # ── Section B: INI Constants ──────────────────────────────────────────────
                 with gr.Group():
-                    gr.Markdown("### System Constants (constants.ini)")
+                    gr.Markdown("### System Constants (from constants.ini)")
                     ini_display = gr.Textbox(
                         label="INI Values (read-only, set by installer)",
                         value=get_ini_display_text(),
-                        lines=6,
+                        lines=10,
                         interactive=False
                     )
                 
@@ -2615,7 +2855,9 @@ def launch_display():
                         interactive=False
                     )
                     refresh_debug_btn = gr.Button("🔄 Refresh Debug Info", variant="secondary")
-                1               
+                
+                gr.Markdown("---")
+                
                 # ── FINAL ROW: Status + Exit ─────────────────────────────────────────────
                 with gr.Row():
                     info_status = gr.Textbox(
@@ -2683,7 +2925,7 @@ def launch_display():
 
             # Quick count for status; full scan runs in the .then(update_model_list)
             try:
-                n = len(list(Path(resolved).glob("*.gguf")))
+                n = len([f for f in Path(resolved).glob("*.gguf") if "mmproj" not in f.name.lower()])
             except Exception:
                 n = 0
             status = f"Folder: {short_path(resolved)} — {n} model(s) found"
