@@ -2,7 +2,7 @@
 
 ### Status
 Beta...
-- Since v1.10.9 there have been major issues with model compatibility, and clearly claude is confused. I can get Qwen 2.5/3.5 working, but not 3, dispite almost a week of bashing it with claude. I may have to move on to version 2, and limit support to, Windows 10-11 and Ubuntu 24-25, in order to get a more manageable code base, and libraries that work as the AI expects. Or I could experiment with fixing it on other AI systems. IDK.
+- Since v1.10.9 major issues with model compatibility were found, and clearly claude was confused. I managed to get Qwen 2.5/3/3.5 working, after almost a week of bashing it with claude. I may have to move on to version 2, and limit support to, Windows 10-11 and Ubuntu 24-25, in order to get a more manageable code base. I need a reliable working version for my own personal AI use.
 - Testing/bugfixing on Ubuntu needs to be checked/done, because after gradio becoming a set version, there were issues running and likely this may be consistent with ubuntu, though past releases mention ubuntu testing/working phases for earlier models/program, again vuague but there are notes in the releases mentioning ubuntu testing/use phases, until I can get around to checking.
 
 ## Description
