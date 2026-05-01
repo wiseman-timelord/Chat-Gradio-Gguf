@@ -2,7 +2,7 @@
 
 ### Status
 Beta...
-- Since v1.10.9 major issues with model compatibility were found, and clearly claude was confused. I managed to get Qwen 2.5/3 working, after almost a week of bashing it with claude, and lost 3.5, this has been the theme of things. I must move on to version 2, and limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and manageable codeBase. I need a reliable working version for my own personal AI use, and I could always release a polished updated version of v1 later when better AI is around.
+- Since v1.10.9 major issues with model compatibility were found, and clearly claude was confused. I managed to get Qwen 2.5/3 working, after almost a week of bashing it with claude, and lost 3.5, this has been the theme of things. I must move on to version 2, and limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and manageable codeBase. I need a reliable working version for my own personal AI use, and I could always release a polished updated version of v1 later when better AI is around. Forcing Gradio 3.50.2 for all insalls limited/challenged other libraries.
 - Testing/bugfixing on Ubuntu needs to be checked/done, because after gradio becoming a set version, there were issues running and likely this may be consistent with ubuntu, though past releases mention ubuntu testing/working phases for earlier models/program, again vuague but there are notes in the releases mentioning ubuntu testing/use phases, until I can get around to checking.
 
 ## Description
