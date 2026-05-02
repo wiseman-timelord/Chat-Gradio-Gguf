@@ -1,9 +1,7 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
-
-### Status
-Beta...
-- Since v1.10.9 major issues with model compatibility were found, and clearly claude was confused. I managed to get Qwen 2.5/3 working, after almost a week of bashing it with claude, and lost 3.5, this has been the theme of things. I must move on to version 2, and limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and manageable codeBase. I need a reliable working version for my own personal AI use, and I could always release a polished updated version of v1 later when better AI is around. Root cause is deemed to be `Forcing Gradio 3.50.2 for all insalls limited/challenged other libraries`.
-- Testing/bugfixing on Ubuntu needs to be checked/done, because after gradio becoming a set version, there were issues running and likely this may be consistent with ubuntu, though past releases mention ubuntu testing/working phases for earlier models/program, again vuague but there are notes in the releases mentioning ubuntu testing/use phases, until I can get around to checking.
+Status - v1 Beta / v2 Alpha
+- v1, in ~v1.10.5 I tried to implement current model handling, ie qwen3.5 deepseek 3.2(?), etc, and clearly claude or whatever else I used was confused, and corrupted things. For now you would have to fish around in the releases for a version that runs for example Qwen3 level models. I will release a final v1 later, and fully check things. v1 is, Windows 7-11 and ubuntu 22-25, compatible. Latest v1 Forces gradio v3 for all installs, slightly earlier releases of v1 used v5 for newer systems. Ubuntu, Unsure about compatibility on either version currently. Check for versions mentioning work on ubuntu (it was likely being tested/used at such points).
+- v2 (upcoming), moving on to version 2, where I will limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and slightly more manageable code complexity. 
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration. One thing to mention though, is that because a goal of the project is to make a Chatbot compatible as it is, therefore compromises had to be made, and it may not have all the latest versions of things, more the most widely compatible versions of things, so some features are not as good as they could be, but also, this program serves as a valuable reference for what needs to be used on what OS, albeit it, as a personal project it could be streamlined/enhanced/customized to your own likings later.   
@@ -391,9 +389,11 @@ project_root/
 ```
 
 # Development for next release
-There has been an overhaul, its it seems to work correctly, the next plans are...
-1. Possibly more testing of newer models that are not Qwen 3.5.
-2. Testing/Bugfixing on Ubuntu 22.
+More testing was done, the restults were not good, moved on to v2. There has been an overhaul, its it seems to work correctly, the next plans are...
+1. v2 - Limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and slightly more manageable code complexity. all features to then be tested, and multiple models tested, likely the model handling will inherit the issues from before, but be easier to fix. 
+2. v1 - Need to clean up v1, and do full test, including Testing/Bugfixing on Ubuntu 22 as this also needs to be checked/done. The issue is gradio becoming a set version 3, requring a shim for pydantic to work correctly. Problems started around there, so maybe we can cut whatever pydantic does from v1. Idea being to make a final version to leave it, after which later only updating to sync model handling.
+3. When there is a stable correctly working latest v2, then the plan will be to develop a stack of tools, ie "Web Research", but this needs to be brainstormed.
+4. Need to ensure attachments is working correctly, and if/when so, then we need artifacts, ie the ability to reference files provided earlier in the session and their presentation.
 
 # Update Ideas
 - It would be great to have a Auto/Quick/Think toggle, so as to have some pre-configured 1b model or the likes be able to do a quick assessment of, if the request is simple or complete, to then, disable think for simple tasks and enable think for complex tasks, and additionally we would want to have it assess context/batch lengths, if the user additionally has those set to auto. Other settings could also be determined through this auto feature pre-prompt system. Needs brainstorming.
