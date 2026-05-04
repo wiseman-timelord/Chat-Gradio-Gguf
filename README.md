@@ -1,16 +1,16 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 Status - v1 Beta / v2 Alpha
-- v1, in ~v1.10.5 I tried to implement current model handling, ie qwen3.5 deepseek 3.2(?), etc, and clearly claude or whatever else I used was confused, and corrupted things. For now you would have to fish around in the releases for a version that runs for example Qwen3 level models. I will release a final v1 later, and fully check things. v1 is, Windows 7-11 and ubuntu 22-25, compatible. Latest v1 Forces gradio v3 for all installs, slightly earlier releases of v1 used v5 for newer systems. Ubuntu, Unsure about compatibility on either version currently. Check for versions mentioning work on ubuntu (it was likely being tested/used at such points).
-- v2 (upcoming), moving on to version 2, where I will limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and slightly more manageable code complexity. 
+- v2 (upcoming), moving on to version 2, where I will limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and slightly more manageable code complexity. The readme.md here will be tailored towards the v2 release from now.
+- v1, after ~v1.10.x I tried to implement current model handling, ie qwen3.5 deepseek 3.2(?), etc, and clearly claude or whatever else I used was confused, and corrupted things. For now you would have to fish around in the releases for a version that runs for example Qwen3 level models. I will release a final v1 later, and fully check things. v1 is, Windows 7-11 and ubuntu 22-25, compatible. 
 
 ## Description
-Intended as a high-quality chat interface with wide hardware/os support, windows 7-11 (WSL not required) and Ubuntu 22-25, with any Gpu on GGUF models through Python ~3.9-3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration. One thing to mention though, is that because a goal of the project is to make a Chatbot compatible as it is, therefore compromises had to be made, and it may not have all the latest versions of things, more the most widely compatible versions of things, so some features are not as good as they could be, but also, this program serves as a valuable reference for what needs to be used on what OS, albeit it, as a personal project it could be streamlined/enhanced/customized to your own likings later.   
+Intended as a high-quality chat interface with wide hardware/os support, windows 10-11 (WSL not required) and Ubuntu 24-25, with any Gpu on GGUF models through Python ~3.11-~3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration.
 
 ### Core Principles
 - This project is for a chat interface, and is not intended to overlap with other blueprints/projects, `Rpg-Gradio-Gguf` or `Agent-Gradio-Gguf`. 
-- A, Windows 7-11 and Ubuntu 22-25, compatibility range; though Ubuntu 25 users have limitations I believe already due to python 3.13. Any and all compatibility issues within those ranges MUST be overcome.
-- This Program is also intended to have only basic tools of, DDG Search, Web Search, and Speech Out. The cost of having wide compatibility is scrifice of tool complexity.
-- I am making this program for the community, so that people on Ubuntu and Windows, are able to use a single chatbot for AI, even on legacy setups or modern systems.
+- A, Windows 10-11 and Ubuntu 24-25, compatibility range; Any and all compatibility issues within those ranges MUST be overcome.
+- This Program is also intended to have only basic tools of, DDG Search, Web Search, and Speech Out. Though more may be added later.
+- I am making this program for the community, so that people on Ubuntu and Windows, are able to use a single chatbot for AI, on recent models.
 
 ### Features
 - **Qt-Web Custom Browser**: The interface uses Qt-Web with Gradio, it appears as a regular application, and means your default browser are untouched.  
@@ -142,111 +142,194 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
 </details>
 
-- The combined Info/Install menu  (v1.10.3)...
+- The combined Info/Install menu  (v2.0.0)...
 <details>
     
-    =================================================================================
-        Chat-Gradio-Gguf - Configure Installation
-    =================================================================================
+    ===============================================================================
+     Chat-Gradio-Gguf v2 — Backend & Install Size
+    ===============================================================================
     
     System Detections...
-        CPU Features: SSE3, SSSE3, SSE4_1
-        Operating System: Windows 10
-        Optimal Python: 3.12; Vulkan Present: No
-        Build Tools: Git, CMake, MSVC, MSBuild
+       CPU Features : AVX | AVX2 | FMA | F16C
+       Build Tools  : Git OK | CMake OK | MSVC OK | MSBuild OK
+       Platform     : Windows 10 | Python 3.12
+       GPU          : DX11.1 | Vulkan: YES
     
     Backend Options...
-       1) Download CPU Binary / Default CPU Wheel
-       2) Download Vulkan Binary / Default CPU Wheel
-       3) Compile CPU Binaries / Compile CPU Wheel
-       4) Compile Vulkan Binaries / Compile Vulkan Wheel
+       1) Download CPU Binary / Default CPU Wheel (Wheel v0.3.16)
+       2) Download Vulkan Binary / Default CPU Wheel (Wheel v0.3.16)
+       3) Compile CPU Binaries / Compile CPU Wheel (Wheel v0.3.22)
+       4) Compile Vulkan Binaries / Compile Vulkan Wheel (Wheel v0.3.22)
     
     Install Size...
-       a) Small  ~135MB - Bge-Small-En v1.5 + pyttsx3/espeak-ng (built-in TTS)
-       b) Medium ~450MB - Bge-Base-En v1.5 + pyttsx3/espeak-ng (built-in TTS)
-       c) Large   ~2GB  - Bge-Base-En v1.5 + Coqui TTS (high quality voices)
+       a) Small  +450MB  - Bge-Small-En v1.5 + Coqui TTS (faster)
+       b) Medium +1.5GB  - Bge-Base-En v1.5  + Coqui TTS (quality)
     
-    =================================================================================
-    Selection; Backend=1-4, Size=a-c, Abandon=A; (e.g. 2b):
+    ===============================================================================
+    Selection; Backend=1-4, Size=a-b, Abandon=A; (e.g. 2b):
 
 </details>
 
-- The installation with compiling...(v1.04.2)
+- The installation without compiling...(v2.00.0)
 <details>
     
     ===============================================================================
-        Chat-Gradio-Gguf - Installation
+     Chat-Gradio-Gguf v2 — Installation
     ===============================================================================
     
-    Installing Chat-Gradio-Gguf on Windows 10 with Python 3.12
-      Route: Compile Vulkan Binaries / Compile Vulkan Wheel
-      Llama.Cpp b7688, Gradio 5.49.1, Qt-Web v6
-      Embedding: BAAI/bge-base-en-v1.5
-      TTS: Coqui - British (Male/Female)
-    [✓] Verified directory: data
-    [✓] Verified directory: scripts
-    [✓] Verified directory: models
-    [✓] Verified directory: data/history
-    [✓] Verified directory: data/temp
-    [✓] Verified directory: data/vectors
-    [✓] Verified directory: data/embedding_cache
-    [✓] Using build temp path: C:\temp_build
+    Installing Chat-Gradio-Gguf v2 on Windows 10 with Python 3.12
+      Mode: Clean Install
+      Route: Download Vulkan Binary / Default CPU Wheel
+      Llama.Cpp b8882, Gradio 5.x, Qt-Web v6
+      Embedding: BAAI/bge-small-en-v1.5
+      GPU: DirectX Feature Level 0xb100
+      TTS: Coqui (p225,p226 / english)
+    [✓] Removed existing virtual environment
+    [✓] Created new virtual environment
+    [✓] Upgraded pip to latest version
+    [✓] Verified virtual environment setup
+    [✓] Installing py-cpuinfo for CPU detection...
+    Collecting py-cpuinfo
+      Using cached py_cpuinfo-9.0.0-py3-none-any.whl.metadata (794 bytes)
+    Using cached py_cpuinfo-9.0.0-py3-none-any.whl (22 kB)
+    Installing collected packages: py-cpuinfo
+    Successfully installed py-cpuinfo-9.0.0
+    
+    [notice] A new release of pip is available: 24.0 -> 26.1
+    [notice] To update, run: C:\Inference_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.10.9\.venv\Scripts\python.exe -m pip install --upgrade pip
+    [✓] py-cpuinfo installed
+    [✓] Protected directory preserved: data/embedding_cache
+    [✓] Directories created/verified
     [✓] System information file created
     [✓] Installing Python dependencies...
-    [✓] Installing base packages (Gradio 5.49.1)...
-      [1/21] Installing numpy<2... OK
-      [2/21] Installing requests... OK
-      [3/21] Installing pyperclip... OK
-      [4/21] Installing spacy... OK
-      [5/21] Installing psutil... OK
-      [6/21] Installing ddgs... OK
-      [7/21] Installing langchain-community... OK
-      [8/21] Installing faiss-cpu... OK
-      [9/21] Installing langchain... OK
-      [10/21] Installing pygments... OK
-      [11/21] Installing lxml... OK
-      [12/21] Installing lxml_html_clean... OK
-      [13/21] Installing tokenizers... OK
-      [14/21] Installing beautifulsoup4... OK
-      [15/21] Installing aiohttp... OK
-      [16/21] Installing pywin32... OK
-      [17/21] Installing tk... OK
-      [18/21] Installing pythonnet... OK
-      [19/21] Installing pyttsx3... OK
-      [20/21] Installing newspaper4k... OK
-      [21/21] Installing gradio... OK
+    [✓] Installing packages (Gradio 5.x)...
+      [1/20] Installing numpy...      Installing collected packages: numpy
+     OK
+      [2/20] Installing requests...      Installing collected packages: urllib3, idna, charset_normalizer, certifi, requests
+     OK
+      [3/20] Installing pyperclip...      Installing collected packages: pyperclip
+     OK
+      [4/20] Installing spacy...      Installing collected packages: wrapt, typing-extensions, spacy-loggers, spacy-legacy, shellingham, setuptools, pygments, packaging, murmurhash, mdurl, MarkupSafe, h11, cymem, confection, colorama, cloudpathlib, catalogue, blis, annotated-types, annotated-doc, wasabi, typing-inspection, tqdm, srsly, smart-open, pydantic-core, preshed, markdown-it-py, jinja2, httpcore, click, anyio, rich, pydantic, httpx, typer, thinc, weasel, spacy
+     OK
+      [5/20] Installing psutil...      Installing collected packages: psutil
+     OK
+      [6/20] Installing ddgs...      Installing collected packages: primp, lxml, ddgs
+     OK
+      [7/20] Installing langchain-community...      Installing collected packages: zstandard, xxhash, uuid-utils, tenacity, PyYAML, python-dotenv, propcache, orjson, mypy-extensions, multidict, marshmallow, langchain-protocol, jsonpointer, httpx-sse, greenlet, frozenlist, attrs, aiohappyeyeballs, yarl, typing-inspect, SQLAlchemy, requests-toolbelt, jsonpatch, aiosignal, pydantic-settings, langsmith, dataclasses-json, aiohttp, langchain-core, langchain-text-splitters, langchain-classic, langchain-community
+     OK
+      [8/20] Installing langchain-text-splitters...   OK
+      [9/20] Installing faiss-cpu...      Installing collected packages: faiss-cpu
+     OK
+      [10/20] Installing langchain...      Installing collected packages: ormsgpack, langgraph-sdk, langgraph-checkpoint, langgraph-prebuilt, langgraph, langchain
+     OK
+      [11/20] Installing pygments...   OK
+      [12/20] Installing lxml...      Installing collected packages: lxml
+            Uninstalling lxml-6.1.0:
+     OK
+      [13/20] Installing lxml_html_clean...      Installing collected packages: lxml_html_clean
+     OK
+      [14/20] Installing beautifulsoup4...      Installing collected packages: soupsieve, beautifulsoup4
+     OK
+      [15/20] Installing aiohttp...   OK
+      [16/20] Installing newspaper4k...      Installing collected packages: sgmllib3k, brotli, w3lib, six, pillow, filelock, feedparser, requests-file, python-dateutil, tldextract, newspaper4k
+     OK
+      [17/20] Installing pywin32...      Installing collected packages: pywin32
+     OK
+      [18/20] Installing tk...      Installing collected packages: tk
+     OK
+      [19/20] Installing pythonnet...      Installing collected packages: pycparser, cffi, clr_loader, pythonnet
+     OK
+      [20/20] Installing gradio...        Downloading pytz-2026.2-py2.py3-none-any.whl.metadata (22 kB)
+        Downloading pytz-2026.2-py2.py3-none-any.whl (510 kB)
+        Installing collected packages: pytz, pydub, websockets, tzdata, tomlkit, semantic-version, ruff, python-multipart, pydantic-core, pillow, hf-xet, groovy, fsspec, ffmpy, aiofiles, uvicorn, starlette, pydantic, pandas, safehttpx, fastapi, huggingface-hub, gradio-client, gradio
+            Uninstalling pydantic_core-2.46.3:
+            Uninstalling pillow-12.2.0:
+            Uninstalling pydantic-2.13.3:
+     OK
     [✓] Base packages installed
-    [✓] Installing embedding backend (torch + sentence-transformers)...
-    [✓] Installing PyTorch 2.4+ (CPU-only) for Python 3.12...
-    [✓] PyTorch 2.4+ (CPU) installed
-    [✓] Installing transformers>=4.42.0...
+    [✓] Installing PyTorch (CPU) — torch>=2.5.0...
+          Using cached https://download-r2.pytorch.org/whl/cpu/torch-2.11.0%2Bcpu-cp312-cp312-win_amd64.whl.metadata (29 kB)
+        Using cached https://download-r2.pytorch.org/whl/cpu/torch-2.11.0%2Bcpu-cp312-cp312-win_amd64.whl (114.5 MB)
+        Installing collected packages: mpmath, sympy, setuptools, networkx, torch
+            Uninstalling setuptools-82.0.1:
+    [✓] PyTorch (CPU) installed
+    [✓] setuptools restored after torch install
+    [✓] Installing transformers>=4.44.0...
+        Installing collected packages: safetensors, regex, tokenizers, transformers
     [✓] transformers installed
-    [✓] Installing sentence-transformers>=3.0.0...
+    [✓] Installing sentence-transformers>=3.3.0...
+        Installing collected packages: threadpoolctl, setuptools, scipy, joblib, scikit-learn, sentence-transformers
+            Uninstalling setuptools-82.0.1:
     [✓] sentence-transformers installed
     [✓] Embedding backend verified
-    [✓] Installing Qt WebEngine for custom browser...
-    [✓] Windows 10 - installing PyQt6 + Qt6 WebEngine...
-    [✓] Qt6 WebEngine installed
-    [✓] Vulkan wheel build - checking Vulkan SDK...
-    [✓] Vulkan SDK detected
-    [✓] Building llama-cpp-python from source (10-20 minutes)
-      Using 20 parallel build threads
-      Build flags: GGML_VULKAN=1, GGML_AVX2=ON, GGML_AVX=ON, GGML_FMA=ON, GGML_F16C=ON, LLAMA_CURL=OFF, GGML_OPENMP=ON
-    [✓] Cleaning previous build artifacts...
-    [✓] Cloning llama-cpp-python v0.3.16...
-    [✗] Build timed out
-    [✗] Python dependencies failed
+    [✓] Installing Qt6 WebEngine for custom browser...
+        Installing collected packages: PyQt6-Qt6, PyQt6-sip, PyQt6
+        Installing collected packages: PyQt6-WebEngine-Qt6, PyQt6-WebEngine
+    [✓] Qt6 WebEngine installed successfully
+    [✓] Installing llama-cpp-python 0.3.16 (CPU, trying 3 sources)...
+      Trying: eswarthammana/llama-cpp-wheels 0.3.16
+          Downloading https://github.com/eswarthammana/llama-cpp-wheels/releases/download/v0.3.16/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl (4.2 MB)
+        Installing collected packages: diskcache, llama-cpp-python
+    [✓] llama-cpp-python 0.3.16 installed via eswarthammana/llama-cpp-wheels 0.3.16
+    [✓] Python dependencies installed successfully
+    [✓] Installing optional file format support...
+    [✓]   Installed PyPDF2
+    [✓]   Installed python-docx
+    [✓]   Installed openpyxl
+    [✓]   Installed python-pptx
+    [✓] Initializing embedding cache for BAAI/bge-small-en-v1.5...
+    Embedding Initialization Output...
+        Importing torch...
+        torch version: 2.11.0+cpu
+        CUDA available: False (should be False)
+        Importing sentence_transformers...
+        Loading model: BAAI/bge-small-en-v1.5
+        Testing embedding...
+        SUCCESS: Model loaded, dimension: 384
+    [✓] Embedding cache initialized
+    [✓] Downloading spaCy language model...
+    Downloading spaCy model: [==============================] 100% (12.2MB/12.2MB) - Complete
+    [✓] Installing spaCy model...
+    [✓] spaCy model installed
+    [✓] Installing espeak-ng (Coqui dependency)...
+    [✓] espeak-ng verified
+    [✓] Installing Coqui TTS with codec support...
+    [✓] Installing torchaudio (CPU-only to match torch)...
+          Using cached https://download-r2.pytorch.org/whl/cpu/torchaudio-2.11.0%2Bcpu-cp312-cp312-win_amd64.whl.metadata (7.0 kB)
+        Using cached https://download-r2.pytorch.org/whl/cpu/torchaudio-2.11.0%2Bcpu-cp312-cp312-win_amd64.whl (326 kB)
+        Installing collected packages: torchaudio
+    [✓] torchaudio (CPU) installed
+    [✓] Coqui TTS package installed
+    [✓] Patched autoregressive.py for transformers compatibility
+    [✓] Downloading Coqui VCTK voice model (~1.4GB)...
+    [COQUI] espeak-ng directory added to PATH
+    [COQUI] espeak-ng DLL: C:/Inference_Files/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.10.9/data/espeak-ng\libespeak-ng.dll
+    [COQUI] espeak-ng data: C:/Inference_Files/Chat-Gradio-Gguf/Chat-Gradio-Gguf-1.10.9/data/espeak-ng\espeak-ng-data
+    [COQUI] espeak-ng verified
+    [COQUI] Loading model...
+    [COQUI] Testing synthesis...
+    [COQUI] Model test passed
+    [✓] Coqui TTS installed and verified
+    [✓] Downloading backend binaries...
+    Downloading backend: [==============================] 100% (32.4MB/32.4MB) - Complete
+    [✓] Extracting backend...
+    Extracting: [=========================] 100% (43.0B/43.0B)
+    [✓] Backend ready
+    [✓] Configuration file created
+    [✓] Installation complete!
+    
+    Run the launcher to start Chat-Gradio-Gguf v2
+    
     [✓] Cleaned up compilation temp folder
-    DeActivated: `.venv`
     Press any key to continue . . .
 
 </details>
 
 ## Hard Requirements
-- Windows 7-11 and/or ~Ubuntu 22-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
-- Python 3.9-3.13 - Requires [Python](https://www.python.org); AI warns me certain libraries wont work on Python 3.14, possibly Spacy. 
+- Windows 10-11 and/or ~Ubuntu 24-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
+- Python ~3.11-~3.13 - Requires [Python](https://www.python.org); AI warns me certain libraries wont work on Python 3.14, possibly Spacy. 
 - Llm Model - You will need a Large Language Model in GGUF format, check the models section for recommendations, but for quick start I advise one like [Qwen3-4B-abliterated-GGUF](https://huggingface.co/mradermacher/Qwen3-4B-abliterated-GGUF) for testing basic operation.
-- Suitable GPU - Gpu may be, Main or Compute, with VRam selection 4GB-64GB. Ideally you want the GPU to cover all model layers for fast interference.
+- Suitable GPU - Gpu may be, Main or Compute, with VRam selection 4GB-96GB. Ideally you want the GPU to cover all model layers for fast interference.
 - System Ram - Your system ram must cover, the curren load and the size of the model layers not able to be covered by the GPU, plus smaller models like the embeddings model, plus the wheel if not built for Vulkan.
 
 ### Building Requirements 
@@ -301,14 +384,13 @@ Web Search = Slower actual website reading research.
 ```
 
 ### Notation 
+- Windows is my main OS, so Check for recent v1 versions mentioning work on ubuntu if you use that (it was likely being tested/used at such points).
 - Changing height of session log height as shown in media section requires restart of GUI, to re-initialize the complicated and fragile dynamic UI through browser fake GUI interface. 
-- Because of how the WT-Web interface works, there is ongoing issue with how sometimes lists of values in the configuration page are non-selectable; just select a different number in list first, then select number you want. Only way to fix this would be to drop older windows/ubuntu support.  
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
-- Support was maintained for Windows 7-8; FastEmbed/ONNX was replaced with PyQt5 + Qt5 WebEngine. So its slower, but the plan is Windows 7-11 and Ubuntu 22-25. Other optimized projects may follow.
 - Optimize context length; the chatbot will chunk data to the size of the context length, however using a max_context_length of ~128000 is EXTREMELY SLOW, and on older computers try NOT to use a context_length over ~32000. 
 - The "iMatrix" models do not currently work, due to requirement of Cuda for imatrix to work. Just to save some issues for people that dont know. In other words, if the model has "i" in its label somewhere significant, then likely it is a iMatrix model, and you will need some other ChatBot that handles such things.
-- VRAM dropdown, 1GB to 64GB in steps, this should be your FREE ram available on the selected card, if you are using the card at the time then this is why we have for example, 6GB for a 8GB GPU in use, safely allowing 2GB for the system, while in compute more one would use for example, the full 8GB on the 8GB GPU.
-- I advise GPU can cover the Q6_K version, the Q6_K useually has negligable quality loss, while allowing good estimation of if the model will fit on a card, ie 8GB card will typically be mostly/completely cover a 7B/8B model in Q6_K compression, with a little extra to display the gradio interface, so the numbers somewhat relate with Q6_K when using same card as display.
+- VRAM dropdown, 1GB to 96GB in steps, this should be your FREE ram available on the selected card, if you are using the card at the time then this is why we have for example, 6GB for a 8GB GPU in use, safely allowing 2GB for the system, while in compute more one would use for example, the full 8GB on the 8GB GPU.
+- I advise GPU can cover the Q5_KM/6_K versions of models, these useually has negligable quality loss, while allowing good estimation of if the model will fit on a card, ie 8GB card will typically be mostly/completely cover a 7B/8B model in 5_KM/Q6_K compression, with a little extra to display the gradio interface, so the numbers somewhat relate with Q5_KM/Q6_K when using same card as display.
 - We used a `1.125` additional to model size for layers to fit on VRAM,  the calculation is `TotalVRam /((ModelFileSize * 1.125) / NumLayers = LayerSize) = NumLayersOnGpu`. This possibly is not the case now.
 - For downloading large files such as LLM in GGUF format, then typically I would use  [DownLord](https://github.com/wiseman-timelord/DownLord), instead of lfs.
 - "Chat-Windows-Gguf" and "Chat-Linux-Gguf", is now "Chat-Gradio-Gguf", as yes, these dual-mode scripts used to be 2 different/same programs.
