@@ -142,7 +142,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
     
 </details>
 
-- The combined Info/Install menu  (v2.0.0)...
+- The combined Info/Install menu, choose 3/4 if System Detections are as shown (v2.0.0)...
 <details>
     
     ===============================================================================
