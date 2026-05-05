@@ -170,7 +170,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 
 </details>
 
-- The installation without compiling...(v2.00.0)
+- The installation without compiling (v2.00.0)...
 <details>
     
     ===============================================================================
