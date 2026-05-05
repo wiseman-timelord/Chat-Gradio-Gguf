@@ -466,11 +466,19 @@ project_root/
 ```
 
 # Development for next release
-More testing was done, the restults were not good, moved on to v2. There has been an overhaul, its it seems to work correctly, the next plans are...
-1. v2 - Limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and slightly more manageable code complexity. all features to then be tested, and multiple models tested, likely the model handling will inherit the issues from before, but be easier to fix. 
-2. v1 - Need to clean up v1, and do full test, including Testing/Bugfixing on Ubuntu 22 as this also needs to be checked/done. The issue is gradio becoming a set version 3, requring a shim for pydantic to work correctly. Problems started around there, so maybe we can cut whatever pydantic does from v1. Idea being to make a final version to leave it, after which later only updating to sync model handling.
-3. When there is a stable correctly working latest v2, then the plan will be to develop a stack of tools, ie "Web Research", but this needs to be brainstormed.
-4. Need to ensure attachments is working correctly, and if/when so, then we need artifacts, ie the ability to reference files provided earlier in the session and their presentation.
+v2 is now in Pre-Release stage...
+1. All features to be tested, and multiple models tested.
+2. There is a issue with model handling on qwen 3.5/3.6, ensure to do compile install and bugfix/correct the handling.
+3. Need to clean up v2, check for redundant code and optimize, then test and fix.
+4. When there is a stable correctly working latest v2, then the plan will be to develop a stack of tools, ie "Web Research", but this needs to be brainstormed.
+5. Need to ensure attachments is working correctly, and if/when so, then we need artifacts, ie the ability to reference files provided earlier in the session and their presentation.
+6. When the user installs, the installer needs to additionally note what version of the wheel was installed, currently that would be either v0.3.20 or v0.3.16, though possibly there is a global for this, but it needs to additionally be noted into the constants.ini, in order to be able to display this in the appropriate location in the about/debug tab in the main program, for purposes of referencing what level of model compatibility the program was installed with.
+
+# Development for nv1
+More testing was done, the restults were not good, moved on to v2...
+1. do full test, including Testing/Bugfixing on, Windoes 8.1 and Ubuntu 22.
+2. Need to clean up v1, check for redundant code and optimize, then test and fix. 
+3. The issues may be gradio becoming a set version 3, requring a shim for pydantic to work correctly. Problems started around there, so maybe we can cut whatever pydantic does from v1. Idea being to make a final version to leave it, after which later only updating to sync model handling.
 
 # Update Ideas
 - It would be great to have a Auto/Quick/Think toggle, so as to have some pre-configured 1b model or the likes be able to do a quick assessment of, if the request is simple or complete, to then, disable think for simple tasks and enable think for complex tasks, and additionally we would want to have it assess context/batch lengths, if the user additionally has those set to auto. Other settings could also be determined through this auto feature pre-prompt system. Needs brainstorming.
