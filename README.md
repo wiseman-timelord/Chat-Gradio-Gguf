@@ -30,8 +30,8 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
 
 ### Preview
-- The main chat window after a date aware AI Web Search report, where both side panels are visible (using the model Qwen3.5-4B-Abliterated-Claude-4.6-Opus-Reasoning-Distilled-GGUF) (v1.11.0)...
-![image_missing](media/expanded_portrait.jpg)
+- The main chat window after a date aware AI Web Search report, where both side panels are visible (using the model Qwen3) (v1.11.0)...
+![image_missing](media/conversation_page_windows.jpg)
 
 - The Interaction page on Ubuntu, here showing the DDG Search tool, with Ubuntu Terminal in the background (v1.02.1)...
 ![image_missing](media/conversation_page_ubuntu.jpg)
