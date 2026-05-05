@@ -1,112 +1,55 @@
-# launcher.py - The entry point of the scripts of the main program.
+# launcher.py - The entry point of the main program.
+# v2: Targets Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.13 / Gradio 5.x / PyQt6
+# Pydantic v2 shim is NOT required — Gradio 5.x is natively compatible with Pydantic v2.
 
-# =============================================================================
-# CRITICAL: Pydantic v1/v2 compatibility shim MUST be before ANY other imports
-# — with one exception: libraries that REQUIRE pydantic v2 must be pre-loaded
-#   here first. Once a module is cached in sys.modules, later "import X" calls
-#   return the cached copy and are unaffected by the shim that follows.
-# =============================================================================
 import sys as _sys
 import os as _os
 
-# Set embedding cache env vars FIRST before ANY imports
+# =============================================================================
+# STEP 1: Set embedding/HF cache env vars BEFORE any library imports.
+# These must be the very first lines so that HuggingFace and sentence-transformers
+# both see the correct paths regardless of import order.
+# =============================================================================
 _cache_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "data", "embedding_cache")
 _os.makedirs(_cache_dir, exist_ok=True)
 _os.environ["TRANSFORMERS_CACHE"] = _cache_dir
 _os.environ["HF_HOME"] = _os.path.dirname(_cache_dir)
 _os.environ["SENTENCE_TRANSFORMERS_HOME"] = _cache_dir
-_os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU mode
-_os.environ["HF_HUB_OFFLINE"] = "1"  # CRITICAL: Force fully offline mode
+_os.environ["CUDA_VISIBLE_DEVICES"] = ""       # Force CPU mode for embeddings
+_os.environ["HF_HUB_OFFLINE"] = "1"            # CRITICAL: fully offline embedding model loading
 _os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
-# -----------------------------------------------------------------------------
-# COMPAT BLOCK — pydantic shim + pre-imports for pydantic-v2-dependent libs.
-#
-# On Windows, Gradio 3.x uses Python multiprocessing (spawn method) for its
-# internal queue, which re-executes this __main__ module in every worker
-# process.  The if __name__ == "__main__": guard below stops main() running
-# again, but this module-level code would otherwise print twice.
-#
-# Strategy:
-#   • Use a sentinel env var (_CGUF_COMPAT_INIT) to suppress repeat output.
-#     Child processes inherit the env and stay silent.
-#   • The pydantic shim (sys.modules remapping) still executes in every
-#     process — child workers need it too if they touch pydantic-dependent libs.
-#   • Check pydantic version FIRST so all messages are context-aware.
-# -----------------------------------------------------------------------------
-_COMPAT_VERBOSE = _os.environ.get("_CGUF_COMPAT_INIT") != "1"
+# =============================================================================
+# STEP 1b: Stub torchcodec BEFORE any imports that might trigger it.
+# torchaudio pulls torchcodec as a transitive dependency; torchcodec tries to
+# load FFmpeg DLLs at import time, which fails on Windows without a full FFmpeg
+# "shared" install.  We don't use any FFmpeg / video-decoding features, so we
+# pre-register dummy stub modules so the real torchcodec never gets imported.
+# =============================================================================
+import types as _types
+import importlib.util as _importlib_util
 
-# Step 1 — Detect pydantic version before any pre-imports so messages are
-#           accurate about whether a shim will actually be applied.
-_pydantic_major = 0
-_pydantic_version_str = "unknown"
-_pydantic_needs_shim = False
-try:
-    import pydantic as _pydantic
-    _pydantic_version_str = _pydantic.VERSION
-    _pydantic_major = int(_pydantic_version_str.split(".")[0])
-    _pydantic_needs_shim = _pydantic_major >= 2
-except Exception:
-    pass
+def _make_stub(name: str) -> _types.ModuleType:
+    """Create a stub module with a proper __spec__ so guards like
+    `if module.__spec__ is None: raise …` (torchaudio, torchcodec) don't trip."""
+    m = _types.ModuleType(name)
+    m.__spec__ = _importlib_util.spec_from_loader(name, loader=None)
+    return m
 
-# Step 2 — Pre-load pydantic-v2-dependent libraries into sys.modules NOW.
-#
-#   pydantic v2 present: spaCy and sentence_transformers must be cached before
-#     the shim below remaps pydantic → pydantic.v1; otherwise their module-
-#     level "from pydantic import field_validator" would fail after the remap.
-#   pydantic v1 present: spaCy requires pydantic v2 and will always fail here;
-#     sentence_transformers is pre-loaded as a minor startup optimisation only.
-#   In both cases, all failures are caught and features degrade gracefully.
-try:
-    import spacy as _spacy_preload
-    if _COMPAT_VERBOSE:
-        _verb = "pre-loaded" if _pydantic_needs_shim else "loaded"
-        print(f"[COMPAT] spaCy {_spacy_preload.__version__} {_verb}")
-except Exception as _e:
-    if _COMPAT_VERBOSE:
-        if _pydantic_needs_shim:
-            print(f"[COMPAT] spaCy pre-load skipped ({type(_e).__name__}) — NLP uses word-split fallback")
-        else:
-            # pydantic v1: spaCy always fails here; this is expected and handled.
-            print(f"[COMPAT] NLP uses word-split fallback")
+if "torchcodec" not in _sys.modules:
+    _sys.modules["torchcodec"] = _make_stub("torchcodec")
+    for _sub in (
+        "torchcodec._internally_replaced_utils",
+        "torchcodec.decoders",
+        "torchcodec.decoders._core",
+    ):
+        _sys.modules[_sub] = _make_stub(_sub)
 
-try:
-    import sentence_transformers as _st_preload
-    if _COMPAT_VERBOSE:
-        print(f"[COMPAT] sentence_transformers loaded")
-except Exception as _e:
-    if _COMPAT_VERBOSE:
-        print(f"[COMPAT] sentence_transformers unavailable — RAG disabled ({type(_e).__name__})")
-
-# Step 3 — Apply pydantic shim (if needed) or report installed state.
-#   This sys.modules remapping runs in every process (main + Gradio workers).
-if _pydantic_needs_shim:
-    try:
-        import pydantic.v1 as _pydantic_v1
-        _sys.modules["pydantic"]           = _pydantic_v1
-        _sys.modules["pydantic.fields"]    = _pydantic_v1.fields
-        _sys.modules["pydantic.main"]      = _pydantic_v1.main
-        _sys.modules["pydantic.validators"]= _pydantic_v1.validators
-        _sys.modules["pydantic.types"]     = _pydantic_v1.types
-        _sys.modules["pydantic.errors"]    = _pydantic_v1.errors
-        _sys.modules["pydantic.networks"]  = _pydantic_v1.networks
-        if _COMPAT_VERBOSE:
-            print(f"[COMPAT] Pydantic v{_pydantic_major} → v1 shim applied for Gradio 3.x")
-    except ImportError:
-        if _COMPAT_VERBOSE:
-            print(f"[COMPAT] WARNING: Pydantic v{_pydantic_major} found but v1 compat layer missing")
-            print("[COMPAT]   Run: pip install 'pydantic<2'")
-elif _pydantic_major > 0:
-    if _COMPAT_VERBOSE:
-        print(f"[COMPAT] Pydantic v{_pydantic_version_str} — Gradio 3.x compatible")
-
-# Mark done — child processes spawned by Gradio multiprocessing inherit this
-# and skip the print block above while still executing the shim itself.
-if _COMPAT_VERBOSE:
-    _os.environ["_CGUF_COMPAT_INIT"] = "1"
-
-# Disable Logging (before any library imports)
-# CRITICAL: Must import logging.config explicitly as it is a submodule
+# =============================================================================
+# STEP 2: Suppress library logging configuration calls before any imports.
+# Libraries call logging.basicConfig() and logging.config.dictConfig() at
+# import time, which would otherwise flood the console. Silence them early.
+# =============================================================================
 import logging as _logging
 import logging.config as _logging_config
 _logging_config.dictConfig = lambda *_, **__: None
@@ -119,14 +62,13 @@ _logging.basicConfig = lambda *_, **__: None
 import sys
 import os
 
-# Enable faulthandler IMMEDIATELY — before any C extension is imported.
+# Enable faulthandler IMMEDIATELY before any C extension import.
 # Without this, a SIGSEGV (e.g. from llama-cpp-python's Jinja2 template parser
-# or an incompatible GGUF architecture) kills the process silently with no
-# traceback, and the batch menu loop restarts without any diagnostic output.
-# With faulthandler enabled, the C-level call stack is printed to stderr before
-# the process exits, making the crash source visible in the batch window.
+# or an incompatible GGUF architecture) kills the process silently.
+# With faulthandler, the C-level call stack is printed to stderr on crash.
 import faulthandler as _faulthandler
-_faulthandler.enable()                   # FIX: was only imported as _os above; functions below use `os` unaliased
+_faulthandler.enable()
+
 import argparse
 import time
 from pathlib import Path
@@ -136,10 +78,12 @@ from scripts.configure import load_config
 from scripts.display import launch_display
 from scripts.utility import detect_cpu_config
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('platform', choices=['windows', 'linux'], help='Target platform')
     return parser.parse_args()
+
 
 def initialize_platform_settings():
     """Initialize platform-specific settings with validation."""
@@ -148,7 +92,7 @@ def initialize_platform_settings():
         print(f"Warning: Invalid backend_type '{cfg.BACKEND_TYPE}', defaulting to CPU_CPU")
         cfg.BACKEND_TYPE = "CPU_CPU"
         cfg.VULKAN_AVAILABLE = False
-    
+
     # Vulkan VRAM optimisation
     if cfg.BACKEND_TYPE in ("VULKAN_CPU", "VULKAN_VULKAN"):
         if cfg.PLATFORM == "windows":
@@ -174,6 +118,7 @@ def initialize_platform_settings():
 
     print(f"Script mode `{cfg.PLATFORM}` with backend `{cfg.BACKEND_TYPE}`")
 
+
 def shutdown_program(llm_state, models_loaded_state, session_log, attached_files):
     """Gracefully shutdown the program, saving current session if active."""
     from scripts.utility import save_session_history
@@ -196,11 +141,9 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
         except Exception as e:
             print(f"Error unloading model: {str(e)}")
 
-    # Graceful shutdown sequence
     print(f"Closing Program...")
     shutdown_platform()
 
-    # Force terminate in a separate thread to ensure it happens
     def force_exit():
         time.sleep(1)
         print("[SHUTDOWN] Force terminating...")
@@ -210,16 +153,15 @@ def shutdown_program(llm_state, models_loaded_state, session_log, attached_files
     exit_thread = threading.Thread(target=force_exit, daemon=True)
     exit_thread.start()
 
-    # Also try to close browser (may or may not work)
     try:
         from scripts.display import close_browser
         close_browser()
     except:
         pass
 
-    # If we get here, force exit anyway
     time.sleep(1)
     os._exit(0)
+
 
 def shutdown_platform():
     """Platform-specific cleanup procedures."""
@@ -231,6 +173,7 @@ def shutdown_platform():
             pass
     print(f"Cleaned up {cfg.PLATFORM} resources")
 
+
 def setup_directories():
     """Setup and create required directories."""
     script_dir = Path(__file__).parent.resolve()
@@ -239,14 +182,14 @@ def setup_directories():
     cfg.HISTORY_DIR = str(script_dir / "data/history")
     cfg.TEMP_DIR = str(script_dir / "data/temp")
 
-    # Create required directories
     for dir_path in [cfg.DATA_DIR, cfg.HISTORY_DIR, cfg.TEMP_DIR]:
         Path(dir_path).mkdir(parents=True, exist_ok=True)
 
     return script_dir
 
+
 def print_configuration():
-    """Print current configuration cfg."""
+    """Print current configuration."""
     print("\nConfiguration:")
     print(f"  Backend: {cfg.BACKEND_TYPE}")
     print(f"  Model: {cfg.MODEL_NAME or 'None'}")
@@ -255,10 +198,10 @@ def print_configuration():
     print(f"  CPU Threads: {cfg.CPU_THREADS}")
     print(f"  GPU Layers: {getattr(cfg, 'GPU_LAYERS', 'Auto')}")
 
+
 def preload_auxiliary_models():
     """Pre-load spaCy and sentence-transformers before main model to avoid memory conflicts."""
-    # 1. spaCy — already loaded before the pydantic shim (see top of file).
-    #    get_nlp_model() just retrieves the cached module; no re-import needed.
+    # spaCy — lazy-imported via get_nlp_model() in utility.py
     try:
         from scripts.utility import get_nlp_model
         nlp = get_nlp_model()
@@ -269,13 +212,9 @@ def preload_auxiliary_models():
     except Exception as e:
         print(f"[INIT] WARN spaCy pre-load failed: {e}")
 
-    # 2. Pre-load sentence-transformers embedding model.
-    #    sentence_transformers itself was loaded at startup (see COMPAT block at
-    #    top of file), so _ensure_embedding_model() is safe to call here.
+    # Sentence-transformers embedding model (lazy-loaded from cache)
     try:
-        # Now trigger the lazy load of the actual embedding model weights
         cfg.context_injector._ensure_embedding_model()
-
         if cfg.context_injector.embedding:
             print("[INIT] OK Embedding model pre-loaded from cache")
         else:
@@ -284,57 +223,59 @@ def preload_auxiliary_models():
         print(f"[INIT] WARN Embedding pre-load failed: {e}")
         print("[INIT]   RAG features will be unavailable")
 
+
 def main():
     """Main entry point for the application."""
     try:
         print("`main` Function Started.")
-        
+
         # Load system constants from INI FIRST (installer-generated)
         from scripts.configure import load_system_ini
         load_system_ini()
-        
+
         # Parse command-line arguments and initialize platform
         args = parse_args()
         cfg.PLATFORM = args.platform
 
         # Load user settings from JSON (model, context, etc.)
         load_config()
-        
+
         # Initialize TTS AFTER load_config so saved voice selection is respected
         from scripts.tools import initialize_tts
         initialize_tts()
 
         # Then initialize platform settings (paths, validation)
         initialize_platform_settings()
-        
+
         # Setup directories and paths
         script_dir = setup_directories()
         print(f"Working directory: {short_path(script_dir)}")
         print(f"Data Directory: {short_path(cfg.DATA_DIR)}")
         print(f"Session History: {short_path(cfg.HISTORY_DIR)}")
         print(f"Temp Directory: {short_path(cfg.TEMP_DIR)}")
-        
+
         # Initialize CPU configuration
         detect_cpu_config()
         print(f"CPU Configuration: {cfg.CPU_PHYSICAL_CORES} physical cores, "
               f"{cfg.CPU_LOGICAL_CORES} logical cores")
-        
+
         # Print final configuration
         cfg.set_status("Config loaded")
         print_configuration()
-        
+
         # Pre-load auxiliary models to avoid memory conflicts
         print("\n[INIT] Pre-loading auxiliary inference...")
         preload_auxiliary_models()
-        
+
         # Launch display
         print("\nLaunching Gradio display...")
         launch_display()
-        
+
     except Exception as e:
         print(f"Fatal error in launcher: {str(e)}")
         shutdown_platform()
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

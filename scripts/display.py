@@ -1,6 +1,6 @@
 # Script: `.\scripts\display.py`
-# Compatible with Gradio 3.50.2 for Qt5 WebEngine (Windows 7-8.1) support
-# Includes Qt WebEngine browser launcher (merged from browser.py)
+# v2: Gradio 5.x / PyQt6 WebEngine / Windows 10-11 / Ubuntu 24-25
+# Includes Qt6 WebEngine browser launcher (merged from browser.py)
 
 
 # Imports - display.py
@@ -73,11 +73,10 @@ from scripts.tools import (
 
 
 # BROWSER FUNCTIONS (merged from browser.py)
-# Custom Qt WebEngine browser window.
-# - Windows 7/8/8.1 : Qt5 WebEngine (PyQt5)
-# - Windows 10/11   : Qt6 WebEngine (PyQt6)
-# - Ubuntu 22-25    : Qt6 WebEngine (PyQt6)
-# Falls back to system default browser if Qt WebEngine is unavailable.
+# Custom Qt6 WebEngine browser window (PyQt6) on all supported platforms.
+# - Windows 10/11 : Qt6 WebEngine (PyQt6)
+# - Ubuntu 24-25  : Qt6 WebEngine (PyQt6)
+# Falls back to system default browser if PyQt6 WebEngine is unavailable.
 
 _qt_app = None
 _qt_browser = None
@@ -134,21 +133,21 @@ def launch_custom_browser(gradio_url="http://localhost:7860",
                           frameless=False, width=1400, height=900,
                           title="Chat-Gradio-Gguf", maximized=False):
     """
-    Launch Gradio app in a Qt5 WebEngine window (PyQt5).
-    Qt5 is used on all supported platforms (Windows 7-11, Ubuntu 22-25).
-    Falls back to system default browser if PyQt5 WebEngine is unavailable.
+    Launch Gradio app in a Qt6 WebEngine window (PyQt6).
+    v2: Qt6 is the primary browser on all supported platforms (Windows 10-11, Ubuntu 24-25).
+    Falls back to system default browser if PyQt6 WebEngine is unavailable.
     """
     print(f"[BROWSER] Launching at {gradio_url}")
-    print(f"[BROWSER] Platform: {cfg.PLATFORM}, Qt5 WebEngine")
+    print(f"[BROWSER] Platform: {cfg.PLATFORM}, Qt6 WebEngine (PyQt6)")
     try:
-        _launch_qt5_browser(gradio_url, title, width, height, frameless, maximized)
+        _launch_qt6_browser(gradio_url, title, width, height, frameless, maximized)
     except ImportError as e:
-        print(f"[BROWSER] Qt5 WebEngine not available: {e}")
+        print(f"[BROWSER] Qt6 WebEngine not available: {e}")
         print("[BROWSER] Falling back to system browser")
         import webbrowser
         webbrowser.open(gradio_url)
     except Exception as e:
-        print(f"[BROWSER] Qt5 WebEngine failed: {e}")
+        print(f"[BROWSER] Qt6 WebEngine failed: {e}")
         import traceback
         traceback.print_exc()
         print("[BROWSER] Falling back to system browser")
@@ -156,61 +155,10 @@ def launch_custom_browser(gradio_url="http://localhost:7860",
         webbrowser.open(gradio_url)
 
 
-def _launch_qt5_browser(url, title, width, height, frameless, maximized):
-    """Launch browser using PyQt5 + Qt5 WebEngine (Windows 7/8/8.1)."""
-    global _qt_app, _qt_browser, _signal_handler
-    from PyQt5.QtWidgets import QApplication
-    from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage, QWebEngineSettings
-    from PyQt5.QtCore import QUrl, Qt, pyqtSignal, QObject
-
-    class CloseSignalHandler(QObject):
-        close_signal = pyqtSignal()
-        def __init__(self, app):
-            super().__init__()
-            self._app = app
-            self.close_signal.connect(self._do_close)
-        def _do_close(self):
-            print("[BROWSER] Close signal received in main thread")
-            if self._app:
-                self._app.quit()
-        def request_close(self):
-            self.close_signal.emit()
-
-    class CustomWebPage(QWebEnginePage):
-        def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
-            if level == 2:
-                print(f"[JS ERROR]: {message}")
-
-    _qt_app = QApplication(sys.argv)
-    _signal_handler = CloseSignalHandler(_qt_app)
-    _qt_browser = QWebEngineView()
-    _qt_browser.setWindowTitle(title)
-    if frameless:
-        _qt_browser.setWindowFlags(Qt.FramelessWindowHint)
-    settings = _qt_browser.settings()
-    settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
-    settings.setAttribute(QWebEngineSettings.LocalStorageEnabled, True)
-    settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
-    settings.setAttribute(QWebEngineSettings.PluginsEnabled, True)
-    page = CustomWebPage(_qt_browser)
-    _qt_browser.setPage(page)
-    _qt_browser.resize(width, height)
-    print(f"[BROWSER] Loading URL: {url}")
-    _qt_browser.setUrl(QUrl(url))
-    if maximized:
-        _qt_browser.showMaximized()
-    else:
-        _qt_browser.show()
-    print("[BROWSER] Qt5 WebEngine window created")
-    _qt_app.exec_()
-    print("[BROWSER] Qt5 event loop exited")
-
-
 def _launch_qt6_browser(url, title, width, height, frameless, maximized):
     """
-    DEAD CODE — retained for reference only.
-    Qt6 (PyQt6) is no longer used. All platforms use Qt5 (_launch_qt5_browser).
-    This function is never called.
+    Launch browser using PyQt6 + Qt6 WebEngine.
+    v2 primary browser on all supported platforms (Windows 10-11, Ubuntu 24-25).
     """
     global _qt_app, _qt_browser, _signal_handler
     import os as _os
@@ -307,76 +255,20 @@ def _launch_qt6_browser(url, title, width, height, frameless, maximized):
     print("[BROWSER] Qt6 event loop exited")
 
 
-# GRADIO 3.x COMPATIBILITY LAYER
-
-# Gradio 3.x Chatbot uses list of tuples: [(user_msg, bot_msg), ...]
-# Gradio 4.x Chatbot uses list of dicts: [{"role": "user", "content": msg}, ...]
-# 
-# We maintain internal state as message dicts for compatibility with inference.py
-# but convert to/from tuple format for the Chatbot component.
-
+# GRADIO 5.x: Chatbot uses type="messages" — dict list is passed directly.
+# These stubs preserve call-site compatibility without any conversion overhead.
 
 def messages_to_tuples(messages):
-    """Convert internal message dicts → Gradio tuple format with labels."""
-    if not messages:
-        return []
-    
-    tuples = []
-    i = 0
-    while i < len(messages):
-        msg = messages[i]
-        # Clean content to remove any existing prefixes before adding our own
-        content = re.sub(r'^AI-Chat:\s*\n?', '', msg.get('content', '').strip(), flags=re.MULTILINE)
-        content = re.sub(r'^User:\s*\n?', '', content, flags=re.MULTILINE)
-        content = content.strip()
-        
-        if msg.get('role') == 'user':
-            display_content = f"User:\n{content}" if content else "User:"
-            
-            if i + 1 < len(messages) and messages[i + 1].get('role') == 'assistant':
-                bot_msg = messages[i + 1].get('content', '').strip()
-                # Clean AI-Chat: prefix from bot message too
-                bot_msg = re.sub(r'^AI-Chat:\s*\n?', '', bot_msg, flags=re.MULTILINE)
-                bot_msg = bot_msg.strip()
-                bot_display = f"AI-Chat:\n{bot_msg}" if bot_msg else "AI-Chat:"
-                tuples.append((display_content, bot_display))
-                i += 1  # skip next (assistant)
-            else:
-                tuples.append((display_content, None))
-                
-        elif msg.get('role') == 'assistant' and (i == 0 or messages[i-1].get('role') != 'user'):
-            # Orphan assistant message - clean and format
-            content = re.sub(r'^AI-Chat:\s*\n?', '', content, flags=re.MULTILINE).strip()
-            display_content = f"AI-Chat:\n{content}" if content else "AI-Chat:"
-            tuples.append((None, display_content))
-            
-        i += 1
-    
-    return tuples
-
-
-def tuples_to_messages(tuples):
-    """Convert Gradio tuple format back to message dict list."""
-    if not tuples:
-        return []
-    
-    messages = []
-    for user_msg, bot_msg in tuples:
-        if user_msg is not None:
-            # Strip the "User:\n" prefix if present
-            clean_user = re.sub(r'^User:\s*\n?', '', user_msg, flags=re.MULTILINE).strip()
-            messages.append({'role': 'user', 'content': clean_user})
-        if bot_msg is not None:
-            # Strip the "AI-Chat:\n" prefix if present
-            clean_bot = re.sub(r'^AI-Chat:\s*\n?', '', bot_msg, flags=re.MULTILINE).strip()
-            messages.append({'role': 'assistant', 'content': clean_bot})
-    
+    """v2 no-op: Gradio 5 Chatbot accepts dict list directly."""
     return messages
 
+def tuples_to_messages(tuples):
+    """v2 no-op: already in dict list format."""
+    return tuples
 
 def get_chatbot_output(session_tuples, session_messages):
-    """Return Gradio 3.x tuple format for the Chatbot component."""
-    return session_tuples
+    """Return message dicts for Gradio 5 Chatbot (type='messages')."""
+    return session_messages
 
 # Functions...
 def update_cpu_select():
@@ -593,14 +485,26 @@ def format_response(output: str) -> str:
     )
     clean_output = re.sub(r'<\|[^>]+\|>', '', clean_output)
     
-    # 3. Remove annoying "Thinking...." filler lines
-    lines = clean_output.split('\n')
-    filtered_lines = [
-        line for line in lines
-        if not (line.strip().startswith("Thinking") and all(c in '.… ' for c in line.strip()[8:]))
-    ]
-    clean_output = '\n'.join(filtered_lines)
-    
+    # 3. Style the "Thinking…" dot line so it is always visible.
+    # inference.py emits "Thinking" then ". " per space-token, then "\n".
+    # We wrap the whole line in THINK_COLOR so it renders prominently.
+    def _style_think_line(m):
+        body = m.group(0).rstrip('\n').rstrip()
+        if body == "Thinking":
+            body = "Thinking."       # minimum indicator when model had 0 space-tokens
+        # Compact ". " → "." so dots run together: Thinking............
+        body = body.replace(". ", ".")
+        # No span/color/italic — same font and colour as the rest of the output.
+        # \n\n gives one blank line between the thinking dots and the response below.
+        return body + '\n\n'
+
+    clean_output = re.sub(
+        r'^Thinking[.\s]*\n?',
+        _style_think_line,
+        clean_output,
+        flags=re.MULTILINE
+    )
+
     # 4. Highlight code blocks
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
     for lang, code in code_blocks:
@@ -612,15 +516,15 @@ def format_response(output: str) -> str:
             except:
                 pass  # silently skip invalid languages
     
-    # 5. Common basic normalization
-    clean_output = re.sub(r' {2,}', ' ', clean_output)  # reduce multiple spaces to 1
+    # 5. Common basic normalization (avoid collapsing spaces inside already-emitted HTML spans)
+    clean_output = re.sub(r'(?<!>)  +(?![^<]*>)', ' ', clean_output)
     
     # 6. Apply the configurable output filter (replaces hardcoded Gradio version checks)
     clean_output = apply_output_filter(clean_output)
         
     clean_output = clean_output.strip()
     
-    # 6. Combine thinking + final output
+    # 7. Combine thinking + final output
     if formatted:
         return '\n'.join(formatted) + '\n\n' + clean_output
     
@@ -744,13 +648,9 @@ def initialize_filter_from_config():
             except Exception as e:
                 print(f"[FILTER] Error loading custom filter: {e}")
     
-    # Default based on Gradio version
-    if cfg.GRADIO_VERSION and cfg.GRADIO_VERSION.startswith('3.'):
-        cfg.FILTER_MODE = "gradio3"
-        cfg.ACTIVE_FILTER = cfg.FILTER_PRESETS.get("gradio3", []).copy()
-    else:
-        cfg.FILTER_MODE = "gradio5"
-        cfg.ACTIVE_FILTER = cfg.FILTER_PRESETS.get("gradio5", []).copy()
+    # v2 default: always use gradio5 filter
+    cfg.FILTER_MODE = "gradio5"
+    cfg.ACTIVE_FILTER = cfg.FILTER_PRESETS.get("gradio5", []).copy()
     
     print(f"[FILTER] Using {cfg.FILTER_MODE} filter ({len(cfg.ACTIVE_FILTER)} rules)")
 
@@ -1136,24 +1036,13 @@ def edit_previous_prompt(session_tuples, session_messages):
     return chatbot_output, session_messages, last_user_msg, "Editing previous message.", has_ai_response
 
 def copy_last_response(session_messages):
-    """Copy last AI response to clipboard, excluding thinking phase"""
+    """Copy last AI response to clipboard, excluding display-only header tags."""
     if session_messages and session_messages[-1].get('role') == 'assistant':
         response = session_messages[-1]['content']
-        
-        clean_response = re.sub(r'<[^>]+>', '', response)
-        
-        lines = clean_response.split('\n')
-        filtered_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("Thinking") and all(c in '.… ' for c in stripped[8:]):
-                continue
-            filtered_lines.append(line)
-        
-        clean_response = '\n'.join(filtered_lines).strip()
-        
+        clean_response = re.sub(r'<[^>]+>', '', response)         # strip HTML spans
+        clean_response = re.sub(r'^(?:AI-Chat|User):\s*\n?', '', clean_response.strip())
         pyperclip.copy(clean_response)
-        return "AI Response copied to clipboard (thinking phase excluded)."
+        return "AI Response copied to clipboard."
     return "No response available to copy."
 
 def handle_inline_copy(action_str, session_messages):
@@ -1246,14 +1135,18 @@ def format_session_id(session_id):
         return session_id
 
 def update_action_buttons(phase, has_ai_response=False):
-    """Update action buttons based on interaction phase and history state."""
-    # Button visibility logic based on phase AND history state
+    """Update action buttons based on interaction phase, history state, and model state."""
+    # A model is considered usable when it is selected and not a placeholder value
+    model_ready = cfg.MODEL_NAME not in (None, "", "Select_a_model...", "No models found")
+
     if phase == "waiting_for_input":
-        if has_ai_response:
-            # Has history: show all action buttons
+        if has_ai_response and model_ready:
+            # Has history AND model selected: show all action buttons
             action_visible, edit_visible, copy_visible, wait_visible = True, True, True, False
         else:
-            # Fresh session: only Send Input visible
+            # Fresh session or no model selected: only Send Input visible
+            # Edit previous is hidden when no model is selected to prevent the
+            # broken state where the user edits an input but cannot submit it.
             action_visible, edit_visible, copy_visible, wait_visible = True, False, False, False
     elif phase in ("input_submitted", "generating_response", "speaking"):
         # During generation: hide action buttons, show wait indicator
@@ -1423,14 +1316,13 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False,
     # Add generation phases
     phases.extend([
         "Generate Stream",   # 6 or 11
-        "Split Thinking",    # 7 or 12
-        "Format Response"    # 8 or 13
+        "Format Response",   # 7 or 12
     ])
     
     # Add TTS phases if enabled
     if tts_enabled:
-        phases.append("Generating TTS")  # 9 or 14
-        phases.append("Playing TTS")     # 10 or 15
+        phases.append("Generating TTS")  # 8 or 13
+        phases.append("Playing TTS")     # 9 or 14
     
     # Build HTML segments
     segments = []
@@ -1650,8 +1542,8 @@ def conversation_display(
     has_ai_response_state, tts_enabled
 ):
     """
-    Main conversation handler - Gradio 3.x compatible.
-    Uses tuple format for Chatbot display, message dicts internally.
+    Main conversation handler - Gradio 5.x.
+    Uses message dict list directly; Chatbot type='messages' renders natively.
     """
     import gradio as gr
     from scripts import configure, utility
@@ -1901,11 +1793,7 @@ def conversation_display(
     
     # PHASE 4: Assemble History - Add message to session and update display
     session_messages = list(session_messages) if session_messages else []
-    session_messages.append({'role': 'user', 'content': complete_user_message})
-
-    session_tuples = list(session_tuples) if session_tuples else []
-    user_display = f"User:\n{complete_user_message}"
-    session_tuples.append((user_display, None))
+    session_messages.append({'role': 'user', 'content': 'User:\n' + complete_user_message})
 
     has_ai_response = len([m for m in session_messages[:-1] if m.get('role') == 'assistant']) > 0
     interaction_phase = "input_submitted"
@@ -2040,8 +1928,8 @@ def conversation_display(
     interaction_phase = "generating_response"
     _cancel_event.clear()
 
-    # Add placeholder for assistant
-    session_messages.append({'role': 'assistant', 'content': ""})
+    # Add placeholder for assistant — tag appears immediately, before any tokens stream.
+    session_messages.append({'role': 'assistant', 'content': "AI-Chat:\n"})
     
     accumulated_response = ""
     
@@ -2070,20 +1958,21 @@ def conversation_display(
             
             accumulated_response += chunk
             
-            # Filter out any AI-Chat: prefix the model might generate
+            # Strip any AI-Chat: the model itself may have echoed, then re-prepend our tag
             clean_response = re.sub(r'^AI-Chat:\s*\n?', '', accumulated_response, flags=re.MULTILINE)
             clean_response = re.sub(r'\nAI-Chat:\s*\n?', '\n', clean_response)
             
-            # Update assistant message (store clean version)
-            session_messages[-1]['content'] = clean_response
+            # Compact thinking dots in real-time: "Thinking. . . ." → "Thinking...."
+            # This prevents a visual "pop" when format_response later runs _style_think_line.
+            clean_response = re.sub(
+                r'^(Thinking)((?:\. )*\.?)',
+                lambda m: m.group(1) + '.' * m.group(2).count('.'),
+                clean_response,
+                flags=re.MULTILINE
+            )
             
-            # Update tuples - add "AI-Chat:" label for display
-            bot_display = f"AI-Chat:\n{clean_response}"
-            session_tuples[-1] = (session_tuples[-1][0], bot_display)
-            
-            # For Gradio 4/5, we also need to update session_messages with label
-            if not cfg.GRADIO_VERSION.startswith('3.'):
-                session_messages[-1]['content'] = bot_display
+            # Update assistant message in-place, keeping the AI-Chat: header
+            session_messages[-1]['content'] = "AI-Chat:\n" + clean_response
             
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
@@ -2098,14 +1987,21 @@ def conversation_display(
         session_messages[-1]['content'] = accumulated_response
         session_tuples[-1] = (session_tuples[-1][0], accumulated_response)
 
-    # Final formatting
+    # Format Response phase
+    format_phase = 12 if (ddg_search_enabled or web_search_enabled) else 7
     formatted_response = format_response(accumulated_response)
-    # Clean any AI-Chat: prefix before storing
+    # Strip any model-generated AI-Chat: before re-adding our tag
     formatted_response = re.sub(r'^AI-Chat:\s*\n?', '', formatted_response, flags=re.MULTILINE)
     formatted_response = re.sub(r'\nAI-Chat:\s*\n?', '\n', formatted_response)
-    session_messages[-1]['content'] = formatted_response
-    # Add label for display
-    session_tuples[-1] = (session_tuples[-1][0], f"AI-Chat:\n{formatted_response}")
+    session_messages[-1]['content'] = "AI-Chat:\n" + formatted_response
+
+    yield (
+        get_chatbot_output(session_tuples, session_messages), session_messages, "",
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(format_phase, ddg_search_enabled, web_search_enabled, tts_enabled)),
+        *update_action_buttons("generating_response", has_ai_response),
+        cancel_flag, loaded_files, "generating_response",
+        llm_state, models_loaded_state, tts_enabled
+    )
 
     #  NEW SESSION CREATION + AUTO-SAVE 
     if accumulated_response.strip():
@@ -2136,13 +2032,13 @@ def conversation_display(
     
     # Auto-speak response if TTS is enabled
     if tts_enabled:
-        # Calculate TTS phase indices based on whether search was enabled
+        # Calculate TTS phase indices (one fewer phase now — Split Thinking removed)
         if ddg_search_enabled or web_search_enabled:
-            tts_gen_phase = 14
-            tts_play_phase = 15
+            tts_gen_phase = 13
+            tts_play_phase = 14
         else:
-            tts_gen_phase = 9
-            tts_play_phase = 10
+            tts_gen_phase = 8
+            tts_play_phase = 9
         
         # Show Generating TTS phase while synthesis runs
         print("[TTS] Generating speech from response...")
@@ -2265,7 +2161,7 @@ def toggle_web_search(current_web_state, current_ddg_state):
 
 
 def launch_display():
-    """Launch the Gradio display – Gradio 3.50.2 with Qt5 WebEngine on all platforms."""
+    """Launch the Gradio display – Gradio 5.x with Qt6 WebEngine on all platforms."""
     global demo
     import tkinter as tk
     from tkinter import filedialog
@@ -2284,12 +2180,9 @@ def launch_display():
         ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR,
         context_injector, QT_VERSION
     )
-    
-    # Gradio 3.50.2 is fixed on all platforms — no version branching needed.
-    is_gradio_3 = True
-    is_gradio_6_plus = False
 
-    print(f"[DISPLAY] Qt Version: {QT_VERSION} (v{QT_VERSION})")
+    # v2: Gradio 5.x on all supported targets — no version branching needed.
+    print(f"[DISPLAY] Qt Version: {QT_VERSION} (PyQt6)")
     print(f"[DISPLAY] Gradio Version: {cfg.GRADIO_VERSION}")
     print(f"[DISPLAY] Graphics Acceleration: {cfg.GRAPHICS_ACCELERATION}")
 
@@ -2404,17 +2297,9 @@ def launch_display():
     }
     """
 
-    # Spacing fixes for Gradio 3 + Qt5 WebEngine
-    css_gradio3_fixes = """
-    /* Reduce extra blank lines and tight spacing issues in Qt WebEngine */
-    .message p { margin-top: 0.3em !important; margin-bottom: 0.3em !important; }
-    .message br + br { display: none !important; }
-    """
+    # v2: css_common is sufficient for Gradio 5.x
+    final_css = css_common
 
-    # Final CSS: always include Gradio 3 fixes
-    final_css = css_common + css_gradio3_fixes
-
-    # CSS always goes in Blocks kwargs (Gradio 3.x)
     blocks_kwargs = {
         "title": "Chat-Gradio-Gguf",
         "css": final_css.strip()
@@ -2494,6 +2379,7 @@ def launch_display():
                         conversation_components["session_log"] = gr.Chatbot(
                             label="Session Log", 
                             height=cfg.SESSION_LOG_HEIGHT,
+                            type="messages",        # Gradio 5.x: native dict list format
                             elem_classes=["scrollable"]
                         )
                         
@@ -2744,10 +2630,7 @@ def launch_display():
                 # ── Program Options ─────────────────────────────────────────────────────────
                 with gr.Group():
                     gr.Markdown("### Program Options")
-                    # Gradio 3 notice: Session Log Height requires restart
-                    if cfg.GRADIO_VERSION and cfg.GRADIO_VERSION.startswith('3.'):
-                        gr.Markdown("*\\*\\* Requires restart after configuring UI components on, Gradio v3.x.x and Qt5-Web, installs*")
-                    # Row 1: Attach slots and Log height
+                    # Row 1: Attach slots and Log height (restart required for UI component changes)
                     with gr.Row():
                         session_log_height = gr.Dropdown(
                             choices=cfg.SESSION_LOG_HEIGHT_OPTIONS,
@@ -2900,7 +2783,7 @@ def launch_display():
 
             root = tk.Tk()
             root.withdraw()
-            root.attributes('-topmost', True)   # float above Qt5 window
+            root.attributes('-topmost', True)   # float above Qt6 window
 
             initial_dir = current_path if Path(current_path).is_dir() else str(Path.home())
 
@@ -3716,10 +3599,10 @@ def launch_display():
             outputs=[conversation_components["user_input"]]
         )
 
-        # ── JS injection via demo.load _js ─────────────────────────────────────────
-        # IMPORTANT: gr.HTML <script> tags do NOT execute in Gradio 3.x because
+        # ── JS injection via demo.load js ──────────────────────────────────────────
+        # IMPORTANT: gr.HTML <script> tags do NOT execute in Gradio because
         # Svelte renders via innerHTML which blocks scripts (browser security).
-        # demo.load(fn=None, _js=...) is the ONLY correct way to run JS in Gradio 3.x.
+        # demo.load(fn=None, js=...) is the correct way to run JS in Gradio 5.x.
         #
         # The JS does:
         #   1. Defines window.cgufFire — relays events to hidden Gradio textboxes
@@ -3727,8 +3610,8 @@ def launch_display():
         #   3. MutationObserver — re-injects after every chatbot update
         #   4. Diagnostic bar — writes found selector info to #cguf-diag div
         #
-        # SELECTOR NOTE: Gradio 3.50.2 Chatbot renders message wrappers with class
-        # "user" or "bot" as the outer div, and "message" on the inner content div.
+        # SELECTOR NOTE: Gradio 5.x Chatbot (type="messages") renders message
+        # wrappers with data-testid="user" and data-testid="bot" attributes.
         # We try multiple patterns and log which one works in the #cguf-diag bar.
         # Once confirmed, set CGUF_DIAG = false in the JS string below.
         _CGUF_JS = """
@@ -3778,17 +3661,19 @@ def launch_display():
         return b;
     }
 
-    /* Try several selector patterns used by different Gradio 3.x patch versions.
-       Log which one finds messages so we know the actual class names. */
+    /* Gradio 5.x selectors first, then Gradio 3.x fallbacks. */
     var SEL_PAIRS = [
-        ['.scrollable .user .message',     '.scrollable .bot .message'],
-        ['.scrollable .message.user',      '.scrollable .message.bot'],
-        ['.scrollable .user-message',      '.scrollable .bot-message'],
-        ['.scrollable .user-row .message', '.scrollable .bot-row .message'],
-        ['.scrollable .user',              '.scrollable .bot'],
-        ['.wrap .user .message',           '.wrap .bot .message'],
-        ['.wrap .user',                    '.wrap .bot'],
-        ['[class*="user-message"]',        '[class*="bot-message"]'],
+        /* Gradio 5.x type="messages" — testid attributes */
+        ['[data-testid="user"]',                     '[data-testid="bot"]'],
+        ['.message-wrap [data-testid="user"]',        '.message-wrap [data-testid="bot"]'],
+        /* Gradio 5.x class-based fallbacks */
+        ['.message.user',                            '.message.bot'],
+        ['div[class*="user"][class*="message"]',     'div[class*="bot"][class*="message"]'],
+        /* Gradio 3.x fallbacks (retained for reference) */
+        ['.scrollable .user .message',               '.scrollable .bot .message'],
+        ['.scrollable .user',                        '.scrollable .bot'],
+        ['.wrap .user',                              '.wrap .bot'],
+        ['[class*="user-message"]',                  '[class*="bot-message"]'],
     ];
 
     function findMessages() {
@@ -3802,8 +3687,9 @@ def launch_display():
             }
         }
         /* Nothing found — dump class names of first 25 elements inside
-           .scrollable so we can add the correct selector */
-        var root = document.querySelector('.scrollable') ||
+           .message-wrap so we can add the correct selector */
+        var root = document.querySelector('.message-wrap') ||
+                   document.querySelector('.scrollable') ||
                    document.querySelector('.wrap');
         if (root) {
             var dump = Array.from(root.querySelectorAll('*')).slice(0, 25)
@@ -3814,7 +3700,7 @@ def launch_display():
                 }).join(' | ');
             log('No msgs. DOM dump: ' + dump.slice(0, 280));
         } else {
-            log('.scrollable/.wrap not found in DOM at all');
+            log('.message-wrap/.scrollable/.wrap not found in DOM');
         }
         return { users: [], bots: [] };
     }
@@ -3870,7 +3756,7 @@ def launch_display():
             fn=None,
             inputs=[],
             outputs=[],
-            _js=_CGUF_JS
+            js=_CGUF_JS
         )
 
         # Attach click handlers to session history buttons
@@ -3904,14 +3790,13 @@ def launch_display():
     # Enable queue for generator/streaming support
     demo.queue()
 
-    # Gradio 3.x launch kwargs — CSS is set in Blocks kwargs, not here
+    # Launch server
     launch_kwargs = {
         "server_name": "localhost",
         "server_port": 7860,
         "show_error": True,
         "share": False,
         "inbrowser": False,
-        "prevent_thread_lock": True
     }
 
     gradio_thread = threading.Thread(

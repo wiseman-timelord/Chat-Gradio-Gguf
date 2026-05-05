@@ -1,4 +1,5 @@
 # scripts/inference.py
+# v2: Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.13 / Gradio 5.x
 
 """
 Consolidated inference module combining model loading/management and prompt generation.

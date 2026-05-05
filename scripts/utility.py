@@ -1,6 +1,7 @@
 # scripts/utility.py
+# v2: Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.13 / Gradio 5.x
 
-# Standard library imports (safe - no pydantic dependency)
+# Standard library imports
 import tempfile
 import re
 import subprocess
@@ -15,7 +16,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-# Third-party imports (safe - no pydantic dependency)
+# Third-party imports
 from docx import Document
 from openpyxl import load_workbook
 from pptx import Presentation
@@ -42,11 +43,11 @@ from scripts.tools import (
 _nlp_model = None
 
 # NOTE: Platform-specific imports (win32com, pythoncom, pyttsx3) are imported
-# lazily inside the functions that need them. This is because cfg.PLATFORM
-# is not set until after the launcher parses command-line arguments.
+# lazily inside the functions that need them, as cfg.PLATFORM is not set until
+# after the launcher parses command-line arguments.
 
 def _get_spacy():
-    """Lazy import spaCy to avoid pydantic compatibility issues at startup."""
+    """Lazy import spaCy — deferred to avoid heavy startup cost."""
     try:
         import spacy
         return spacy

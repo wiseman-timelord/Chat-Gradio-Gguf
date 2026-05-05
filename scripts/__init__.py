@@ -1,1 +1,1 @@
-# SCript: __init__.py - Empty init script
+# Script: __init__.py - Empty init script
