@@ -485,8 +485,7 @@ More testing was done, the restults were not good, moved on to v2...
 3. The issues may be gradio becoming a set version 3, requring a shim for pydantic to work correctly. Problems started around there, so maybe we can cut whatever pydantic does from v1. Idea being to make a final version to leave it, after which later only updating to sync model handling.
 
 ## Credits
-Thanks to all the following teams, for the use of their software/platforms...
-- [Llama.Cpp](https://github.com/ggml-org/llama.cpp) - The binaries used for interference with models.
+Thanks to all the following teams for their assistance/comtributions...
 - [Claude Sonnet/Opus](https://claude.ai/chat), [Kimi K2/K2.5](https://www.kimi.com), [XAI Grok](https://x.com/i/grok), [Deepseek R1/3](https://www.deepseek.com/), [Perplexity](https://www.perplexity.ai) - Paid/Free AI Platforms. 
 - [Gradio](https://gradio.app/), [PyTorch](https://pytorch.org/), [llama-cpp-python](https://llama-cpp-python.readthedocs.io/), [sentence-transformers](https://sbert.net/), [LangChain](https://www.langchain.com/), [spaCy](https://spacy.io/), [PyQt6](https://www.riverbankcomputing.com/software/pyqt/), [Coqui TTS](https://github.com/coqui-ai/tts), [Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/), [Numpy](https://numpy.org/), [Transformers (Hugging Face)](https://huggingface.co/docs/transformers/), [faiss-cpu](https://github.com/facebookresearch/faiss), [Aiohttp](https://aiohttp.readthedocs.io/), [Newspaper4k](https://github.com/codelucas/newspaper) - Python Libraries.
 
