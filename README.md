@@ -1,6 +1,6 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 Status - v1 Beta / v2 Alpha
-- v2 (upcoming), moving on to version 2, where I will limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and slightly more manageable code complexity. The readme.md here will be tailored towards the v2 release from now.
+- v2 (upcoming), moving on to version 2, where I will limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and slightly more manageable code complexity. The readme.md here will be tailored towards the v2 release from now. 
 - v1, after ~v1.10.x I tried to implement current model handling, ie qwen3.5 deepseek 3.2(?), etc, and clearly claude or whatever else I used was confused, and corrupted things. For now you would have to fish around in the releases for a version that runs for example Qwen3 level models. I will release a final v1 later, and fully check things. v1 is, Windows 7-11 and ubuntu 22-25, compatible. 
 
 ## Description
@@ -397,7 +397,7 @@ Web Search = Slower actual website reading research.
 - Through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files.
 
 ### Models working (with gpt for comparrisson).
-- Models newer than Qwen 3 will (at the current time/date) require to compile during install, this is due to a versioning difference between, the [available pre-built wheels](https://github.com/eswarthammana/llama-cpp-wheels/releases) and the [latest llama.cpp binary](https://github.com/ggml-org/llama.cpp/releases). Hope that makes sense. Either way, the models just keep getting better...
+- Models newer than Qwen 3 will (at the current time/date) require to compile during install, as apposed to the non-compile install that handles models Qwen 3 or earler, this is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and the latest llama.cpp wheel, however I will only be testing/supporting models on, Qwen 3 or newer, level models. Hope that makes sense. Either way, the models just keep getting better...
 
 | Model                                  | IFEval   | BBH      | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
 |----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
@@ -408,11 +408,6 @@ Web Search = Slower actual website reading research.
 | [gpt-oss-20b](https://huggingface.co/unsloth/gpt-oss-20b-GGUF) (20B) | 84.1%  | 58.1%   | 96.0-98.7%   | 71.5%    | ~42.5%    | 85.3%           | N/A   |
 | [Qwen3-30B-A3B-GGUF](https://huggingface.co/mradermacher/Qwen3-30B-A3B-abliterated-GGUF) (30B-A3B) | N/A  | N/A   | 80.4%   | 65.8%   | 72.2%   | N/A           | N/A   |
 | **Qwen3-8B**       | ~83%     | 56.73%   | 60.80%   | 44.44%   | N/A      | 76.89%            | N/A       |
-| [Lamarckvergence-14B-GGUF](https://huggingface.co/mradermacher/Lamarckvergence-14B-GGUF) (14B) | 76.56%   | 50.33%   | 54.00%   | 15.10%   | 16.34%   | 47.59% (MMLU-PRO) | N/A       |
-| qwen2.5-test-32b-it (32B)              | 78.89%   | 58.28%   | 59.74%   | 15.21%   | 19.13%   | 52.95%            | 29.54 kg  |
-| [T3Q-qwen2.5-14b-v1.0-e3-Uncensored-DeLMAT-GGUF](https://huggingface.co/mradermacher/T3Q-qwen2.5-14b-v1.0-e3-Uncensored-DeLMAT-GGUF/tree/main) (14B) | ~73.24%   | ~65.47%   | ~28.63%   | ~22.26%    | ~38.69%   | ~54.27% (MMLU-PRO) | ~1.56 kg   |
-| [qwen2.5-7b-cabs-v0.4-GGUF](https://huggingface.co/mradermacher/qwen2.5-7b-cabs-v0.4-GGUF) (7B) | 75.83%   | 36.36%   | 48.39%   | 7.72%    | 15.17%   | 37.73% (MMLU-PRO) | N/A       |
-
 
 <details>
   <summary>Table Key ></summary>
