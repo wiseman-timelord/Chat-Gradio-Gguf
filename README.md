@@ -383,7 +383,7 @@ Web Search = Slower actual website reading research.
 ```
 
 ### Notation 
-- v1, after ~v1.10.x I tried to implement more up-to-date model handling, there were issues with running the scripts, the overcomplicated scripts being an AI challenge. May release a v1 legacy release/fork later. v1 legacy version if it happens be, Windows 7-11 and ubuntu 22-25, compatiblity. Possibly something like Corqui would have to be stripped from it. 
+- v1, after ~v1.10.x I tried to implement more up-to-date model handling, there were issues with running the scripts, the overcomplicated scripts being an AI challenge. 
 - Windows is my main OS, so Check for recent v1 versions mentioning work on ubuntu if you use that (it was likely being tested/used at such points).
 - Changing height of session log height as shown in media section requires restart of GUI, to re-initialize the complicated and fragile dynamic UI through browser fake GUI interface. 
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
@@ -477,6 +477,7 @@ v2 is now in Pre-Release stage...
 8. Possibility of artifacts, the AI mentioned this, I want to see how feasable it is first.
 9. It would be great to have a Auto/Quick/Think toggle, so as to have some pre-configured 1b model or the likes be able to do a quick assessment of, if the request is simple or complete, to then, disable think for simple tasks and enable think for complex tasks, and additionally we would want to have it assess context/batch lengths, if the user additionally has those set to auto. Other settings could also be determined through this auto feature pre-prompt system. Needs brainstorming.
 10. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far.
+11. Release a v1 legacy release. v1 legacy version retaining, Windows 7-11 and ubuntu 22-25, compatiblity. Possibly something like Corqui would have to be stripped from it, to reduce complexity, relying on built-in TTS only. Additionally a checkover of the scripts, and removal of dead code, and upgrading of flimsy code. 
 
 # Development for v1...
 More testing was done, the restults were not good, moved on to v2...
