@@ -1,7 +1,6 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
-Status - v1 Beta / v2 Alpha
-- v2 (upcoming), moving on to version 2, where I will limit support to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and slightly more manageable code complexity. The readme.md here will be tailored towards the v2 release from now. 
-- v1, after ~v1.10.x I tried to implement current model handling, ie qwen3.5 deepseek 3.2(?), etc, and clearly claude or whatever else I used was confused, and corrupted things. For now you would have to fish around in the releases for a version that runs for example Qwen3 level models. I will release a final v1 later, and fully check things. v1 is, Windows 7-11 and ubuntu 22-25, compatible. 
+Status - v2 Alpha
+- v2 (early release) compatibility was limited to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and more sane/simple scripts, the idea being people with older OS likely not target audience for inference. The readme.md here will be tailored towards the v2 release from now. 
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 10-11 (WSL not required) and Ubuntu 24-25, with any Gpu on GGUF models through Python ~3.11-~3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration.
@@ -384,6 +383,7 @@ Web Search = Slower actual website reading research.
 ```
 
 ### Notation 
+- v1, after ~v1.10.x I tried to implement more up-to-date model handling, ie qwen3.5 deepseek 3.2(?), etc, and clearly claude or whatever else I used was confused, and corrupted things. For now one would search around in the releases for a version that runs for example Qwen3 level models. I may release a v1 legacy release/fork later. v1 version will remain intended for, Windows 7-11 and ubuntu 22-25, compatiblity. 
 - Windows is my main OS, so Check for recent v1 versions mentioning work on ubuntu if you use that (it was likely being tested/used at such points).
 - Changing height of session log height as shown in media section requires restart of GUI, to re-initialize the complicated and fragile dynamic UI through browser fake GUI interface. 
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
