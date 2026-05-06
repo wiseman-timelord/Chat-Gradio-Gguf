@@ -15,72 +15,6 @@ import numpy as np
 # from langchain_text_splitters import RecursiveCharacterTextSplitter
 # from langchain_community.document_loaders import TextLoader
 
-# =============================================================================
-# DEFAULT CONFIGURATION DICTIONARIES
-# =============================================================================
-
-DEFAULTS = {
-    "MODEL_FOLDER": "path/to/your/models",
-    "CONTEXT_SIZE": 32768,
-    "VRAM_SIZE": 8192,
-    "BATCH_SIZE": 2048,
-    "TEMPERATURE": 0.66,
-    "REPEAT_PENALTY": 1.0,
-    "DYNAMIC_GPU_LAYERS": True,
-    "MMAP": True,
-    "MLOCK": True,
-    "MAX_HISTORY_SLOTS": 10,
-    "MAX_ATTACH_SLOTS": 8,
-    "SESSION_LOG_HEIGHT": 650,
-    "INPUT_LINES": 27,
-    "PRINT_RAW_OUTPUT": False,
-    "SHOW_THINK_PHASE": False,
-    "CPU_ONLY_MODE": True,
-    "VRAM_OPTIONS": [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536, 98304],
-    "CTX_OPTIONS": [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072, 196608, 262144],
-    "BATCH_OPTIONS": [128, 256, 512, 1024, 2048, 4096, 8192],
-    "TEMP_OPTIONS": [0.0, 0.1, 0.25, 0.33, 0.5, 0.66, 0.75, 1.0],
-    "REPEAT_OPTIONS": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
-    "HISTORY_SLOT_OPTIONS": [4, 8, 10, 12, 16],
-    "ATTACH_SLOT_OPTIONS": [2, 4, 6, 8, 10],
-    "SESSION_LOG_HEIGHT_OPTIONS": [250, 450, 550, 600, 625, 650, 700, 800, 1000, 1400],
-}
-
-DEFAULT_CONFIG = {
-    "model_settings": {
-        "layer_allocation_mode": "SRAM_ONLY",
-        "model_dir": "path/to/your/models",
-        "model_name": "Select_a_model...",
-        "context_size": 32768,
-        "vram_size": 8192,
-        "temperature": 0.66,
-        "repeat_penalty": 1.0,
-        "llama_cli_path": None,
-        "llama_bin_path": None,
-        "selected_gpu": None,
-        "selected_cpu": None,
-        "mmap": True,
-        "mlock": True,
-        "n_batch": 1024,
-        "dynamic_gpu_layers": True,
-        "max_history_slots": 12,
-        "max_attach_slots": 6,
-        "session_log_height": 650,
-        "show_think_phase": False,
-        "print_raw_output": False,
-        "cpu_threads": None,
-        "bleep_on_events": False,
-        "use_python_bindings": True,
-        "filter_mode": "gradio5",  # Output filtering mode: gradio5, or custom
-        # TTS Settings
-        "tts_enabled": False,
-        "tts_voice": None,
-        "tts_output_device": "default",
-        "tts_sample_rate": 44100,
-        "max_tts_length": 4500,
-    }
-}
-
 CONFIG_PATH = Path("data/persistent.json")
 
 # =============================================================================
@@ -119,7 +53,10 @@ FILTER_PRESETS = {
         ("\t\n\n", "\t\n"),
         ("\n\n\n", "\n\n"),
     ],
-    # Kept for reference / user-selectable "Full" filter preset
+    # Legacy preset — strips markdown-breaking whitespace patterns from pre-Gradio-5
+    # renderers. Selectable by the user as a "Full" filter option via display.py.
+    # NOTE: aggressive rules (e.g. \n\r -> \r) will damage Gradio 5.x markdown output
+    # if applied as the default; only enable deliberately.
     "gradio3": [
         ("<p>", "\n"),
         ("</p>", "\n"),
@@ -155,13 +92,9 @@ MLOCK = True
 MAX_HISTORY_SLOTS = 12
 MAX_ATTACH_SLOTS = 6
 SESSION_LOG_HEIGHT = 650
-INPUT_LINES = 27
 VRAM_OPTIONS = [0, 756, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384, 20480, 24576, 32768, 49152, 65536]
 CTX_OPTIONS = [1024, 2048, 4096, 8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072]
 BATCH_OPTIONS = [128, 256, 512, 1024, 2048, 4096, 8096]
-COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243")
-COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british")
-COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name
 TEMP_OPTIONS = [0.0, 0.1, 0.25, 0.33, 0.5, 0.66, 0.75, 1.0]
 REPEAT_OPTIONS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 HISTORY_SLOT_OPTIONS = [4, 8, 10, 12, 16]
@@ -180,7 +113,6 @@ SESSION_ACTIVE = False
 MODEL_NAME = "Select_a_model..."
 GPU_LAYERS = 0
 SELECTED_GPU = None
-STREAM_OUTPUT = True
 USE_PYTHON_BINDINGS = True
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
@@ -219,15 +151,15 @@ SOUND_SAMPLE_RATE_OPTIONS = [44100, 48000]
 # TTS (Text-to-Speech) Configuration
 # =============================================================================
 TTS_ENABLED = False
-TTS_ENGINE = "none"           # Detected engine: "pyttsx3", "espeak-ng", "none"
+TTS_ENGINE = "none"           # Detected engine: "espeak-ng", "none"
 TTS_AUDIO_BACKEND = "none"    # Audio backend: "windows", "pulseaudio", "pipewire", "none"
 TTS_VOICE = None
 TTS_VOICE_NAME = None
 MAX_TTS_LENGTH = 4500
 TTS_TYPE = "builtin"
-COQUI_VOICE_ID = None
-COQUI_VOICE_ACCENT = None
-COQUI_MODEL = "tts_models/en/vctk/vits"
+COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243")
+COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british")
+COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name
 
 # Arrays
 session_attached_files = []
@@ -235,7 +167,6 @@ session_vector_files = []
 
 # Search Configuration
 DDG_SEARCH_ENABLED = False
-WEB_SEARCH_ENABLED = False
 
 # UI Constants/Variables
 USER_COLOR = "#ffffff"
@@ -699,7 +630,7 @@ def load_system_ini():
         else:
             WINDOWS_VERSION = None
 
-        # Load TTS configuration (always Coqui)
+        # Load TTS configuration (always Coqui in v2)
         if 'tts' in config:
             tts_section = config['tts']
             COQUI_VOICE_ID = tts_section.get('coqui_voice_id', 'p225,p226')
@@ -872,7 +803,7 @@ def update_setting(key, value):
         if key in {
             "context_size", "vram_size", "n_gpu_layers", "n_batch",
             "max_history_slots", "max_attach_slots", "session_log_height",
-            "cpu_threads", "tts_sample_rate", "max_tts_length"
+            "cpu_threads", "sound_sample_rate", "max_tts_length"
         }:
             value = int(value)
         elif key in {"temperature", "repeat_penalty"}:
@@ -963,7 +894,7 @@ def set_status(msg: str, console=False, priority=False):
             print(f"[Background] {msg}")
         return
 
-    if priority and "Load" in msg or "loading" in msg.lower():
+    if priority and ("Load" in msg or "loading" in msg.lower()):
         _status_lock = "model_loading"
         _status_lock_message = msg
 
