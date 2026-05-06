@@ -1,6 +1,6 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 Status - v2 Beta
-- v2 (early release) compatibility was limited to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and more sane/simple scripts, the idea being people with older OS likely not target audience for inference. The readme.md here will be tailored towards the v2 release from now. 
+- v2 (early release) compatibility was limited to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and more sane/simple scripts. Since the transition to v2, the scripts have been checked over, optimized, cleaned. The readme.md here will be tailored towards the v2 release from now.  
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 10-11 (WSL not required) and Ubuntu 24-25, with any Gpu on GGUF models through Python ~3.11-~3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration.
@@ -383,7 +383,7 @@ Web Search = Slower actual website reading research.
 ```
 
 ### Notation 
-- v1, after ~v1.10.x I tried to implement more up-to-date model handling, there were issues with running the scripts, the overcomplicated scripts being an AI challenge. 
+- The idea of v2 limiting compatibility being people with older OS likely not target audience for inference, though I do intend to do a final update to v1 and release as v1 Legacy. v1 After ~v1.10.x there were issues with main program, the overcomplicated scripts being an AI challenge. 
 - Windows is my main OS, so Check for recent v1 versions mentioning work on ubuntu if you use that (it was likely being tested/used at such points).
 - Changing height of session log height as shown in media section requires restart of GUI, to re-initialize the complicated and fragile dynamic UI through browser fake GUI interface. 
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
@@ -469,7 +469,6 @@ project_root/
 v2 is now in Pre-Release stage...
 1. Testing the TTS, I notice it is correctly not reading "Thinking......." (thinking phase), however it is reading the asterisks, which is annoying, so whatever version of the text output is being processed before being sent to the TTS, additionally needs to have all asterisks stripped. I am guessing those are the asterisks at the start of each line for the markup format output, when it is writing bulletpoints, but obviously we would keep them on/unaltered in the session log version.
 1. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6.
-3. Cleaning up v2, check for redundant code and optimize, then test and fix.
 4. Copy/pasting is not working on the little icons at the end of prompts/responses in the session log. test after above task.
 5. When there is a stable correctly working latest v2, then the plan will be to develop a stack of tools, ie "Web Research", but this needs to be brainstormed.
 6. Need to ensure attachments is working correctly, and if/when so, then we need artifacts, ie the ability to reference files provided earlier in the session and their presentation.
