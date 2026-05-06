@@ -1251,10 +1251,8 @@ def synthesize_last_response(session_messages: list) -> Optional[str]:
     if not last_response:
         return None
 
-    # aggressive cleaning for TTS  (… unchanged …)
-    text = last_response
-    # … all the re.sub() calls …
-    text = text.strip()
+    # Clean text using shared TTS pipeline (strips markdown, HTML, asterisks, etc.)
+    text = _clean_text_for_tts(last_response)
     if not text:
         return None
 
@@ -1448,6 +1446,60 @@ def get_tts_status() -> str:
         return "TTS: OFF (Coqui)"
 
 
+def _clean_text_for_tts(text: str) -> str:
+    """Shared text cleaning pipeline applied before any TTS synthesis.
+
+    Strips all markdown formatting, HTML, code blocks, and symbols that a
+    speech engine would either mispronounce or vocalise as literal character
+    names (e.g. "asterisk", "hash", "underscore").
+
+    NOTE: asterisks are intentionally stripped here — the session log retains
+    the original markdown so bullet-point rendering in the chat is unaffected.
+    """
+    # Remove the "AI-Chat:" header that display.py prepends to every response
+    text = re.sub(r'^AI-Chat:\s*\n?', '', text, flags=re.MULTILINE)
+
+    # Remove the "Thinking…" dot-progress line emitted by inference.py
+    # during the think phase.  The dots are silently parsed as pauses by
+    # espeak-ng, but the word "Thinking" would be spoken — strip the whole line.
+    text = re.sub(r'^Thinking[.\s]*\n?', '', text, flags=re.MULTILINE)
+
+    # Remove fenced code blocks completely (content is not speakable)
+    text = re.sub(r'```[\s\S]*?```', '', text)
+
+    # Remove inline code spans
+    text = re.sub(r'`[^`]+`', '', text)
+
+    # Strip HTML / display tags (format_response may wrap content in <span> etc.)
+    text = re.sub(r'<[^>]+>', '', text)
+
+    # Unwrap markdown links — keep the visible label, drop the URL
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+
+    # Remove markdown image references entirely
+    text = re.sub(r'!\[.*?\]\([^)]+\)', '', text)
+
+    # ── Asterisk / emphasis stripping ────────────────────────────────────────
+    # Must run BEFORE the general symbol sweep so that "**word**" → "word"
+    # rather than "word" being surrounded by spaces.
+    # Order matters: match the longer token (**) before the shorter one (*).
+    text = re.sub(r'\*\*', '', text)   # bold markers
+    text = re.sub(r'\*',   '', text)   # italic markers / bullet asterisks
+    text = re.sub(r'~~',   '', text)   # strikethrough markers
+    text = re.sub(r'(?<!\w)_|_(?!\w)', '', text)  # leading/trailing underscores (emphasis)
+
+    # Replace remaining symbol characters with a space so words don't run together
+    text = re.sub(r'[#•→⇒★☆]|[-=]{2,}', ' ', text)
+
+    # Normalise punctuation — keep only characters a TTS engine handles well
+    text = re.sub(r'[^\w\s.,!?;:\'"()-]', ' ', text)
+
+    # Collapse runs of whitespace / newlines to a single space
+    text = re.sub(r'\s+', ' ', text)
+
+    return text.strip()
+
+
 def speak_last_response(session_messages: list) -> str:
     """
     Speak the last AI response from session.
@@ -1476,36 +1528,8 @@ def speak_last_response(session_messages: list) -> str:
     if not last_response:
         return "No AI response to speak"
     
-    # Aggressive cleaning optimized for TTS
-    text = last_response
-    
-    # Remove markdown code blocks completely
-    text = re.sub(r'```[\s\S]*?```', '', text)
-    
-    # Remove inline code
-    text = re.sub(r'`[^`]+`', '', text)
-    
-    # Remove HTML-like tags
-    text = re.sub(r'<[^>]+>', '', text)
-    
-    # Remove markdown links but keep text: [text](url) → text
-    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-    
-    # Remove images and other markdown junk
-    text = re.sub(r'!\[.*?\]\([^)]+\)', '', text)
-    
-    # Remove emphasis markers but keep the words
-    text = re.sub(r'(\*\*|\*|_|\~\~|`)', '', text)
-    
-    # Replace multiple symbols with space or nothing
-    text = re.sub(r'([#*•→⇒★☆]|[-=]{2,})', ' ', text)
-    
-    # Normalize punctuation (keep , . ! ? ; : and quotes)
-    text = re.sub(r'[^\w\s.,!?;:\'\"()-]', ' ', text)
-    
-    # Collapse multiple spaces/newlines
-    text = re.sub(r'\s+', ' ', text)
-    text = text.strip()
+    # Clean text using shared TTS pipeline (strips markdown, HTML, asterisks, etc.)
+    text = _clean_text_for_tts(last_response)
     
     if not text:
         return "Response has no speakable content after cleaning"
