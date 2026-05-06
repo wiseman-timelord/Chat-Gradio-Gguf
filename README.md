@@ -15,7 +15,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Qt-Web Custom Browser**: The interface uses Qt-Web with Gradio, it appears as a regular application, and means your default browser are untouched.  
 - **Comprihensive GPU Support**: Vulkan, with dropdown list in configuration selection supporting multi CPU/GPU setup.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, THINK, and Markdown formatting, and file attachments. 
-- **Text To Speech**: Using built-in Windows/Ubuntu speech capabilities, for basic TTS tool.
+- **Text To Speech**: Corqui-TTS for realistic reading of output, where output is filtered for all symbols/tags/thinking appropriately.
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
 - **Configurable Context**: Set model context to 8192-138072, and batch output to 256-8192.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
@@ -454,15 +454,6 @@ project_root/
 │ └── __init__.py
 ├── .venv/
 └────── *
-```
-
-- Built in Tts tool notes.
-```
-| Mode     | TTS engine       | Audio *player* |
-| -------- | ---------------- | -------------- |
-| Windows  | `pyttsx3` (SAPI) | **built-in**   |
-| Pulse    | `espeak-ng`      | `paplay`       |
-| PipeWire | `espeak-ng`      | `pw-play`      |
 ```
 
 # Development for v2
