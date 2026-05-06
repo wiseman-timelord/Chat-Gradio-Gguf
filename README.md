@@ -1,5 +1,5 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
-Status - v2 Alpha
+Status - v2 Beta
 - v2 (early release) compatibility was limited to, Python 3.11-3.13 and Windows 10-11 and Ubuntu 24-25, in order to get, newer libraries and more sane/simple scripts, the idea being people with older OS likely not target audience for inference. The readme.md here will be tailored towards the v2 release from now. 
 
 ## Description
