@@ -465,7 +465,7 @@ project_root/
 | PipeWire | `espeak-ng`      | `pw-play`      |
 ```
 
-# Development for v2...
+# Development for v2
 v2 is now in Pre-Release stage...
 1. Testing the TTS, I notice it is correctly not reading "Thinking......." (thinking phase), however it is reading the asterisks, which is annoying, so whatever version of the text output is being processed before being sent to the TTS, additionally needs to have all asterisks stripped. I am guessing those are the asterisks at the start of each line for the markup format output, when it is writing bulletpoints, but obviously we would keep them on/unaltered in the session log version.
 1. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6.
@@ -477,13 +477,13 @@ v2 is now in Pre-Release stage...
 8. Possibility of artifacts, the AI mentioned this, I want to see how feasable it is first.
 9. It would be great to have a Auto/Quick/Think toggle, so as to have some pre-configured 1b model or the likes be able to do a quick assessment of, if the request is simple or complete, to then, disable think for simple tasks and enable think for complex tasks, and additionally we would want to have it assess context/batch lengths, if the user additionally has those set to auto. Other settings could also be determined through this auto feature pre-prompt system. Needs brainstorming.
 10. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far.
-11. Release a v1 legacy release. v1 legacy version retaining, Windows 7-11 and ubuntu 22-25, compatiblity. Possibly something like Corqui would have to be stripped from it, to reduce complexity, relying on built-in TTS only. Additionally a checkover of the scripts, and removal of dead code, and upgrading of flimsy code. 
 
-# Development for v1...
-More testing was done, the restults were not good, moved on to v2...
+# Development for v1
+The plan is to release a v1 legacy version retaining, Windows 7-11 and ubuntu 22-25, compatiblity, and the following updates/downgrades...
 1. do full test, including Testing/Bugfixing on, Windoes 8.1 and Ubuntu 22.
 2. Need to clean up v1, check for redundant code and optimize, then test and fix. 
 3. The issues may be gradio becoming a set version 3, requring a shim for pydantic to work correctly. Problems started around there, so maybe we can cut whatever pydantic does from v1. Idea being to make a final version to leave it, after which later only updating to sync model handling.
+11. Possibly something like Corqui would have to be stripped from it, to reduce complexity, relying on built-in TTS only. Additionally a checkover of the scripts, and removal of dead code, and upgrading of flimsy code. 
 
 ## Credits
 Thanks to all the following teams for their assistance/comtributions...
