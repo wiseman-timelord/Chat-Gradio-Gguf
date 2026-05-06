@@ -39,7 +39,7 @@ GRAPHICS_ACCELERATION = True  # Set by installer
 GRADIO_VERSION = "5.x"     # Gradio 5.x — written by installer; default 5.x for v2
 
 # Output Filtering Configuration
-FILTER_MODE = "gradio5"  # v2 default — Gradio 5.x format
+FILTER_MODE = "gradio5"  # Options: "gradio5" or "custom"
 
 FILTER_PRESETS = {
     "gradio5": [
@@ -52,27 +52,6 @@ FILTER_PRESETS = {
         ("\r\n\n", "\r\n"),
         ("\t\n\n", "\t\n"),
         ("\n\n\n", "\n\n"),
-    ],
-    # Legacy preset — strips markdown-breaking whitespace patterns from pre-Gradio-5
-    # renderers. Selectable by the user as a "Full" filter option via display.py.
-    # NOTE: aggressive rules (e.g. \n\r -> \r) will damage Gradio 5.x markdown output
-    # if applied as the default; only enable deliberately.
-    "gradio3": [
-        ("<p>", "\n"),
-        ("</p>", "\n"),
-        ("\n\n\n\r", "\n\r"),
-        ("\n\n\n\t", "\n\t"),
-        ("\r\n\n\n", "\r\n"),
-        ("\t\n\n\n", "\t\n"),
-        ("\n\r\n", "\n"),
-        ("\n\n\r", "\r"),
-        ("\n\n\t", "\t"),
-        ("\r\n\n", "\r"),
-        ("\t\n\n", "\t"),
-        ("\n\r", "\r"),
-        ("\n\t", "\t"),
-        ("\r\n", "\r"),
-        ("\t\n", "\t"),
     ],
 }
 
@@ -116,8 +95,8 @@ SELECTED_GPU = None
 USE_PYTHON_BINDINGS = True
 DATA_DIR = None  # Will be set by launcher.py
 llm = None
-LLAMA_CLI_PATH = None  # will be set from constants.ini
-LLAMA_BIN_PATH = None  # will be set from constants.ini
+LLAMA_CLI_PATH = None  # Will be set from constants.ini
+LLAMA_BIN_PATH = None  # Will be set from constants.ini
 global_status = None
 _status_lock = None  # Tracks which operation has status priority
 _status_lock_message = ""  # Message to restore when lock releases
@@ -151,15 +130,15 @@ SOUND_SAMPLE_RATE_OPTIONS = [44100, 48000]
 # TTS (Text-to-Speech) Configuration
 # =============================================================================
 TTS_ENABLED = False
-TTS_ENGINE = "none"           # Detected engine: "espeak-ng", "none"
-TTS_AUDIO_BACKEND = "none"    # Audio backend: "windows", "pulseaudio", "pipewire", "none"
+TTS_ENGINE = "none"           # Detected at runtime by initialize_tts() in tools.py
+TTS_AUDIO_BACKEND = "none"    # Detected at runtime: "windows", "pulseaudio", "pipewire", "none"
 TTS_VOICE = None
 TTS_VOICE_NAME = None
 MAX_TTS_LENGTH = 4500
 TTS_TYPE = "builtin"
-COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243")
-COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british")
-COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name
+COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243") — set from constants.ini
+COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british") — set from constants.ini
+COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name — set from constants.ini
 
 # Arrays
 session_attached_files = []
@@ -607,7 +586,6 @@ def load_system_ini():
 
         EMBEDDING_MODEL_NAME = system.get('embedding_model', 'BAAI/bge-small-en-v1.5')
         EMBEDDING_BACKEND = system.get('embedding_backend', 'sentence_transformers')
-        # v2: default Gradio version is 5.x
         GRADIO_VERSION = system.get('gradio_version', '5.x')
         LLAMA_CLI_PATH = system.get('llama_cli_path', None)
         LLAMA_BIN_PATH = system.get('llama_bin_path', None)
@@ -630,7 +608,7 @@ def load_system_ini():
         else:
             WINDOWS_VERSION = None
 
-        # Load TTS configuration (always Coqui in v2)
+        # Load TTS configuration (Coqui)
         if 'tts' in config:
             tts_section = config['tts']
             COQUI_VOICE_ID = tts_section.get('coqui_voice_id', 'p225,p226')
