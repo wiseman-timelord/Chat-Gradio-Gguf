@@ -383,7 +383,7 @@ Web Search = Slower actual website reading research.
 ```
 
 ### Notation 
-- v1, after ~v1.10.x I tried to implement more up-to-date model handling, ie qwen3.5 deepseek 3.2(?), etc, and clearly claude or whatever else I used was confused, and corrupted things. For now one would search around in the releases for a version that runs for example Qwen3 level models. I may release a v1 legacy release/fork later. v1 version will remain intended for, Windows 7-11 and ubuntu 22-25, compatiblity. 
+- v1, after ~v1.10.x I tried to implement more up-to-date model handling, there were issues with running the scripts, the overcomplicated scripts being an AI challenge. May release a v1 legacy release/fork later. v1 legacy version if it happens be, Windows 7-11 and ubuntu 22-25, compatiblity. Possibly something like Corqui would have to be stripped from it. 
 - Windows is my main OS, so Check for recent v1 versions mentioning work on ubuntu if you use that (it was likely being tested/used at such points).
 - Changing height of session log height as shown in media section requires restart of GUI, to re-initialize the complicated and fragile dynamic UI through browser fake GUI interface. 
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
