@@ -467,9 +467,8 @@ project_root/
 
 # Development for v2...
 v2 is now in Pre-Release stage...
-1. All features to be tested, and multiple models tested.
-2. There is a issue with model handling on qwen 3.5/3.6, ensure to do compile install and bugfix/correct the handling.
-3. Need to clean up v2, check for redundant code and optimize, then test and fix.
+1. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6.
+3. Cleaning up v2, check for redundant code and optimize, then test and fix.
 4. When there is a stable correctly working latest v2, then the plan will be to develop a stack of tools, ie "Web Research", but this needs to be brainstormed.
 5. Need to ensure attachments is working correctly, and if/when so, then we need artifacts, ie the ability to reference files provided earlier in the session and their presentation.
 6. When the user installs, the installer needs to additionally note what version of the wheel was installed, currently that would be either v0.3.20 or v0.3.16, though possibly there is a global for this, but it needs to additionally be noted into the constants.ini, in order to be able to display this in the appropriate location in the about/debug tab in the main program, for purposes of referencing what level of model compatibility the program was installed with.
