@@ -458,7 +458,6 @@ project_root/
 
 # Development for v2
 v2 is now in Pre-Release stage...
-1. Testing the TTS, I notice it is correctly not reading "Thinking......." (thinking phase), however it is reading the asterisks, which is annoying, so whatever version of the text output is being processed before being sent to the TTS, additionally needs to have all asterisks stripped. I am guessing those are the asterisks at the start of each line for the markup format output, when it is writing bulletpoints, but obviously we would keep them on/unaltered in the session log version.
 1. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6.
 4. Copy/pasting is not working on the little icons at the end of prompts/responses in the session log. test after above task.
 5. When there is a stable correctly working latest v2, then the plan will be to develop a stack of tools, ie "Web Research", but this needs to be brainstormed.
