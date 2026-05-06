@@ -325,7 +325,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 </details>
 
 ## Hard Requirements
-- Windows 10-11 and/or ~Ubuntu 24-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts.
+- Windows 10-11 and/or ~Ubuntu 24-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts. Ubuntu has not been tested since v2, check v1 release notes for mentions of Ubuntu/Linux testing.
 - Python ~3.11-~3.13 - Requires [Python](https://www.python.org); AI warns me certain libraries wont work on Python 3.14, possibly Spacy. 
 - Llm Model - You will need a Large Language Model in GGUF format, check the models section for recommendations, but for quick start I advise one like [Qwen3-4B-abliterated-GGUF](https://huggingface.co/mradermacher/Qwen3-4B-abliterated-GGUF) for testing basic operation.
 - Suitable GPU - Gpu may be, Main or Compute, with VRam selection 4GB-96GB. Ideally you want the GPU to cover all model layers for fast interference.
