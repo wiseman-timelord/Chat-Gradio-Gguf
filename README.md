@@ -462,8 +462,21 @@ v2 is now in Pre-Release stage...
 1. Built-in TTS was removed...
 ```
 Built-in TTS was removed, now we are using corqui TTS.
-1. Move the model selection during install to a new menu that comes after the current install options menu, this new menu will require the user to type a number followed by a letter, ie `1c`, while the old menu will only have numbers now. the new menu will have numbers 1 or 2 for embeddings, `1. Small Embedding Model` or `2. Base Embedding Model`, from the first menu. the new menu has a letter, this will relate to the new options for english accents, ie "a. English (British) M/F".
+1. Move the, embeddings and tts, model selection during install to a new menu that comes after the current install options menu, this new menu will require the user to type a number followed by a letter, ie `1c`, while the old menu will only have numbers now. the new menu will have numbers 1 or 2 for embeddings, `1. Small Embedding Model` or `2. Base Embedding Model`, from the first menu. the new menu has a letter, this will relate to the new options for english accents, ie "a. English (British) M/F".
 2. The user will select what accent of english to install with, we would select accents for english ie "a. English British", and again each choice will include male and female in the same selection. The list in the program will then be detecting correctly the models as per usual, and hopefully there is no other configuration required in program, and it will correctly, detect and list, the male and female version of specific accent of english chosen.
+3. By moving the, embedding and tts, models selection to a new menu, we can then have mode space on the first menu for the displaying of diagnostics, ie split the text display...
+================================================================================
+    Chat-Gradio-Gguf: Installer
+================================================================================
+
+**system diagnostics currently printed on the first menu
+
+--------------------------------------------------------------------------------
+
+**4 numbered options currently on the old menu, download cpu, download vulkan, compile cpu, compile vulkan. 
+
+================================================================================
+Selectionl; **the current prompt** :_
 ```
 2. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6 and glm 4.7, they just seem to say thinking then say the final response. debug output needs checking, but I think we may have to promt the model to use a specific format of output including "<THINK>" and "</THINK>" before final response, in order for all models to produce the same output format as Qwen3, in order for Thinking... to be split correctly in real time.
 2. When there is a stable correctly working latest v2, then the plan will be to develop some extra tools, but this needs to be brainstormed and figured out..
