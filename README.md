@@ -466,10 +466,10 @@ Built-in TTS was removed, now we are using corqui TTS.
 2. The user will select what accent of english to install with, we would select accents for english ie "a. English British", and again each choice will include male and female in the same selection. The list in the program will then be detecting correctly the models as per usual, and hopefully there is no other configuration required in program, and it will correctly, detect and list, the male and female version of specific accent of english chosen.
 3. By moving the, embedding and tts, models selection to a new menu, we can then have mode space on the first menu for the displaying of diagnostics, ie split the text display...
 ================================================================================
-    Chat-Gradio-Gguf: Installer
+    Chat-Gradio-Gguf: Llama.Cpp Options
 ================================================================================
 
-**system diagnostics currently printed on the first menu
+**system diagnostics currently printed on the first menu**
 
 --------------------------------------------------------------------------------
 
