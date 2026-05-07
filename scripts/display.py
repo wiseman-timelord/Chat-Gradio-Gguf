@@ -390,6 +390,7 @@ def get_ini_display_text():
     lines.append(f"Embedding Model:  {getattr(cfg, 'EMBEDDING_MODEL_NAME', 'N/A')}")
     lines.append(f"Embedding Backend:  {getattr(cfg, 'EMBEDDING_BACKEND', 'N/A')}")
     lines.append(f"Llama Bin Path:  {getattr(cfg, 'LLAMA_BIN_PATH', 'N/A')}")
+    lines.append(f"Llama Wheel:  {getattr(cfg, 'LLAMA_WHEEL_VERSION', 'N/A')}")
     lines.append(f"TTS Engine:  {getattr(cfg, 'TTS_ENGINE', 'N/A')}")
     if getattr(cfg, 'TTS_TYPE', '') == "coqui":
         lines.append(f"Coqui Voice ID:  {getattr(cfg, 'COQUI_VOICE_ID', 'N/A')}")
@@ -2712,7 +2713,7 @@ def launch_display():
                     ini_display = gr.Textbox(
                         label="INI Values (read-only, set by installer)",
                         value=get_ini_display_text(),
-                        lines=10,
+                        lines=8,
                         interactive=False
                     )
                 
@@ -2722,7 +2723,7 @@ def launch_display():
                     debug_display = gr.Textbox(
                         label="Critical Globals (click Refresh to update)",
                         value=get_debug_globals_text(),
-                        lines=10,
+                        lines=11,
                         interactive=False
                     )
                     refresh_debug_btn = gr.Button("🔄 Refresh Debug Info", variant="secondary")

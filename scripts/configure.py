@@ -97,6 +97,7 @@ DATA_DIR = None  # Will be set by launcher.py
 llm = None
 LLAMA_CLI_PATH = None  # Will be set from constants.ini
 LLAMA_BIN_PATH = None  # Will be set from constants.ini
+LLAMA_WHEEL_VERSION = None  # Will be set from constants.ini (llama-cpp-python wheel version)
 global_status = None
 _status_lock = None  # Tracks which operation has status priority
 _status_lock_message = ""  # Message to restore when lock releases
@@ -574,6 +575,7 @@ def load_system_ini():
         global OS_VERSION, WINDOWS_VERSION, TTS_ENGINE, TTS_AUDIO_BACKEND
         global TTS_TYPE, COQUI_VOICE_ID, COQUI_VOICE_ACCENT, COQUI_MODEL
         global GRAPHICS_ACCELERATION, QT_VERSION, DX_FEATURE_LEVEL
+        global LLAMA_WHEEL_VERSION
 
         PLATFORM = system.get('platform')
         BACKEND_TYPE = system.get('backend_type', 'CPU_CPU')
@@ -589,6 +591,7 @@ def load_system_ini():
         GRADIO_VERSION = system.get('gradio_version', '5.x')
         LLAMA_CLI_PATH = system.get('llama_cli_path', None)
         LLAMA_BIN_PATH = system.get('llama_bin_path', None)
+        LLAMA_WHEEL_VERSION = system.get('llama_wheel_version', None)
 
         print(f"[INI] Platform: {PLATFORM}")
         print(f"[INI] Backend: {BACKEND_TYPE}")

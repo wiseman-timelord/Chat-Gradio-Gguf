@@ -31,6 +31,10 @@ LLAMACPP_PYTHON_PREBUILT_VERSION = "v0.3.16"
 #     release tag. Falls back to LLAMACPP_PYTHON_VERSION_FALLBACK if unreachable.
 LLAMACPP_PYTHON_VERSION = None
 LLAMACPP_PYTHON_VERSION_FALLBACK = "v0.3.20"
+# Set during install_python_deps() once the wheel is confirmed installed.
+# Written to constants.ini by update_ini_wheel_version() so the main program
+# can display it in the About/Debug tab.
+_INSTALLED_LLAMA_WHEEL_VERSION = None
 LLAMACPP_TARGET_VERSION = "b8882"
 DOWNLOAD_RELEASE_TAG = "b8882"
 WIN_COMPILE_TEMP = Path("C:/temp_build")
@@ -956,6 +960,7 @@ def install_linux_system_dependencies(backend: str) -> bool:
 def install_python_deps(backend: str) -> bool:
     """Install Python dependencies.
     v2: Single-phase install — no critical pinned packages, no force-reinstall phase."""
+    global _INSTALLED_LLAMA_WHEEL_VERSION
     print_status("Installing Python dependencies...")
     try:
         pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
@@ -1020,6 +1025,7 @@ def install_python_deps(backend: str) -> bool:
 
                 if installed:
                     print_status(f"llama-cpp-python {wheel_version} installed via {label}")
+                    _INSTALLED_LLAMA_WHEEL_VERSION = f"v{wheel_version}"
                     break
                 else:
                     print(f"  Source unavailable: {label}")
@@ -1042,6 +1048,8 @@ def install_python_deps(backend: str) -> bool:
 
             if not build_llama_cpp_python_with_flags(build_flags):
                 return False
+            # Record the compiled wheel version
+            _INSTALLED_LLAMA_WHEEL_VERSION = get_latest_llamacpp_python_version()
 
         print_status("Python dependencies installed successfully")
         return True
@@ -1124,6 +1132,34 @@ def create_system_ini(platform: str, os_version: str, python_version: str,
         return True
     except Exception as e:
         print_status(f"Failed to create constants.ini: {str(e)}", False)
+        return False
+
+
+def update_ini_wheel_version(version: str) -> bool:
+    """Patch constants.ini to record the llama-cpp-python wheel version.
+
+    Called after install_python_deps() so the version is confirmed installed.
+    Uses configparser to update the [system] section in-place, preserving all
+    other keys and the [tts] section.
+    """
+    import configparser as _cp
+    ini_path = BASE_DIR / "data" / "constants.ini"
+    if not ini_path.exists():
+        print_status("constants.ini not found — cannot record wheel version", False)
+        return False
+    try:
+        cfg_ini = _cp.ConfigParser()
+        cfg_ini.read(ini_path, encoding='utf-8')
+        if 'system' not in cfg_ini:
+            print_status("constants.ini missing [system] — cannot record wheel version", False)
+            return False
+        cfg_ini['system']['llama_wheel_version'] = version
+        with open(ini_path, 'w', encoding='utf-8') as f:
+            cfg_ini.write(f)
+        print_status(f"Recorded llama-cpp-python wheel version: {version}")
+        return True
+    except Exception as e:
+        print_status(f"Could not update wheel version in constants.ini: {e}", False)
         return False
 
 
@@ -2725,19 +2761,20 @@ def _read_existing_ini() -> dict:
             return None
         sys_sec = config['system']
         result = {
-            'platform':           sys_sec.get('platform',        PLATFORM),
-            'os_version':         sys_sec.get('os_version',      'unknown'),
-            'python_version':     sys_sec.get('python_version',
-                                              f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"),
-            'backend_type':       sys_sec.get('backend_type',    'CPU_CPU'),
-            'embedding_model':    sys_sec.get('embedding_model', 'BAAI/bge-small-en-v1.5'),
-            'vulkan_available':   sys_sec.getboolean('vulkan_available', False),
-            'windows_version':    sys_sec.get('windows_version', None),
-            'llama_cli_path':     sys_sec.get('llama_cli_path',  None),
-            'llama_bin_path':     sys_sec.get('llama_bin_path',  None),
-            'tts_engine':         'coqui',
-            'coqui_voice_id':     None,
-            'coqui_voice_accent': None,
+            'platform':              sys_sec.get('platform',        PLATFORM),
+            'os_version':            sys_sec.get('os_version',      'unknown'),
+            'python_version':        sys_sec.get('python_version',
+                                                 f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"),
+            'backend_type':          sys_sec.get('backend_type',    'CPU_CPU'),
+            'embedding_model':       sys_sec.get('embedding_model', 'BAAI/bge-small-en-v1.5'),
+            'vulkan_available':      sys_sec.getboolean('vulkan_available', False),
+            'windows_version':       sys_sec.get('windows_version', None),
+            'llama_cli_path':        sys_sec.get('llama_cli_path',  None),
+            'llama_bin_path':        sys_sec.get('llama_bin_path',  None),
+            'llama_wheel_version':   sys_sec.get('llama_wheel_version', None),
+            'tts_engine':            'coqui',
+            'coqui_voice_id':        None,
+            'coqui_voice_accent':    None,
         }
         if 'tts' in config:
             tts_sec = config['tts']
@@ -3095,6 +3132,9 @@ def install():
         )
         backend_str = _backend_type_to_string(existing['backend_type'])
         create_config(backend_str, existing['embedding_model'])
+        # Re-apply the existing wheel version (create_system_ini doesn't know it)
+        if existing.get('llama_wheel_version'):
+            update_ini_wheel_version(existing['llama_wheel_version'])
         print_status("Configuration refresh complete!")
         print("\nRun the launcher to start Chat-Gradio-Gguf\n")
         return
@@ -3214,6 +3254,10 @@ def install():
     if not install_python_deps(backend):
         print_status("Python dependencies failed", False)
         sys.exit(1)
+
+    # Persist the confirmed wheel version into constants.ini now that install succeeded
+    if _INSTALLED_LLAMA_WHEEL_VERSION:
+        update_ini_wheel_version(_INSTALLED_LLAMA_WHEEL_VERSION)
 
     install_optional_file_support()
 
