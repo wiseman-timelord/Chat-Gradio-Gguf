@@ -463,17 +463,29 @@ v2 is now in Pre-Release stage...
 ```
 Built-in TTS was removed, now we are using corqui TTS.
 1. Move the, embeddings and tts, model selection during install to a new menu that comes after the current install options menu, this new menu will require the user to type a number followed by a letter, ie `1c`, while the old menu will only have numbers now. the new menu will have numbers 1 or 2 for embeddings, `1. Small Embedding Model` or `2. Base Embedding Model`, from the first menu. the new menu has a letter, this will relate to the new options for english accents, ie "a. English (British) M/F".
+================================================================================
+    Chat-Gradio-Gguf: Embed And TTS Model Options 
+================================================================================
+
+**2 individual lines with blank line between, concise details of differences between small and base Corqui TTS models speed/InstalledSize**
+
+--------------------------------------------------------------------------------
+
+**however many English accents are available, max 9 most popular**
+
+================================================================================
+Selectionl; **the current prompt** :_
 2. The user will select what accent of english to install with, we would select accents for english ie "a. English British", and again each choice will include male and female in the same selection. The list in the program will then be detecting correctly the models as per usual, and hopefully there is no other configuration required in program, and it will correctly, detect and list, the male and female version of specific accent of english chosen.
 3. By moving the, embedding and tts, models selection to a new menu, we can then have mode space on the first menu for the displaying of diagnostics, ie split the text display...
 ================================================================================
-    Chat-Gradio-Gguf: Llama.Cpp Options
+    Chat-Gradio-Gguf: Llama.Cpp Backend Options
 ================================================================================
 
 **system diagnostics currently printed on the first menu**
 
 --------------------------------------------------------------------------------
 
-**4 numbered options currently on the old menu, download cpu, download vulkan, compile cpu, compile vulkan. 
+**4 numbered options currently on the old menu, download cpu, download vulkan, compile cpu, compile vulkan.**
 
 ================================================================================
 Selectionl; **the current prompt** :_
