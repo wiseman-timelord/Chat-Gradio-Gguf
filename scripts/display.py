@@ -50,7 +50,7 @@ from scripts.configure import (
 # Utility & helper modules
 from scripts import utility
 from scripts.utility import (
-    hybrid_search, is_research_available, get_research_capabilities, short_path,
+    hybrid_search, is_research_available, short_path,
     get_saved_sessions, get_cpu_info, load_session_history, save_session_history,
     get_available_gpus, filter_operational_content, process_files, eject_file, 
     summarize_session, beep, update_file_slot_ui 
@@ -58,8 +58,8 @@ from scripts.utility import (
 
 # Model handling
 from scripts.inference import (
-    get_response_stream, get_available_models, unload_inference, get_model_settings,
-    inspect_model, load_inference, change_model, load_models
+    get_response_stream, get_available_models, unload_models, get_model_settings,
+    inspect_model, change_model, load_models
 )
 
 # Tools (search, TTS, etc.)
@@ -352,12 +352,6 @@ def update_panel_on_mode_change(current_panel):
         new_panel
     )
 
-def process_attach_files(files, attached_files):
-    """Process uploaded files for attachment."""
-    if not files:
-        return "No files selected.", attached_files
-    return process_files(files, attached_files, cfg.MAX_ATTACH_SLOTS, is_attach=True)
-
 def process_vector_files(files, vector_files, models_loaded):
     if not models_loaded:
         return "Error: Load model first.", vector_files
@@ -459,7 +453,7 @@ def format_response(output: str) -> str:
     from pygments import highlight
     from pygments.lexers import get_lexer_by_name
     from pygments.formatters import HtmlFormatter
-    from scripts.configure import THINK_COLOR, GRADIO_VERSION
+    from scripts.configure import THINK_COLOR
     
     formatted = []
     
@@ -601,13 +595,6 @@ def load_filter_preset(preset_name):
         text = filter_list_to_text(preset)
         return text, f"Loaded Light filter (Gradio 5 style, {len(preset)} rules)"
     
-    elif preset_name == "Full":
-        cfg.FILTER_MODE = "gradio3"
-        preset = cfg.FILTER_PRESETS.get("gradio3", [])
-        cfg.ACTIVE_FILTER = preset.copy()
-        text = filter_list_to_text(preset)
-        return text, f"Loaded Full filter (Gradio 3 style, {len(preset)} rules)"
-    
     return "", "Unknown preset"
 
 def save_custom_filter(filter_text):
@@ -744,8 +731,6 @@ def update_model_list(model_folder):
 
 def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, cpu_threads, llm_state, models_loaded_state):
     """Explicitly load the currently selected model with current cfg."""
-    import scripts.configure as cfg
-    from scripts.inference import load_inference, get_model_settings
     from scripts.utility import beep
     if not model_name or model_name in ["Select_a_model...", "No models found", " ", None]:
         return (
@@ -821,8 +806,6 @@ def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, c
 
 def handle_unload_model(llm_state, models_loaded_state):
     """Explicitly unload the currently loaded model."""
-    import scripts.configure as cfg
-    from scripts.inference import unload_models
     from scripts.utility import beep
     if not models_loaded_state or llm_state is None:
         return (
@@ -911,37 +894,10 @@ def save_rp_settings(rp_location, user_name, user_role, ai_npc, ai_npc_role):
         rp_location, user_name, user_role, ai_npc, ai_npc_role
     )
 
-def process_uploaded_files(files, loaded_files, models_loaded):
-    from scripts.utility import create_session_vectorstore
-    import scripts.configure as cfg
-    import os
-    print("Uploaded files:", files)
-    if not models_loaded:
-        return "Error: Load a model first.", loaded_files
-    
-    max_files = cfg.MAX_ATTACH_SLOTS
-    if len(loaded_files) >= max_files:
-        return f"Max files ({max_files}) reached.", loaded_files
-    
-    new_files = [f for f in files if os.path.isfile(f) and f not in loaded_files]
-    print("New files to add:", new_files)
-    available_slots = max_files - len(loaded_files)
-    for file in reversed(new_files[:available_slots]):
-        loaded_files.insert(0, file)
-    
-    session_vectorstore = create_session_vectorstore(loaded_files)
-    cfg.context_injector.set_session_vectorstore(session_vectorstore)
-    
-    print("Updated loaded_files:", loaded_files)
-    return f"Processed {min(len(new_files), available_slots)} new files.", loaded_files
-
 def start_new_session(session_messages, attached_files, llm_state, models_loaded_state):
     """
     Start a fresh session. Preserves model loaded state to prevent unnecessary reloads.
     """
-    import scripts.configure as cfg
-    from scripts.utility import save_session_history
-
     # 1. Save current session if it was active and has messages
     if cfg.SESSION_ACTIVE and session_messages:
         try:
@@ -969,16 +925,6 @@ def start_new_session(session_messages, attached_files, llm_state, models_loaded
         llm_state,                          # Preserve llm state
         models_loaded_state                 # Preserve models_loaded state
     )
-
-def _get_cpu_default():
-    """Helper function to get CPU default value."""
-    import scripts.utility as utility
-    cpu_info = utility.get_cpu_info()
-    if len(cpu_info) > 1:
-        return "Auto-Select"
-    else:
-        cpu_labs = [c["label"] for c in cpu_info]
-        return cpu_labs[0] if cpu_labs else "Default CPU"
 
 def load_session_by_index(idx):
     saved_sessions = utility.get_saved_sessions()
@@ -1047,24 +993,38 @@ def copy_last_response(session_messages):
 
 def handle_inline_copy(action_str, session_messages):
     """Triggered by JS inline copy button via hidden relay textbox.
-    action_str: 'user:<tuple_idx>'  or  'bot:<tuple_idx>'
-    tuple_idx → flat message index: user = idx*2, bot = idx*2+1
+    action_str: 'user:<nth>'  or  'bot:<nth>' with optional '|<timestamp>' suffix.
+    nth is the index within messages of that role only (robust against system messages).
     """
     if not action_str or ':' not in action_str:
         return "Nothing to copy.", ""
     try:
-        role_part, idx_s = action_str.rsplit(':', 1)
-        tuple_idx = int(idx_s)
+        # Strip JS timestamp suffix (appended to guarantee .change() fires on repeat clicks)
+        clean_str = action_str.split('|')[0]
+        role_part, idx_s = clean_str.rsplit(':', 1)
+        nth = int(idx_s)
     except (ValueError, AttributeError):
         return "Copy error: bad format.", ""
 
-    msg_idx = tuple_idx * 2 if role_part == 'user' else tuple_idx * 2 + 1
-    if not session_messages or msg_idx >= len(session_messages):
+    # Find nth message of the requested role — safe against system/tool messages in the list
+    if role_part == 'user':
+        candidates = [m for m in session_messages if m.get('role') == 'user']
+    else:
+        candidates = [m for m in session_messages if m.get('role') == 'assistant']
+
+    if not candidates or nth >= len(candidates):
         return "Message not found.", ""
 
-    content = session_messages[msg_idx].get('content', '')
-    clean = re.sub(r'<[^>]+>', '', content).strip()
-    clean = re.sub(r'^(?:AI-Chat|User):\s*\n?', '', clean, flags=re.MULTILINE).strip()
+    content = candidates[nth].get('content', '') or ''
+    # Strip HTML tags, then decode common HTML entities so copied text is clean
+    clean = re.sub(r'<[^>]+>', '', content)
+    clean = (clean
+             .replace('&amp;',  '&')
+             .replace('&lt;',   '<')
+             .replace('&gt;',   '>')
+             .replace('&quot;', '"')
+             .replace('&#39;',  "'"))
+    clean = re.sub(r'^(?:AI-Chat|User):\s*\n?', '', clean.strip(), flags=re.MULTILINE).strip()
     try:
         pyperclip.copy(clean)
         label = "AI response" if role_part == 'bot' else "User message"
@@ -1075,27 +1035,32 @@ def handle_inline_copy(action_str, session_messages):
 
 def handle_inline_edit(idx_str, session_messages):
     """Triggered by JS inline edit button via hidden relay textbox.
-    idx_str: stringified tuple_idx — edit session from that user message onward.
-    Truncates history before it, loads the user text back into the input box.
+    idx_str: stringified nth user-message index with optional '|<timestamp>' suffix.
+    Finds the nth user message by role (safe against system messages), truncates
+    history to just before that message, and loads its text into the input box.
     """
     if not idx_str:
         return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "", False, ""
     try:
-        tuple_idx = int(idx_str)
+        # Strip JS timestamp suffix (appended to guarantee .change() fires on repeat clicks)
+        clean_str = idx_str.split('|')[0]
+        nth = int(clean_str)
     except ValueError:
         return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "Edit error: invalid index.", False, ""
 
-    msg_idx = tuple_idx * 2
-    if msg_idx >= len(session_messages) or session_messages[msg_idx].get('role') != 'user':
+    # Locate the nth user message by role — robust against system/tool messages in the list
+    user_entries = [(i, m) for i, m in enumerate(session_messages) if m.get('role') == 'user']
+    if nth >= len(user_entries):
         return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "Edit target not found.", False, ""
 
-    user_content = session_messages[msg_idx].get('content', '')
+    original_idx, target_msg = user_entries[nth]
+    user_content = target_msg.get('content', '') or ''
     user_content = re.sub(r'^User:\s*\n?', '', user_content, flags=re.MULTILINE).strip()
 
-    new_messages = session_messages[:msg_idx]
+    new_messages = session_messages[:original_idx]
     chatbot_out  = get_chatbot_output(messages_to_tuples(new_messages), new_messages)
     has_ai       = any(m.get('role') == 'assistant' for m in new_messages)
-    status       = f"✏️ Editing from message {tuple_idx + 1} — edit the text above then Send Input."
+    status       = f"✏️ Editing from message {nth + 1} — edit the text above then Send Input."
     return user_content, chatbot_out, new_messages, status, has_ai, ""
 
 
@@ -2251,6 +2216,24 @@ def launch_display():
     }
 
     /* ── Inline per-message action buttons ───────────────────────────── */
+    /* Relay textboxes: must be in DOM (visible=True) for JS to find them,
+       but must take up zero visual space. Do NOT use display:none or
+       visibility:hidden on the container or textarea — those suppress
+       Svelte reactivity. Collapse to 0×0 via height/overflow/opacity only. */
+    .cguf-relay {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        z-index: -1 !important;
+        clip: rect(0,0,0,0) !important;
+    }
     .cguf-actions {
         display: flex;
         justify-content: flex-end;
@@ -2403,13 +2386,19 @@ def launch_display():
 
                         # Relay textboxes: JS writes here → .change() fires Python handlers.
                         # elem_id puts an id on the wrapper div; JS finds the textarea inside.
+                        # IMPORTANT: visible=True is required so Gradio 5 (Svelte {#if})
+                        # actually renders these into the DOM. visible=False removes them
+                        # entirely, making document.getElementById() return null and
+                        # breaking all JS→Python relay. Visual hiding is done via CSS only.
                         copy_action_box = gr.Textbox(
-                            value="", visible=False,
-                            elem_id="cguf-copy-action", label=""
+                            value="", visible=True,
+                            elem_id="cguf-copy-action", label="",
+                            elem_classes=["cguf-relay"]
                         )
                         edit_action_box = gr.Textbox(
-                            value="", visible=False,
-                            elem_id="cguf-edit-action", label=""
+                            value="", visible=True,
+                            elem_id="cguf-edit-action", label="",
+                            elem_classes=["cguf-relay"]
                         )
 
                         with gr.Row(elem_classes=["clean-elements"]):
@@ -2677,7 +2666,6 @@ def launch_display():
                     with gr.Row():
                         filter_user_btn = gr.Button("User Preset")
                         filter_light_btn = gr.Button("Light Preset")
-                        filter_full_btn = gr.Button("Full Preset")
                     filter_text = gr.Textbox(
                         label="Custom Filter Rules (find→replace pairs)",
                         value=get_filter_text_for_display(),
@@ -2930,7 +2918,7 @@ def launch_display():
         def handle_model_change(new_model, current_model, llm_state, models_loaded_state, model_folder):
             """Handle model selection change: unload → 3s countdown → load new model"""
             import time
-            from scripts.inference import unload_inference, load_models
+            from scripts.inference import unload_models, load_models
             from scripts.utility import beep, short_path
 
             # No change or invalid → skip
@@ -3540,10 +3528,6 @@ def launch_display():
             text, status = load_filter_preset("Light")
             return text, status
 
-        def load_full_filter():
-            text, status = load_filter_preset("Full")
-            return text, status
-
         filter_user_btn.click(
             fn=load_user_filter,
             inputs=[],
@@ -3556,12 +3540,6 @@ def launch_display():
             outputs=[filter_text, filter_status]
         )
         
-        filter_full_btn.click(
-            fn=load_full_filter,
-            inputs=[],
-            outputs=[filter_text, filter_status]
-        )
-
         # Delete all history button handler
         delete_history_btn.click(
             fn=delete_all_sessions,
@@ -3626,7 +3604,10 @@ def launch_display():
     }
 
     /* Fire a Gradio .change() event by writing to a hidden textbox.
-       Must use native property setter so Svelte/Gradio reactivity fires. */
+       Must use native property setter so Svelte/Gradio reactivity fires.
+       A '|<timestamp>' suffix is appended so the value is ALWAYS different from
+       the previous one — this guarantees .change() fires even when the user
+       clicks the same button twice in a row (Svelte only reacts to actual changes). */
     window.cgufFire = function(elemId, value) {
         var wrap = document.getElementById(elemId);
         if (!wrap) { log('ERROR: #' + elemId + ' not in DOM'); return; }
@@ -3635,13 +3616,15 @@ def launch_display():
                   wrap.querySelector('input');
         if (!inp) { log('ERROR: no input inside #' + elemId); return; }
         try {
+            var unique = value + '|' + Date.now();
             var proto = inp.tagName === 'TEXTAREA'
                 ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
             var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
-            setter.call(inp, value);
+            setter.call(inp, unique);
             inp.dispatchEvent(new Event('input',  { bubbles: true }));
             inp.dispatchEvent(new Event('change', { bubbles: true }));
-            log('OK ' + elemId + '=' + value);
+            inp.dispatchEvent(new Event('blur',   { bubbles: true }));
+            log('OK ' + elemId + '=' + unique);
         } catch(e) {
             log('ERROR setter: ' + e.message);
         }
@@ -3661,7 +3644,7 @@ def launch_display():
         return b;
     }
 
-    /* Gradio 5.x selectors first, then Gradio 3.x fallbacks. */
+    /* Gradio 5.x selectors. */
     var SEL_PAIRS = [
         /* Gradio 5.x type="messages" — testid attributes */
         ['[data-testid="user"]',                     '[data-testid="bot"]'],
@@ -3669,11 +3652,7 @@ def launch_display():
         /* Gradio 5.x class-based fallbacks */
         ['.message.user',                            '.message.bot'],
         ['div[class*="user"][class*="message"]',     'div[class*="bot"][class*="message"]'],
-        /* Gradio 3.x fallbacks (retained for reference) */
-        ['.scrollable .user .message',               '.scrollable .bot .message'],
-        ['.scrollable .user',                        '.scrollable .bot'],
-        ['.wrap .user',                              '.wrap .bot'],
-        ['[class*="user-message"]',                  '[class*="bot-message"]'],
+
     ];
 
     function findMessages() {
