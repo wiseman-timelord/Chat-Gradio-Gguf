@@ -383,7 +383,7 @@ Web Search = Slower actual website reading research.
 ```
 
 ### Notation 
-- The idea of v2 limiting compatibility being people with older OS likely not target audience for inference, though I do intend to do a final update to v1 and release as v1 Legacy. v1 After ~v1.10.x there were issues with main program, the overcomplicated scripts being an AI challenge. 
+- The idea of v2 limiting compatibility being people with older OS likely not target audience for inference, and through streamling and simplifying complexity, to make possible additional complexity to upgrade. 
 - Windows is my main OS, so Check for recent v1 versions mentioning work on ubuntu if you use that (it was likely being tested/used at such points).
 - Changing height of session log height as shown in media section requires restart of GUI, to re-initialize the complicated and fragile dynamic UI through browser fake GUI interface. 
 - The "Cancel Input/Response" button was impossible for now; Attempted most recently, 2 Opus 4.5 and 2 Grok, sessions, and added about ~=>45k, but then required, "Wait For Response" for Gradio v3 and Cancel Input for Gradio v4. Instead there is now a dummy "..Wait For Response.." button.
@@ -458,6 +458,7 @@ project_root/
 
 # Development for v2
 v2 is now in Pre-Release stage...
+1. Built-in TTS was removed, instead lets add another display, where the user will select what accent of english to install with, so in installer there would be additional screen after the install options, where we would select accents for english, and again each choice will include male and female in the same selection. The list in the program will then be detecting these other versions of accents files for voice selevtion, and whatever was selected, the user will see the male and female, voices installed for the appropriate selection.
 1. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6 and glm 4.7, they just seem to say thinking then say the final response. debug output needs checking, but I think we may have to promt the model to use a specific format of output including "<THINK>" and "</THINK>" before final response, in order for all models to produce the same output format as Qwen3, in order for Thinking... to be split correctly in real time.
 2. When there is a stable correctly working latest v2, then the plan will be to develop some extra tools, but this needs to be brainstormed and figured out..
 3. Code Optimization / redistribution of code, moving code out from display script, to applicably relatingly themed scripts, if there is relevance to both scripts and it is sound to do so, in order to reduce overall code in display script by moving it out, as appropriate to do so, nothing extreme. 
@@ -465,11 +466,11 @@ v2 is now in Pre-Release stage...
 10. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far. If attempted again, then start with test scripts.
 
 # Development for v1
-The plan is to release a v1 legacy version retaining, Windows 7-11 and ubuntu 22-25, compatiblity, and the following updates/downgrades...
+I do intend to do a final update to v1 and release as v1 Legacy. v1 After ~v1.10.x there were issues with main program, the overcomplicated scripts being an AI. so, The plan is to release a v1 legacy version retaining, Windows 7-11 and ubuntu 22-25, compatiblity, and the following updates/downgrades...
 1. do full test, including Testing/Bugfixing on, Windoes 8.1 and Ubuntu 22.
 2. Need to clean up v1, check for redundant code and optimize, then test and fix. 
 3. The issues may be gradio becoming a set version 3, requring a shim for pydantic to work correctly. Problems started around there, so maybe we can cut whatever pydantic does from v1. Idea being to make a final version to leave it, after which later only updating to sync model handling.
-11. Possibly something like Corqui would have to be stripped from it, to reduce complexity, relying on built-in TTS only. Additionally a checkover of the scripts, and removal of dead code, and upgrading of flimsy code. 
+11. Possibly something like Corqui would have to be stripped from it, to reduce complexity relying on built-in TTS only. Additionally a checkover of the scripts, and removal of dead code, and upgrading of flimsy code. 
 
 ## Credits
 Thanks to all the following teams for their assistance/comtributions...
