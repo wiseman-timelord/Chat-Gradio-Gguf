@@ -1228,6 +1228,104 @@ def _play_audio_file(file_path: str, output_device: Optional[str] = None):
 
 
 
+
+def synthesize_text_to_file(text, voice_id=None):
+    """Synthesize text to a WAV file without playing. Returns the file path or None."""
+
+    if cfg.TTS_ENGINE == "none":
+        print("[TTS] No TTS engine available")
+        return None
+
+    if not text or not text.strip():
+        print("[TTS] Empty text, skipping")
+        return None
+
+    text = _clean_text_for_tts(text)
+    if not text:
+        print("[TTS] Text empty after cleaning")
+        return None
+
+    if len(text) > cfg.MAX_TTS_LENGTH:
+        print(f"[TTS] Text truncated from {len(text)} to {cfg.MAX_TTS_LENGTH} chars")
+        text = text[:cfg.MAX_TTS_LENGTH]
+
+    if cfg.TTS_ENGINE == "coqui":
+        return _synthesize_coqui_to_file(text, voice_id)
+
+    print(f"[TTS] Unsupported engine: {cfg.TTS_ENGINE}")
+    return None
+
+
+def _synthesize_coqui_to_file(text, voice_id=None):
+    """Synthesize text to WAV using Coqui TTS. Returns WAV path or None."""
+    import os
+    from pathlib import Path
+    import time
+
+    if not text or not text.strip():
+        print("[TTS] Empty text, skipping")
+        return None
+
+    effective_voice_id = voice_id or cfg.COQUI_VOICE_ID or "p225"
+    if "," in effective_voice_id:
+        effective_voice_id = effective_voice_id.split(",")[0].strip()
+
+    wav_path = os.path.join(cfg.TEMP_DIR, f"tts_msg_{int(time.time()*1000)}.wav")
+
+    try:
+        base_dir = Path(__file__).parent.parent
+
+        if cfg.PLATFORM == "windows":
+            espeak_dir = base_dir / "data" / "espeak-ng"
+            espeak_dll = espeak_dir / "libespeak-ng.dll"
+            espeak_exe = espeak_dir / "espeak-ng.exe"
+            espeak_data = espeak_dir / "espeak-ng-data"
+
+            if not espeak_dll.exists():
+                print(f"[TTS] ERROR: espeak-ng not found at {espeak_dir}")
+                return None
+
+            os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = str(espeak_dll)
+            os.environ["PHONEMIZER_ESPEAK_PATH"] = str(espeak_exe)
+            os.environ["ESPEAK_DATA_PATH"] = str(espeak_data)
+
+        from TTS.api import TTS
+
+        tts_model_dir = base_dir / "data" / "tts_models"
+        os.environ["TTS_HOME"] = str(tts_model_dir)
+
+        model_name = getattr(cfg, 'COQUI_MODEL', 'tts_models/en/vctk/vits')
+
+        print(f"[TTS] Coqui synthesizing with voice {effective_voice_id}...")
+
+        tts = TTS(model_name=model_name, progress_bar=False)
+
+        if _tts_stop_flag.is_set():
+            return None
+
+        tts.tts_to_file(
+            text=text,
+            file_path=wav_path,
+            speaker=effective_voice_id
+        )
+
+        if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
+            print("[TTS] Synthesis produced empty file")
+            return None
+
+        print(f"[TTS] Synthesized -> {wav_path}")
+        return wav_path
+
+    except ImportError as e:
+        print(f"[TTS] Coqui TTS not installed: {e}")
+        return None
+    except Exception as e:
+        print(f"[TTS] Synthesis error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 def synthesize_last_response(session_messages: list) -> Optional[str]:
     """Synthesize TTS audio from the last AI response (blocking).
     Returns the path to the generated WAV file, or None on failure.
@@ -1373,6 +1471,9 @@ def stop_speaking():
     if _tts_thread and _tts_thread.is_alive():
         _tts_thread.join(timeout=1.0)
 
+def clear_tts_stop():
+    """Clear the TTS stop flag so a new playback can start."""
+    _tts_stop_flag.clear()
 
 def is_speaking() -> bool:
     """Check if TTS is currently active."""

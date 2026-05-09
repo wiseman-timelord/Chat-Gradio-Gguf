@@ -43,7 +43,7 @@ from scripts.configure import (
     TEMP_OPTIONS, REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS,
     SESSION_LOG_HEIGHT_OPTIONS, ATTACH_SLOT_OPTIONS, HISTORY_DIR,
     USER_COLOR, THINK_COLOR, RESPONSE_COLOR, PRINT_RAW_OUTPUT,
-    SHOW_THINK_PHASE, BLEEP_ON_EVENTS, TTS_ENABLED, TTS_VOICE_NAME,
+    SHOW_THINK_PHASE, BLEEP_ON_EVENTS, TTS_PHASE, TTS_CURRENT_MSG_IDX, TTS_BUSY,
     MAX_TTS_LENGTH, context_injector, STATUS_MESSAGES
 )
 
@@ -68,7 +68,7 @@ from scripts.tools import (
     get_voice_choices, get_output_device_choices, get_sample_rate_choices,
     speak_last_response, stop_speaking, get_tts_status, initialize_tts,
     get_voice_id_by_name, speak_text,
-    synthesize_last_response, play_tts_audio
+    synthesize_text_to_file, play_tts_audio
 )
 
 
@@ -1034,6 +1034,125 @@ def handle_inline_copy(action_str, session_messages):
         return f"Copy error: {e}", ""
 
 
+
+def _tts_worker(msg_index, text):
+    """Background worker for TTS: synthesize then play."""
+    import scripts.configure as cfg
+    from scripts.tools import clear_tts_stop
+    clear_tts_stop()          # <-- CRITICAL: reset flag from any previous stop
+    
+    cfg.TTS_BUSY = True
+    cfg.TTS_PHASE = "generating"
+    cfg.TTS_CURRENT_MSG_IDX = msg_index
+    wav_path = None
+    try:
+        print(f"[TTS] Starting synthesis for msg {msg_index} ({len(text)} chars)...")
+        wav_path = synthesize_text_to_file(text)
+        if wav_path and os.path.exists(wav_path):
+            cfg.TTS_PHASE = "playing"
+            play_tts_audio(wav_path)   # blocking until audio finishes
+        elif not wav_path:
+            print("[TTS] Synthesis returned no file, skipping playback")
+    except Exception as e:
+        print(f"[TTS] Worker error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        cfg.TTS_PHASE = "idle"
+        cfg.TTS_CURRENT_MSG_IDX = None
+        cfg.TTS_BUSY = False
+        print(f"[TTS] Worker done for msg {msg_index}")
+
+
+def handle_inline_tts(action_str, session_messages):
+    """Handle per-message TTS button clicks. 4-phase cycle: play->generating->playing->idle."""
+    import scripts.configure as cfg
+    import gradio as gr
+
+    # Reset state box to idle first
+    result = {"tts_state": gr.update(value="idle")}
+
+    if not action_str or not action_str.strip():
+        return result["tts_state"]
+
+    # Strip JS timestamp suffix (appended by cgufFire to guarantee .change() fires
+    # on repeated clicks — same pattern used by handle_inline_copy / handle_inline_edit)
+    clean_str = action_str.split('|')[0]
+
+    parts = clean_str.split(':')
+    if len(parts) < 2:
+        return result["tts_state"]
+
+    action = parts[0].strip()
+    msg_idx_str = parts[1].strip()
+
+    try:
+        msg_idx = int(msg_idx_str)
+    except ValueError:
+        return result["tts_state"]
+
+    if action == "stop":
+        print(f"[TTS] Stop requested for msg {msg_idx}")
+        stop_speaking()
+        cfg.TTS_PHASE = "idle"
+        cfg.TTS_CURRENT_MSG_IDX = None
+        cfg.TTS_BUSY = False
+        return gr.update(value="idle")
+
+    if action == "bot":
+        # Guard against duplicate events: cgufFire dispatches input/change/blur in
+        # rapid succession and Gradio 5.x may fire the Python handler for more than
+        # one of them.  Setting cfg.TTS_BUSY = True here (before thread start) closes
+        # the race window that existed when the flag was only set inside the thread.
+        if cfg.TTS_BUSY:
+            print(f"[TTS] Already busy (msg {cfg.TTS_CURRENT_MSG_IDX}), ignoring duplicate trigger")
+            return gr.update(value=f"{cfg.TTS_CURRENT_MSG_IDX}|{cfg.TTS_PHASE}")
+
+        # Get the bot message content
+        bot_msgs = [m for m in session_messages if m.get("role") == "assistant"]
+        if msg_idx < 0 or msg_idx >= len(bot_msgs):
+            print(f"[TTS] Invalid message index: {msg_idx}")
+            return result["tts_state"]
+
+        text = bot_msgs[msg_idx].get("content", "")
+        if not text.strip():
+            return result["tts_state"]
+
+        # Truncate to max TTS length
+        if len(text) > cfg.MAX_TTS_LENGTH:
+            text = text[:cfg.MAX_TTS_LENGTH]
+            print(f"[TTS] Text truncated to {cfg.MAX_TTS_LENGTH} chars")
+
+        # Claim the busy flag HERE, before the thread starts, so any duplicate
+        # event arriving milliseconds later hits the guard above and is dropped.
+        cfg.TTS_BUSY = True
+        cfg.TTS_PHASE = "generating"
+        cfg.TTS_CURRENT_MSG_IDX = msg_idx
+
+        # Start generation in background thread
+        import threading
+        thread = threading.Thread(
+            target=_tts_worker,
+            args=(msg_idx, text),
+            daemon=True,
+            name=f"TTSWorker-{msg_idx}"
+        )
+        thread.start()
+        return gr.update(value=f"{msg_idx}|generating")
+
+    return result["tts_state"]
+
+
+def tts_heartbeat():
+    """Return current TTS state for JS polling. Called periodically by demo.load()."""
+    import scripts.configure as cfg
+    idx = getattr(cfg, 'TTS_CURRENT_MSG_IDX', None)
+    phase = getattr(cfg, 'TTS_PHASE', 'idle')
+    if idx is not None and phase != 'idle':
+        return f"{idx}|{phase}"
+    return "idle"
+
+
 def handle_inline_edit(idx_str, session_messages):
     """Triggered by JS inline edit button via hidden relay textbox.
     idx_str: stringified nth user-message index with optional '|<timestamp>' suffix.
@@ -1240,8 +1359,7 @@ def update_backend_ui():
     ]
 
 def build_progress_html(step: int, ddg_search_enabled: bool = False, 
-                        web_search_enabled: bool = False,
-                        tts_enabled: bool = False):
+                        web_search_enabled: bool = False):
     """
     Build dynamic progress indicator HTML based on enabled features.
     
@@ -1285,10 +1403,7 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False,
         "Format Response",   # 7 or 12
     ])
     
-    # Add TTS phases if enabled
-    if tts_enabled:
-        phases.append("Generating TTS")  # 8 or 13
-        phases.append("Playing TTS")     # 9 or 14
+
     
     # Build HTML segments
     segments = []
@@ -1436,31 +1551,7 @@ def extract_search_query(user_input: str) -> str:
     print(f"[SEARCH-QUERY] Original: '{original[:60]}...' → Extracted: '{query}'")
     return query
 
-def toggle_tts_sound(current_state):
-    """Toggle TTS Sound enabled/disabled."""
-    import gradio as gr
-    import scripts.configure as cfg
-    new_state = not current_state
-    cfg.TTS_ENABLED = new_state
 
-    variant = "primary" if new_state else "secondary"
-    label = "🔊 TTS Sound ON" if new_state else "🔊 TTS Sound"
-
-    # Get proper status text
-    status = get_tts_status()
-
-    return (
-        new_state,
-        gr.update(variant=variant, value=label),
-        gr.update(variant=variant),
-        status
-    )
-
-
-def speak_response_handler(session_messages):
-    """Handle speaking the last AI response."""
-    result = speak_last_response(session_messages)
-    return result, result
 
 
 def stop_tts_handler():
@@ -1505,7 +1596,7 @@ def conversation_display(
     user_input, session_tuples, session_messages, loaded_files,
     is_reasoning_model, cancel_flag, ddg_search_enabled, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
-    has_ai_response_state, tts_enabled
+    has_ai_response_state
 ):
     """
     Main conversation handler - Gradio 5.x.
@@ -1543,7 +1634,7 @@ def conversation_display(
                 gr.update(visible=True), gr.update(visible=False),
                 *update_action_buttons("waiting_for_input", has_ai_response_state),
                 cancel_flag, loaded_files, "waiting_for_input",
-                llm_state, models_loaded_state, tts_enabled
+                llm_state, models_loaded_state
             )
             return
 
@@ -1556,7 +1647,7 @@ def conversation_display(
                 gr.update(visible=True), gr.update(visible=False),
                 *update_action_buttons("waiting_for_input", has_ai_response_state),
                 cancel_flag, loaded_files, "waiting_for_input",
-                llm_state, models_loaded_state, tts_enabled
+                llm_state, models_loaded_state
             )
             return
 
@@ -1569,7 +1660,7 @@ def conversation_display(
             gr.update(visible=True, value="Auto-loading model — please wait... "),
             *update_action_buttons("input_submitted", has_ai_response_state),
             cancel_flag, loaded_files, "input_submitted",
-            llm_state, models_loaded_state, tts_enabled
+            llm_state, models_loaded_state
         )
 
         try:
@@ -1595,7 +1686,7 @@ def conversation_display(
                     gr.update(visible=True, value="Model ready — processing your message... "),
                     *update_action_buttons("input_submitted", has_ai_response_state),
                     cancel_flag, loaded_files, "input_submitted",
-                    new_llm, True, tts_enabled  # CRITICAL: Return raw values, not gr.update()
+                    new_llm, True, not gr.update()
                 )
 
                 # Update local variables so rest of function uses loaded model
@@ -1611,7 +1702,7 @@ def conversation_display(
                     gr.update(visible=False),
                     *update_action_buttons("waiting_for_input", has_ai_response_state),
                     cancel_flag, loaded_files, "waiting_for_input",
-                    llm_state, False, tts_enabled  # Return raw False, not gr.update()
+                    llm_state, False, not gr.update()
                 )
                 return
 
@@ -1624,7 +1715,7 @@ def conversation_display(
                 gr.update(visible=False),
                 *update_action_buttons("waiting_for_input", has_ai_response_state),
                 cancel_flag, loaded_files, "waiting_for_input",
-                llm_state, False, tts_enabled  # Return raw False
+                llm_state, False
             )
             return
     
@@ -1641,8 +1732,7 @@ def conversation_display(
             loaded_files,
             "waiting_for_input",
             llm_state,
-            models_loaded_state,  # Return state value directly
-            tts_enabled
+            models_loaded_state
         )
         return
 
@@ -1664,14 +1754,13 @@ def conversation_display(
         session_messages, 
         " ",
         gr.update(visible=False, value=""),
-        gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled, tts_enabled)),
+        gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, 
         loaded_files, 
         "input_submitted",
         llm_state, 
-        models_loaded_state,  # Return state value directly
-        tts_enabled
+        models_loaded_state
     )
 
     
@@ -1703,10 +1792,10 @@ def conversation_display(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, ddg_search_enabled, web_search_enabled, tts_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state, tts_enabled  # Return state values
+        llm_state, models_loaded_state
     )
 
     
@@ -1737,10 +1826,10 @@ def conversation_display(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, ddg_search_enabled, web_search_enabled, tts_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state, tts_enabled  # Return state values
+        llm_state, models_loaded_state
     )
     
     # PHASE 3: Add System - Build complete user message with file contents
@@ -1751,10 +1840,10 @@ def conversation_display(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, ddg_search_enabled, web_search_enabled, tts_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state, tts_enabled  # Return state values
+        llm_state, models_loaded_state
     )
     
     # PHASE 4: Assemble History - Add message to session and update display
@@ -1770,14 +1859,13 @@ def conversation_display(
         session_messages, 
         " ",
         gr.update(visible=False, value=""),
-        gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled, tts_enabled)),
+        gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, 
         loaded_files, 
         "input_submitted",
         llm_state, 
-        models_loaded_state,  # Return state value directly
-        tts_enabled
+        models_loaded_state
     )
     
     # PHASE 5: Check Model - Get model settings and prepare for generation
@@ -1866,10 +1954,10 @@ def conversation_display(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, ddg_search_enabled, web_search_enabled, tts_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state, tts_enabled  # Return state values
+        llm_state, models_loaded_state
     )
 
     # Search progress phases (if any search is enabled)
@@ -1877,10 +1965,10 @@ def conversation_display(
         for phase_idx in [6, 7, 8, 9, 10]:
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, web_search_enabled, tts_enabled)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, web_search_enabled)),
                 *update_action_buttons("input_submitted", has_ai_response),
                 cancel_flag, loaded_files, "input_submitted",
-                llm_state, models_loaded_state, tts_enabled  # Return state values
+                llm_state, models_loaded_state
             )
             time.sleep(0.15)
 
@@ -1902,10 +1990,10 @@ def conversation_display(
     try:
         yield (
             get_chatbot_output(session_tuples, session_messages), session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled, tts_enabled)),
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled)),
             *update_action_buttons("generating_response", has_ai_response),
             cancel_flag, loaded_files, "generating_response",
-            llm_state, models_loaded_state, tts_enabled  # Return state values
+            llm_state, models_loaded_state
         )
         
         # Stream the response
@@ -1942,10 +2030,10 @@ def conversation_display(
             
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled, tts_enabled)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled)),
                 *update_action_buttons("generating_response", has_ai_response),
                 cancel_flag, loaded_files, "generating_response",
-                llm_state, models_loaded_state, tts_enabled  # Return state values
+                llm_state, models_loaded_state
             )
             
     except Exception as e:
@@ -1963,10 +2051,10 @@ def conversation_display(
 
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(format_phase, ddg_search_enabled, web_search_enabled, tts_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(format_phase, ddg_search_enabled, web_search_enabled)),
         *update_action_buttons("generating_response", has_ai_response),
         cancel_flag, loaded_files, "generating_response",
-        llm_state, models_loaded_state, tts_enabled
+        llm_state, models_loaded_state
     )
 
     #  NEW SESSION CREATION + AUTO-SAVE 
@@ -1996,58 +2084,6 @@ def conversation_display(
     cleared_files = []
     cfg.session_attached_files = []
     
-    # Auto-speak response if TTS is enabled
-    if tts_enabled:
-        # Calculate TTS phase indices (one fewer phase now — Split Thinking removed)
-        if ddg_search_enabled or web_search_enabled:
-            tts_gen_phase = 13
-            tts_play_phase = 14
-        else:
-            tts_gen_phase = 8
-            tts_play_phase = 9
-        
-        # Show Generating TTS phase while synthesis runs
-        print("[TTS] Generating speech from response...")
-        yield (
-            get_chatbot_output(session_tuples, session_messages),
-            session_messages,
-            "Generating speech...",
-            gr.update(visible=False),
-            gr.update(visible=True, value=build_progress_html(tts_gen_phase, ddg_search_enabled, web_search_enabled, tts_enabled)),
-            *update_action_buttons("speaking", True),
-            False,
-            [],
-            "speaking",
-            llm_state,
-            models_loaded_state,
-            tts_enabled
-        )
-        
-        # BLOCKING: Synthesize audio (this takes time - progress stays on "Generating TTS")
-        wav_path = synthesize_last_response(session_messages)
-        
-        # Switch to Playing TTS phase
-        print("[TTS] Playing speech audio...")
-        yield (
-            get_chatbot_output(session_tuples, session_messages),
-            session_messages,
-            "Playing speech...",
-            gr.update(visible=False),
-            gr.update(visible=True, value=build_progress_html(tts_play_phase, ddg_search_enabled, web_search_enabled, tts_enabled)),
-            *update_action_buttons("speaking", True),
-            False,
-            [],
-            "speaking",
-            llm_state,
-            models_loaded_state,
-            tts_enabled
-        )
-        
-        # BLOCKING: Play the audio (progress stays on "Playing TTS")
-        if wav_path:
-            play_tts_audio(wav_path)
-        print("[TTS] Speech playback complete")
-    
     # Beep AFTER TTS completes (or immediately if TTS disabled)
     beep()
     
@@ -2063,8 +2099,7 @@ def conversation_display(
         [],                             # cleared attached_files
         "waiting_for_input",
         llm_state,                      # Return actual llm object
-        models_loaded_state,            # Return actual boolean
-        tts_enabled                     # Return tts state
+        models_loaded_state             # Return actual boolean
     )
 
 def toggle_left_expanded_state(current_state):
@@ -2310,7 +2345,7 @@ def launch_display():
             ddg_search_enabled=gr.State(False),
             web_search_enabled=gr.State(False),
             has_ai_response=gr.State(False),  # ← MUST BE INITIALIZED HERE
-            tts_enabled=gr.State(False)
+            tts_state=gr.State(value="idle")
         )
         
         config_components = {}
@@ -2396,6 +2431,16 @@ def launch_display():
                             elem_id="cguf-copy-action", label="",
                             elem_classes=["cguf-relay"]
                         )
+                        tts_action_box = gr.Textbox(
+                            value="", visible=True,
+                            elem_id="cguf-tts-action", label="",
+                            elem_classes=["cguf-relay"]
+                        )
+                        tts_state_box = gr.Textbox(
+                            value="idle", visible=True,
+                            elem_id="cguf-tts-state", label="",
+                            elem_classes=["cguf-relay"]
+                        )
                         edit_action_box = gr.Textbox(
                             value="", visible=True,
                             elem_id="cguf-edit-action", label="",
@@ -2418,14 +2463,12 @@ def launch_display():
                             # Then the rest of your tool buttons
                             action_buttons["ddg_search"] = gr.Button("🔍 DDG Search", variant="secondary", scale=1)
                             action_buttons["web_search"] = gr.Button("🌐 Web Search", variant="secondary", scale=1)
-                            action_buttons["tts_sound"] = gr.Button("🔊 TTS Sound", variant="secondary", scale=1)
-
+                            
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as right_column_collapsed:
                         toggle_button_right_collapsed = gr.Button("<->", variant="secondary")
                         action_buttons["ddg_search_collapsed"] = gr.Button("🔍", variant="secondary")
                         action_buttons["web_search_collapsed"] = gr.Button("🌐", variant="secondary")
-                        action_buttons["tts_sound_collapsed"] = gr.Button("🔊", variant="secondary")
-
+                        
                 with gr.Row():
                     interaction_global_status = gr.Textbox(
                         value="Ready",
@@ -2885,8 +2928,7 @@ def launch_display():
                 states["llm"],                              # llm state object
                 states["models_loaded"],                    # models_loaded state flag
                 states["has_ai_response"],                   # has_ai_response state flag
-                states["tts_enabled"]       # Added TTS state
-            ],
+                            ],
             outputs=[
                 conversation_components["session_log"],     # Updated chat display
                 states["session_messages"],                 # Updated internal messages state
@@ -2903,8 +2945,7 @@ def launch_display():
                 states["interaction_phase"],                # Updated phase state
                 states["llm"],                              # Updated LLM state
                 states["models_loaded"],                    # Updated models_loaded state
-                states["tts_enabled"]                       # TTS state (matches final gr.update yield)
-            ]
+                            ]
         ).then(
             fn=update_session_buttons,
             inputs=[],
@@ -3252,117 +3293,7 @@ def launch_display():
         )
 
         # TTS Sound button handlers
-        action_buttons["tts_sound"].click(
-            fn=toggle_tts_sound,
-            inputs=[states["tts_enabled"]],
-            outputs=[
-                states["tts_enabled"],
-                action_buttons["tts_sound"],
-                action_buttons["tts_sound_collapsed"],
-                interaction_global_status
-            ]
-        )
         
-        action_buttons["tts_sound_collapsed"].click(
-            fn=toggle_tts_sound,
-            inputs=[states["tts_enabled"]],
-            outputs=[
-                states["tts_enabled"],
-                action_buttons["tts_sound"],
-                action_buttons["tts_sound_collapsed"],
-                interaction_global_status
-            ]
-        )
-
-        # Normal (visible) Start New Session button
-        start_new_session_btn.click(
-            fn=start_new_session,
-            inputs=[
-                states["session_messages"],
-                states["attached_files"],
-                states["llm"],
-                states["models_loaded"]
-            ],
-            outputs=[
-                conversation_components["session_log"],
-                states["session_messages"],
-                states["attached_files"],
-                interaction_global_status,
-                states["has_ai_response"],
-                action_buttons["action"],
-                action_buttons["edit_previous"],
-                action_buttons["copy_response"],
-                action_buttons["cancel_input"],
-                action_buttons["cancel_response"],
-                states["llm"],
-                states["models_loaded"]
-            ]
-        ).then(
-            fn=update_session_buttons,
-            inputs=[],
-            outputs=buttons["session"]
-        ).then(
-            fn=lambda: update_file_slot_ui([], True),
-            inputs=[],
-            outputs=attach_slots + [attach_files]
-        )
-
-        # Collapsed (sidebar) Start New Session button - same logic
-        new_session_btn_collapsed.click(
-            fn=start_new_session,
-            inputs=[
-                states["session_messages"],
-                states["attached_files"],
-                states["llm"],
-                states["models_loaded"]
-            ],
-            outputs=[
-                conversation_components["session_log"],
-                states["session_messages"],
-                states["attached_files"],
-                interaction_global_status,
-                states["has_ai_response"],
-                action_buttons["action"],
-                action_buttons["edit_previous"],
-                action_buttons["copy_response"],
-                action_buttons["cancel_input"],
-                action_buttons["cancel_response"],
-                states["llm"],
-                states["models_loaded"]
-            ]
-        ).then(
-            fn=update_session_buttons,
-            inputs=[],
-            outputs=buttons["session"]
-        )
-
-        # ── Edit Previous Message Button Handler ───────────────────────────────────
-        action_buttons["edit_previous"].click(
-            fn=edit_previous_prompt,
-            inputs=[
-                conversation_components["session_log"],
-                states["session_messages"]
-            ],
-            outputs=[
-                conversation_components["session_log"],
-                states["session_messages"],
-                conversation_components["user_input"],  # ← Critical: populates input box with previous message
-                interaction_global_status,
-                states["has_ai_response"]
-            ]
-        ).then(
-            fn=lambda has_ai: update_action_buttons("waiting_for_input", has_ai),
-            inputs=[states["has_ai_response"]],
-            outputs=[
-                action_buttons["action"],
-                action_buttons["edit_previous"],
-                action_buttons["copy_response"],
-                action_buttons["cancel_input"],
-                action_buttons["cancel_response"]
-            ]
-        )
-
-        # ── Copy Last Response Button Handler ───────────────────────────────────────
         action_buttons["copy_response"].click(
             fn=copy_last_response,
             inputs=[states["session_messages"]],
@@ -3374,6 +3305,13 @@ def launch_display():
             fn=handle_inline_copy,
             inputs=[copy_action_box, states["session_messages"]],
             outputs=[interaction_global_status, copy_action_box]
+        )
+
+        # ── Inline TTS: triggered by JS through hidden relay textbox ───────────────
+        tts_action_box.change(
+            fn=handle_inline_tts,
+            inputs=[tts_action_box, states["session_messages"]],
+            outputs=[tts_state_box]
         )
 
         # ── Inline edit: triggered by JS through hidden relay textbox ───────────────
@@ -3711,6 +3649,29 @@ def launch_display():
             row.className = 'cguf-actions';
             row.appendChild(makeBtn('📋', 'Copy AI response',
                                     'cguf-copy-action', 'bot:' + i));
+            /* TTS button with 4-phase cycle: play -> busy -> stop -> play */
+            var ttsBtn = document.createElement('button');
+            ttsBtn.className = 'cguf-btn cguf-tts-btn';
+            ttsBtn.textContent = '▶';
+            ttsBtn.title = 'Play Text-to-Speech';
+            ttsBtn.type = 'button';
+            ttsBtn.id = 'cguf-tts-btn-' + i;
+            ttsBtn.dataset.ttsPhase = 'play';
+            ttsBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                var phase = ttsBtn.dataset.ttsPhase;
+                if (phase === 'play') {
+                    window.cgufFire('cguf-tts-action', 'bot:' + i);
+                    ttsBtn.textContent = '⏳';
+                    ttsBtn.title = 'Generating audio...';
+                    ttsBtn.dataset.ttsPhase = 'busy';
+                } else if (phase === 'stop') {
+                    window.cgufFire('cguf-tts-action', 'stop:' + i);
+                }
+                /* phase === 'busy': non-interactive, ignore click */
+            });
+            row.appendChild(ttsBtn);
             msg.appendChild(row);
         });
     }
@@ -3724,6 +3685,47 @@ def launch_display():
     obs.observe(document.body, { childList: true, subtree: true });
 
     /* Staggered initial runs — Gradio may not have painted its first frame yet */
+    /* Poll TTS state box and update button icons */
+    (function pollTtsState() {
+        var wrap = document.getElementById('cguf-tts-state');
+        if (wrap) {
+            var inp = wrap.querySelector('textarea') || wrap.querySelector('input');
+            if (inp && inp.value) {
+                var val = inp.value.trim();
+                if (val === 'idle') {
+                    document.querySelectorAll('.cguf-tts-btn').forEach(function(btn) {
+                        btn.textContent = '▶';
+                        btn.title = 'Play Text-to-Speech';
+                        btn.dataset.ttsPhase = 'play';
+                    });
+                } else {
+                    var parts = val.split('|');
+                    if (parts.length === 2) {
+                        var idx = parts[0];
+                        var phase = parts[1];
+                        var target = document.getElementById('cguf-tts-btn-' + idx);
+                        if (target) {
+                            if (phase === 'generating') {
+                                target.textContent = '⏳';
+                                target.title = 'Generating audio...';
+                                target.dataset.ttsPhase = 'busy';
+                            } else if (phase === 'playing') {
+                                target.textContent = '⏹';
+                                target.title = 'Stop playback';
+                                target.dataset.ttsPhase = 'stop';
+                            } else if (phase === 'idle') {
+                                target.textContent = '▶';
+                                target.title = 'Play Text-to-Speech';
+                                target.dataset.ttsPhase = 'play';
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        setTimeout(pollTtsState, 500);
+    })();
+
     setTimeout(injectButtons, 800);
     setTimeout(injectButtons, 2000);
     setTimeout(injectButtons, 4000);
@@ -3738,6 +3740,53 @@ def launch_display():
             outputs=[],
             js=_CGUF_JS
         )
+
+        # TTS heartbeat: poll state for per-message button icon updates
+        tts_timer = gr.Timer(value=1.0, active=True)
+        tts_timer.tick(
+            fn=tts_heartbeat,
+            inputs=[],
+            outputs=[tts_state_box]
+        )
+
+        # ── Start New Session buttons (expanded + collapsed) ───────────────────────
+        # These buttons were defined in the layout but never had .click() handlers
+        # wired up.  Both share the same handler and outputs.
+        _new_session_outputs = [
+            conversation_components["session_log"],
+            states["session_messages"],
+            states["attached_files"],
+            interaction_global_status,
+            states["has_ai_response"],
+            action_buttons["action"],
+            action_buttons["edit_previous"],
+            action_buttons["copy_response"],
+            action_buttons["cancel_input"],
+            action_buttons["cancel_response"],
+            states["llm"],
+            states["models_loaded"],
+        ]
+        _new_session_inputs = [
+            states["session_messages"],
+            states["attached_files"],
+            states["llm"],
+            states["models_loaded"],
+        ]
+
+        for _btn in (start_new_session_btn, new_session_btn_collapsed):
+            _btn.click(
+                fn=start_new_session,
+                inputs=_new_session_inputs,
+                outputs=_new_session_outputs,
+            ).then(
+                fn=update_session_buttons,
+                inputs=[],
+                outputs=buttons["session"],
+            ).then(
+                fn=lambda: update_file_slot_ui([], True),
+                inputs=[],
+                outputs=attach_slots + [attach_files],
+            )
 
         # Attach click handlers to session history buttons
         for i, btn in enumerate(buttons["session"]):

@@ -141,6 +141,14 @@ COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243") — s
 COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british") — set from constants.ini
 COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name — set from constants.ini
 
+# =============================================================================
+# Per-Message TTS Button State (4-phase cycle: play -> generating -> playing -> idle)
+# =============================================================================
+TTS_PHASE = "idle"            # "idle" | "generating" | "playing"
+TTS_CURRENT_MSG_IDX = None    # Which bot message index is active (0-based)
+TTS_BUSY = False              # Whether any TTS operation is in progress
+_tts_state_lock = threading.Lock()  # Thread-safety for TTS state globals
+
 # Arrays
 session_attached_files = []
 session_vector_files = []
