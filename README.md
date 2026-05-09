@@ -465,43 +465,16 @@ project_root/
 
 # Development for v2
 v2 is now in Pre-Release stage...
-1. Built-in TTS was removed...
+1. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6 and glm 4.7, they just seem to say thinking then say the final response. debug output needs checking, but I think we may have to promt the model to use a specific format of output including "<THINK>" and "</THINK>" before final response, in order for all models to produce the same output format as Qwen3, in order for Thinking... to be split correctly in real time.
+2. The project now aims to support these specific models shown below, but do so well. Qwen3 will be dropped when other handling is shown to work, and as reference for how others are supposed to work during development. The main program needs to support these models throughout, and do so well...
 ```
-Built-in TTS was removed, now we are using corqui TTS.
-1. Move the, embeddings and tts, model selection during install to a new menu that comes after the current install options menu, this new menu will require the user to type a number followed by a letter, ie `1c`, while the old menu will only have numbers now. the new menu will have numbers 1 or 2 for embeddings, `1. Small Embedding Model` or `2. Base Embedding Model`, from the first menu. the new menu has a letter, this will relate to the new options for english accents, ie "a. English (British) M/F".
-Selectionl; **the current prompt** :_
-2. The user will select what accent of english to install with, we would select accents for english ie "a. English British", and again each choice will include male and female in the same selection. The list in the program will then be detecting correctly the models as per usual, and hopefully there is no other configuration required in program, and it will correctly, detect and list, the male and female version of specific accent of english chosen.
-3. By moving the, embedding and tts, models selection to a new menu, we can then have mode space on the first menu for the displaying of diagnostics, ie split the text display. 
-
-Here is the new first menu...
-================================================================================
-    Chat-Gradio-Gguf: Llama.Cpp Backend Options
-================================================================================
-
-**system diagnostics currently printed on the first menu**
-
---------------------------------------------------------------------------------
-
-**4 numbered options currently on the old menu, download cpu, download vulkan, compile cpu, compile vulkan.**
-
-================================================================================
-Selectionl; **the current prompt, but with only numbers instead of number/letter** :_
-
-Here is the new second menu...
-================================================================================
-    Chat-Gradio-Gguf: Embed And TTS Model Options 
-================================================================================
-
-**2 individual lines with blank line between, concise details of differences between small and base Corqui TTS models speed/InstalledSize**
-
---------------------------------------------------------------------------------
-
-**however many English accents are available, max 9 most popular**
-
-================================================================================
-Selectionl; **the similar to the prompt, but with only numbers instead of number/letter** :_
+GLM 4.7/5
+Qwen 3/3.5/3.6
+Gemma 4
+gpt oss
+minstral 3
+granite 4/4.14.1
 ```
-2. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6 and glm 4.7, they just seem to say thinking then say the final response. debug output needs checking, but I think we may have to promt the model to use a specific format of output including "<THINK>" and "</THINK>" before final response, in order for all models to produce the same output format as Qwen3, in order for Thinking... to be split correctly in real time.
 2. When there is a stable correctly working latest v2, then the plan will be to develop some extra tools, but this needs to be brainstormed and figured out. Possibly we could even remove tools, and intend to use only agentic tool calling models, where through pre-prompt it would determine if it needs to web research, then currently we would not need tools toolbar.
 3. Code Optimization / redistribution of code, moving code out from display script, to applicably relatingly themed scripts, if there is relevance to both scripts and it is sound to do so, in order to reduce overall code in display script by moving it out, as appropriate to do so, nothing extreme. 
 4. we would have a toggle button  in the text input area, Quick means no thinking, Think means thinking, Auto where it would do a pre-prompt in order to determine if it should think or not then it would do the actual response. 
