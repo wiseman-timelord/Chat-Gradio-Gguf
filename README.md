@@ -397,27 +397,23 @@ Web Search = Slower actual website reading research.
 - Through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files.
 
 ### Models working (with gpt for comparrisson).
-- Models newer than Qwen 3 will (at the current time/date) require to compile during install, as apposed to the non-compile install that handles models Qwen 3 or earler but not newer ones, this is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source, however I will only be testing Qwen 3 currently, other sections in the readme cover why. GPT is shown for reference..
+- If you installed with compile option, then you will be able to use the newer models, otherwise with non-compile install will work with models from ~6 months ago, but dont quote me on that. This is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source. Regardless, version 2 of Chat-Gradio-Ggud is currently being programmed towards these models....
 
-| Model                                  | IFEval   | BBH      | MATH     | GPQA     | MuSR     | MMLU              | CO2 Cost  |
-|----------------------------------------|----------|----------|----------|----------|----------|-------------------|-----------|
-| Early GPT-4 (compare stats)            | N/A      | ~50%*    | 42.2%    | N/A      | N/A      | 86.4%             | N/A       |
-| Early GPT-4o (compare stats)           | N/A      | ~60%*    | 52.9%*   | N/A      | N/A      | 87.5%*            | N/A       |
-| [Qwen3-30B-A3B](https://huggingface.co/mradermacher/Qwen3-30B-A3B-abliterated-GGUF) (30B-A3B) | N/A  | N/A   | 80.4%   | 65.8%   | 72.2%   | N/A           | N/A   |
-| [Qwen3-8B](https://huggingface.co/mradermacher/Qwen3-8B-abliterated-GGUF)       | ~83%     | 56.73%   | 60.80%   | 44.44%   | N/A      | 76.89%            | N/A       |
-| [Qwen3.5-9B](https://huggingface.co/Jackrong/Qwen3.5-9B-Claude-4.6-Opus-Reasoning-Distilled-GGUF) | 91.5%    | N/A      | N/A      | 81.7% (Diamond) | N/A      | 82.5% (MMLU-Pro)  | N/A       |
-| [Qwen3.5-27B](https://huggingface.co/Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF) | 95.0%    | N/A      | N/A      | 85.5% (Diamond) | N/A      | 86.1% (MMLU-Pro)  | N/A       |
-| [gpt-oss-20b](https://huggingface.co/unsloth/gpt-oss-20b-GGUF) (20B) | 84.1%  | 58.1%   | 96.0-98.7%   | 71.5%    | ~42.5%    | 85.3%           | N/A   |
-
-- Model support in v2 will be as follows...
-```
-GLM 4.7/5
-Qwen 3/3.5/3.6
-Gemma 4
-gpt oss
-minstral 3
-granite 4/4.1
-```
+| Model                                      | IFEval                  | BBH            | MATH / MATH-500          | GPQA / Diamond       | MuSR       | MMLU / MMLU-Pro              | Notes / Other |
+|--------------------------------------------|-------------------------|----------------|--------------------------|----------------------|------------|------------------------------|---------------|
+| Early GPT-4 (ref)                          | N/A                     | ~50%*          | 42.2%                    | N/A                  | N/A        | 86.4%                        | Reference |
+| Early GPT-4o (ref)                         | N/A                     | ~60%*          | 52.9%*                   | N/A                  | N/A        | 87.5%*                       | Reference |
+| Qwen3-30B-A3B (MoE)                        | ~91.6%                  | ~62-72%        | 80.4%+                   | 65.8%+               | 72.2%      | High 70s-82%                 | Strong efficient MoE |
+| Qwen3-8B                                   | ~83%                    | 56.73%         | 60.80%                   | 44.44%               | N/A        | 76.89%                       | - |
+| Qwen3.5-9B (distilled example)             | 91.5%                   | N/A            | N/A                      | 81.7% (Diamond)      | N/A        | 82.5% (MMLU-Pro)             | - |
+| Qwen3.5-27B (distilled)                    | 95.0%                   | N/A            | N/A                      | 85.5% (Diamond)      | N/A        | 86.1% (MMLU-Pro)             | - |
+| Qwen3/3.5/3.6 Large (e.g. 235B-A22B)      | 94-95%+                 | 84-86%+        | 90%+ (variants)          | 88-92%+              | High       | 86-89%+ / 87-89% Pro         | Flagship performance |
+| Gemma 4 31B (Dense)                        | High                    | Strong         | Excellent (~89% AIME)    | ~84.3% Diamond       | N/A        | 87.1% / 85.2% Pro            | Strong math/coding |
+| Gemma 4 26B MoE                            | High                    | Strong         | Strong (~88% AIME)       | ~82% Diamond         | N/A        | ~82.7% / 82.6% Pro           | Efficient variant |
+| gpt-oss-20b                                | 84.1%                   | 58.1%          | 96.0-98.7%               | 71.5%                | ~42.5%     | 85.3%                        | Exceptional MATH |
+| Minstral 3 / Mistral Large 3 family        | High 80s-90s            | Competitive    | Strong (~85% AIME)       | ~80%+                | N/A        | ~81%+ / Pro competitive      | Good all-rounder |
+| Granite 4.1-30B (Instruct)                 | 89.65%                  | 83.74%         | Strong (GSM8K etc.)      | 45.76%               | N/A        | 80.16% / 64.09% Pro          | Excellent tool-calling |
+| Granite 4.1-8B                             | ~87%                    | ~80.5%         | Good                     | ~42%                 | N/A        | ~73.8% / 56% Pro             | Compact & efficient |
 
 
 <details>
