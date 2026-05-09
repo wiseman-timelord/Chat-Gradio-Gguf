@@ -409,6 +409,16 @@ Web Search = Slower actual website reading research.
 | [Qwen3.5-27B](https://huggingface.co/Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF) | 95.0%    | N/A      | N/A      | 85.5% (Diamond) | N/A      | 86.1% (MMLU-Pro)  | N/A       |
 | [gpt-oss-20b](https://huggingface.co/unsloth/gpt-oss-20b-GGUF) (20B) | 84.1%  | 58.1%   | 96.0-98.7%   | 71.5%    | ~42.5%    | 85.3%           | N/A   |
 
+- Model support in v2 will be as follows...
+```
+GLM 4.7/5
+Qwen 3/3.5/3.6
+Gemma 4
+gpt oss
+minstral 3
+granite 4/4.1
+```
+
 
 <details>
   <summary>Table Key ></summary>
