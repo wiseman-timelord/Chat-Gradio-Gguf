@@ -200,8 +200,15 @@ STATUS_MESSAGES = {
     "tts_stopped": "Speech stopped"
 }
 
+# =============================================================================
+# CHAT FORMAT MAP
+# Maps GGUF architecture keys to llama-cpp-python chat format strings.
+# None = use the chat template embedded in the GGUF (preferred for newer models).
+# =============================================================================
 CHAT_FORMAT_MAP = {
     # ── Qwen family ───────────────────────────────────────────────────────────
+    # All Qwen3/3.5/3.6 variants ship with embedded Jinja chat templates that
+    # handle the enable_thinking flag and <think> tags natively.
     'qwen2'      : None,
     'qwen3'      : None,
     'qwen36'     : None,
@@ -215,20 +222,34 @@ CHAT_FORMAT_MAP = {
     # ── DeepSeek family ───────────────────────────────────────────────────────
     'deepseek2'  : 'deepseek2',
     # ── Gemma family ──────────────────────────────────────────────────────────
+    # Gemma 4 uses embedded chat template; the <|think|> trigger token is
+    # injected into the system prompt by get_system_message() when appropriate.
     'gemma3'     : 'gemma',
     'gemma3n'    : 'gemma',
-    'gemma4'     : 'gemma',
+    'gemma4'     : None,
     # ── GLM family ────────────────────────────────────────────────────────────
     'glm4'       : None,
     'glm4moe'    : None,
     'chatglm'    : None,
     # ── Kimi family ───────────────────────────────────────────────────────────
     'kimi'       : None,
+    # ── GPT-OSS family ────────────────────────────────────────────────────────
+    # GPT-OSS (OpenAI) uses the Harmony chat template (embedded in GGUF).
+    # Reasoning/thinking is always active via the <|channel|>analysis channel.
+    'gpt2'       : None,
+    # ── Granite family ────────────────────────────────────────────────────────
+    # Granite 4.0 / 4.1 — dense instruct models, no thinking mode.
+    # Uses <|start_of_role|> / <|end_of_role|> role tokens via embedded template.
+    'granite'    : None,
     # ── Misc ──────────────────────────────────────────────────────────────────
     'stablelm'   : 'chatml',
 }
 
-# Handling Keywords for Special Model Behaviors
+# =============================================================================
+# HANDLING KEYWORDS
+# Derive behavioural flags from model filename tokens.
+# Keys map to lists of lowercase substrings; a match sets the corresponding flag.
+# =============================================================================
 handling_keywords = {
     "code": ["code", "program", "dev", "copilot", "python", "powershell"],
 
@@ -260,10 +281,36 @@ handling_keywords = {
         "glm-4v", "glm4v", "glm4.1v", "glm-4.1v", "glm4.6v", "glm-4.6v",
     ],
 
+    # ── thinking_capable ──────────────────────────────────────────────────────
+    # Models that natively emit structured thinking blocks during generation.
+    # The flag causes get_system_message() to inject a thinking-format hint and
+    # (for Gemma 4) the <|think|> activation token into the system prompt.
+    # Mistral Small 3.x and Granite 4/4.1 are intentionally absent — they are
+    # standard instruct models with no native thinking mode.
     "thinking_capable": [
+        # ── Qwen family ───────────────────────────────────────────────────────
+        # Qwen3: all sizes always think.
+        # Qwen3.5/3.6 Small (0.8B–9B): thinking opt-in via chat template, but
+        # can still be triggered by system-prompt instruction; included so the
+        # hint is always injected for consistent output format.
         "qwen3",
+        "qwen3.5", "qwen35", "qwen3_5",    # Qwen3.5 — all size variants
+        "qwen3.6", "qwen36", "qwen3_6",    # Qwen3.6 — all size variants
+        # ── GLM family ────────────────────────────────────────────────────────
+        # GLM 4.6 / 4.7 / 5 MoE: Harmony-style <|channel|>analysis blocks.
+        # Dense GLM variants (glm4 arch) are excluded — only MoE GLM thinks.
+        "glm-4.6", "glm4.6",
         "glm-4.7", "glm4.7",
         "glm-5",   "glm5",
+        # ── Gemma 4 ───────────────────────────────────────────────────────────
+        # All Gemma 4 sizes emit <|channel>thought ... <channel|> blocks when
+        # thinking is active.  E2B/E4B can disable it; 26B/31B always think.
+        # The system prompt injection adds <|think|> to activate the channel.
+        "gemma-4", "gemma4",
+        # ── GPT-OSS ───────────────────────────────────────────────────────────
+        # OpenAI GPT-OSS 20B and 120B: Harmony protocol, always emits
+        # <|channel|>analysis<|message|> reasoning blocks before the answer.
+        "gpt-oss", "gpt_oss",
     ],
 }
 

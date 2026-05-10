@@ -2658,9 +2658,9 @@ def launch_display():
                     )
                     exit_config = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], scale=1)
 
-            with gr.Tab("Program/Filter Settings"):
+            with gr.Tab("Interface/Filter Settings"):
                         
-                # ── Program Options ─────────────────────────────────────────────────────────
+                # ── Interface Options ─────────────────────────────────────────────────────────
                 with gr.Group():
                     gr.Markdown("### Program Options")
                     # Row 1: Attach slots and Log height (restart required for UI component changes)
