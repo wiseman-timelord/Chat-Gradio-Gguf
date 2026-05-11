@@ -27,8 +27,11 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, ie, uncensored, nsfw, chat, code.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
-
+v2_00_8_GLM47.jpg
 ### Preview
+- The Session Log on Window, showing, both sidepanels collapsed and the basic test. (GLM 4.7 model on v2.00.8)...
+![image_missing](media/v2_00_7_Qwen30.jpg)
+
 - The Session Log on Window, showing, both sidepanels collapsed and the basic test. (Qwen 3 model on v2.00.7)...
 ![image_missing](media/v2_00_7_Qwen30.jpg)
 
