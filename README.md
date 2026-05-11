@@ -27,7 +27,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, ie, uncensored, nsfw, chat, code.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
-v2_00_8_GLM47.jpg
+
 ### Preview
 - The Session Log on Window, showing, both sidepanels collapsed and the basic test. (GLM 4.7 model on v2.00.8)...
 ![image_missing](media/v2_00_8_GLM47.jpg)
@@ -327,7 +327,7 @@ v2_00_8_GLM47.jpg
 ## Hard Requirements
 - Windows 10-11 and/or ~Ubuntu 24-25 - Its BOTH a, Windows AND linux, program, batch for windows and bash for linux, launch dual-mode scripts. Ubuntu has not been tested since v2, check v1 release notes for mentions of Ubuntu/Linux testing.
 - Python ~3.11-~3.13 - Requires [Python](https://www.python.org); AI warns me certain libraries wont work on Python 3.14, possibly Spacy. 
-- Llm Model - You will need a Large Language Model in GGUF format, check the models section for recommendations, but for quick start I advise one like [Qwen3-4B-abliterated-GGUF](https://huggingface.co/mradermacher/Qwen3-4B-abliterated-GGUF) for testing basic operation.
+- Llm Model - You will need a Large Language Model in GGUF format, check the models section for recommendations, but for quick start I advise one like a Qwen3 4B GGUF model such as [Qwen3-4B-abliterated-GGUF](https://huggingface.co/mradermacher/Qwen3-4B-abliterated-GGUF) for testing basic operation or fast responses, and a Qwen 30b A3B GGUF model for proper testing.
 - Suitable GPU - Gpu may be, Main or Compute, with VRam selection 4GB-96GB. Ideally you want the GPU to cover all model layers for fast interference.
 - System Ram - Your system ram must cover, the curren load and the size of the model layers not able to be covered by the GPU, plus smaller models like the embeddings model, plus the wheel if not built for Vulkan.
 
