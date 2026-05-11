@@ -220,7 +220,12 @@ CHAT_FORMAT_MAP = {
     # ── Llama family ──────────────────────────────────────────────────────────
     'llama'      : 'llama-2',
     # ── DeepSeek family ───────────────────────────────────────────────────────
-    'deepseek2'  : 'deepseek2',
+    # None = use embedded Jinja chat template.
+    # 'deepseek2' is NOT a valid llama-cpp-python chat_format string.
+    # DeepSeek V2/V3 and any community GLM quant that reports deepseek2 as its
+    # GGUF architecture key both ship with embedded templates that work correctly
+    # when chat_format is left unset (None).
+    'deepseek2'  : None,
     # ── Gemma family ──────────────────────────────────────────────────────────
     # Gemma 4 uses embedded chat template; the <|think|> trigger token is
     # injected into the system prompt by get_system_message() when appropriate.

@@ -987,6 +987,10 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             _fallback_fmt = {
                 "qwen2":"chatml","qwen3":"chatml","qwen35":"chatml","qwen36":"chatml",
                 "llama":"llama-3","gemma3":"gemma","gemma4":"gemma",
+                # deepseek2 arch covers DeepSeek V2/V3 AND GLM quants that were
+                # converted with incorrect architecture metadata. chatml is correct
+                # for both families when the embedded template fails to parse.
+                "deepseek2": "chatml",
             }.get(_arch, "chatml")
             print(f"[CHAT-FMT] Template issue ({type(_e).__name__}): {_e}. "
                   f"Falling back to '{_fallback_fmt}'.")
@@ -1323,11 +1327,19 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
     #
     # _think_close_tag: updated when an explicit open tag is found, so the
     # correct close token is prioritised in the unified dispatch.
-    is_thinking_capable = settings.get("is_thinking_capable", False)
-    in_thinking_phase   = is_thinking_capable
-    _think_close_tag    = "</think>"    # default; updated on explicit open-tag detection
-    output_buffer       = ""
-    raw_output          = ""
+    is_thinking_capable   = settings.get("is_thinking_capable", False)
+    in_thinking_phase     = is_thinking_capable
+    _think_close_tag      = "</think>"   # default; updated on explicit open-tag detection
+    # Rolling tail of recent thinking content — NOT cleared between tokens.
+    # Used to detect multi-token close patterns ("**Answer:**") and to recover
+    # embedded GLM answers when </think> arrives as a lone token.
+    _think_tail           = ""
+    _THINK_TAIL_LEN       = 600          # chars — enough for a full answer sentence
+    # Set after an "**Answer:**" close; causes stray </think> tokens that arrive
+    # in the normal-output stream afterwards to be silently dropped.
+    _suppress_think_close = False
+    output_buffer         = ""
+    raw_output            = ""
 
     # Emit "Thinking" label immediately for thinking-capable models so the user
     # gets feedback before the first token arrives (matches Qwen 3 30B-A3B UX).
@@ -1427,24 +1439,70 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
 
         # ── CLOSE detection — unified dispatch ────────────────────────────────
         #
-        # _think_close_tag is checked first (highest priority — matches what
-        # opened the block). The remaining candidates are fallback safety-nets
-        # for models that deviate slightly from their expected format.
+        # DESIGN: _think_tail is updated FIRST (before any detection) so that
+        # the current token is always included.  This is essential for detecting
+        # multi-token patterns like "**Answer:**" (which arrives as several tokens:
+        # "**", "Answer", ":**") — output_buffer is cleared each iteration and can
+        # never accumulate a multi-token pattern intact.
         #
-        # After closing, GPT-OSS Harmony protocol headers are stripped from the
-        # answer section before yielding so they don't appear as stray text.
+        # Close-token priority order:
+        #   1. _think_close_tag  — set when block opened (e.g. <|end|> for GPT-OSS)
+        #   2. "**Answer:**"     — GLM 4.7: embeds final answer inside think block
+        #   3. "**Final Answer:**" — alternative GLM marker
+        #   4. "</think>"        — standard close (Qwen family + GLM bare output)
+        #   5. "<channel|>"      — Gemma 4
+        #   6. "<|end|>"         — GPT-OSS / GLM MoE Harmony fallback
+        #
+        # "**Answer:**" is placed ABOVE "</think>" so it fires first when both
+        # appear in the tail (GLM outputs: [thinking] **Answer:** text </think>).
+        # rsplit picks the LAST occurrence, skipping mid-thought markers like
+        # "**Answer Option 1:**" or "**Answer Formulation:**".
         if in_thinking_phase:
+            # Step 1 — update tail BEFORE checking so current token is included
+            _think_tail = (_think_tail + token)[-_THINK_TAIL_LEN:]
+
+            # Step 2 — check for close tokens in the rolling tail
             close_token = None
-            for candidate in (_think_close_tag, "</think>", "<channel|>", "<|end|>"):
-                if candidate in output_buffer:
+            for candidate in (
+                _think_close_tag,
+                "**Answer:**", "**Final Answer:**",    # GLM embedded-answer markers
+                "</think>",
+                "<channel|>",
+                "<|end|>",
+            ):
+                if candidate in _think_tail:
                     close_token = candidate
                     break
 
             if close_token:
                 in_thinking_phase = False
-                parts         = output_buffer.split(close_token, 1)
-                think_content = parts[0]
-                after_think   = parts[1] if len(parts) > 1 else ""
+
+                # Split the tail on the close token to recover after_think.
+                # parts[0] = thinking content in the tail (already dot-yielded)
+                # parts[1] = content after close token (the actual answer, if any)
+                parts       = _think_tail.split(close_token, 1)
+                after_think = parts[1].strip() if len(parts) > 1 else ""
+
+                # ── GLM "answer after marker" pattern ─────────────────────────
+                # "**Answer:**" fired: after_think IS the answer text.
+                # Strip any trailing </think> the model appends after the answer,
+                # and set the suppress flag so stray </think> tokens are silently
+                # dropped during normal-output streaming.
+                if close_token in ("**Answer:**", "**Final Answer:**"):
+                    after_think = re.sub(r'</think>\s*$', '', after_think).strip()
+                    _suppress_think_close = True
+
+                # ── GLM "answer before </think>" recovery ─────────────────────
+                # "</think>" fired but after_think is empty — the model placed its
+                # answer INSIDE the thinking block just before </think>:
+                #   [thinking]...\n**Answer:** text here</think>
+                # Recover the answer from parts[0] (the tail before </think>).
+                elif close_token in ("</think>", _think_close_tag) and not after_think:
+                    for _marker in ("**Answer:**", "**Final Answer:**"):
+                        if _marker in parts[0]:
+                            # rsplit → take content after the LAST marker occurrence
+                            after_think = parts[0].rsplit(_marker, 1)[1].strip()
+                            break
 
                 # Strip GPT-OSS / Harmony answer-section headers
                 after_think = re.sub(
@@ -1453,21 +1511,17 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
                     r'<\|start\|>assistant<\|message\|>', '', after_think)
                 after_think = after_think.lstrip()
 
-                if cfg.SHOW_THINK_PHASE:
-                    yield think_content + close_token + "\n"
-                else:
-                    spaces = think_content.count(" ")
-                    if spaces > 0:
-                        yield ". " * min(spaces, 50)
-                    yield "\n"
+                # Separator between thinking and response
+                yield "\n"
 
                 output_buffer = after_think
+                _think_tail   = ""
                 if after_think:
                     yield after_think
                     output_buffer = ""
                 continue
 
-            # Still inside thinking block
+            # Still inside thinking block — tail already updated above; yield dots
             if cfg.SHOW_THINK_PHASE:
                 yield token
                 output_buffer = ""
@@ -1479,6 +1533,14 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
             continue
 
         # ── Normal response output ────────────────────────────────────────────
+        # Strip stray </think> tokens that arrive after the thinking phase was
+        # already closed via "**Answer:**".  GLM 4.7 outputs the closing tag
+        # as a separate token even after the answer text has been extracted.
+        if _suppress_think_close and "</think>" in output_buffer:
+            output_buffer = output_buffer.replace("</think>", "").lstrip()
+            if not output_buffer:
+                continue
+
         if len(output_buffer) > 20:
             yield output_buffer
             output_buffer = ""
