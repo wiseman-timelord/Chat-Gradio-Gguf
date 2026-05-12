@@ -514,6 +514,9 @@ def format_response(output: str) -> str:
     # 5. Common basic normalization (avoid collapsing spaces inside already-emitted HTML spans)
     clean_output = re.sub(r'(?<!>)  +(?![^<]*>)', ' ', clean_output)
     
+    # 5b. Strip decorative separator lines echoed from search context
+    clean_output = strip_separators(clean_output)
+
     # 6. Apply the configurable output filter (replaces hardcoded Gradio version checks)
     clean_output = apply_output_filter(clean_output)
         
@@ -2030,6 +2033,9 @@ def conversation_display(
                 flags=re.MULTILINE
             )
             
+            # Strip decorative separators in real-time (search context echo-back)
+            clean_response = strip_separators(clean_response)
+            
             # Update assistant message in-place, keeping the AI-Chat: header
             session_messages[-1]['content'] = "AI-Chat:\n" + clean_response
             
@@ -2113,6 +2119,22 @@ def toggle_left_expanded_state(current_state):
 def toggle_right_expanded_state(current_state):
     return not current_state
 
+def strip_separators(text: str) -> str:
+    """Remove decorative separator lines echoed from search context into model output.
+    Targets Unicode box-drawing chars (═ ─ ━) and ASCII runs (= - * _) of 3+ chars,
+    plus header-inside-separator patterns like ══ HEADING ══.
+    Collapses any resulting triple-blank-lines back to double.
+    """
+    import re
+    # Lines that are purely a run of separator characters
+    text = re.sub(r'^\s*[═─━=*_-]{3,}\s*$', '', text, flags=re.MULTILINE)
+    # Lines formatted ══ ANY TEXT ══ (box-char header sandwich)
+    text = re.sub(r'^\s*[═─━]+[^═─━\n]+[═─━]+\s*$', '', text, flags=re.MULTILINE)
+    # Collapse cascading blank lines left by removed separators
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text
+
+
 def toggle_ddg_search(current_ddg_state, current_web_state):
     """Toggle DDG Search (hybrid mode). Disables Web Search if enabling DDG."""
     import gradio as gr
@@ -2123,18 +2145,13 @@ def toggle_ddg_search(current_ddg_state, current_web_state):
     new_web_state = False if new_ddg_state else current_web_state
     
     ddg_variant = "primary" if new_ddg_state else "secondary"
-    ddg_label = "🔍 DDG Search ON" if new_ddg_state else "🔍 DDG Search"
-    
     web_variant = "primary" if new_web_state else "secondary"
-    web_label = "🌐 Web Search ON" if new_web_state else "🌐 Web Search"
     
     return (
         new_ddg_state,                                          # ddg_search_enabled state
         new_web_state,                                          # web_search_enabled state
-        gr.update(variant=ddg_variant, value=ddg_label),        # ddg_search button
-        gr.update(variant=ddg_variant),                         # ddg_search_collapsed button
-        gr.update(variant=web_variant, value=web_label),        # web_search button
-        gr.update(variant=web_variant)                          # web_search_collapsed button
+        gr.update(variant=ddg_variant),                         # ddg_search button
+        gr.update(variant=web_variant),                         # web_search button
     )
 
 
@@ -2148,18 +2165,13 @@ def toggle_web_search(current_web_state, current_ddg_state):
     new_ddg_state = False if new_web_state else current_ddg_state
     
     web_variant = "primary" if new_web_state else "secondary"
-    web_label = "🌐 Web Search ON" if new_web_state else "🌐 Web Search"
-    
     ddg_variant = "primary" if new_ddg_state else "secondary"
-    ddg_label = "🔍 DDG Search ON" if new_ddg_state else "🔍 DDG Search"
     
     return (
         new_web_state,                                          # web_search_enabled state
         new_ddg_state,                                          # ddg_search_enabled state
-        gr.update(variant=web_variant, value=web_label),        # web_search button
-        gr.update(variant=web_variant),                         # web_search_collapsed button
-        gr.update(variant=ddg_variant, value=ddg_label),        # ddg_search button
-        gr.update(variant=ddg_variant)                          # ddg_search_collapsed button
+        gr.update(variant=web_variant),                         # web_search button
+        gr.update(variant=ddg_variant),                         # ddg_search button
     )
 
 
@@ -2319,6 +2331,14 @@ def launch_display():
         white-space: nowrap;
         text-overflow: ellipsis;
     }
+
+    /* Ensure emoji render correctly via system emoji fonts in Qt6 WebEngine */
+    .message, .message p, .message span, .message li {
+        font-family: ui-sans-serif, system-ui, -apple-system,
+                     "Segoe UI Emoji", "Apple Color Emoji",
+                     "Noto Color Emoji", "Twemoji Mozilla",
+                     sans-serif !important;
+    }
     """
 
     # v2: css_common is sufficient for Gradio 5.x
@@ -2371,17 +2391,7 @@ def launch_display():
                     # LEFT PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as left_column_expanded:
                         toggle_button_left_expanded = gr.Button(">-------<", variant="secondary")
-                        gr.Markdown("**Dynamic Panel**")
-                        panel_toggle = gr.Radio(choices=["History", "Attachments"], label="", value="History")
-                        with gr.Group(visible=False) as attach_group:
-                            attach_files = gr.UploadButton(
-                                "Add Attach Files..", 
-                                file_types=[f".{ext}" for ext in cfg.ALLOWED_EXTENSIONS], 
-                                file_count="multiple", 
-                                variant="secondary"
-                            )
-                            attach_slots = [gr.Button("Attach Slot Free", variant="huggingface", visible=False) 
-                                          for _ in range(cfg.MAX_POSSIBLE_ATTACH_SLOTS)]
+                        gr.Markdown("**History**")
                         with gr.Group(visible=True) as history_slots_group:
                             start_new_session_btn = gr.Button("Start New Session..", variant="secondary")
                             buttons["session"] = [gr.Button(f"History Slot {i+1}", variant="huggingface", visible=False) 
@@ -2390,12 +2400,6 @@ def launch_display():
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as left_column_collapsed:
                         toggle_button_left_collapsed = gr.Button("<->", variant="secondary")
                         new_session_btn_collapsed = gr.Button("New", variant="secondary")
-                        add_attach_files_collapsed = gr.UploadButton(
-                            "Add",
-                            file_types=[f".{ext}" for ext in cfg.ALLOWED_EXTENSIONS],
-                            file_count="multiple",
-                            variant="secondary"
-                        )
 
                     # CENTER - Main chat area
                     with gr.Column(scale=30, elem_classes=["clean-elements"]):
@@ -2410,20 +2414,31 @@ def launch_display():
                         initial_max_lines = max(3, int(((cfg.SESSION_LOG_HEIGHT - 100) / 10) / 2.5) - 6)
                         cfg.USER_INPUT_MAX_LINES = initial_max_lines
                         
-                        # User input initially disabled until valid model selected
-                        conversation_components["user_input"] = gr.Textbox(
-                            label="User Input", 
-                            lines=3, 
-                            max_lines=initial_max_lines, 
-                            interactive=True,                           # ← always allow typing
-                            placeholder="Type your message here... (model auto-loads on first send)"
-                        )
-                        
-                        conversation_components["progress_indicator"] = gr.Markdown(
-                            value="",
-                            visible=False,
-                            elem_classes=["progress-indicator"]
-                        )
+                        # User input row: text+progress column on left, search icons on right
+                        with gr.Row(elem_classes=["clean-elements"]):
+                            with gr.Column(scale=10):
+                                # User input initially disabled until valid model selected
+                                conversation_components["user_input"] = gr.Textbox(
+                                    label="User Input", 
+                                    lines=3, 
+                                    max_lines=initial_max_lines, 
+                                    interactive=True,
+                                    placeholder="Type your message here... (model auto-loads on first send)"
+                                )
+                                conversation_components["progress_indicator"] = gr.Markdown(
+                                    value="",
+                                    visible=False,
+                                    elem_classes=["progress-indicator"]
+                                )
+                            with gr.Column(scale=1, min_width=55, elem_classes=["clean-elements"]):
+                                action_buttons["ddg_search"] = gr.Button(
+                                    "🔍", variant="secondary",
+                                    elem_id="cguf-ddg-btn", min_width=50
+                                )
+                                action_buttons["web_search"] = gr.Button(
+                                    "🌐", variant="secondary",
+                                    elem_id="cguf-web-btn", min_width=50
+                                )
 
                         # Relay textboxes: JS writes here → .change() fires Python handlers.
                         # elem_id puts an id on the wrapper div; JS finds the textarea inside.
@@ -2464,17 +2479,25 @@ def launch_display():
                     # RIGHT PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as right_column_expanded:
                         toggle_button_right_expanded = gr.Button(">-------<", variant="secondary")
-                        gr.Markdown("**Tools / Options**")
-                        
-                        with gr.Row(elem_classes=["clean-elements"]):
-                            # Then the rest of your tool buttons
-                            action_buttons["ddg_search"] = gr.Button("🔍 DDG Search", variant="secondary", scale=1)
-                            action_buttons["web_search"] = gr.Button("🌐 Web Search", variant="secondary", scale=1)
+                        gr.Markdown("**Attachments**")
+                        with gr.Group(visible=True) as attach_group:
+                            attach_files = gr.UploadButton(
+                                "Add Attach Files..",
+                                file_types=[f".{ext}" for ext in cfg.ALLOWED_EXTENSIONS],
+                                file_count="multiple",
+                                variant="secondary"
+                            )
+                            attach_slots = [gr.Button("Attach Slot Free", variant="huggingface", visible=False)
+                                          for _ in range(cfg.MAX_POSSIBLE_ATTACH_SLOTS)]
                             
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as right_column_collapsed:
                         toggle_button_right_collapsed = gr.Button("<->", variant="secondary")
-                        action_buttons["ddg_search_collapsed"] = gr.Button("🔍", variant="secondary")
-                        action_buttons["web_search_collapsed"] = gr.Button("🌐", variant="secondary")
+                        add_attach_files_collapsed = gr.UploadButton(
+                            "Add",
+                            file_types=[f".{ext}" for ext in cfg.ALLOWED_EXTENSIONS],
+                            file_count="multiple",
+                            variant="secondary"
+                        )
                         
                 with gr.Row():
                     interaction_global_status = gr.Textbox(
@@ -3204,13 +3227,6 @@ def launch_display():
             outputs=[ini_display, debug_display, info_status]
         )
 
-        # Panel toggles
-        panel_toggle.change(
-            fn=update_panel_on_mode_change,
-            inputs=[panel_toggle],
-            outputs=[panel_toggle, attach_group, history_slots_group, states["selected_panel"]]
-        )
-
         # Left panel expand/collapse
         def toggle_left_panel(current_state):
             new_state = not current_state
@@ -3253,22 +3269,7 @@ def launch_display():
                 states["ddg_search_enabled"],
                 states["web_search_enabled"],
                 action_buttons["ddg_search"],
-                action_buttons["ddg_search_collapsed"],
-                action_buttons["web_search"],
-                action_buttons["web_search_collapsed"]
-            ]
-        )
-        
-        action_buttons["ddg_search_collapsed"].click(
-            fn=toggle_ddg_search,
-            inputs=[states["ddg_search_enabled"], states["web_search_enabled"]],
-            outputs=[
-                states["ddg_search_enabled"],
-                states["web_search_enabled"],
-                action_buttons["ddg_search"],
-                action_buttons["ddg_search_collapsed"],
-                action_buttons["web_search"],
-                action_buttons["web_search_collapsed"]
+                action_buttons["web_search"]
             ]
         )
 
@@ -3280,22 +3281,7 @@ def launch_display():
                 states["web_search_enabled"],
                 states["ddg_search_enabled"],
                 action_buttons["web_search"],
-                action_buttons["web_search_collapsed"],
-                action_buttons["ddg_search"],
-                action_buttons["ddg_search_collapsed"]
-            ]
-        )
-        
-        action_buttons["web_search_collapsed"].click(
-            fn=toggle_web_search,
-            inputs=[states["web_search_enabled"], states["ddg_search_enabled"]],
-            outputs=[
-                states["web_search_enabled"],
-                states["ddg_search_enabled"],
-                action_buttons["web_search"],
-                action_buttons["web_search_collapsed"],
-                action_buttons["ddg_search"],
-                action_buttons["ddg_search_collapsed"]
+                action_buttons["ddg_search"]
             ]
         )
 
@@ -3728,6 +3714,18 @@ def launch_display():
     setTimeout(injectButtons, 800);
     setTimeout(injectButtons, 2000);
     setTimeout(injectButtons, 4000);
+
+    /* Set tooltips on search icon buttons by elem_id */
+    (function setSearchTooltips() {
+        function applyTooltips() {
+            var ddg = document.querySelector('#cguf-ddg-btn button');
+            var web = document.querySelector('#cguf-web-btn button');
+            if (ddg) ddg.title = 'DDG Search';
+            if (web) web.title = 'Web Search';
+            if (!ddg || !web) setTimeout(applyTooltips, 500);
+        }
+        applyTooltips();
+    })();
 
     log('injector ready — waiting for messages');
     return [];
