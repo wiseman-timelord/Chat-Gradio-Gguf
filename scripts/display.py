@@ -1158,30 +1158,39 @@ def handle_inline_edit(idx_str, session_messages):
     idx_str: stringified nth user-message index with optional '|<timestamp>' suffix.
     Finds the nth user message by role (safe against system messages), truncates
     history to just before that message, and loads its text into the input box.
+
+    NOTE: The relay box is NOT reset to "" on return — the JS timestamp suffix
+    already guarantees .change() fires on every click, so resetting would only
+    trigger a second (empty) invocation that clears the user_input we just set.
     """
-    if not idx_str:
-        return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "", False, ""
+    if not idx_str or not idx_str.strip():
+        # Relay box was reset or empty — ignore silently; return no-ops so nothing changes.
+        return gr.update(), gr.update(), session_messages, gr.update(), gr.update(), gr.update()
     try:
         # Strip JS timestamp suffix (appended to guarantee .change() fires on repeat clicks)
-        clean_str = idx_str.split('|')[0]
+        clean_str = idx_str.split('|')[0].strip()
+        if not clean_str:
+            return gr.update(), gr.update(), session_messages, gr.update(), gr.update(), gr.update()
         nth = int(clean_str)
     except ValueError:
-        return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "Edit error: invalid index.", False, ""
+        return gr.update(), gr.update(), session_messages, "Edit error: invalid index.", gr.update(), gr.update()
 
     # Locate the nth user message by role — robust against system/tool messages in the list
     user_entries = [(i, m) for i, m in enumerate(session_messages) if m.get('role') == 'user']
     if nth >= len(user_entries):
-        return "", get_chatbot_output(messages_to_tuples(session_messages), session_messages), session_messages, "Edit target not found.", False, ""
+        return gr.update(), gr.update(), session_messages, "Edit target not found.", gr.update(), gr.update()
 
     original_idx, target_msg = user_entries[nth]
     user_content = target_msg.get('content', '') or ''
+    # Strip the stored "User:\n" prefix so the raw text lands in the input box
     user_content = re.sub(r'^User:\s*\n?', '', user_content, flags=re.MULTILINE).strip()
 
     new_messages = session_messages[:original_idx]
     chatbot_out  = get_chatbot_output(messages_to_tuples(new_messages), new_messages)
     has_ai       = any(m.get('role') == 'assistant' for m in new_messages)
     status       = f"✏️ Editing from message {nth + 1} — edit the text above then Send Input."
-    return user_content, chatbot_out, new_messages, status, has_ai, ""
+    # Return gr.update() for edit_action_box (no reset) to avoid the re-trigger loop
+    return user_content, chatbot_out, new_messages, status, has_ai, gr.update()
 
 
 def update_session_buttons():
@@ -1220,42 +1229,38 @@ def format_session_id(session_id):
         return session_id
 
 def update_action_buttons(phase, has_ai_response=False):
-    """Update action buttons based on interaction phase, history state, and model state."""
-    # A model is considered usable when it is selected and not a placeholder value
-    model_ready = cfg.MODEL_NAME not in (None, "", "Select_a_model...", "No models found")
-
+    """Update action buttons based on interaction phase.
+    Dynamic bar is now simplified to two states only:
+      • waiting_for_input  →  'Send Input' visible, 'Wait' hidden
+      • generating         →  'Send Input' hidden, 'Wait' visible
+    Edit Previous and Copy Output have been removed from the bar;
+    per-message ✏ and 📋 icons in the session log handle those actions.
+    """
     if phase == "waiting_for_input":
-        if has_ai_response and model_ready:
-            # Has history AND model selected: show all action buttons
-            action_visible, edit_visible, copy_visible, wait_visible = True, True, True, False
-        else:
-            # Fresh session or no model selected: only Send Input visible
-            # Edit previous is hidden when no model is selected to prevent the
-            # broken state where the user edits an input but cannot submit it.
-            action_visible, edit_visible, copy_visible, wait_visible = True, False, False, False
+        action_visible, wait_visible = True, False
     elif phase in ("input_submitted", "generating_response", "speaking"):
-        # During generation: hide action buttons, show wait indicator
-        action_visible, edit_visible, copy_visible, wait_visible = False, False, False, True
+        action_visible, wait_visible = False, True
     else:
-        action_visible, edit_visible, copy_visible, wait_visible = True, False, False, False
+        action_visible, wait_visible = True, False
 
-    # Configure Send Input button appearance
+    # Configure Send Input button
     action_value = "Send Input"
     action_variant = "secondary" if phase == "waiting_for_input" else "primary"
     action_classes = ["send-button-green"] if phase == "waiting_for_input" else []
     action_interactive = (phase == "waiting_for_input")
 
-    # Configure wait indicator
+    # Configure wait indicator label
     wait_value = "..Wait For Response.."
     if phase == "speaking" and getattr(cfg, 'TTS_ENABLED', False):
         wait_value = "🔊 Speaking Response..."
 
     return [
-        gr.update(value=action_value, variant=action_variant, elem_classes=action_classes, interactive=action_interactive, visible=action_visible),
-        gr.update(visible=edit_visible),
-        gr.update(visible=copy_visible),
-        gr.update(visible=False),  # cancel_input (placeholder)
-        gr.update(value=wait_value, variant="primary", interactive=False, visible=wait_visible)
+        gr.update(value=action_value, variant=action_variant, elem_classes=action_classes,
+                  interactive=action_interactive, visible=action_visible),
+        gr.update(visible=False),   # edit_previous — removed from bar; keep for output-list compat
+        gr.update(visible=False),   # copy_response — removed from bar; keep for output-list compat
+        gr.update(visible=False),   # cancel_input  — hidden placeholder
+        gr.update(value=wait_value, variant="primary", interactive=False, visible=wait_visible),
     ]
 
 def handle_model_inspect(model_name):
@@ -2449,10 +2454,12 @@ def launch_display():
 
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=1)
-                            action_buttons["edit_previous"] = gr.Button("Edit Previous", variant="secondary", scale=1, visible=False)
-                            action_buttons["copy_response"] = gr.Button("Copy Output", variant="secondary", scale=1, visible=False)
-                            action_buttons["cancel_input"] = gr.Button("", variant="primary", scale=1, visible=False)  # Hidden placeholder for output compatibility
                             action_buttons["cancel_response"] = gr.Button("..Wait For Response..", variant="primary", scale=1, visible=False)
+                        # Hidden off-Row components — never visible; kept only so existing
+                        # output-list lengths in event handlers remain unchanged.
+                        action_buttons["edit_previous"] = gr.Button("", variant="secondary", visible=False)
+                        action_buttons["copy_response"] = gr.Button("", variant="secondary", visible=False)
+                        action_buttons["cancel_input"]  = gr.Button("", variant="primary",   visible=False)
 
                     # RIGHT PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as right_column_expanded:
@@ -2936,9 +2943,9 @@ def launch_display():
                 conversation_components["user_input"],      # Hide/show user input box
                 conversation_components["progress_indicator"], # Progress flow diagram
                 action_buttons["action"],                   # Main action button state
-                action_buttons["edit_previous"],            # Edit button visibility
-                action_buttons["copy_response"],            # Copy button visibility
-                action_buttons["cancel_input"],             # Cancel input placeholder
+                action_buttons["edit_previous"],            # Hidden (removed from bar — compat only)
+                action_buttons["copy_response"],            # Hidden (removed from bar — compat only)
+                action_buttons["cancel_input"],             # Hidden placeholder
                 action_buttons["cancel_response"],          # Wait indicator button
                 states["cancel_flag"],                      # Updated cancel flag
                 states["attached_files"],                   # Updated attached files list
@@ -3290,14 +3297,6 @@ def launch_display():
                 action_buttons["ddg_search"],
                 action_buttons["ddg_search_collapsed"]
             ]
-        )
-
-        # TTS Sound button handlers
-        
-        action_buttons["copy_response"].click(
-            fn=copy_last_response,
-            inputs=[states["session_messages"]],
-            outputs=[interaction_global_status]
         )
 
         # ── Inline copy: triggered by JS through hidden relay textbox ───────────────
