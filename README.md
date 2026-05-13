@@ -464,18 +464,28 @@ project_root/
 ```
 
 # Development for v2
-v2 is now in Pre-Release stage...
-1. Multiple models tested. Output for thinking seems to be correct on Qwen 3, but thinking is being displayed on newer models such as Qwen 3.5/3.6 and glm 4.7, they just seem to say thinking then say the final response. debug output needs checking, but I think we may have to promt the model to use a specific format of output including "<THINK>" and "</THINK>" before final response, in order for all models to produce the same output format as Qwen3, in order for Thinking... to be split correctly in real time.
+v2 is now in Release stage...
+1. So, obviously if I do a websearch I would use the websearch, not DDG alone. Removal of DDG Search, because web-search is currently a multi-phase hybrid search, that includes a ddg search. This also enable less complexity, providing a little space for later a new tool, rather than, this is the less good websearch.
 2. The project now aims to support these specific models shown below, but do so well. Qwen3 will be dropped when other handling is shown to work, and as reference for how others are supposed to work during development. The main program needs to support these models throughout, and do so well...
 ```
-GLM 4.7/5
+GLM 4.7/5.1
 Qwen 3/3.5/3.6
 Gemma 4
 gpt oss
 minstral 3
-granite 4/4.14.1
+granite 4/4.1
 ```
-2. When there is a stable correctly working latest v2, then the plan will be to develop some extra tools, but this needs to be brainstormed and figured out. Possibly we could even remove tools, and intend to use only agentic tool calling models, where through pre-prompt it would determine if it needs to web research, then currently we would not need tools toolbar.
+...thereabouts, we need complete handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response, in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc.
+2. After removing DDG search the plan will be to develop some extra tools, but this needs to be brainstormed and figured out. What can we do consistently between the target list of models...
+```
+GLM 4.7/5.1
+Qwen 3/3.5/3.6
+Gemma 4
+gpt oss
+minstral 3
+granite 4/4.1
+```
+...can we get non-agentic models on the list, to be able to also respond with jsons or commands for generic agentic tool calling management function, to enable built-in tools in the models, that, depending on the model you load, would then have some additional icons next to the websearch or whatever? where through pre-prompting then all models would be able to do toolcalling? so where as models such as Qwen have advanced tool calling, then other models would require additional prompting or whatever, this is my understanding? First we need to know the specific features for each of the models.
 3. Code Optimization / redistribution of code, moving code out from display script, to applicably relatingly themed scripts, if there is relevance to both scripts and it is sound to do so, in order to reduce overall code in display script by moving it out, as appropriate to do so, nothing extreme. 
 4. we would have a toggle button  in the text input area, Quick means no thinking, Think means thinking, Auto where it would do a pre-prompt in order to determine if it should think or not then it would do the actual response. 
 5. Sticking with the idea of an auto mode, it would be possible to do a pre-prompt in order to determine the context size and batch size, automatically then reload the model.
