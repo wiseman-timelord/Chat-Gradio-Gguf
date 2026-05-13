@@ -397,7 +397,7 @@ Web Search = Slower actual website reading research.
 - Through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files.
 
 ### Models working (with gpt for comparrisson).
-- If you installed with compile option, then you will be able to use the newer models, otherwise with non-compile install will work with models from ~6 months ago, but dont quote me on that. This is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source. 
+- If you installed with compile option, then you will be able to use the newer models, otherwise with non-compile install will work with models from ~6 months ago, but dont quote me on that. This is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source. If not compiling, then the model handling will be limited to GLM4.7/Qwen3 level models.  
 - Chat-Gradio-Ggud is currently being programmed towards these models, and performance for the intended models is reported to be like this (no good ~30b models for GLM 5.1 yet)...
 
 | Model                                      | IFEval                  | BBH            | MATH / MATH-500 / AIME          | GPQA / Diamond       | MuSR       | MMLU / MMLU-Pro              | Notes / Other |
