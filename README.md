@@ -398,7 +398,7 @@ Web Search = Slower actual website reading research.
 
 ### Models working (with gpt for comparrisson).
 - If you installed with compile option, then you will be able to use the newer models, otherwise with non-compile install will work with models from ~6 months ago, but dont quote me on that. This is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source. If not compiling, then the model handling will be limited to GLM4.7/Qwen3 level models.  
-- Chat-Gradio-Ggud is currently being programmed towards these models, and performance for the intended models is reported to be like this (no good ~30b models for GLM 5.1 yet)...
+- Chat-Gradio-Ggud is currently being programmed towards these models, and performance for the intended models is reported to be like this (no good ~30b models for GLM 5.1 yet, currently GLM 4.7 seems consistently bad compared to Qwen, regardless of better scores people say were internal/faked)...
 
 | Model                                      | IFEval                  | BBH            | MATH / MATH-500 / AIME          | GPQA / Diamond       | MuSR       | MMLU / MMLU-Pro              | Notes / Other |
 |--------------------------------------------|-------------------------|----------------|---------------------------------|----------------------|------------|------------------------------|---------------|
