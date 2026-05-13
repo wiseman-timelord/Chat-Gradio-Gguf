@@ -30,11 +30,11 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
 
 ### Preview
-- The Session Log on Window, showing, both sidepanels collapsed and the basic test. (GLM 4.7 model on v2.00.8)...
-![image_missing](media/v2_00_8_GLM47.jpg)
-
 - The Session Log on Window, showing, both sidepanels collapsed and the Web Search tool test. (Qwen 3 model on v2.00.11)...
 ![image_missing](media/v2_00_11_Qwen3.jpg)
+
+- The Session Log on Window, showing, both sidepanels collapsed and the basic Offline test. (GLM 4.7 model on v2.00.11)...
+![image_missing](media/v2_00_11_GLM47.jpg)
 
 - The Config page, for configuration of, Hardware, TTS, Models (v1.02.1)...
 ![image_missing](media/config_page.jpg)
