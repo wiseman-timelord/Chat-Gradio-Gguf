@@ -486,6 +486,13 @@ minstral 3
 granite 4/4.1
 ```
 ...can we get non-agentic models on the list, to be able to also respond with jsons or commands for generic agentic tool calling management function, to enable built-in tools in the models, that, depending on the model you load, would then have some additional icons next to the websearch or whatever? where through pre-prompting then all models would be able to do toolcalling? so where as models such as Qwen have advanced tool calling, then other models would require additional prompting or whatever, this is my understanding? First we need to know the specific features for each of the models.
+3. These specific models have Tool Calling...
+```
+GLM 4.7/5.1
+Qwen 3/3.5/3.6
+minstral 3
+```
+...possibly the program could focus on them, but the list is already limited, and I dont think my chatbot needs such an implementation, it needs to stay open with regards to models, as people want choice.
 3. Code Optimization / redistribution of code, moving code out from display script, to applicably relatingly themed scripts, if there is relevance to both scripts and it is sound to do so, in order to reduce overall code in display script by moving it out, as appropriate to do so, nothing extreme. 
 4. we would have a toggle button  in the text input area, Quick means no thinking, Think means thinking, Auto where it would do a pre-prompt in order to determine if it should think or not then it would do the actual response. 
 5. Sticking with the idea of an auto mode, it would be possible to do a pre-prompt in order to determine the context size and batch size, automatically then reload the model.
