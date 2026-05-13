@@ -352,6 +352,11 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 3. Go back to the `Interaction` page and begin interactions, ensuring to notice tool options available, and select appropriately for your intended use, then type your input into the User Input box, and then click Send Input.
 4. When all is finished, click `Exit` on the bottom right, then you are left with the terminal menu, where you type `x` to exit.
 ```
+- Test Prompts...
+```
+LOCAL: How much wood could a wood chuck chuck if a wood chuck could chuck wood?!
+WEB SEARCH: Produce web research upon recent events relating to the recent events in the war in the middle-east, then compile a timeline report with most significant events for the most recent 28 days from the current date.
+```
 
 ### Useful Info
 - Research Tools, configuration scales to Context Length...
