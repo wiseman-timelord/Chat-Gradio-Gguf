@@ -5,13 +5,6 @@
 echo -ne "\033]0;Chat-Gradio-Gguf\007"
 printf '\e[8;25;82t'
 
-# Change to script dir#!/bin/bash
-# Script: `./Chat-Gradio-Gguf.sh`
-
-# Set terminal configuration (Linux/Unix method)
-echo -ne "\033]0;Chat-Gradio-Gguf\007"
-printf '\e[8;25;82t'
-
 # Change to script directory
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$SCRIPT_DIR" || exit 1
@@ -35,6 +28,35 @@ display_separator_thick() {
 
 display_separator_thin() {
     echo "-------------------------------------------------------------------------------"
+}
+
+# Detect best Python 3.11-3.13
+detect_python() {
+    local candidates=("python3.13" "python3.12" "python3.11" "python3")
+    local best_version=""
+    local best_cmd=""
+
+    for cmd in "${candidates[@]}"; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            version=$("$cmd" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+')
+            major=$(echo "$version" | cut -d. -f1)
+            minor=$(echo "$version" | cut -d. -f2)
+            if [ "$major" -eq 3 ] && [ "$minor" -ge 11 ] && [ "$minor" -le 13 ]; then
+                if [ -z "$best_version" ] || [ "$minor" -gt "$best_version" ]; then
+                    best_version="$minor"
+                    best_cmd="$cmd"
+                fi
+            fi
+        fi
+    done
+
+    if [ -z "$best_cmd" ]; then
+        echo "Error: No compatible Python 3.11-3.13 found."
+        echo "Please install Python 3.11, 3.12, or 3.13."
+        exit 1
+    fi
+    echo "Selected Python: $best_cmd"
+    PYTHON_CMD="$best_cmd"
 }
 
 # Main menu
@@ -99,7 +121,8 @@ run_installation() {
     display_separator_thick
     echo ""
 
-    python3 ./installer.py linux
+    detect_python
+    "$PYTHON_CMD" ./installer.py linux
     if [ $? -ne 0 ]; then
         echo "Error during installation"
         read -p "Press Enter to continue..."

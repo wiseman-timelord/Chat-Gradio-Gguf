@@ -39,7 +39,7 @@ echo ---------------------------------------------------------------------------
 goto :eof
 
 REM ============================================================
-REM  Detect best Python 3.9–3.13 from common locations
+REM  Detect best Python 3.11-3.13 from common locations
 REM ============================================================
 :DetectPython
 set "PYTHON_EXE="
@@ -62,8 +62,8 @@ if not defined PYTHON_EXE (
 )
 
 if not defined PYTHON_EXE (
-    echo Error: No compatible Python 3.9-3.13 found.
-    echo Please install Python 3.9-3.13 from python.org
+    echo Error: No compatible Python 3.11-3.13 found.
+    echo Please install Python 3.11, 3.12, or 3.13 from python.org
     pause
     goto :end_of_script
 )
@@ -86,7 +86,7 @@ for /f "tokens=2 delims= " %%V in ('"%pyexe%" --version 2^>^&1') do (
     for /f "tokens=1,2 delims=." %%A in ("%%V") do (
         set "MAJ=%%A"
         set "MIN=%%B"
-        if !MAJ!==3 if !MIN! GEQ 9 if !MIN! LEQ 13 (
+        if !MAJ!==3 if !MIN! GEQ 11 if !MIN! LEQ 13 (
             if !MIN! GTR !BEST_MINOR! (
                 set "BEST_MAJOR=!MAJ!"
                 set "BEST_MINOR=!MIN!"

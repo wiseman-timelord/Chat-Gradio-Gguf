@@ -36,7 +36,6 @@ LLAMACPP_PYTHON_VERSION_FALLBACK = "v0.3.20"
 # can display it in the About/Debug tab.
 _INSTALLED_LLAMA_WHEEL_VERSION = None
 LLAMACPP_TARGET_VERSION = "b8882"
-DOWNLOAD_RELEASE_TAG = "b8882"
 WIN_COMPILE_TEMP = Path("C:/temp_build")
 LINUX_COMPILE_TEMP = None
 _INSTALL_PROCESSES = set()
@@ -49,15 +48,11 @@ _CPU_FEATURES = None
 _CPU_DETECTED_EARLY = False
 OS_VERSION = None
 VS_GENERATOR = None
-DETECTED_PYTHON_INFO = {}
 
 # Display/Browser variables
 DX11_CAPABLE = None
 DX_FEATURE_LEVEL = None
 DX_FEATURE_NAME = None
-# v2: Gradio 5.x + PyQt6 on all supported platforms
-SELECTED_GRADIO = "5.x"
-SELECTED_QTWEB  = "v6"
 
 # Maps/Lists
 DIRECTORIES = [
@@ -259,7 +254,7 @@ if PLATFORM == "windows":
             "compile_wheel": False, "vulkan_required": False, "build_flags": {}
         },
         "Download Vulkan Binary / Default CPU Wheel": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-win-vulkan-x64.zip",
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-win-vulkan-x64.zip",
             "dest": "data/llama-vulkan-bin",
             "cli_path": "data/llama-vulkan-bin/llama-cli.exe",
             "needs_python_bindings": True, "compile_binary": False,
@@ -287,7 +282,7 @@ else:  # Linux
             "compile_wheel": False, "vulkan_required": False, "build_flags": {}
         },
         "Download Vulkan Binary / Default CPU Wheel": {
-            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{DOWNLOAD_RELEASE_TAG}/llama-{DOWNLOAD_RELEASE_TAG}-bin-ubuntu-vulkan-x64.tar.gz",
+            "url": f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMACPP_TARGET_VERSION}/llama-{LLAMACPP_TARGET_VERSION}-bin-ubuntu-vulkan-x64.tar.gz",
             "dest": "data/llama-vulkan-bin",
             "cli_path": "data/llama-vulkan-bin/llama-cli",
             "needs_python_bindings": True, "compile_binary": False,
@@ -347,6 +342,8 @@ if PLATFORM == "windows":
     ])
 # Linux: no platform-specific extras needed for v2 (pyvirtualdisplay removed)
 
+def clear_screen():
+    os.system('cls' if PLATFORM == "windows" else 'clear')
 
 def backend_requires_compilation(backend: str) -> bool:
     """Check if the selected backend requires compilation"""
@@ -409,18 +406,6 @@ def detect_linux_version() -> str:
         OS_VERSION = "unknown"
         return "unknown"
 
-
-def detect_version_selections() -> None:
-    """
-    Populate DETECTED_PYTHON_INFO.
-    v2: Gradio 5.x + PyQt6 used on all platforms — no dynamic selection needed.
-    """
-    global DETECTED_PYTHON_INFO, SELECTED_GRADIO, SELECTED_QTWEB
-    DETECTED_PYTHON_INFO = detect_all_pythons()
-    SELECTED_GRADIO = "5.x"
-    SELECTED_QTWEB  = "v6"
-
-
 def get_dynamic_requirements() -> list:
     """
     Build requirements list for Gradio 5.x.
@@ -442,76 +427,6 @@ def get_torch_version_for_python() -> str:
     No two-tier split needed.
     """
     return "torch>=2.5.0"
-
-
-def detect_all_pythons() -> dict:
-    """Detect all Python installations and select optimal version.
-    v2: Valid range is Python 3.11-3.13 for all supported platforms."""
-    import platform as plat
-    found_pythons = []
-
-    if PLATFORM == "windows":
-        possible_commands = ["python", "python3", "py -3.13", "py -3.12", "py -3.11"]
-        for cmd in possible_commands:
-            try:
-                parts = cmd.split()
-                result = subprocess.run(parts + ["--version"], capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    version_str = result.stdout.strip() or result.stderr.strip()
-                    match = re.search(r"Python\s+(\d+)\.(\d+)", version_str)
-                    if match:
-                        major, minor = int(match.group(1)), int(match.group(2))
-                        found_pythons.append((major, minor, cmd))
-            except:
-                pass
-    else:
-        possible_commands = ["python3", "python3.13", "python3.12", "python3.11", "python"]
-        for cmd in possible_commands:
-            try:
-                result = subprocess.run([cmd, "--version"], capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    version_str = result.stdout.strip() or result.stderr.strip()
-                    match = re.search(r"Python\s+(\d+)\.(\d+)", version_str)
-                    if match:
-                        major, minor = int(match.group(1)), int(match.group(2))
-                        found_pythons.append((major, minor, cmd))
-            except:
-                pass
-
-    seen_versions = set()
-    unique_pythons = []
-    for major, minor, cmd in found_pythons:
-        if (major, minor) not in seen_versions:
-            seen_versions.add((major, minor))
-            unique_pythons.append((major, minor, cmd))
-
-    # v2: valid range is 3.11–3.13 for all targets
-    min_py, max_py = (3, 11), (3, 13)
-
-    valid_pythons = [
-        (major, minor, cmd) for major, minor, cmd in unique_pythons
-        if (major, minor) >= min_py and (major, minor) <= max_py
-    ]
-
-    if valid_pythons:
-        valid_pythons.sort(key=lambda x: (x[0], x[1]), reverse=True)
-        optimal = valid_pythons[0]
-        return {
-            "all_found": unique_pythons,
-            "valid_range": (min_py, max_py),
-            "optimal": optimal,
-            "optimal_version": f"{optimal[0]}.{optimal[1]}",
-            "optimal_command": optimal[2]
-        }
-
-    return {
-        "all_found": unique_pythons,
-        "valid_range": (min_py, max_py),
-        "optimal": None,
-        "optimal_version": "None",
-        "optimal_command": None
-    }
-
 
 def check_version_compatibility():
     """Check Python and OS compatibility.
@@ -719,26 +634,8 @@ def run_detections_once() -> None:
     print(f"[DETECT] Vulkan: {'YES' if _DETECTED_VULKAN else 'NO'} | DX: {_DETECTED_DX_NAME}")
     print(f"[DETECT] Build tools: {', '.join(k for k,v in _DETECTED_BUILD_TOOLS.items() if v) or 'none'}")
 
-
-def prompt_build_threads() -> None:
-    global _USER_BUILD_THREADS
-    import multiprocessing
-    try:
-        total = multiprocessing.cpu_count()
-    except:
-        total = 4
-    recommended = max(1, int(total * 0.85))
-    print(f"\nBuild threads: {total} logical cores detected")
-    print(f"  Default (85%): {recommended} threads")
-    choice = input(f"  Enter thread count [Enter = {recommended}]: ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= total * 2:
-        _USER_BUILD_THREADS = int(choice)
-    else:
-        _USER_BUILD_THREADS = recommended
-    print(f"  Using {_USER_BUILD_THREADS} build threads")
-
-
 def print_header(section: str = "Installer") -> None:
+    clear_screen()
     width = shutil.get_terminal_size().columns - 1
     print("=" * width)
     print(f" Chat-Gradio-Gguf v2 — {section}")
@@ -968,7 +865,7 @@ def install_python_deps(backend: str) -> bool:
 
         all_requirements = get_dynamic_requirements()
 
-        print_status(f"Installing packages (Gradio {SELECTED_GRADIO})...")
+        print_status(f"Installing Python packages...")
         total = len(all_requirements)
         for i, req in enumerate(all_requirements, 1):
             pkg_name = req.split('>=')[0].split('==')[0].split('[')[0]
@@ -1214,14 +1111,6 @@ def simple_progress_bar(current: int, total: int, width: int = 25) -> str:
 
     return f"[{bar}] {percent}% ({format_bytes(current)}/{format_bytes(total)})"
 
-
-def has_avx_support() -> bool:
-    global _CPU_FEATURES
-    if _CPU_FEATURES is None:
-        detect_cpu_features()
-    return _CPU_FEATURES.get('AVX', False) if _CPU_FEATURES is not None else False
-
-
 def check_vcredist_windows() -> bool:
     try:
         import winreg
@@ -1325,14 +1214,6 @@ def is_vulkan_installed() -> bool:
             return result1.returncode == 0 or b"libvulkan" in result2.stdout
         except FileNotFoundError:
             return False
-
-
-def verify_backend_dependencies(backend: str) -> bool:
-    if backend == "Vulkan GPU":
-        if not is_vulkan_installed():
-            print_status("Warning: Vulkan not detected!", False)
-            return False
-    return True
 
 
 def pip_install_with_retry(pip_exe: str, package: str, extra_args: list = None,
@@ -3080,8 +2961,6 @@ def install():
     if not check_version_compatibility():
         sys.exit(1)
 
-    detect_version_selections()
-
     install_mode = select_install_mode()
 
     python_version = (f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -3189,7 +3068,7 @@ def install():
     print(f"Installing {APP_NAME} v2 on {os_display} with Python {py_ver}")
     print(f"  Mode: {mode_label}")
     print(f"  Route: {backend}")
-    print(f"  Llama.Cpp {LLAMACPP_TARGET_VERSION}, Gradio {SELECTED_GRADIO}, Qt-Web {SELECTED_QTWEB}")
+    print(f"  Llama.Cpp {LLAMACPP_TARGET_VERSION}")
     print(f"  Embedding: {embedding_model}")
 
     if PLATFORM == "windows":
