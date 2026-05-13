@@ -326,18 +326,22 @@ class WebSearchEngine:
                 'metadata': {'type': 'web_search', 'query': query, 'error': error_msg, 'sources': []}
             }
         
-        # Phase 1: Gather search results via DDGS API only.
-        # Web Search is intentionally DDGS-API-only (no HTML scraper) so that it
-        # is cleanly distinct from DDG Search (hybrid_search).  The value of
-        # Web Search over DDG Search is the comprehensive deep-page fetching, not
-        # a different indexer.
+        # Phase 1: Gather search results — DDGS API (primary) + DDG HTML scrape (supplemental).
+        # Both sources feed the same ranking/scoring pipeline; deduplication by URL ensures
+        # no result appears twice.  The DDGS API is tried first; HTML scrape adds breadth
+        # for queries where the API returns fewer than max_results hits.
         print(f"[WEB-SEARCH] Searching for: {query}")
         
         all_results = []
         
-        # DDGS API search only
+        # Primary: DDGS API search
         api_results = self._search_ddgs_api(query, max_results)
         all_results.extend(api_results)
+        
+        # Supplemental: DDG HTML scrape — adds results when API coverage is thin
+        if len(all_results) < max_results:
+            html_results = self._search_duckduckgo_html(query, max_results)
+            all_results.extend(html_results)
         
         if not all_results:
             return {

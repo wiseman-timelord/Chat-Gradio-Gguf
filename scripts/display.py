@@ -50,7 +50,7 @@ from scripts.configure import (
 # Utility & helper modules
 from scripts import utility
 from scripts.utility import (
-    hybrid_search, is_research_available, short_path,
+    is_research_available, short_path,
     get_saved_sessions, get_cpu_info, load_session_history, save_session_history,
     get_available_gpus, filter_operational_content, process_files, eject_file, 
     summarize_session, beep, update_file_slot_ui 
@@ -251,7 +251,15 @@ def _launch_qt6_browser(url, title, width, height, frameless, maximized):
 
     QTimer.singleShot(100, load_url)
     print("[BROWSER] Qt6 WebEngine window created")
-    _qt_app.exec()
+    try:
+        _qt_app.exec()
+    except Exception as e:
+        # COM RPC_E_SERVERFAULT (0x80010108) occurs on exit when background threads
+        # attempt COM calls after the main thread has terminated. Safe to ignore.
+        if "0x80010108" in str(e):
+            print("[BROWSER] COM RPC error ignored (normal during shutdown)")
+        else:
+            raise
     print("[BROWSER] Qt6 event loop exited")
 
 
@@ -1366,18 +1374,13 @@ def update_backend_ui():
         gr.update()
     ]
 
-def build_progress_html(step: int, ddg_search_enabled: bool = False, 
-                        web_search_enabled: bool = False):
+def build_progress_html(step: int, web_search_enabled: bool = False):
     """
     Build dynamic progress indicator HTML based on enabled features.
     
     Cases:
-    1. Vanilla (no search, no TTS): 9 steps (0-8)
-    2. DDG hybrid search: 14 steps (adds 5 search phases + Inject Context)
-    3. Web search: 14 steps (adds 5 search phases + Inject Context)  
-    4. TTS enabled: +2 steps (Generating TTS, Playing TTS)
-    
-    Note: DDG and Web search are mutually exclusive.
+    1. Vanilla (no search): 8 steps (0-7)
+    2. Web search: 13 steps (adds 5 search phases + Inject Context)
     """
     # Base phases (always present) - indices 0-5
     base_phases = [
@@ -1391,14 +1394,8 @@ def build_progress_html(step: int, ddg_search_enabled: bool = False,
     
     phases = base_phases.copy()
     
-    # Add search phases if either search mode is enabled (they're mutually exclusive)
-    if ddg_search_enabled:
-        phases.append("DDG Pre-Search")    # 6
-        phases.append("Analyze Results")   # 7
-        phases.append("Deep Fetch")        # 8
-        phases.append("Merge Results")     # 9
-        phases.append("Inject Context")    # 10
-    elif web_search_enabled:
+    # Add search phases if web search is enabled
+    if web_search_enabled:
         phases.append("Search Discovery")  # 6
         phases.append("Rank & Select")     # 7
         phases.append("Parallel Fetch")    # 8
@@ -1434,128 +1431,131 @@ def handle_cpu_threads_change(new_threads):
 def extract_search_query(user_input: str) -> str:
     """
     Extract a clean, focused search query from natural language user input.
-    Prioritizes substantive content over meta/discussion text.
+
+    Order of operations:
+      1. Strip trailing output-format instructions ("compile a report", "for the last 28 days", etc.)
+      2. Strip leading research/task instruction prefixes ("Produce web research upon...", etc.)
+      3. If the result is still multi-sentence, score and pick the best sentence.
+      4. Final cleanup and whitespace normalisation.
+      5. Fallback to proper-noun extraction if result is still too short.
+      6. Truncate at 120 chars (generous — preserves full topic phrases).
     """
     import re
-    
+
     original = user_input.strip()
-    
-    # Step 1: Split on fallback instructions (keep only the first part)
-    fallback_patterns = [
-        r'\s*if\s+(?:you\s+)?(?:cannot|can\'t|could\s+not).*$',  # "if you cannot..."
-        r'\s*if\s+that\s+fails.*$',  # "if that fails..."
-        r'\s*otherwise.*$',  # "otherwise..."
-        r'\s*alternatively.*$',  # "alternatively..."
-        r'\s+in\s+which\s+case.*$',  # "in which case..."
-        r'\s+if\s+not.*$',  # "if not..."
-    ]
-    
-    working_text = original
-    for pattern in fallback_patterns:
-        working_text = re.sub(pattern, '', working_text, flags=re.IGNORECASE | re.DOTALL)
-    
-    # Step 2: Remove meta/development/testing preambles (CRITICAL FIX)
-    # These patterns remove "I am developing...", "Here is a test...", etc.
-    meta_patterns = [
+    working = original
+
+    # ── Step 1: Strip leading research/task instruction prefixes ─────────────
+    # Run FIRST so "Produce web research and compile a report, [TOPIC]" has its
+    # prefix removed before trailing strips run — otherwise trailing strips
+    # consume the embedded topic along with the format instruction.
+    leading_patterns = [
+        # "Produce (a) web research (and compile a report)? (upon|on|about|…)? (recent events relating to)?"
+        r'^produce\s+(?:a\s+)?web\s+(?:research|search)\b\s*(?:and\s+compile\s+(?:a\s+)?(?:report|timeline|summary)\s*)?,?\s*(?:upon|on|about|for|regarding|into|relating\s+to)?\s*(?:recent\s+events?\s*(?:relating\s+to|regarding|about|on|in|concerning)?\s*)?',
+        # "compile a report, …" left over after produce-web-research strip
+        r'^compile\s+(?:a\s+)?(?:report|timeline|summary|analysis)\s*,?\s*',
+        # "I want a timeline of (the) events (from) (the most recent N days) (relating to / about / on)?"
+        r'^i\s+want\s+a\s+(?:timeline|report|summary|list)\s+of\s+(?:the\s+)?events?\s+(?:from\s+)?(?:the\s+)?(?:most\s+recent|last|past)\s+\d+\s+days?\s*(?:relating\s+to|about|on|in|regarding|concerning)?\s*',
+        r'^i\s+want\s+a\s+(?:timeline|report|summary|list)\s+of\s+(?:the\s+)?(?:events?\s+)?(?:from\s+|about\s+|on\s+|regarding\s+)?',
+        # "Do/Perform/Run/Conduct (a) web search/research on/for/about (recent events …)?"
+        r'^(?:do|perform|run|conduct)\s+(?:a\s+)?web\s+(?:search|research)\s*(?:on|for|about|regarding|into|upon)?\s*(?:recent\s+events?\s*(?:relating\s+to|regarding|about|on|in)?\s*)?',
+        # "Search (the web / online) for/about (recent events …)?"
+        r'^search\s+(?:the\s+web\s+|online\s+)?(?:for|about|on|regarding|into)?\s*(?:recent\s+events?\s*(?:relating\s+to|regarding|about|on|in)?\s*)?',
+        # "Find / Look up / Get / Fetch (recent news/info …)? about/on/…"
+        r'^(?:find|look\s+up|look\s+for|get|fetch)\s+(?:(?:recent|latest|current|new)\s+)?(?:news|information|info|data|details|updates?|results?)?\s*(?:about|on|for|regarding|into)?\s*',
+        # "Research (the / recent events about)?"
+        r'^research\s+(?:(?:the|recent|latest|current)\s+)?(?:events?\s+(?:about|on|in|regarding)?\s*)?',
+        # "What is/are the latest/recent/current news/updates/events about/on/…"
+        r'^what\s+(?:are|is)\s+(?:the\s+)?(?:latest|recent|current|new)\s+(?:news|information|updates?|events?|developments?)\s+(?:about|on|regarding|in|concerning)\s+',
+        # "Can you / Could you / Please (search|find|look up|research) (for/about/on/into)?"
+        r'^(?:can\s+you|could\s+you|would\s+you|will\s+you|please)?\s*(?:please\s+)?(?:search|find|look\s+up|research|google|check|investigate|tell\s+me\s+about)\s+(?:for\s+|about\s+|on\s+|into\s+)?',
+        # "I want/need/would like (a report on / information about / to know about)?"
+        r'^i\s+(?:want|need|would\s+like)\s+(?:(?:a\s+)?(?:report|timeline|summary|analysis)\s+(?:on|about|of|regarding)\s+|(?:to\s+know|information|info)\s+(?:about|on|regarding)\s+)?',
+        # "I want a timeline of (the events from)?"
+        r'^i\s+want\s+a\s+timeline\s+of\s+(?:the\s+)?(?:events?\s+(?:from|in|about|on|regarding)?\s*)?',
+        # Dev/test preambles
         r'^.*?(?:i\'?m?|i\s+am)\s+(?:developing|building|creating|working\s+on|testing)\s+(?:the|my|this)?\s*(?:internet\s+based\s+tools?|tools?|chatbot|ai|program|script|features?).*?(?:so\s+here|here)\s+(?:is|are|goes)\s*(?:a\s+)?(?:test|example).*?\n+',
-        r'^.*?(?::\s*\n+|\.\.\.\n+|,\s*so\s+here\s+is\s+a\s+test[:\s]*\n+)',
         r'^(?:test|testing)[:\s-]+',
-        r'^.*?(?:just|simply)?\s*(?:trying\s+to|want\s+to|need\s+to)\s+test\s+.*?(?:please|find|search|look)',
     ]
-    
-    query = working_text
-    for pattern in meta_patterns:
-        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
-    
-    # Step 3: If query is still mostly meta-text, look for the actual topic sentence
-    # The real query usually contains specific entities (Iran, 2026, etc.)
-    sentences = re.split(r'(?<=[.!?])\s+', query)
-    
-    # Score each sentence - prefer sentences with:
-    # - Proper nouns (capitalized words not at start)
-    # - Years/dates
-    # - Location names
-    # - Action words (find, search, what, tell me about)
-    best_sentence = ""
-    best_score = -1
-    
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if len(sentence) < 10:
-            continue
-            
-        score = 0
-        
-        # Prefer sentences with capitalized words in the middle (proper nouns)
-        words = sentence.split()
-        for i, word in enumerate(words):
-            if i > 0 and word[0].isupper() and len(word) > 2:
-                score += 3  # Proper noun likely
-        
-        # Prefer sentences with years
-        if re.search(r'\b20\d\d\b', sentence):
-            score += 5
-        
-        # Prefer sentences with location indicators
-        location_words = ['iran', 'iraq', 'syria', 'ukraine', 'russia', 'china', 'protest', 'uprising', 'war', 'election', 'news']
-        for loc in location_words:
-            if loc in sentence.lower():
-                score += 4
-        
-        # Demerit for meta words
-        meta_words = ['chatbot', 'test', 'testing', 'developing', 'tool', 'feature', 'internet', 'based', 'i am', "i'm"]
-        for meta in meta_words:
-            if meta in sentence.lower():
-                score -= 2
-        
-        if score > best_score:
-            best_score = score
-            best_sentence = sentence
-    
-    # If we found a good substantive sentence, use it
-    if best_score > 0:
-        query = best_sentence
-    else:
-        # Fallback: if no good sentence found, use what we have but clean it
-        pass
-    
-    # Step 4: Remove common request wrappers
-    wrappers = [
-        r'^(?:can\s+you|could\s+you|would\s+you|will\s+you)?\s*(?:please\s+)?(?:search|find|look\s+up|research|google|check|investigate|tell\s+me)\s+(?:for\s+|about\s+|on\s+|into\s+)?',
-        r'^(?:what\s+(?:is|are)\s+(?:the\s+)?(?:latest|current|recent|new)\s+(?:news|information|updates|developments)\s+(?:on|about|regarding)\s+)',
-        r'^(?:find\s+(?:out\s+)?(?:what\s+you\s+can\s+)?(?:about\s+)?)',
-        r'^(?:i\s+(?:want|need|would\s+like)\s+(?:to\s+know\s+)?(?:about\s+)?)',
+
+    query = working
+    for pattern in leading_patterns:
+        candidate = re.sub(pattern, '', query, flags=re.IGNORECASE).strip()
+        if len(candidate) > 4:
+            query = candidate
+
+    # ── Step 2: Strip trailing output-format / scope instructions ────────────
+    # Now runs AFTER leading so topic exposed by step 1 is not consumed.
+    trailing_patterns = [
+        # "and compile a report / timeline / summary …"
+        r',?\s*(?:and\s+)?(?:then\s+)?(?:compile|create|write|produce|generate|build|format)\s+(?:a\s+)?(?:report|timeline|summary|analysis|list|overview|review)\b.*$',
+        # "then present / display / show the results …"
+        r',?\s*(?:and\s+)?(?:then\s+)?(?:present|display|show|output)\s+(?:it|them|the\s+results?)\b.*$',
+        # "for / over the most recent / last / past N days …"
+        r',?\s*(?:for|over)\s+(?:the\s+)?(?:most\s+recent|last|past)\s+\d+\s+days?\b.*$',
+        # "from the current date …"
+        r',?\s*from\s+the\s+current\s+date\b.*$',
+        # fallback conditionals
+        r'\s*if\s+(?:you\s+)?(?:cannot|can\'t|could\s+not)\b.*$',
+        r'\s*if\s+that\s+fails\b.*$',
+        r'\s*otherwise\b.*$',
+        r'\s*alternatively\b.*$',
+        r'\s+in\s+which\s+case\b.*$',
     ]
-    
-    for pattern in wrappers:
-        query = re.sub(pattern, '', query, flags=re.IGNORECASE)
-    
-    # Step 5: Clean up
-    query = query.strip()
-    query = re.sub(r'^["\']+', '', query)  # Remove leading quotes
-    query = re.sub(r'["\']+$', '', query)  # Remove trailing quotes
-    query = re.sub(r'\s+', ' ', query)  # Normalize whitespace
-    query = re.sub(r'[.!?]+$', '', query)  # Remove trailing punctuation
-    
-    # If query is empty or too short, use a keyword extraction fallback
+    for pattern in trailing_patterns:
+        candidate2 = re.sub(pattern, '', query, flags=re.IGNORECASE | re.DOTALL).strip()
+        if len(candidate2) > 4:
+            query = candidate2
+
+    # ── Step 3: Multi-sentence → pick best sentence ──────────────────────────
+    if re.search(r'[.!?]', query):
+        sentences = re.split(r'(?<=[.!?])\s+', query)
+        best_sentence, best_score = '', -1
+        topic_words = [
+            'iran', 'iraq', 'israel', 'syria', 'ukraine', 'russia', 'china',
+            'middle.?east', 'war', 'conflict', 'election', 'crisis', 'attack',
+            'ceasefire', 'nuclear', 'climate', 'economy', 'protest', 'uprising',
+        ]
+        meta_words = ['chatbot', 'test', 'testing', 'developing', 'tool', 'i am', "i'm"]
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) < 10:
+                continue
+            score = 0
+            words = sentence.split()
+            for i, word in enumerate(words):
+                if i > 0 and word[0].isupper() and len(word) > 2:
+                    score += 3
+            if re.search(r'\b20\d\d\b', sentence):
+                score += 5
+            for tw in topic_words:
+                if re.search(tw, sentence, re.IGNORECASE):
+                    score += 4
+            for mw in meta_words:
+                if mw in sentence.lower():
+                    score -= 2
+            if score > best_score:
+                best_score, best_sentence = score, sentence
+        if best_score >= 0 and best_sentence:
+            query = best_sentence
+
+    # ── Step 4: Final cleanup ─────────────────────────────────────────────────
+    query = query.strip().strip('"\'').strip()
+    query = re.sub(r'\s+', ' ', query)
+    query = re.sub(r'[.!?]+$', '', query).strip()
+
+    # ── Step 5: Fallback — proper-noun / year extraction ─────────────────────
     if len(query) < 5:
-        # Extract all capitalized words and years from original
-        keywords = []
-        # Find capitalized phrases (proper nouns)
-        for match in re.finditer(r'\b[A-Z][a-zA-Z]{2,}\b', original):
-            word = match.group()
-            if word.lower() not in ['i', 'the', 'a', 'an', 'and', 'or', 'but', 'so', 'here', 'test']:
-                keywords.append(word)
-        # Find years
-        for match in re.finditer(r'\b20\d\d\b', original):
-            keywords.append(match.group())
-        
-        query = ' '.join(keywords[:6]) if keywords else original[:80]
-    
-    # Step 6: Truncate if too long
-    if len(query) > 80:
-        query = query[:80].rsplit(' ', 1)[0]
-    
+        skip = {'the', 'a', 'an', 'and', 'or', 'but', 'so', 'here', 'test', 'i'}
+        keywords = [m.group() for m in re.finditer(r'\b[A-Z][a-zA-Z]{2,}\b', original)
+                    if m.group().lower() not in skip]
+        keywords += [m.group() for m in re.finditer(r'\b20\d\d\b', original)]
+        query = ' '.join(keywords[:8]) if keywords else original[:100]
+
+    # ── Step 6: Truncate — 120 chars preserves full topic phrases ────────────
+    if len(query) > 120:
+        query = query[:120].rsplit(' ', 1)[0]
+
     print(f"[SEARCH-QUERY] Original: '{original[:60]}...' → Extracted: '{query}'")
     return query
 
@@ -1602,7 +1602,7 @@ _cancel_event = threading.Event()
 
 def conversation_display(
     user_input, session_tuples, session_messages, loaded_files,
-    is_reasoning_model, cancel_flag, ddg_search_enabled, web_search_enabled,
+    is_reasoning_model, cancel_flag, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
     has_ai_response_state
 ):
@@ -1762,7 +1762,7 @@ def conversation_display(
         session_messages, 
         " ",
         gr.update(visible=False, value=""),
-        gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled)),
+        gr.update(visible=True, value=build_progress_html(4, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, 
         loaded_files, 
@@ -1800,7 +1800,7 @@ def conversation_display(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, ddg_search_enabled, web_search_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         llm_state, models_loaded_state
@@ -1834,7 +1834,7 @@ def conversation_display(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, ddg_search_enabled, web_search_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         llm_state, models_loaded_state
@@ -1848,7 +1848,7 @@ def conversation_display(
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, ddg_search_enabled, web_search_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         llm_state, models_loaded_state
@@ -1867,7 +1867,7 @@ def conversation_display(
         session_messages, 
         " ",
         gr.update(visible=False, value=""),
-        gr.update(visible=True, value=build_progress_html(4, ddg_search_enabled, web_search_enabled)),
+        gr.update(visible=True, value=build_progress_html(4, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, 
         loaded_files, 
@@ -1881,17 +1881,14 @@ def conversation_display(
     model_settings = get_model_settings(cfg.MODEL_NAME)
     
     
-    # SEARCH LOGIC: Handle DDG Search and Web Search (mutually exclusive)
+    # SEARCH LOGIC: Web Search (DDG API + deep article fetch)
     
     search_results = None
     search_metadata = None
     search_status_text = ""
     search_warning = ""
     
-    # Determine which search mode is active (only one can be active at a time)
-    search_active = ddg_search_enabled or web_search_enabled
-    
-    if search_active and user_input.strip():
+    if web_search_enabled and user_input.strip():
         try:
             # Calculate context-scaled search parameters
             # Base values are calibrated for 32768 context (multiplier = 1.0)
@@ -1904,14 +1901,9 @@ def conversation_display(
                 print(f"[SEARCH-WARNING] {search_warning}")
             
             # Scale parameters based on context (min values ensure functionality)
-            # DDG Search: base 8 results, 4 deep fetch at 32k context
             # Web Search: base 12 results, 6 deep fetch at 32k context
-            if ddg_search_enabled:
-                scaled_ddg_results = max(4, round(8 * context_multiplier))
-                scaled_deep_fetch = max(2, round(4 * context_multiplier))
-            else:
-                scaled_max_results = max(6, round(12 * context_multiplier))
-                scaled_deep_fetch = max(3, round(6 * context_multiplier))
+            scaled_max_results = max(6, round(12 * context_multiplier))
+            scaled_deep_fetch = max(3, round(6 * context_multiplier))
             
             # Use proper query extraction
             search_query = extract_search_query(user_input)
@@ -1920,14 +1912,9 @@ def conversation_display(
             print(f"[SEARCH-DEBUG] Original input: {user_input[:100]}...")
             print(f"[SEARCH-DEBUG] Extracted query: '{search_query}'")
             
-            if ddg_search_enabled:
-                # DDG Hybrid Search with scaled parameters
-                print(f"[HYBRID-SEARCH] Query: {search_query} (ctx={effective_ctx}, results={scaled_ddg_results}, deep={scaled_deep_fetch})")
-                result = utility.hybrid_search(search_query, ddg_results=scaled_ddg_results, deep_fetch=scaled_deep_fetch)
-            else:
-                # Comprehensive Web Search with scaled parameters
-                print(f"[WEB-SEARCH] Query: {search_query} (ctx={effective_ctx}, results={scaled_max_results}, deep={scaled_deep_fetch})")
-                result = utility.web_search(search_query, max_results=scaled_max_results, deep_fetch=scaled_deep_fetch)
+            # Comprehensive Web Search with scaled parameters
+            print(f"[WEB-SEARCH] Query: {search_query} (ctx={effective_ctx}, results={scaled_max_results}, deep={scaled_deep_fetch})")
+            result = utility.web_search(search_query, max_results=scaled_max_results, deep_fetch=scaled_deep_fetch)
             
             # Extract content and metadata from dict return format
             if isinstance(result, dict):
@@ -1935,8 +1922,7 @@ def conversation_display(
                 search_metadata = result.get('metadata', {})
             else:
                 search_results = result
-                search_type = 'hybrid' if ddg_search_enabled else 'web_search'
-                search_metadata = {'type': search_type, 'query': search_query, 'sources': [], 'error': None}
+                search_metadata = {'type': 'web_search', 'query': search_query, 'sources': [], 'error': None}
             
             # Add context scaling info to metadata
             if search_metadata:
@@ -1956,24 +1942,23 @@ def conversation_display(
             import traceback
             traceback.print_exc()
             search_results = f"Search error: {str(e)}"
-            search_type = 'hybrid' if ddg_search_enabled else 'web_search'
-            search_metadata = {'type': search_type, 'query': user_input[:100], 'error': str(e), 'sources': []}
+            search_metadata = {'type': 'web_search', 'query': user_input[:100], 'error': str(e), 'sources': []}
             search_status_text = f"⚠️ Search Error: {str(e)}"
     
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, ddg_search_enabled, web_search_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, web_search_enabled)),
         *update_action_buttons("input_submitted", has_ai_response),
         cancel_flag, loaded_files, "input_submitted",
         llm_state, models_loaded_state
     )
 
-    # Search progress phases (if any search is enabled)
-    if ddg_search_enabled or web_search_enabled:
+    # Search progress phases (if web search is enabled)
+    if web_search_enabled:
         for phase_idx in [6, 7, 8, 9, 10]:
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, ddg_search_enabled, web_search_enabled)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, web_search_enabled)),
                 *update_action_buttons("input_submitted", has_ai_response),
                 cancel_flag, loaded_files, "input_submitted",
                 llm_state, models_loaded_state
@@ -1981,7 +1966,7 @@ def conversation_display(
             time.sleep(0.15)
 
     # Calculate Generate Stream phase index
-    if ddg_search_enabled or web_search_enabled:
+    if web_search_enabled:
         generate_phase = 11
     else:
         generate_phase = 6
@@ -1998,7 +1983,7 @@ def conversation_display(
     try:
         yield (
             get_chatbot_output(session_tuples, session_messages), session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled)),
+            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, web_search_enabled)),
             *update_action_buttons("generating_response", has_ai_response),
             cancel_flag, loaded_files, "generating_response",
             llm_state, models_loaded_state
@@ -2008,7 +1993,7 @@ def conversation_display(
         for chunk in get_response_stream(
             session_log=session_messages,
             settings=model_settings,
-            ddg_search_enabled=ddg_search_enabled,
+            web_search_enabled=web_search_enabled,
             search_results=search_results,
             cancel_event=_cancel_event,
             llm_state=llm_state,
@@ -2041,7 +2026,7 @@ def conversation_display(
             
             yield (
                 get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, ddg_search_enabled, web_search_enabled)),
+                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, web_search_enabled)),
                 *update_action_buttons("generating_response", has_ai_response),
                 cancel_flag, loaded_files, "generating_response",
                 llm_state, models_loaded_state
@@ -2053,7 +2038,7 @@ def conversation_display(
         session_tuples[-1] = (session_tuples[-1][0], accumulated_response)
 
     # Format Response phase
-    format_phase = 12 if (ddg_search_enabled or web_search_enabled) else 7
+    format_phase = 12 if web_search_enabled else 7
     formatted_response = format_response(accumulated_response)
     # Strip any model-generated AI-Chat: before re-adding our tag
     formatted_response = re.sub(r'^AI-Chat:\s*\n?', '', formatted_response, flags=re.MULTILINE)
@@ -2062,7 +2047,7 @@ def conversation_display(
 
     yield (
         get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(format_phase, ddg_search_enabled, web_search_enabled)),
+        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(format_phase, web_search_enabled)),
         *update_action_buttons("generating_response", has_ai_response),
         cancel_flag, loaded_files, "generating_response",
         llm_state, models_loaded_state
@@ -2135,43 +2120,16 @@ def strip_separators(text: str) -> str:
     return text
 
 
-def toggle_ddg_search(current_ddg_state, current_web_state):
-    """Toggle DDG Search (hybrid mode). Disables Web Search if enabling DDG."""
-    import gradio as gr
-    
-    new_ddg_state = not current_ddg_state
-    
-    # If enabling DDG, disable Web Search (mutual exclusivity)
-    new_web_state = False if new_ddg_state else current_web_state
-    
-    ddg_variant = "primary" if new_ddg_state else "secondary"
-    web_variant = "primary" if new_web_state else "secondary"
-    
-    return (
-        new_ddg_state,                                          # ddg_search_enabled state
-        new_web_state,                                          # web_search_enabled state
-        gr.update(variant=ddg_variant),                         # ddg_search button
-        gr.update(variant=web_variant),                         # web_search button
-    )
-
-
-def toggle_web_search(current_web_state, current_ddg_state):
-    """Toggle Web Search (comprehensive mode). Disables DDG Search if enabling Web Search."""
+def toggle_web_search(current_web_state):
+    """Toggle Web Search (comprehensive DDG + deep-fetch mode)."""
     import gradio as gr
     
     new_web_state = not current_web_state
-    
-    # If enabling Web Search, disable DDG Search (mutual exclusivity)
-    new_ddg_state = False if new_web_state else current_ddg_state
-    
     web_variant = "primary" if new_web_state else "secondary"
-    ddg_variant = "primary" if new_ddg_state else "secondary"
     
     return (
         new_web_state,                                          # web_search_enabled state
-        new_ddg_state,                                          # ddg_search_enabled state
-        gr.update(variant=web_variant),                         # web_search button
-        gr.update(variant=ddg_variant),                         # ddg_search button
+        gr.update(variant=web_variant),                        # web_search button
     )
 
 
@@ -2367,7 +2325,6 @@ def launch_display():
             left_expanded_state=gr.State(True),
             right_expanded_state=gr.State(True),
             model_settings=gr.State({}),
-            ddg_search_enabled=gr.State(False),
             web_search_enabled=gr.State(False),
             has_ai_response=gr.State(False),  # ← MUST BE INITIALIZED HERE
             tts_state=gr.State(value="idle")
@@ -2431,10 +2388,6 @@ def launch_display():
                                     elem_classes=["progress-indicator"]
                                 )
                             with gr.Column(scale=1, min_width=55, elem_classes=["clean-elements"]):
-                                action_buttons["ddg_search"] = gr.Button(
-                                    "🔍", variant="secondary",
-                                    elem_id="cguf-ddg-btn", min_width=50
-                                )
                                 action_buttons["web_search"] = gr.Button(
                                     "🌐", variant="secondary",
                                     elem_id="cguf-web-btn", min_width=50
@@ -2952,7 +2905,6 @@ def launch_display():
                 states["attached_files"],                   # loaded_files
                 states["is_reasoning_model"],               # is_reasoning_model flag
                 states["cancel_flag"],                      # cancel_flag state
-                states["ddg_search_enabled"],               # ddg_search_enabled state
                 states["web_search_enabled"],               # web_search_enabled state
                 states["interaction_phase"],                # interaction_phase state
                 states["llm"],                              # llm state object
@@ -3261,27 +3213,13 @@ def launch_display():
             outputs=[states["right_expanded_state"], right_column_expanded, right_column_collapsed]
         )
 
-        # DDG Search toggle - mutually exclusive with Web Search
-        action_buttons["ddg_search"].click(
-            fn=toggle_ddg_search,
-            inputs=[states["ddg_search_enabled"], states["web_search_enabled"]],
-            outputs=[
-                states["ddg_search_enabled"],
-                states["web_search_enabled"],
-                action_buttons["ddg_search"],
-                action_buttons["web_search"]
-            ]
-        )
-
-        # Web Search toggle - mutually exclusive with DDG Search
+        # Web Search toggle
         action_buttons["web_search"].click(
             fn=toggle_web_search,
-            inputs=[states["web_search_enabled"], states["ddg_search_enabled"]],
+            inputs=[states["web_search_enabled"]],
             outputs=[
                 states["web_search_enabled"],
-                states["ddg_search_enabled"],
                 action_buttons["web_search"],
-                action_buttons["ddg_search"]
             ]
         )
 
@@ -3715,14 +3653,12 @@ def launch_display():
     setTimeout(injectButtons, 2000);
     setTimeout(injectButtons, 4000);
 
-    /* Set tooltips on search icon buttons by elem_id */
+    /* Set tooltip on web search icon button by elem_id */
     (function setSearchTooltips() {
         function applyTooltips() {
-            var ddg = document.querySelector('#cguf-ddg-btn button');
             var web = document.querySelector('#cguf-web-btn button');
-            if (ddg) ddg.title = 'DDG Search';
             if (web) web.title = 'Web Search';
-            if (!ddg || !web) setTimeout(applyTooltips, 500);
+            if (!web) setTimeout(applyTooltips, 500);
         }
         applyTooltips();
     })();

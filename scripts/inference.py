@@ -85,7 +85,7 @@ Summarize the key information focusing on relevance and recency.""",
 }
 
 
-def get_system_message(is_uncensored=False, is_nsfw=False, ddg_search_enabled=False,
+def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=False,
                        is_reasoning=False, is_roleplay=False, is_code=False, is_moe=False,
                        is_vision=False, is_thinking_capable=False, is_gemma4=False):
     """Build system message based on model characteristics."""
@@ -101,7 +101,7 @@ def get_system_message(is_uncensored=False, is_nsfw=False, ddg_search_enabled=Fa
 
     system = base
 
-    if ddg_search_enabled:
+    if web_search_enabled:
         system += " " + PROMPT_TEMPLATES["ddg_search"]
 
     if is_reasoning:
@@ -864,21 +864,38 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         if SELECTED_GPU and SELECTED_GPU != "Auto-Select":
             from scripts.utility import get_available_gpus
             gpu_list = get_available_gpus()
+            # Normalise the selected GPU name (remove "(TM)", extra spaces, lower case)
+            selected_norm = SELECTED_GPU.lower().replace("(tm)", "").strip()
+            selected_idx = None
             print("\n[VULKAN] GPU Selection:")
             print(f"  User selected: {SELECTED_GPU}")
             for idx, gpu_name in enumerate(gpu_list):
-                marker = "  <- SELECTED" if gpu_name == SELECTED_GPU else ""
+                gpu_norm = gpu_name.lower().replace("(tm)", "").strip()
+                marker = ""
+                # Fuzzy match: exact, contains, or contained in
+                if (gpu_norm == selected_norm or
+                    selected_norm in gpu_norm or
+                    gpu_norm in selected_norm):
+                    selected_idx = idx
+                    marker = "  <- SELECTED"
                 print(f"    Vulkan{idx}: {gpu_name}{marker}")
-            try:
-                gpu_index = gpu_list.index(SELECTED_GPU)
-                os.environ["GGML_VULKAN_DEVICE"] = str(gpu_index)
-                print(f"[VULKAN] Set GGML_VULKAN_DEVICE={gpu_index} ({SELECTED_GPU})\n")
-            except (ValueError, IndexError):
-                print("[VULKAN] Warning: selected GPU not found, defaulting to Vulkan0\n")
+
+            if selected_idx is not None:
+                # Both environment variables are needed for full restriction
+                os.environ["VK_VISIBLE_DEVICES"] = str(selected_idx)
+                os.environ["GGML_VULKAN_DEVICE"] = str(selected_idx)
+                print(f"[VULKAN] Restricting to device index {selected_idx} ({gpu_list[selected_idx]})\n")
+            else:
+                print("[VULKAN] Selected GPU not found in device list, falling back to Vulkan0\n")
+                os.environ.pop("VK_VISIBLE_DEVICES", None)
                 os.environ["GGML_VULKAN_DEVICE"] = "0"
         else:
             print("[VULKAN] Auto-select mode - will use Vulkan0\n")
+            os.environ.pop("VK_VISIBLE_DEVICES", None)
             os.environ["GGML_VULKAN_DEVICE"] = "0"
+    else:
+        # CPU_CPU mode: remove Vulkan restrictions
+        os.environ.pop("VK_VISIBLE_DEVICES", None)
 
     chat_handler = None
     if is_vision:
@@ -1224,7 +1241,7 @@ def build_messages_with_context_management(session_log, system_message, context_
     return messages
 
 
-def get_response_stream(session_log, settings, ddg_search_enabled=False, search_results=None,
+def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None,
                         cancel_event=None, llm_state=None, models_loaded_state=False):
     """Streaming response generator with unified thinking-phase handling."""
     from scripts.utility import beep, clean_content, read_file_content
@@ -1258,7 +1275,7 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
     system_message = get_system_message(
         is_uncensored=settings.get("is_uncensored", False),
         is_nsfw=settings.get("is_nsfw", False),
-        ddg_search_enabled=ddg_search_enabled,
+        web_search_enabled=web_search_enabled,
         is_reasoning=settings.get("is_reasoning", False),
         is_roleplay=settings.get("is_roleplay", False),
         is_code=settings.get("is_code", False),
@@ -1269,11 +1286,20 @@ def get_response_stream(session_log, settings, ddg_search_enabled=False, search_
     ) + "\nRespond directly without prefixes like 'AI-Chat:'."
 
     if search_results:
+        _is_thinking = settings.get("is_thinking_capable", False) or settings.get("is_reasoning", False)
+        _budget_note = (
+            f"You have {cfg.BATCH_SIZE} tokens available to produce your final report."
+            " Compile your response within this limit, including the THINK phase at the start."
+            if _is_thinking else
+            f"You have {cfg.BATCH_SIZE} tokens available to produce your final report."
+            " Compile your response within this limit."
+        )
         system_message += (
             f"\n\n--- WEB SEARCH CONTEXT ---\n{search_results}\n--- END SEARCH CONTEXT ---\n\n"
-            "IMPORTANT: Base your response on the search results above. Cite sources when possible."
+            f"IMPORTANT: Base your response on the search results above. Cite sources when possible."
+            f"\n\n{_budget_note}"
         )
-    elif ddg_search_enabled:
+    elif web_search_enabled:
         system_message += "\n\n[Note: Web search enabled but returned no results. Answer from knowledge.]"
 
     print(f"[RESPONSE-STREAM] System message: {len(system_message)} chars | "
