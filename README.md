@@ -398,30 +398,23 @@ Web Search = Slower actual website reading research.
 
 ### Models working (with gpt for comparrisson).
 - If you installed with compile option, then you will be able to use the newer models, otherwise with non-compile install will work with models from ~6 months ago, but dont quote me on that. This is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source. 
-- Chat-Gradio-Ggud is currently being programmed towards these models....
+- Chat-Gradio-Ggud is currently being programmed towards these models, and performance for the intended models is reported to be like this (no good ~30b models for GLM 5.1 yet)...
 
-![image_missing](media/model_info.jpg)
-
-- Performance for the intended models is reported to be like this...
-
-| Model                                      | IFEval                  | BBH            | MATH / MATH-500          | GPQA / Diamond       | MuSR       | MMLU / MMLU-Pro              | Notes / Other |
-|--------------------------------------------|-------------------------|----------------|--------------------------|----------------------|------------|------------------------------|---------------|
-| Early GPT-4 (ref)                          | N/A                     | ~50%*          | 42.2%                    | N/A                  | N/A        | 86.4%                        | Reference |
-| Early GPT-4o (ref)                         | N/A                     | ~60%*          | 52.9%*                   | N/A                  | N/A        | 87.5%*                       | Reference |
-| Qwen3-30B-A3B (MoE)                        | ~91.6%                  | ~62-72%        | 80.4%+                   | 65.8%+               | 72.2%      | High 70s-82%                 | Strong efficient MoE |
-| Qwen3-8B                                   | ~83%                    | 56.73%         | 60.80%                   | 44.44%               | N/A        | 76.89%                       | - |
-| Qwen3.5-9B (distilled example)             | 91.5%                   | N/A            | N/A                      | 81.7% (Diamond)      | N/A        | 82.5% (MMLU-Pro)             | - |
-| Qwen3.5-27B (distilled)                    | 95.0%                   | N/A            | N/A                      | 85.5% (Diamond)      | N/A        | 86.1% (MMLU-Pro)             | - |
-| Qwen3/3.5/3.6 Large (e.g. 235B-A22B)      | 94-95%+                 | 84-86%+        | 90%+ (variants)          | 88-92%+              | High       | 86-89%+ / 87-89% Pro         | Flagship performance |
-| GLM-4.7 (~32B active MoE)             | ~90-92% (high)         | Strong (~75-82% est.) | Excellent (~95%+ AIME 2025; high MATH-500) | 85.7% Diamond     | N/A / High | ~85-87% / 84.3%             | Strong reasoning/coding/agentic; 200K context; open-weights MIT. Top open MoE in math/tool-use. HLE ~24-43% (w/tools). |
-| GLM-5.1 (~40B active MoE)             | High 90s (est. ~92%+)  | Competitive-High | Very strong (~89-95%+ math) | ~86-87% Diamond   | High       | High 80s / ~85%+            | Flagship agentic/long-horizon; excels in coding (SWE-Bench ~58-78% variants). 200K+ context. Closes gap to closed frontiers. |
-| Gemma 4 31B (Dense)                        | High                    | Strong         | Excellent (~89% AIME)    | ~84.3% Diamond       | N/A        | 87.1% / 85.2% Pro            | Strong math/coding |
-| Gemma 4 26B MoE                            | High                    | Strong         | Strong (~88% AIME)       | ~82% Diamond         | N/A        | ~82.7% / 82.6% Pro           | Efficient variant |
-| gpt-oss-20b                                | 84.1%                   | 58.1%          | 96.0-98.7%               | 71.5%                | ~42.5%     | 85.3%                        | Exceptional MATH |
-| Minstral 3 / Mistral Large 3 family        | High 80s-90s            | Competitive    | Strong (~85% AIME)       | ~80%+                | N/A        | ~81%+ / Pro competitive      | Good all-rounder |
-| Granite 4.1-30B (Instruct)                 | 89.65%                  | 83.74%         | Strong (GSM8K etc.)      | 45.76%               | N/A        | 80.16% / 64.09% Pro          | Excellent tool-calling |
-| Granite 4.1-8B                             | ~87%                    | ~80.5%         | Good                     | ~42%                 | N/A        | ~73.8% / 56% Pro             | Compact & efficient |
-
+| Model                                      | IFEval                  | BBH            | MATH / MATH-500 / AIME          | GPQA / Diamond       | MuSR       | MMLU / MMLU-Pro              | Notes / Other |
+|--------------------------------------------|-------------------------|----------------|---------------------------------|----------------------|------------|------------------------------|---------------|
+| Early GPT-4 (ref)                          | N/A                     | ~50%*          | 42.2%                           | N/A                  | N/A        | 86.4%                        | Reference |
+| Early GPT-4o (ref)                         | N/A                     | ~60%*          | 52.9%*                          | N/A                  | N/A        | 87.5%*                       | Reference |
+| **GLM-4.7-Flash (30B-A3B MoE)**            | High (~83-91% est.)     | Strong         | AIME 2025: 91.6%                | 75.2%                | N/A        | ~80-84% / Strong Pro         | Excellent coding/agentic; SWE-bench Verified 59.2%; strong tool-calling |
+| **Qwen3-30B-A3B (MoE)**                    | ~91.6%                  | ~62-72%        | 80.4%+ / AIME ~70.9%            | 65.8%+               | 72.2%      | High 70s-82%                 | Strong efficient MoE |
+| **Qwen3-32B**                              | 93.7% (non-thinking) / 91.0% (thinking) | High (~84-86%) | Strong (MATH-500 96.1% thinking)| 66.8% (thinking)     | N/A        | ~83-87% / 72.7-79.8% Pro     | Excellent dense ~32B performer |
+| **Qwen3.5-27B**                            | 93.9% / 95.0%           | Strong         | Very strong (high AIME/MATH)    | 82.8-85.5% Diamond   | N/A        | 82-86% / 83.7-86.1% Pro      | Outstanding mid-size balance |
+| **Qwen3.5 ~32-35B class (e.g. 35B-A3B)**  | 93-94%+                 | Strong         | Excellent (AIME high 80s-90s)   | ~82-87% Diamond      | High       | 84-87% / 84-87% Pro          | Strong MoE variants in this size |
+| Gemma 4 31B (Dense)                        | High                    | Strong         | Excellent (~89% AIME)           | ~84.3% Diamond       | N/A        | 87.1% / 85.2% Pro            | Strong math/coding |
+| Gemma 4 26B MoE                            | High                    | Strong         | Strong (~88% AIME)              | ~82% Diamond         | N/A        | ~82.7% / 82.6% Pro           | Efficient variant |
+| gpt-oss-20b                                | 84.1%                   | 58.1%          | 96.0-98.7%                      | 71.5%                | ~42.5%     | 85.3%                        | Exceptional MATH |
+| Minstral 3 / Mistral Large 3 family        | High 80s-90s            | Competitive    | Strong (~85% AIME)              | ~80%+                | N/A        | ~81%+ / Pro competitive      | Good all-rounder |
+| Granite 4.1-30B (Instruct)                 | 89.65%                  | 83.74%         | Strong (GSM8K etc.)             | 45.76%               | N/A        | 80.16% / 64.09% Pro          | Excellent tool-calling |
+| Granite 4.1-8B                             | ~87%                    | ~80.5%         | Good                            | ~42%                 | N/A        | ~73.8% / 56% Pro             | Compact & efficient |
 
 <details>
   <summary>Table Key ></summary>
