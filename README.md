@@ -464,8 +464,9 @@ project_root/
 ```
 
 # Development for v2
-v2 is now in Release stage...
-1. So, obviously if I do a websearch I would use the websearch, not DDG alone. Removal of DDG Search, because web-search is currently a multi-phase hybrid search, that includes a ddg search. This also enable less complexity, providing a little space for later a new tool, rather than, this is the less good websearch.
+v2 is now in Release stage, but there is still work planned...
+1. cleanup of scripts of main program, installer has already been done.
+1. The output text has double blank lines inserted. Output text needs to be fixed, or we need to find alternate interface/browser solution.
 2. The project now aims to support these specific models shown below, but do so well. Qwen3 will be dropped when other handling is shown to work, and as reference for how others are supposed to work during development. The main program needs to support these models throughout, and do so well...
 ```
 GLM 4.7/5.1
