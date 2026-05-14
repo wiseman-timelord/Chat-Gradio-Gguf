@@ -1204,6 +1204,57 @@ def handle_inline_edit(idx_str, session_messages):
     return user_content, chatbot_out, new_messages, status, has_ai, gr.update()
 
 
+def handle_inline_retry(action_str, session_messages):
+    """Triggered by JS retry button via hidden relay textbox.
+    action_str: 'bot:<nth>' with optional '|<timestamp>' suffix.
+    Strips the nth bot response (and everything after it) from history,
+    recovers the preceding user prompt and returns it to the input box.
+    A chained .then(conversation_display) auto-resubmits the prompt.
+
+    NOTE: The relay box is NOT reset to "" on return — the JS timestamp suffix
+    already guarantees .change() fires on every click (same pattern as edit).
+    """
+    if not action_str or not action_str.strip():
+        return gr.update(), gr.update(), session_messages, gr.update(), gr.update(), gr.update()
+
+    try:
+        clean_str = action_str.split('|')[0].strip()
+        if not clean_str:
+            return gr.update(), gr.update(), session_messages, gr.update(), gr.update(), gr.update()
+        parts = clean_str.split(':')
+        nth = int(parts[1])
+    except (ValueError, IndexError, AttributeError):
+        return gr.update(), gr.update(), session_messages, "Retry error: bad format.", gr.update(), gr.update()
+
+    # Locate the nth bot message in the full message list
+    bot_entries = [(i, m) for i, m in enumerate(session_messages) if m.get('role') == 'assistant']
+    if nth >= len(bot_entries):
+        return gr.update(), gr.update(), session_messages, "Retry target not found.", gr.update(), gr.update()
+
+    bot_abs_idx, _ = bot_entries[nth]
+
+    # The user message that triggered this bot response is the last user message before it
+    user_entries_before = [
+        (i, m) for i, m in enumerate(session_messages[:bot_abs_idx])
+        if m.get('role') == 'user'
+    ]
+    if not user_entries_before:
+        return gr.update(), gr.update(), session_messages, "No preceding user message found.", gr.update(), gr.update()
+
+    user_abs_idx, user_msg = user_entries_before[-1]
+    user_content = user_msg.get('content', '') or ''
+    # Strip the stored "User:\n" prefix so raw text lands in the input box
+    user_content = re.sub(r'^User:\s*\n?', '', user_content, flags=re.MULTILINE).strip()
+
+    # Truncate history to just before the user message (removes user + all following messages)
+    new_messages = session_messages[:user_abs_idx]
+    chatbot_out = get_chatbot_output(messages_to_tuples(new_messages), new_messages)
+    has_ai = any(m.get('role') == 'assistant' for m in new_messages)
+    status = f"🔄 Retrying response {nth + 1} — regenerating..."
+
+    return user_content, chatbot_out, new_messages, status, has_ai, gr.update()
+
+
 def update_session_buttons():
     """Update session history buttons."""
     sessions = get_saved_sessions()[:cfg.MAX_HISTORY_SLOTS]
@@ -2419,6 +2470,11 @@ def launch_display():
                             elem_id="cguf-edit-action", label="",
                             elem_classes=["cguf-relay"]
                         )
+                        retry_action_box = gr.Textbox(
+                            value="", visible=True,
+                            elem_id="cguf-retry-action", label="",
+                            elem_classes=["cguf-relay"]
+                        )
 
                         with gr.Row(elem_classes=["clean-elements"]):
                             action_buttons["action"] = gr.Button("Send Input", variant="secondary", elem_classes=["send-button-green"], scale=1)
@@ -3261,6 +3317,62 @@ def launch_display():
             ]
         )
 
+        # ── Inline retry: triggered by JS through hidden relay textbox ──────────────
+        # Step 1: strip the response and load the preceding user prompt into the input.
+        # Step 2: auto-submit via conversation_display (same chain as Send Input).
+        retry_action_box.change(
+            fn=handle_inline_retry,
+            inputs=[retry_action_box, states["session_messages"]],
+            outputs=[
+                conversation_components["user_input"],
+                conversation_components["session_log"],
+                states["session_messages"],
+                interaction_global_status,
+                states["has_ai_response"],
+                retry_action_box,
+            ]
+        ).then(
+            fn=conversation_display,
+            inputs=[
+                conversation_components["user_input"],
+                conversation_components["session_log"],
+                states["session_messages"],
+                states["attached_files"],
+                states["is_reasoning_model"],
+                states["cancel_flag"],
+                states["web_search_enabled"],
+                states["interaction_phase"],
+                states["llm"],
+                states["models_loaded"],
+                states["has_ai_response"],
+            ],
+            outputs=[
+                conversation_components["session_log"],
+                states["session_messages"],
+                interaction_global_status,
+                conversation_components["user_input"],
+                conversation_components["progress_indicator"],
+                action_buttons["action"],
+                action_buttons["edit_previous"],
+                action_buttons["copy_response"],
+                action_buttons["cancel_input"],
+                action_buttons["cancel_response"],
+                states["cancel_flag"],
+                states["attached_files"],
+                states["interaction_phase"],
+                states["llm"],
+                states["models_loaded"],
+            ]
+        ).then(
+            fn=update_session_buttons,
+            inputs=[],
+            outputs=buttons["session"]
+        ).then(
+            fn=lambda files: update_file_slot_ui(files, True),
+            inputs=[states["attached_files"]],
+            outputs=attach_slots + [attach_files]
+        )
+
         # Save Settings button
         def unified_save_wrapper(
             # Hardware
@@ -3572,6 +3684,9 @@ def launch_display():
             row.className = 'cguf-actions';
             row.appendChild(makeBtn('📋', 'Copy AI response',
                                     'cguf-copy-action', 'bot:' + i));
+            /* Retry button: re-generates this response from the same prompt */
+            row.appendChild(makeBtn('↻', 'Re-generate this response',
+                                    'cguf-retry-action', 'bot:' + i));
             /* TTS button with 4-phase cycle: play -> busy -> stop -> play */
             var ttsBtn = document.createElement('button');
             ttsBtn.className = 'cguf-btn cguf-tts-btn';
