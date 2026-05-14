@@ -465,9 +465,9 @@ project_root/
 
 # Development for v2
 v2 is now in Release stage, but there is still work planned...
-1. cleanup of scripts of main program, installer has already been done.
-1. The output text has double blank lines inserted. Output text needs to be fixed, or we need to find alternate interface/browser solution.
-2. The project now aims to support these specific models shown below, but do so well. Qwen3 will be dropped when other handling is shown to work, and as reference for how others are supposed to work during development. The main program needs to support these models throughout, and do so well...
+1. cleanup of scripts of main program, installer has already been done. Need to pass the program scripts through Qwen, get a full analysis, then hand over to claude. Qwen is great at finding redundant/broken code.
+2. The output text has double blank lines inserted. Output text needs to be fixed, or we need to find alternate interface/browser solution. The long running issue of additional lines between each line is a long running problem, but we are now getting double blank lines, which may mean the filter is not working correctly. Surely one of the AI can by now say, "this is the issue" to the additional blank lines thing. Gur.
+3. The project now aims to support these specific models shown below, but do so well. Qwen3 and GLM 4.7 level models should be kept, in order to keep compatibility with non-compile install options. The main program needs to support the models shown below, thereabouts, we need complete handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response, in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
 ```
 GLM 4.7/5.1
 Qwen 3/3.5/3.6
@@ -476,27 +476,15 @@ gpt oss
 minstral 3
 granite 4/4.1
 ```
-...thereabouts, we need complete handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response, in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc.
-2. After removing DDG search the plan will be to develop some extra tools, but this needs to be brainstormed and figured out. What can we do consistently between the target list of models...
-```
-GLM 4.7/5.1
-Qwen 3/3.5/3.6
-Gemma 4
-gpt oss
-minstral 3
-granite 4/4.1
-```
-...can we get non-agentic models on the list, to be able to also respond with jsons or commands for generic agentic tool calling management function, to enable built-in tools in the models, that, depending on the model you load, would then have some additional icons next to the websearch or whatever? where through pre-prompting then all models would be able to do toolcalling? so where as models such as Qwen have advanced tool calling, then other models would require additional prompting or whatever, this is my understanding? First we need to know the specific features for each of the models.
-3. These specific models have Tool Calling...
+...
+4. After removing DDG search the plan will be to develop some extra tools, but this needs to be brainstormed and figured out. Tool Ideas: We Could have a toggle for "THINK" button  in the tools area if it is a thinking model, but if it was not a thinking model then we could simulate think by adding a prompt phase instructing the model to think, then do another prompt. It would be off by default on non-thinking and on by default on a thinking model. If we wanted a thinking model to not think, then we would say so in the command. I tried to implement this before, and it would complicate think code, because now the model would be think but we may not want to use it in think, and vice versa. 
+5. What can we do consistently between the target list of models, supposedly these specific models have proper Tool Calling. possibly the program could focus on them, but the list is already limited, and I dont think my chatbot needs such an implementation, it needs to stay open with regards to models, as people want choice. Can we get non-agentic models on the list, to be able to also respond with jsons or commands for generic agentic tool calling management function, to enable built-in tools in the models, that, depending on the model you load, would then have some additional icons next to the websearch or whatever? where through pre-prompting then all models would be able to do toolcalling? so where as models such as Qwen have advanced tool calling, then other models would require additional prompting or whatever, this is my understanding? First we need to know the specific features for each of the models. The Agentic models are as follows...
 ```
 GLM 4.7/5.1
 Qwen 3/3.5/3.6
 minstral 3
 ```
-...possibly the program could focus on them, but the list is already limited, and I dont think my chatbot needs such an implementation, it needs to stay open with regards to models, as people want choice.
 3. Code Optimization / redistribution of code, moving code out from display script, to applicably relatingly themed scripts, if there is relevance to both scripts and it is sound to do so, in order to reduce overall code in display script by moving it out, as appropriate to do so, nothing extreme. 
-4. we would have a toggle button  in the text input area, Quick means no thinking, Think means thinking, Auto where it would do a pre-prompt in order to determine if it should think or not then it would do the actual response. 
-5. Sticking with the idea of an auto mode, it would be possible to do a pre-prompt in order to determine the context size and batch size, automatically then reload the model.
 10. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far. If attempted again, then start with test scripts.
 
 # Development for v1
