@@ -2,16 +2,12 @@
 # v2: Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.13 / Gradio 5.x
 
 # Standard library imports
-import tempfile
 import re
 import subprocess
 import json
 import time
-import random
 import psutil
-import shutil
 import os
-import zipfile
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -24,7 +20,6 @@ import gradio as gr
 import PyPDF2
 
 # Project imports
-from scripts.inference import load_models, clean_content
 import scripts.configure as cfg
 from scripts.configure import (
     TEMP_DIR, HISTORY_DIR, SESSION_FILE_FORMAT, ALLOWED_EXTENSIONS,
@@ -32,8 +27,12 @@ from scripts.configure import (
 )
 
 # Import search functions from tools module
+# NOTE: inference.py is NOT imported here at module level — doing so creates a
+# circular dependency (launcher → utility → inference → configure → utility).
+# Any inference functions needed inside utility functions must be imported lazily
+# inside the function body: `from scripts.inference import func`
 from scripts.tools import (
-    hybrid_search, format_search_status_for_chat,
+    format_search_status_for_chat,
     web_search, format_web_search_status_for_chat
 )
 
@@ -104,18 +103,6 @@ def _beep_linux() -> None:
 # GENERAL UTILITY FUNCTIONS
 # =============================================================================
 
-def has_vulkan_binary():
-    """Check if Vulkan binary is available (VULKAN_CPU or VULKAN_VULKAN modes)."""
-    return cfg.BACKEND_TYPE in ["VULKAN_CPU", "VULKAN_VULKAN"]
-
-def has_vulkan_wheel():
-    """Check if Python wheel has Vulkan support (VULKAN_VULKAN mode only)."""
-    return cfg.BACKEND_TYPE == "VULKAN_VULKAN"
-
-def is_cpu_only():
-    """Check if running in pure CPU mode (CPU_CPU mode)."""
-    return cfg.BACKEND_TYPE == "CPU_CPU"
-
 def short_path(path_str, max_len=44):
     """Truncate path to last max_len chars with ... prefix."""
     path = str(path_str)
@@ -123,52 +110,18 @@ def short_path(path_str, max_len=44):
         return path
     return "..." + path[-max_len:]
 
-def filter_operational_content(text):
-    """Remove operational tags, metadata, and AI prefixes from the text."""
-    # Remove AI-Chat: prefix patterns
-    text = re.sub(r'^AI-Chat:\s*\n?', '', text, flags=re.MULTILINE)
-    text = re.sub(r'\nAI-Chat:\s*\n?', '\n', text)
-
-    # Remove thinking/answer tags
-    text = re.sub(r' <think> .*? </think> ', '', text, flags=re.DOTALL)
-    text = re.sub(r'<answer>.*?</answer>', '', text, flags=re.DOTALL)
-
-    # Remove llama.cpp operational output patterns
-    patterns = [
-        r"ggml_vulkan:.*",
-        r"load_tensors:.*",
-        r"main:.*",
-        r"Error executing CLI:.*",
-        r"CLI Error:.*",
-        r"build:.*",
-        r"llama_model_load.*",
-        r"print_info:.*",
-        r"load:.*",
-        r"llama_init_from_model:.*",
-        r"llama_kv_cache_init:.*",
-        r"sampler.*",
-        r"eval:.*",
-        r"embd_inp.size.*",
-        r"waiting for user input",
-    ]
-    for pattern in patterns:
-        text = re.sub(pattern, '', text, flags=re.DOTALL)
-
-    return text.strip()
-
 
 # =============================================================================
 # CPU/GPU DETECTION
 # =============================================================================
 
 def detect_cpu_config():
-    """Detect CPU configuration and set thread options."""
+    """Detect CPU configuration and set thread count."""
     try:
         cfg.CPU_PHYSICAL_CORES = psutil.cpu_count(logical=False) or 1
         cfg.CPU_LOGICAL_CORES = psutil.cpu_count(logical=True) or 1
 
         max_threads = cfg.CPU_LOGICAL_CORES
-        cfg.CPU_THREAD_OPTIONS = list(range(1, max_threads + 1))
 
         if cfg.CPU_THREADS is None or cfg.CPU_THREADS > max_threads:
             cfg.CPU_THREADS = max(1, max_threads // 2)
@@ -185,8 +138,8 @@ def detect_cpu_config():
         print(f"[CPU] Detection error: {e}")
         cfg.CPU_PHYSICAL_CORES = 4
         cfg.CPU_LOGICAL_CORES = 8
-        cfg.CPU_THREAD_OPTIONS = list(range(1, 9))
         cfg.CPU_THREADS = 4
+
 
 def get_available_gpus_windows():
     """Retrieve available GPUs on Windows using multiple methods."""
@@ -212,12 +165,14 @@ def get_available_gpus_windows():
 
     return ["CPU Only"]
 
+
 def get_available_gpus():
     """Get list of available GPUs based on platform."""
     if cfg.PLATFORM == "windows":
         return get_available_gpus_windows()
     else:
         return get_available_gpus_linux()
+
 
 def get_available_gpus_linux():
     """Retrieve available GPUs on Linux."""
@@ -246,6 +201,7 @@ def get_available_gpus_linux():
             pass
 
     return gpus if gpus else ["CPU Only"]
+
 
 def get_cpu_info():
     """Get CPU information for display."""
@@ -318,6 +274,7 @@ def get_nlp_model():
 
     return _nlp_model
 
+
 def summarize_session(messages):
     """Generate a short label for a session based on initial messages."""
     if not messages:
@@ -355,6 +312,7 @@ def summarize_session(messages):
     words = text.split()[:6]
     return ' '.join(words)[:40] if words else "Session"
 
+
 def get_saved_sessions():
     """Get list of saved session files, sorted by date (newest first)."""
     history_path = Path(HISTORY_DIR)
@@ -371,6 +329,7 @@ def get_saved_sessions():
 
     sessions.sort(reverse=True)
     return [s[1] for s in sessions[:cfg.MAX_HISTORY_SLOTS]]
+
 
 def save_session_history(messages, attached_files=None):
     """Save current session to history."""
@@ -400,6 +359,7 @@ def save_session_history(messages, attached_files=None):
         print(f"[SESSION] Saved: {label} ({filename})")
     except Exception as e:
         print(f"[SESSION] Save error: {e}")
+
 
 def load_session_history(filename):
     """Load a session from history file."""
@@ -496,47 +456,6 @@ def read_file_content(file_path):
     except Exception as e:
         return None, None, False, str(e)
 
-def summarize_document(file_path):
-    """Summarize the contents of a document using spaCy, up to 100 characters."""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            content = file.read()
-
-        nlp = get_nlp_model()
-        if nlp is None:
-            words = content.split()[:10]
-            return ' '.join(words)[:100] if words else "No summary available"
-
-        doc = nlp(content[:2000])
-
-        candidates = []
-        for ent in doc.ents:
-            candidates.append(ent.text)
-        for chunk in doc.noun_chunks:
-            if chunk.root.pos_ in ['NOUN', 'PROPN']:
-                candidates.append(chunk.text)
-
-        if candidates:
-            summary = candidates[0]
-        else:
-            sentences = [sent.text.strip() for sent in doc.sents]
-            summary = sentences[0] if sentences else "No summary available"
-
-        return summary[:100]
-
-    except Exception as e:
-        print(f"Error summarizing document {file_path}: {e}")
-        return "Error generating summary"
-
-def get_attached_files_summary(attached_files):
-    """Generate a list of summaries for attached files."""
-    if not attached_files:
-        return "No attached files to summarize."
-    summary_list = []
-    for file in attached_files:
-        summary = summarize_document(file)
-        summary_list.append(f"**{Path(file).name}** - {summary}")
-    return "\n".join(summary_list)
 
 def eject_file(file_list, slot_index, is_attach=True):
     """Eject a file from the specified slot."""
@@ -550,6 +469,7 @@ def eject_file(file_list, slot_index, is_attach=True):
         status_msg = "No file to eject"
 
     return file_list, status_msg
+
 
 def update_file_slot_ui(file_list, is_attach=True):
     """Update file slot UI components."""
@@ -572,21 +492,6 @@ def update_file_slot_ui(file_list, is_attach=True):
 
     return button_updates
 
-def delete_all_session_histories():
-    """Delete all history JSON files in HISTORY_DIR."""
-    history_dir = Path(HISTORY_DIR)
-    for file in history_dir.glob('*.json'):
-        try:
-            file.unlink()
-            print(f"Deleted history file: {file}")
-        except Exception as e:
-            print(f"Error deleting {file}: {e}")
-    return "All session histories deleted."
-
-def create_session_vectorstore(file_paths):
-    """Thin wrapper so display.py can call the injector transparently."""
-    from scripts.configure import context_injector
-    context_injector.set_session_vectorstore(file_paths)
 
 def process_attach_files(files, attached_files):
     """Process uploaded files for attachment."""
@@ -596,8 +501,9 @@ def process_attach_files(files, attached_files):
     cfg.session_attached_files = updated_files
     return status, updated_files
 
+
 def process_files(files, existing_files, max_files, is_attach=True):
-    """Process uploaded files for attach or vector, ensuring no duplicates and respecting max file limits."""
+    """Process uploaded files, ensuring no duplicates and respecting max file limits."""
     print(f"[FILES] Raw input type: {type(files)}, value: {files}")
 
     if not files:
@@ -651,21 +557,8 @@ def process_files(files, existing_files, max_files, is_attach=True):
     if is_attach:
         cfg.session_attached_files = updated_files
     else:
-        cfg.session_attached_files = updated_files
+        cfg.session_vector_files = updated_files
 
     status = f"Attached {len(processed_files)} file(s)."
     print(f"[FILES] Status: {status}, Total files: {len(updated_files)}")
     return status, updated_files
-
-
-# =============================================================================
-# RESEARCH CAPABILITY CHECK (for UI visibility)
-# =============================================================================
-
-def is_research_available() -> bool:
-    """Check if hybrid search capabilities are available (newspaper library)."""
-    try:
-        from newspaper import Article
-        return True
-    except ImportError:
-        return False

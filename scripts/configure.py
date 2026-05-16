@@ -3,7 +3,6 @@
 
 import json
 import configparser
-import time
 import threading
 import os
 from pathlib import Path
@@ -104,18 +103,10 @@ _status_lock_message = ""  # Message to restore when lock releases
 PRINT_RAW_OUTPUT = False
 SHOW_THINK_PHASE = False
 BLEEP_ON_EVENTS = False
-THINK_MIN_CHARS_BEFORE_CLOSE = 100
 USER_INPUT_MAX_LINES = 10  # Recalculated by display.py based on SESSION_LOG_HEIGHT
-
-# Dynamic Model Loading
-LAST_INTERACTION_TIME = None
-INACTIVITY_TIMEOUT = 3600  # 1 hour in seconds
-_inactivity_checker_thread = None
-_inactivity_checker_stop = False
 
 # CPU Configuration
 CPU_THREADS = None  # Will be auto-detected
-CPU_THREAD_OPTIONS = []  # Will be populated with available thread counts
 CPU_PHYSICAL_CORES = 1
 CPU_LOGICAL_CORES = 1
 SELECTED_CPU = "Auto-Select"
@@ -136,7 +127,6 @@ TTS_AUDIO_BACKEND = "none"    # Detected at runtime: "windows", "pulseaudio", "p
 TTS_VOICE = None
 TTS_VOICE_NAME = None
 MAX_TTS_LENGTH = 4500
-TTS_TYPE = "builtin"
 COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243") — set from constants.ini
 COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british") — set from constants.ini
 COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name — set from constants.ini
@@ -153,9 +143,6 @@ _tts_state_lock = threading.Lock()  # Thread-safety for TTS state globals
 session_attached_files = []
 session_vector_files = []
 
-# Search Configuration
-DDG_SEARCH_ENABLED = False
-
 # UI Constants/Variables
 USER_COLOR = "#ffffff"
 THINK_COLOR = "#c8a2c8"
@@ -168,8 +155,6 @@ MMPROJ_EXTENSIONS = ["-mmproj-", "mmproj"]
 MAX_POSSIBLE_HISTORY_SLOTS = 16
 MAX_POSSIBLE_ATTACH_SLOTS = 10
 demo = None
-PROGRESS_COLORS = ['#ffffff', '#0000ff', '#ffff00', '#ff0000']
-PROGRESS_CYCLE_TIME = 500  # milliseconds
 
 # RAG CONSTANTS
 RAG_CHUNK_SIZE_DIVIDER = 6
@@ -398,26 +383,15 @@ class ContextInjector:
         """Create embeddings for a list of texts using sentence-transformers."""
         if self.embedding is None:
             return None
-
-        if not texts:
-            return None
-
         try:
+            import numpy as np
             embeddings = self.embedding.encode(
                 texts,
+                batch_size=batch_size,
                 convert_to_numpy=True,
                 show_progress_bar=False,
-                batch_size=batch_size
+                normalize_embeddings=False
             )
-
-            if embeddings is None or embeddings.size == 0:
-                print("[RAG] Warning: Empty embeddings returned")
-                return None
-
-            if np.isnan(embeddings).any() or not np.any(embeddings):
-                print("[RAG] Warning: Invalid embeddings (NaN or all zeros)")
-                return None
-
             return embeddings.astype(np.float32)
         except Exception as e:
             print(f"[RAG] Embedding error: {e}")
@@ -536,6 +510,11 @@ class ContextInjector:
         self.temp_chunks = chunks
         print(f"[RAG] Indexed {len(chunks)} temporary input chunks (dim={self._embedding_dim})")
 
+    def clear_temporary_input(self):
+        """Clear any pending temporary RAG input (called after each response cycle)."""
+        self.temp_index = None
+        self.temp_chunks = []
+
     def retrieve_context(self, query, k=None):
         """Retrieve relevant context from both file and temporary indexes."""
         if k is None:
@@ -632,8 +611,7 @@ def load_system_ini():
 
         global PLATFORM, BACKEND_TYPE, VULKAN_AVAILABLE, EMBEDDING_MODEL_NAME
         global EMBEDDING_BACKEND, GRADIO_VERSION, LLAMA_CLI_PATH, LLAMA_BIN_PATH
-        global OS_VERSION, WINDOWS_VERSION, TTS_ENGINE, TTS_AUDIO_BACKEND
-        global TTS_TYPE, COQUI_VOICE_ID, COQUI_VOICE_ACCENT, COQUI_MODEL
+        global OS_VERSION, WINDOWS_VERSION, COQUI_VOICE_ID, COQUI_VOICE_ACCENT, COQUI_MODEL
         global GRAPHICS_ACCELERATION, QT_VERSION, DX_FEATURE_LEVEL
         global LLAMA_WHEEL_VERSION
 
@@ -835,96 +813,9 @@ def save_config():
     return "Settings saved"
 
 
-def update_setting(key, value):
-    """Update a single setting with optional model reload."""
-    reload_required = False
-    reload_keys = {"context_size", "n_gpu_layers", "vram_size", "model_folder", "model_name"}
-
-    try:
-        if key in {
-            "context_size", "vram_size", "n_gpu_layers", "n_batch",
-            "max_history_slots", "max_attach_slots", "session_log_height",
-            "cpu_threads", "sound_sample_rate", "max_tts_length"
-        }:
-            value = int(value)
-        elif key in {"temperature", "repeat_penalty"}:
-            value = float(value)
-        elif key in {"mlock", "dynamic_gpu_layers", "tts_enabled"}:
-            value = bool(value)
-
-        attr_name = key.upper() if key.upper() in globals() else key
-        globals()[attr_name] = value
-
-        reload_required = key in reload_keys
-
-        if reload_required:
-            from scripts.inference import change_model
-            reload_result = change_model(MODEL_NAME.split('/')[-1])
-            message = f"Setting '{key}' updated to '{value}', model reload triggered."
-            return message, *reload_result
-        else:
-            message = f"Setting '{key}' updated to '{value}'."
-            return message, None, None
-
-    except Exception as e:
-        message = f"Error updating setting '{key}': {str(e)}"
-        return message, None, None
-
-
 # =============================================================================
-# UTILITY FUNCTIONS
+# STATUS FUNCTION
 # =============================================================================
-
-def validate_backend_type(backend):
-    """Validate and normalize backend type."""
-    if backend not in ["CPU_CPU", "VULKAN_CPU", "VULKAN_VULKAN"]:
-        print(f"[BACKEND] Invalid backend '{backend}', defaulting to CPU_CPU")
-        return "CPU_CPU"
-    return backend
-
-
-def start_inactivity_checker():
-    """Start background thread to check for model inactivity and auto-unload."""
-    global _inactivity_checker_thread, _inactivity_checker_stop
-
-    if _inactivity_checker_thread is not None and _inactivity_checker_thread.is_alive():
-        return
-
-    def checker():
-        global LAST_INTERACTION_TIME, _inactivity_checker_stop, llm, MODELS_LOADED, GPU_LAYERS, LOADED_CONTEXT_SIZE
-
-        while not _inactivity_checker_stop:
-            time.sleep(60)
-
-            if _inactivity_checker_stop:
-                break
-
-            if MODELS_LOADED and llm is not None:
-                if LAST_INTERACTION_TIME is not None:
-                    elapsed = time.time() - LAST_INTERACTION_TIME
-                    if elapsed > INACTIVITY_TIMEOUT:
-                        print(f"[INACTIVITY] {elapsed:.0f}s elapsed (> {INACTIVITY_TIMEOUT}s timeout)")
-                        set_status("Auto-unloading model due to inactivity...", console=True)
-
-                        from scripts.inference import unload_models
-                        status, new_llm, new_models_loaded = unload_models(llm, MODELS_LOADED)
-                        llm = new_llm
-                        MODELS_LOADED = new_models_loaded
-                        GPU_LAYERS = 0
-                        LOADED_CONTEXT_SIZE = None
-
-                        set_status("Model auto-unloaded (1 hour idle)", console=True)
-                        try:
-                            from scripts.utility import beep
-                            beep()
-                        except:
-                            pass
-
-    _inactivity_checker_stop = False
-    _inactivity_checker_thread = threading.Thread(target=checker, daemon=True, name="InactivityChecker")
-    _inactivity_checker_thread.start()
-    print("[INACTIVITY] Checker started (1 hour timeout)")
-
 
 def set_status(msg: str, console=False, priority=False):
     """Update both UI and/or terminal with priority support."""

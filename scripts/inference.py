@@ -15,7 +15,7 @@ from scripts.configure import (
     CONTEXT_SIZE, GPU_LAYERS, BATCH_SIZE, BACKEND_TYPE, VRAM_SIZE,
     DYNAMIC_GPU_LAYERS, MMAP, MLOCK, handling_keywords, llm,
     MODEL_NAME, REPEAT_PENALTY, TEMPERATURE, MODELS_LOADED, CHAT_FORMAT_MAP,
-    THINK_MIN_CHARS_BEFORE_CLOSE, LOADED_CONTEXT_SIZE, CPU_THREADS,
+    LOADED_CONTEXT_SIZE, CPU_THREADS,
     SELECTED_GPU, set_status, save_config
 )
 # REMOVED: from scripts.utility import beep, short_path (causes circular import)
@@ -129,9 +129,6 @@ def get_system_message(is_uncensored=False, is_nsfw=False, web_search_enabled=Fa
 
     return system
 
-
-def get_reasoning_instruction():
-    return PROMPT_TEMPLATES["reasoning"]
 
 # ============================================================================
 # MODEL METADATA & UTILITY FUNCTIONS (formerly models.py)
@@ -595,52 +592,6 @@ def get_model_layers(model_path: str) -> int:
     return 32
 
 
-def inspect_model(model_name):
-    if model_name == "Select_a_model...":
-        return "Select a model to inspect."
-    model_path = Path(cfg.MODEL_FOLDER) / model_name
-    if not model_path.exists():
-        return f"Model file '{model_path}' not found."
-    save_config()
-    try:
-        metadata = get_model_metadata(str(model_path))
-        architecture = metadata.get('general.architecture', 'unknown')
-        params_str   = metadata.get('general.size_label', 'Unknown')
-        layers       = metadata.get(f'{architecture}.block_count', 'Unknown')
-        max_ctx      = metadata.get(f'{architecture}.context_length', 'Unknown')
-        model_size_gb = get_model_size(str(model_path)) / 1024
-        if isinstance(layers, int) and layers > 0:
-            fit_layers = calculate_single_model_gpu_layers_with_layers(
-                str(model_path), cfg.VRAM_SIZE, layers, DYNAMIC_GPU_LAYERS
-            )
-        else:
-            fit_layers = "Unknown"
-        return f"{params_str}|{fit_layers}/{layers}|{model_size_gb:.1f}GB|{max_ctx}"
-    except Exception as e:
-        return f"Error inspecting model: {str(e)}"
-
-
-def get_mmproj_context_llama(mmproj_path):
-    """Get mmproj context size, with _read_gguf_kv fallback."""
-    try:
-        from llama_cpp import LlamaMetadata
-        metadata = LlamaMetadata(model_path=str(mmproj_path))
-        for key in ['clip.context_length', 'context_length', 'n_ctx']:
-            if key in metadata:
-                return int(metadata[key])
-    except Exception:
-        pass
-    # Fallback: use the pure-Python parser
-    try:
-        kv = _read_gguf_kv(str(mmproj_path))
-        for key in ['clip.context_length', 'context_length', 'n_ctx']:
-            if key in kv:
-                return int(kv[key])
-    except Exception:
-        pass
-    return 4096
-
-
 # ── GGUF hybrid-architecture safety helpers ───────────────────────────────────
 
 _SSM_TENSOR_PREFIXES = (
@@ -864,7 +815,6 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         if SELECTED_GPU and SELECTED_GPU != "Auto-Select":
             from scripts.utility import get_available_gpus
             gpu_list = get_available_gpus()
-            # Normalise the selected GPU name (remove "(TM)", extra spaces, lower case)
             selected_norm = SELECTED_GPU.lower().replace("(tm)", "").strip()
             selected_idx = None
             print("\n[VULKAN] GPU Selection:")
@@ -872,7 +822,6 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             for idx, gpu_name in enumerate(gpu_list):
                 gpu_norm = gpu_name.lower().replace("(tm)", "").strip()
                 marker = ""
-                # Fuzzy match: exact, contains, or contained in
                 if (gpu_norm == selected_norm or
                     selected_norm in gpu_norm or
                     gpu_norm in selected_norm):
@@ -881,7 +830,6 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
                 print(f"    Vulkan{idx}: {gpu_name}{marker}")
 
             if selected_idx is not None:
-                # Both environment variables are needed for full restriction
                 os.environ["VK_VISIBLE_DEVICES"] = str(selected_idx)
                 os.environ["GGML_VULKAN_DEVICE"] = str(selected_idx)
                 print(f"[VULKAN] Restricting to device index {selected_idx} ({gpu_list[selected_idx]})\n")
@@ -894,7 +842,6 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             os.environ.pop("VK_VISIBLE_DEVICES", None)
             os.environ["GGML_VULKAN_DEVICE"] = "0"
     else:
-        # CPU_CPU mode: remove Vulkan restrictions
         os.environ.pop("VK_VISIBLE_DEVICES", None)
 
     chat_handler = None
@@ -1004,9 +951,6 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             _fallback_fmt = {
                 "qwen2":"chatml","qwen3":"chatml","qwen35":"chatml","qwen36":"chatml",
                 "llama":"llama-3","gemma3":"gemma","gemma4":"gemma",
-                # deepseek2 arch covers DeepSeek V2/V3 AND GLM quants that were
-                # converted with incorrect architecture metadata. chatml is correct
-                # for both families when the embedded template fails to parse.
                 "deepseek2": "chatml",
             }.get(_arch, "chatml")
             print(f"[CHAT-FMT] Template issue ({type(_e).__name__}): {_e}. "
@@ -1061,7 +1005,6 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         cfg.GPU_LAYERS          = gpu_layers
         cfg.MODEL_NAME          = model
         cfg.LOADED_CONTEXT_SIZE = effective_ctx
-        cfg.LAST_INTERACTION_TIME = time.time()
 
         status_parts = ["Model ready"]
         if is_vision:    status_parts.append("vision")
@@ -1190,61 +1133,10 @@ def unload_models(llm_state, models_loaded_state):
         return err, llm_state, models_loaded_state
 
 
-def update_thinking_phase_constants():
-    """Call during initialization to register thinking phase detection patterns."""
-    import scripts.configure as cfg
-
-    cfg.THINK_OPENING_TAGS = [
-        "<think>",                                         # Standard (Qwen3/3.5/3.6)
-        "<|start|>assistant<|channel|>analysis<|message|>",  # GPT-OSS Harmony (full)
-        "<|channel|>analysis",                             # GLM MoE / GPT-OSS (short)
-        "<|channel>thought",                               # Gemma 4 (distinct spelling)
-    ]
-    cfg.THINK_CLOSING_TAGS = [
-        "</think>",                                        # Standard + GLM bare output
-        "<|end|><|start|>assistant<|channel|>final<|message|>",  # GPT-OSS full close
-        "<|end|>",                                         # GPT-OSS short close
-        "<channel|>",                                      # Gemma 4
-    ]
-    cfg.THINK_CLOSING_PARTIAL_PATTERNS = ["<|end|>", "<|channel|>final", "<channel|>"]
-    print(f"[THINKING] {len(cfg.THINK_OPENING_TAGS)} open / "
-          f"{len(cfg.THINK_CLOSING_TAGS)} close patterns registered")
-
-
-def build_messages_with_context_management(session_log, system_message, context_size):
-    """Build message list with proper context budget allocation."""
-    from scripts.utility import clean_content as utility_clean_content
-
-    effective_ctx = cfg.LOADED_CONTEXT_SIZE or context_size
-    system_tokens = len(system_message) // 4
-    avail_hist    = int((effective_ctx - system_tokens) * 0.25)
-    avail_input   = int((effective_ctx - system_tokens) * 0.50)
-
-    messages = []
-    if not session_log and system_message:
-        messages.append({"role": "system", "content": system_message})
-
-    history_chars = 0
-    for msg in reversed(session_log[:-2]):
-        content = utility_clean_content(msg["role"], msg["content"])
-        if history_chars + len(content) > avail_hist * 4:
-            break
-        messages.insert(1 if messages else 0, {"role": msg["role"], "content": content})
-        history_chars += len(content)
-
-    current_input = utility_clean_content("user", session_log[-2]["content"])
-    if len(current_input) > avail_input * 4:
-        current_input = (cfg.context_injector.get_relevant_context(
-            query=current_input[:1000], k=6, include_temp=True
-        ) or current_input[:avail_input * 4])
-    messages.append({"role": "user", "content": current_input})
-    return messages
-
-
 def get_response_stream(session_log, settings, web_search_enabled=False, search_results=None,
                         cancel_event=None, llm_state=None, models_loaded_state=False):
     """Streaming response generator with unified thinking-phase handling."""
-    from scripts.utility import beep, clean_content, read_file_content
+    from scripts.utility import beep, read_file_content
     import traceback
 
     # ── Auto-load if model is not ready ──────────────────────────────────────
@@ -1261,7 +1153,6 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 return
             cfg.llm = llm_state
             cfg.MODELS_LOADED = models_loaded
-            cfg.LAST_INTERACTION_TIME = time.time()
             yield "\n**Model loaded successfully!** Generating response...\n\n"
         except Exception as e:
             traceback.print_exc()
@@ -1526,7 +1417,6 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
                 elif close_token in ("</think>", _think_close_tag) and not after_think:
                     for _marker in ("**Answer:**", "**Final Answer:**"):
                         if _marker in parts[0]:
-                            # rsplit → take content after the LAST marker occurrence
                             after_think = parts[0].rsplit(_marker, 1)[1].strip()
                             break
 
@@ -1578,22 +1468,3 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         print("\n***RAW_OUTPUT_FROM_MODEL_START***")
         print(raw_output)
         print("***RAW_OUTPUT_FROM_MODEL_END***\n")
-
-
-def change_model(model_name):
-    try:
-        from scripts.configure import MODEL_FOLDER, VRAM_SIZE, MODELS_LOADED, llm
-        status, models_loaded, llm_state = load_models(
-            MODEL_FOLDER, model_name, VRAM_SIZE, llm, MODELS_LOADED
-        )
-        return status, models_loaded, llm_state
-    except Exception as e:
-        return f"Error changing model: {str(e)}", False, None
-
-# ============================================================================
-# BACKWARD COMPATIBILITY ALIASES
-# ============================================================================
-
-get_available_inference = get_available_models
-unload_inference        = unload_models
-load_inference          = load_models
