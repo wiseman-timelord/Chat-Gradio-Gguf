@@ -1950,14 +1950,17 @@ def initialize_embedding_cache(embedding_model: str) -> bool:
     """Initialize embedding model cache using sentence-transformers"""
     print_status(f"Initializing embedding cache for {embedding_model}...")
 
-    cache_dir  = BASE_DIR / "data" / "embedding_cache"
+    cache_dir = BASE_DIR / "data" / "embedding_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                     ("python.exe" if PLATFORM == "windows" else "python"))
 
+    # Use a more verbose initialization script with progress output
     init_script = f'''
-import os, sys
+import os
+import sys
+import time
 from pathlib import Path
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -1968,61 +1971,85 @@ os.environ["TRANSFORMERS_CACHE"] = str(cache_dir.absolute())
 os.environ["HF_HOME"] = str(cache_dir.parent.absolute())
 os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(cache_dir.absolute())
 
-try:
-    print("Importing torch...", flush=True)
-    import torch
-    torch.set_grad_enabled(False)
-    print(f"torch version: {{torch.__version__}}", flush=True)
-    print(f"CUDA available: {{torch.cuda.is_available()}} (should be False)", flush=True)
+# Enable progress bars
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
-    print("Importing sentence_transformers...", flush=True)
-    from sentence_transformers import SentenceTransformer
+print("Importing torch...", flush=True)
+import torch
+torch.set_grad_enabled(False)
+print(f"torch version: {{torch.__version__}}", flush=True)
+print(f"CUDA available: {{torch.cuda.is_available()}} (should be False)", flush=True)
 
-    print(f"Loading model: {embedding_model}", flush=True)
-    model = SentenceTransformer("{embedding_model}", device="cpu")
-    model.eval()
+print("Importing sentence_transformers...", flush=True)
+from sentence_transformers import SentenceTransformer
 
-    print("Testing embedding...", flush=True)
-    test_embedding = model.encode(["test"], batch_size=1, normalize_embeddings=True,
-                                  convert_to_tensor=True)
-    dim = test_embedding.shape[1] if len(test_embedding.shape) > 1 else len(test_embedding)
-    print(f"SUCCESS: Model loaded, dimension: {{dim}}", flush=True)
+print(f"Loading model: {embedding_model}", flush=True)
+print("This may take several minutes while downloading model files...", flush=True)
+sys.stdout.flush()
 
-except ImportError as e:
-    print(f"FATAL: Import failed - {{type(e).__name__}}: {{str(e)}}", flush=True)
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-except Exception as e:
-    print(f"FATAL: {{type(e).__name__}}: {{str(e)}}", flush=True)
-    sys.exit(1)
+# Load model with progress bar enabled
+model = SentenceTransformer(
+    "{embedding_model}", 
+    device="cpu",
+    cache_folder=str(cache_dir.absolute())
+)
+model.eval()
+
+print("Testing embedding...", flush=True)
+test_embedding = model.encode(
+    ["test"], 
+    batch_size=1, 
+    normalize_embeddings=True,
+    convert_to_tensor=True,
+    show_progress_bar=True
+)
+dim = test_embedding.shape[1] if len(test_embedding.shape) > 1 else len(test_embedding)
+print(f"SUCCESS: Model loaded, dimension: {{dim}}", flush=True)
 '''
 
     script_path = TEMP_DIR / "init_embedding.py"
     try:
-        with open(script_path, 'w') as f:
+        with open(script_path, 'w', encoding='utf-8') as f:
             f.write(init_script)
 
         print("Embedding Initialization Output...")
-        result = subprocess.run(
-            [python_exe, str(script_path)], capture_output=True, text=True, timeout=600
+        print("(This may take 2-10 minutes depending on download speed)")
+        
+        # Run with timeout and capture output in real-time
+        process = subprocess.Popen(
+            [python_exe, str(script_path)],
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT,
+            text=True, 
+            bufsize=1,
+            universal_newlines=True
         )
+        
+        # Print output in real-time
+        for line in process.stdout:
+            print(f"    {line.rstrip()}")
+        
+        process.wait(timeout=1200)  # 20 minutes timeout for large models
+        
+        script_path.unlink(missing_ok=True)
 
-        if result.stdout:
-            for line in result.stdout.strip().split('\n'):
-                print(f"    {line}")
-        if result.stderr and "error" in result.stderr.lower():
-            print("    STDERR:", result.stderr[:200])
-
-        if result.returncode == 0 and "SUCCESS" in result.stdout:
-            print_status("Embedding cache initialized")
-            return True
+        if process.returncode == 0:
+            # Verify cache was populated
+            cache_files = list(cache_dir.rglob("*"))
+            if len(cache_files) > 10:
+                print_status(f"Embedding cache initialized ({len(cache_files)} files)")
+                return True
+            else:
+                print_status("Embedding cache appears incomplete", False)
+                return False
         else:
             print_status("Embedding initialization failed", False)
             return False
 
     except subprocess.TimeoutExpired:
-        print_status("Embedding initialization timed out (>600s)", False)
+        process.kill()
+        print_status("Embedding initialization timed out after 20 minutes", False)
+        print_status("Check your internet connection and try again", False)
         return False
     except Exception as e:
         print_status(f"Embedding initialization failed: {e}", False)
