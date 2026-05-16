@@ -2268,6 +2268,8 @@ def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
             "-DCMAKE_BUILD_TYPE=Release",
             f"-DCMAKE_BUILD_PARALLEL_LEVEL={build_threads}",
             "-DLLAMA_CURL=OFF",
+            "-DLLAMA_BUILD_SERVER=OFF",      # Disable server entirely, avoids xxd requirement
+            "-DLLAMA_SERVER_UI=OFF",         # Additional safeguard
         ]
 
         cpu_features = detect_cpu_features()
