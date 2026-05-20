@@ -475,22 +475,15 @@ gpt oss
 minstral 3
 granite 4/4.1
 ```
-3. Next to the WebSearch icon/button We Could have a toggle for "THINK" button, an icon of a brain would be optimal, if there is not a default one, then   in the tools area if it is a thinking model, but if it was not a thinking model then we could simulate think by adding a prompt phase instructing the model to think, then do another prompt. It would be off by default on non-thinking and on by default on a thinking model. If we wanted a thinking model to not think, then we would say so in the command. I tried to implement this before, and it would complicate think code, because now the model would be think but we may not want to use it in think, and vice versa. 
-4. What can we do consistently between the target list of models, supposedly these specific models have proper Tool Calling. possibly the program could focus on them, but the list is already limited, and I dont think my chatbot needs such an implementation, it needs to stay open with regards to models, as people want choice. Can we get non-agentic models on the list, to be able to also respond with jsons or commands for generic agentic tool calling management function, to enable built-in tools in the models, that, depending on the model you load, would then have some additional icons next to the websearch or whatever? where through pre-prompting then all models would be able to do toolcalling? so where as models such as Qwen have advanced tool calling, then other models would require additional prompting or whatever, this is my understanding? First we need to know the specific features for each of the models. The Agentic models are as follows...
-```
-GLM 4.7/5.1
-Qwen 3/3.5/3.6
-minstral 3
-```
 3. Code Optimization / redistribution of code, moving code out from display script, to applicably relatingly themed scripts, if there is relevance to both scripts and it is sound to do so, in order to reduce overall code in display script by moving it out, as appropriate to do so, nothing extreme. 
 10. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far. If attempted again, then start with test scripts.
 
-# Development for v1
-I do intend to do a final update to v1 and release as v1 Legacy. v1 After ~v1.10.x there were issues with main program, the overcomplicated scripts being an AI. so, The plan is to release a v1 legacy version retaining, Windows 7-11 and ubuntu 22-25, compatiblity, and the following updates/downgrades...
-1. do full test, including Testing/Bugfixing on, Windoes 8.1 and Ubuntu 22.
-2. Need to clean up v1, check for redundant code and optimize, then test and fix. 
-3. The issues may be gradio becoming a set version 3, requring a shim for pydantic to work correctly. Problems started around there, so maybe we can cut whatever pydantic does from v1. Idea being to make a final version to leave it, after which later only updating to sync model handling.
-11. Possibly something like Corqui would have to be stripped from it, to reduce complexity relying on built-in TTS only. Additionally a checkover of the scripts, and removal of dead code, and upgrading of flimsy code. 
+### Devekopment (reasoning notes)
+- Think/NoThink button turned out to be bad idea, because quantized highly trained models are designed to either be a Thinking or Non-Thinking model, and thinking models simply, do not work well without or are unable to stop using, thinking mode. While one could say it would be useful to have a thinking mode button for non-thinking models, I consider current non-thinking models to be Nieche or low performers.
+- TTS button has moved from tools to the bottom of given output, due to inference completing at unknown times therefore I do not intend reading to be automatic, as it typically will happen in an untimely mannor.
+
+### Development for v1 
+- Best way to do a Legacy compatible version will be cloned from main, and then add compatibility back in and release that as the final v1 version. 
 
 ## Credits
 Thanks to all the following teams for their assistance/comtributions...
