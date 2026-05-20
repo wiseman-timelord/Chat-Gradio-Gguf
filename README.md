@@ -468,14 +468,15 @@ v2 is now in Release stage, but there is still work planned...
 1. The output text has double blank lines inserted. Output text needs to be fixed, or we need to find alternate interface/browser solution. The long running issue of additional lines between each line is a long running problem, but we are now getting double blank lines, which may mean the filter is not working correctly. Surely one of the AI can by now say, "this is the issue" to the additional blank lines thing. Gur.
 2. The project now aims to support these specific models shown below, but do so well. Qwen3 and GLM 4.7 level models should be kept, in order to keep compatibility with non-compile install options. The main program needs to support the models shown below, thereabouts, we need complete handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response, in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
 ```
-GLM => 4
-Qwen => 3
-Gemma => 4
+GLM
+Qwen
+Gemma
 gpt oss
-minstral 3
-granite => 4
-Llama => 3
-Kimi => K1.5
+minstral
+granite
+Llama
+Kimi
+Deepseek
 ```
 - TTS button has moved from tools to the bottom of given output, due to inference completing at unknown times therefore I do not intend reading to be automatic, as it typically will happen in an untimely mannor, however with the decision against think tool, we should have a tool button for it, just so it auto reads if the user wants that, while still having the ability to not use that on automatic, and instead click the play icon at the bottom of the output, ie keep the embedded icons as they are, but put back auto-reading tool button also. 
 
