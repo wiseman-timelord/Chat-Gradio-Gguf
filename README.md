@@ -468,19 +468,20 @@ v2 is now in Release stage, but there is still work planned...
 1. The output text has double blank lines inserted. Output text needs to be fixed, or we need to find alternate interface/browser solution. The long running issue of additional lines between each line is a long running problem, but we are now getting double blank lines, which may mean the filter is not working correctly. Surely one of the AI can by now say, "this is the issue" to the additional blank lines thing. Gur.
 2. The project now aims to support these specific models shown below, but do so well. Qwen3 and GLM 4.7 level models should be kept, in order to keep compatibility with non-compile install options. The main program needs to support the models shown below, thereabouts, we need complete handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response, in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
 ```
-GLM 4.7/5.1
-Qwen 3/3.5/3.6
-Gemma 4
+GLM => 4
+Qwen => 3
+Gemma => 4
 gpt oss
 minstral 3
-granite 4/4.1
+granite => 4
+Llama => 3
+Kimi => K1.5
 ```
-3. Code Optimization / redistribution of code, moving code out from display script, to applicably relatingly themed scripts, if there is relevance to both scripts and it is sound to do so, in order to reduce overall code in display script by moving it out, as appropriate to do so, nothing extreme. 
-10. Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far. If attempted again, then start with test scripts.
+- TTS button has moved from tools to the bottom of given output, due to inference completing at unknown times therefore I do not intend reading to be automatic, as it typically will happen in an untimely mannor, however with the decision against think tool, we should have a tool button for it, just so it auto reads if the user wants that, while still having the ability to not use that on automatic, and instead click the play icon at the bottom of the output, ie keep the embedded icons as they are, but put back auto-reading tool button also. 
 
-### Devekopment (reasoning notes)
+### Development (reasoning notes)
 - Think/NoThink button turned out to be bad idea, because quantized highly trained models are designed to either be a Thinking or Non-Thinking model, and thinking models simply, do not work well without or are unable to stop using, thinking mode. While one could say it would be useful to have a thinking mode button for non-thinking models, I consider current non-thinking models to be Nieche or low performers.
-- TTS button has moved from tools to the bottom of given output, due to inference completing at unknown times therefore I do not intend reading to be automatic, as it typically will happen in an untimely mannor.
+- Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far. If attempted again, then start with test scripts.
 
 ### Development for v1 
 - Best way to do a Legacy compatible version will be cloned from main, and then add compatibility back in and release that as the final v1 version. 
