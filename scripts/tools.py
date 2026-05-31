@@ -1086,6 +1086,7 @@ def initialize_tts():
 
     cfg.TTS_ENGINE = engine
     cfg.TTS_AUDIO_BACKEND = backend
+    cfg.TTS_ENABLED = (engine != "none")   # <-- ADD THIS LINE
 
     if engine == "coqui":
         coqui_voice = getattr(cfg, 'COQUI_VOICE_ID', 'p243')
@@ -1139,20 +1140,23 @@ def get_tts_status() -> str:
 
 
 def _clean_text_for_tts(text: str) -> str:
-    """Shared text cleaning pipeline applied before any TTS synthesis.
-
-    Strips all markdown formatting, HTML, code blocks, and symbols that a
-    speech engine would either mispronounce or vocalise as literal character
-    names (e.g. "asterisk", "hash", "underscore").
-
-    NOTE: asterisks are intentionally stripped here — the session log retains
-    the original markdown so bullet-point rendering in the chat is unaffected.
-    """
+    """Shared text cleaning pipeline applied before any TTS synthesis."""
+    # Remove the "AI-Chat:" prefix line (may appear at beginning)
     text = re.sub(r'^AI-Chat:\s*\n?', '', text, flags=re.MULTILINE)
-    text = re.sub(r'^Thinking[.\s]*\n?', '', text, flags=re.MULTILINE)
+
+    # Remove HTML tags first
+    text = re.sub(r'<[^>]+>', '', text)
+
+    # Remove any line that consists of "Thinking" followed by dots/spaces
+    # (?m) enables multiline mode, \r? handles Windows line endings
+    text = re.sub(r'(?m)^Thinking[.\s]+\r?\n?', '', text)
+
+    # Collapse multiple blank lines that may have been created
+    text = re.sub(r'\n\s*\n', '\n', text)
+
+    # Then apply the existing cleaning rules (code blocks, markdown, etc.)
     text = re.sub(r'```[\s\S]*?```', '', text)
     text = re.sub(r'`[^`]+`', '', text)
-    text = re.sub(r'<[^>]+>', '', text)
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
     text = re.sub(r'!\[.*?\]\([^)]+\)', '', text)
     text = re.sub(r'\*\*', '', text)

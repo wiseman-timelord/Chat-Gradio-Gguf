@@ -395,23 +395,21 @@ def format_response(output: str) -> str:
     )
     clean_output = re.sub(r'<\|[^>]+\|>', '', clean_output)
 
-    # 3. Style the "Thinking…" dot line so it is always visible.
-    def _style_think_line(m):
-        body = m.group(0).rstrip('\n').rstrip()
-        if body == "Thinking":
-            styled = f'<span style="color:{THINK_COLOR};font-style:italic;">Thinking...</span>'
+    # 3. Fix the "Thinking..." line: collapse dot‑space sequences into contiguous dots
+    lines = clean_output.splitlines(keepends=False)
+    if lines:
+        first_line = lines[0]
+        # Check if it's a thinking progress line (starts with "Thinking" and contains dots)
+        if first_line.strip().startswith("Thinking") and '.' in first_line:
+            # Replace any dot followed by whitespace with a single dot, repeatedly
+            # Converts "Thinking. . . ." -> "Thinking...."
+            first_line = re.sub(r'\.\s+', '.', first_line)
+            # Remove any trailing spaces
+            first_line = first_line.rstrip()
+            # Insert a blank line after the thinking line
+            clean_output = first_line + "\n\n" + "\n".join(lines[1:])
         else:
-            dot_count = body.count('.')
-            dots = '.' * min(dot_count, 40)
-            styled = f'<span style="color:{THINK_COLOR};font-style:italic;">Thinking{dots}</span>'
-        return styled + '\n'
-
-    clean_output = re.sub(
-        r'^Thinking[.\s]*\n?',
-        _style_think_line,
-        clean_output,
-        flags=re.MULTILINE
-    )
+            clean_output = "\n".join(lines)
 
     # 4. Highlight code blocks
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', clean_output, re.DOTALL)
@@ -1005,41 +1003,47 @@ def delete_all_sessions():
         return f"Error deleting history: {str(e)}"
 
 
-def build_progress_html(step: int, web_search_enabled: bool = False):
-    """Build dynamic progress indicator HTML based on enabled features."""
-    base_phases = [
-        "Handle Input",      # 0
-        "Build Prompt",      # 1
-        "Inject RAG",        # 2
-        "Add System",        # 3
-        "Assemble History",  # 4
-        "Check Model",       # 5
+def get_phase_list(web_search_enabled: bool = False, auto_tts_enabled: bool = False) -> list:
+    """Return ordered list of progress phases based on enabled features."""
+    phases = [
+        "Handle Input",
+        "Build Prompt",
+        "Inject RAG",
+        "Add System",
+        "Assemble History",
+        "Check Model",
     ]
-
-    phases = base_phases.copy()
-
     if web_search_enabled:
-        phases.append("Search Discovery")  # 6
-        phases.append("Rank & Select")     # 7
-        phases.append("Parallel Fetch")    # 8
-        phases.append("Process & Merge")   # 9
-        phases.append("Inject Context")    # 10
-
+        phases.extend([
+            "Search Discovery",
+            "Rank & Select",
+            "Parallel Fetch",
+            "Process & Merge",
+            "Inject Context",
+        ])
     phases.extend([
-        "Generate Stream",   # 6 or 11
-        "Format Response",   # 7 or 12
+        "Generate Stream",
+        "Format Response",
     ])
+    if auto_tts_enabled:
+        phases.extend([
+            "Synthesizing Speech",
+            "Playing Audio",
+        ])
+    return phases
 
+def build_progress_html(step: int, web_search_enabled: bool = False, auto_tts_enabled: bool = False) -> str:
+    """Build dynamic progress indicator HTML based on enabled features."""
+    phases = get_phase_list(web_search_enabled, auto_tts_enabled)
     segments = []
     for i, phase in enumerate(phases):
         if i < step:
-            color = "#00ff00"
+            color = "#00ff00"      # completed
         elif i == step:
-            color = "#4488ff"
+            color = "#4488ff"      # current
         else:
-            color = "#666666"
+            color = "#666666"      # pending
         segments.append(f'<span style="color:{color}; font-weight:bold;">{phase}</span>')
-
     return " → ".join(segments)
 
 
@@ -1162,7 +1166,7 @@ def conversation_display(
     user_input, session_tuples, session_messages, loaded_files,
     is_reasoning_model, cancel_flag, web_search_enabled,
     interaction_phase, llm_state, models_loaded_state,
-    has_ai_response_state
+    has_ai_response_state, tts_speak_enabled
 ):
     """
     Main conversation handler - Gradio 5.x.
@@ -1171,6 +1175,26 @@ def conversation_display(
     from scripts.inference import get_model_settings, get_response_stream, load_models
     from scripts.configure import context_injector
     from scripts.utility import read_file_content
+
+    # Helper to clean text for TTS
+    def _clean_text_for_tts(text: str) -> str:
+        """Remove markdown, tags, and thinking indicators for TTS."""
+        text = re.sub(r'^AI-Chat:\s*\n?', '', text, flags=re.MULTILINE)
+        text = re.sub(r'<[^>]+>', '', text)
+        text = re.sub(r'(?m)^Thinking[.\s]+\r?\n?', '', text)
+        text = re.sub(r'\n\s*\n', '\n', text)
+        text = re.sub(r'```[\s\S]*?```', '', text)
+        text = re.sub(r'`[^`]+`', '', text)
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        text = re.sub(r'!\[.*?\]\([^)]+\)', '', text)
+        text = re.sub(r'\*\*', '', text)
+        text = re.sub(r'\*', '', text)
+        text = re.sub(r'~~', '', text)
+        text = re.sub(r'(?<!\w)_|_(?!\w)', '', text)
+        text = re.sub(r'[#•→⇒★☆]|[-=]{2,}', ' ', text)
+        text = re.sub(r'[^\w\s.,!?;:\'"()-]', ' ', text)
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
 
     # CRITICAL FIX: Recover from Gradio state reset (e.g., after New Session)
     if llm_state is None and cfg.llm is not None:
@@ -1185,10 +1209,14 @@ def conversation_display(
                 get_chatbot_output(session_tuples, session_messages),
                 session_messages,
                 "❌ No valid model selected. Please choose one in Configuration tab.",
-                gr.update(visible=True), gr.update(visible=False),
+                gr.update(visible=True),
+                gr.update(visible=False),
                 *update_action_buttons("waiting_for_input", has_ai_response_state),
-                cancel_flag, loaded_files, "waiting_for_input",
-                llm_state, models_loaded_state
+                cancel_flag,
+                loaded_files,
+                "waiting_for_input",
+                llm_state,
+                models_loaded_state
             )
             return
 
@@ -1198,10 +1226,14 @@ def conversation_display(
                 get_chatbot_output(session_tuples, session_messages),
                 session_messages,
                 f"❌ Model file missing: {cfg.MODEL_NAME}\nCheck folder path.",
-                gr.update(visible=True), gr.update(visible=False),
+                gr.update(visible=True),
+                gr.update(visible=False),
                 *update_action_buttons("waiting_for_input", has_ai_response_state),
-                cancel_flag, loaded_files, "waiting_for_input",
-                llm_state, models_loaded_state
+                cancel_flag,
+                loaded_files,
+                "waiting_for_input",
+                llm_state,
+                models_loaded_state
             )
             return
 
@@ -1212,8 +1244,11 @@ def conversation_display(
             gr.update(visible=False),
             gr.update(visible=True, value="Auto-loading model — please wait... "),
             *update_action_buttons("input_submitted", has_ai_response_state),
-            cancel_flag, loaded_files, "input_submitted",
-            llm_state, models_loaded_state
+            cancel_flag,
+            loaded_files,
+            "input_submitted",
+            llm_state,
+            models_loaded_state
         )
 
         try:
@@ -1234,8 +1269,11 @@ def conversation_display(
                     gr.update(visible=False),
                     gr.update(visible=True, value="Model ready — processing your message... "),
                     *update_action_buttons("input_submitted", has_ai_response_state),
-                    cancel_flag, loaded_files, "input_submitted",
-                    new_llm, True, not gr.update()
+                    cancel_flag,
+                    loaded_files,
+                    "input_submitted",
+                    new_llm,
+                    True
                 )
 
                 llm_state = new_llm
@@ -1249,8 +1287,11 @@ def conversation_display(
                     gr.update(visible=True),
                     gr.update(visible=False),
                     *update_action_buttons("waiting_for_input", has_ai_response_state),
-                    cancel_flag, loaded_files, "waiting_for_input",
-                    llm_state, False, not gr.update()
+                    cancel_flag,
+                    loaded_files,
+                    "waiting_for_input",
+                    llm_state,
+                    False
                 )
                 return
 
@@ -1262,8 +1303,11 @@ def conversation_display(
                 gr.update(visible=True),
                 gr.update(visible=False),
                 *update_action_buttons("waiting_for_input", has_ai_response_state),
-                cancel_flag, loaded_files, "waiting_for_input",
-                llm_state, False
+                cancel_flag,
+                loaded_files,
+                "waiting_for_input",
+                llm_state,
+                False
             )
             return
 
@@ -1292,16 +1336,32 @@ def conversation_display(
     complete_user_message = ""
     search_results = None
 
+    # Get ordered phase list based on enabled features
+    phase_list = get_phase_list(web_search_enabled, tts_speak_enabled)
+    
+    def yield_progress(phase_name):
+        """Yield progress update for a specific phase name."""
+        try:
+            step = phase_list.index(phase_name)
+        except ValueError:
+            step = 0
+        
+        return (
+            get_chatbot_output(session_tuples, session_messages),
+            session_messages,
+            "",
+            gr.update(visible=False),
+            gr.update(visible=True, value=build_progress_html(step, web_search_enabled, tts_speak_enabled)),
+            *update_action_buttons("input_submitted", has_ai_response),
+            cancel_flag,
+            loaded_files,
+            "input_submitted",
+            llm_state,
+            models_loaded_state
+        )
+
     # PHASE 0: Handle Input
-    yield (
-        get_chatbot_output(session_tuples, session_messages),
-        session_messages, " ",
-        gr.update(visible=False, value=""),
-        gr.update(visible=True, value=build_progress_html(4, web_search_enabled)),
-        *update_action_buttons("input_submitted", has_ai_response),
-        cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state
-    )
+    yield yield_progress("Handle Input")
 
     # PHASE 1: Build Prompt
     processed_input = user_input
@@ -1326,13 +1386,7 @@ def conversation_display(
         if file_parts:
             file_contents_section = "\n".join(file_parts)
 
-    yield (
-        get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(1, web_search_enabled)),
-        *update_action_buttons("input_submitted", has_ai_response),
-        cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state
-    )
+    yield yield_progress("Build Prompt")
 
     # PHASE 2: Inject RAG
     effective_context = cfg.LOADED_CONTEXT_SIZE or cfg.CONTEXT_SIZE
@@ -1351,26 +1405,14 @@ def conversation_display(
         except Exception as e:
             print(f"[RAG-TEMP] Error: {e}")
 
-    yield (
-        get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(2, web_search_enabled)),
-        *update_action_buttons("input_submitted", has_ai_response),
-        cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state
-    )
+    yield yield_progress("Inject RAG")
 
     # PHASE 3: Add System
     complete_user_message = processed_input
     if file_contents_section:
         complete_user_message = processed_input + file_contents_section
 
-    yield (
-        get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(3, web_search_enabled)),
-        *update_action_buttons("input_submitted", has_ai_response),
-        cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state
-    )
+    yield yield_progress("Add System")
 
     # PHASE 4: Assemble History
     session_messages = list(session_messages) if session_messages else []
@@ -1378,15 +1420,7 @@ def conversation_display(
     has_ai_response = len([m for m in session_messages[:-1] if m.get('role') == 'assistant']) > 0
     interaction_phase = "input_submitted"
 
-    yield (
-        get_chatbot_output(session_tuples, session_messages),
-        session_messages, " ",
-        gr.update(visible=False, value=""),
-        gr.update(visible=True, value=build_progress_html(4, web_search_enabled)),
-        *update_action_buttons("input_submitted", has_ai_response),
-        cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state
-    )
+    yield yield_progress("Assemble History")
 
     # PHASE 5: Check Model
     model_settings = get_model_settings(cfg.MODEL_NAME)
@@ -1440,41 +1474,22 @@ def conversation_display(
             search_metadata = {'type': 'web_search', 'query': user_input[:100], 'error': str(e), 'sources': []}
             search_status_text = f"⚠️ Search Error: {str(e)}"
 
-    yield (
-        get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(5, web_search_enabled)),
-        *update_action_buttons("input_submitted", has_ai_response),
-        cancel_flag, loaded_files, "input_submitted",
-        llm_state, models_loaded_state
-    )
+    yield yield_progress("Check Model")
 
+    # Web search phases (if enabled)
     if web_search_enabled:
-        for phase_idx in [6, 7, 8, 9, 10]:
-            yield (
-                get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(phase_idx, web_search_enabled)),
-                *update_action_buttons("input_submitted", has_ai_response),
-                cancel_flag, loaded_files, "input_submitted",
-                llm_state, models_loaded_state
-            )
+        for phase_name in ["Search Discovery", "Rank & Select", "Parallel Fetch", "Process & Merge", "Inject Context"]:
+            yield yield_progress(phase_name)
             time.sleep(0.15)
 
-    generate_phase = 11 if web_search_enabled else 6
-    interaction_phase = "generating_response"
+    # Generate Stream phase
+    yield yield_progress("Generate Stream")
     _cancel_event.clear()
 
     session_messages.append({'role': 'assistant', 'content': "AI-Chat:\n"})
     accumulated_response = ""
 
     try:
-        yield (
-            get_chatbot_output(session_tuples, session_messages), session_messages, "",
-            gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, web_search_enabled)),
-            *update_action_buttons("generating_response", has_ai_response),
-            cancel_flag, loaded_files, "generating_response",
-            llm_state, models_loaded_state
-        )
-
         for chunk in get_response_stream(
             session_log=session_messages,
             settings=model_settings,
@@ -1503,34 +1518,32 @@ def conversation_display(
             clean_response = strip_separators(clean_response)
             session_messages[-1]['content'] = "AI-Chat:\n" + clean_response
 
+            # During streaming, keep progress on Generate Stream
+            step = phase_list.index("Generate Stream")
             yield (
-                get_chatbot_output(session_tuples, session_messages), session_messages, "",
-                gr.update(visible=False), gr.update(visible=True, value=build_progress_html(generate_phase, web_search_enabled)),
+                get_chatbot_output(session_tuples, session_messages),
+                session_messages,
+                "",
+                gr.update(visible=False),
+                gr.update(visible=True, value=build_progress_html(step, web_search_enabled, tts_speak_enabled)),
                 *update_action_buttons("generating_response", has_ai_response),
-                cancel_flag, loaded_files, "generating_response",
-                llm_state, models_loaded_state
+                cancel_flag,
+                loaded_files,
+                "generating_response",
+                llm_state,
+                models_loaded_state
             )
 
     except Exception as e:
         accumulated_response = f"Error: {str(e)}"
         session_messages[-1]['content'] = accumulated_response
-        if session_tuples:
-            session_tuples[-1] = (session_tuples[-1][0], accumulated_response)
 
     # Format Response phase
-    format_phase = 12 if web_search_enabled else 7
+    yield yield_progress("Format Response")
     formatted_response = format_response(accumulated_response)
     formatted_response = re.sub(r'^AI-Chat:\s*\n?', '', formatted_response, flags=re.MULTILINE)
     formatted_response = re.sub(r'\nAI-Chat:\s*\n?', '\n', formatted_response)
     session_messages[-1]['content'] = "AI-Chat:\n" + formatted_response
-
-    yield (
-        get_chatbot_output(session_tuples, session_messages), session_messages, "",
-        gr.update(visible=False), gr.update(visible=True, value=build_progress_html(format_phase, web_search_enabled)),
-        *update_action_buttons("generating_response", has_ai_response),
-        cancel_flag, loaded_files, "generating_response",
-        llm_state, models_loaded_state
-    )
 
     # Session save
     if accumulated_response.strip():
@@ -1554,12 +1567,50 @@ def conversation_display(
     cfg.session_attached_files = []
     beep()
 
+    # Auto-TTS: synchronous with progress stages
+    if tts_speak_enabled and cfg.TTS_ENABLED:
+        try:
+            bot_msgs = [m for m in session_messages if m.get("role") == "assistant"]
+            if bot_msgs:
+                msg_idx = len(bot_msgs) - 1
+                text = bot_msgs[msg_idx].get("content", "")
+                if text.strip():
+                    # Clean text for TTS
+                    text = _clean_text_for_tts(text)
+                    if text:
+                        if len(text) > cfg.MAX_TTS_LENGTH:
+                            text = text[:cfg.MAX_TTS_LENGTH]
+                            print(f"[AUTO-TTS] Text truncated to {cfg.MAX_TTS_LENGTH} chars")
+                        
+                        # Synthesizing Speech phase
+                        yield yield_progress("Synthesizing Speech")
+                        
+                        # Generate audio file
+                        from scripts.tools import synthesize_text_to_file, play_tts_audio
+                        wav_path = synthesize_text_to_file(text)
+                        
+                        if wav_path and os.path.exists(wav_path):
+                            # Playing Audio phase
+                            yield yield_progress("Playing Audio")
+                            play_tts_audio(wav_path)
+                            print(f"[AUTO-TTS] Completed for msg {msg_idx}")
+                        else:
+                            print("[AUTO-TTS] Synthesis failed")
+                    else:
+                        print("[AUTO-TTS] Text empty after cleaning")
+                else:
+                    print("[AUTO-TTS] Last response empty, skipping")
+        except Exception as e:
+            print(f"[AUTO-TTS] Error: {e}")
+            traceback.print_exc()
+
+    # Final yield to reset UI
     yield (
         get_chatbot_output(session_tuples, session_messages),
         session_messages,
         "Ready — response complete",
-        gr.update(visible=True),
-        gr.update(visible=False),
+        gr.update(value="", visible=True),   # Clear and show user input
+        gr.update(visible=False),            # Hide progress indicator
         *update_action_buttons("waiting_for_input", True),
         False,          # cancel_flag reset
         [],             # cleared attached_files
@@ -1567,7 +1618,6 @@ def conversation_display(
         llm_state,
         models_loaded_state
     )
-
 
 def strip_separators(text: str) -> str:
     """Remove decorative separator lines echoed from search context into model output."""
@@ -1584,6 +1634,17 @@ def toggle_web_search(current_web_state):
     return (
         new_web_state,
         gr.update(variant=web_variant),
+    )
+
+
+def toggle_tts_speak(current_tts_state):
+    """Toggle Auto TTS Speak (automatically speak AI responses when enabled)."""
+    new_tts_state = not current_tts_state
+    tts_variant = "primary" if new_tts_state else "secondary"
+    tts_icon = "🔊" if new_tts_state else "🔇"
+    return (
+        new_tts_state,
+        gr.update(variant=tts_variant, value=tts_icon),
     )
 
 
@@ -1715,6 +1776,14 @@ def launch_display():
         border-color: rgba(255,255,255,0.26);
         color: #e0e6f4;
     }
+    #cguf-tts-btn button {
+        font-size: 16px !important;
+        padding: 0 8px !important;
+    }
+    #cguf-tts-btn.primary button {
+        background: rgba(68, 136, 204, 0.3) !important;
+        border-color: rgba(68, 136, 204, 0.6) !important;
+    }
     #cguf-diag {
         font-family: monospace;
         font-size: 10px;
@@ -1760,7 +1829,8 @@ def launch_display():
             model_settings=gr.State({}),
             web_search_enabled=gr.State(False),
             has_ai_response=gr.State(False),
-            tts_state=gr.State(value="idle")
+            tts_state=gr.State(value="idle"),
+            tts_speak_enabled=gr.State(False)
         )
 
         config_components = {}
@@ -1819,8 +1889,12 @@ def launch_display():
                                 )
                             with gr.Column(scale=1, min_width=55, elem_classes=["clean-elements"]):
                                 action_buttons["web_search"] = gr.Button(
-                                    "🌐", variant="secondary",
+                                    "🔍", variant="secondary",
                                     elem_id="cguf-web-btn", min_width=50
+                                )
+                                action_buttons["tts_speak"] = gr.Button(
+                                    "🔇", variant="secondary",
+                                    elem_id="cguf-tts-btn", min_width=50
                                 )
 
                         copy_action_box = gr.Textbox(
@@ -2203,6 +2277,7 @@ def launch_display():
                 states["llm"],
                 states["models_loaded"],
                 states["has_ai_response"],
+                states["tts_speak_enabled"],
             ],
             outputs=[
                 conversation_components["session_log"],
@@ -2456,6 +2531,13 @@ def launch_display():
             outputs=[states["web_search_enabled"], action_buttons["web_search"]]
         )
 
+        # TTS Speak toggle button
+        action_buttons["tts_speak"].click(
+            fn=toggle_tts_speak,
+            inputs=[states["tts_speak_enabled"]],
+            outputs=[states["tts_speak_enabled"], action_buttons["tts_speak"]]
+        )
+
         # Inline copy
         copy_action_box.change(
             fn=handle_inline_copy,
@@ -2520,6 +2602,7 @@ def launch_display():
                 states["llm"],
                 states["models_loaded"],
                 states["has_ai_response"],
+                states["tts_speak_enabled"],
             ],
             outputs=[
                 conversation_components["session_log"],
@@ -2873,7 +2956,9 @@ def launch_display():
         function applyTooltips() {
             var web = document.querySelector('#cguf-web-btn button');
             if (web) web.title = 'Web Search';
-            if (!web) setTimeout(applyTooltips, 500);
+            var tts = document.querySelector('#cguf-tts-btn button');
+            if (tts) tts.title = 'Auto TTS Speak (toggle ON to automatically speak AI responses)';
+            if (!web || !tts) setTimeout(applyTooltips, 500);
         }
         applyTooltips();
     })();
