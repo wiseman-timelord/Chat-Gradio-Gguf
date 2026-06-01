@@ -1,6 +1,6 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 Status - v2 Release.
-- Currently on v2.01.x, Improvements to TTS going on in this subversion.
+- Currently on v2.01.x, Improvements/corrections to several things in this subversion, see release notes.
 - Currently is, tested and working, on Windows 10 and I would assume windows 11 may be ok, but at some point Ubuntu 24-25 side must be checked. Possibly it will happen when I get to the end of v2 development plan, see development section.
 
 ## Description
