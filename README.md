@@ -44,6 +44,35 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The both side panels expanded, showing dynamic progress indication replacing the user input box upon submission (Windows v2.01.00)...
 ![image_missing](media/dynamic_progress.jpg)
 
+- Upcoming Kokoro TTS voice model selection menu...
+```
+=================================================================================
+ Kokoro TTS — Voice Pack Selection
+=================================================================================
+
+
+  Kokoro TTS contains all voices in a single ~300 MB model file.
+  Choose which voices are enabled in the main program’s dropdown.
+
+  1) American Male+Female Pack 1  (1 male + 1 female)
+     (Adam, Heart)
+
+  2) American Male+Female Pack 2  (2 male + 4 female)
+     (Adam, Michael, Heart, Bella, Nova, Sky)
+
+  3) British Male+Female Pack 1   (1 male + 1 female)
+     (George, Emma)
+
+  4) British Male+Female Pack 2   (2 male + 2 female)
+     (George, Lewis, Emma, Alice)
+
+
+---------------------------------------------------------------------------------
+Selection; Pack = 1-4, Abandon = A:
+
+
+```
+
 - Startup looks like this in the Command Prompt console (v1.10.6)...
 <details>
     
