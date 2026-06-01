@@ -1,7 +1,6 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 Status - v2 Release.
-- Currently on v2.01.x, Improvements/corrections to several things in this subversion, see release notes.
-- Currently is, tested and working, on Windows 10 and I would assume windows 11 may be ok, but at some point Ubuntu 24-25 side must be checked. Possibly it will happen when I get to the end of v2 development plan, see development section.
+- Currently on v2.01.x, Improvements/corrections to several things in this subversion, see release notes.  Currently confirmed working on Windows 10 and I would assume windows 11 may be ok, but at some point Ubuntu 24-25 side must be checked. Possibly it will happen when I get to the end of v2 development plan, see development section. 
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 10-11 (WSL not required) and Ubuntu 24-25, with any Gpu on GGUF models through Python ~3.11-~3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration.
