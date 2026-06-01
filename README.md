@@ -1,6 +1,6 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 Status - v2 Release.
-- Currently on v2.00.12, which is now seeing the updates mostly done in relevance to, newer libraries and more sane scripts/interface, as well as completion of GLM 4.7 and Qwen 3.6, model handling, that I intended for v2.
+- Currently on v2.01.x, Improvements to TTS going on in this subversion.
 - Currently is, tested and working, on Windows 10 and I would assume windows 11 may be ok, but at some point Ubuntu 24-25 side must be checked. Possibly it will happen when I get to the end of v2 development plan, see development section.
 
 ## Description
@@ -465,7 +465,7 @@ project_root/
 
 # Development for v2
 v2 is now in Release stage, but there is still work planned...
-1. The output text has double blank lines inserted. Output text needs to be fixed, or we need to find alternate interface/browser solution. The long running issue of additional lines between each line is a long running problem, but we are now getting double blank lines, which may mean the filter is not working correctly. Surely one of the AI can by now say, "this is the issue" to the additional blank lines thing. Gur.
+1. LONG-RUNNING ISSUE: The output text has double blank lines inserted. Output text needs to be fixed, or we need to find alternate interface/browser solution. The long running issue of additional lines between each line is a long running problem, but we are now getting double blank lines, which may mean the filter is not working correctly. Surely one of the AI can by now say, "this is the issue" to the additional blank lines thing. Gur.
 2. The project now aims to support these specific models shown below, but do so well. Qwen3 and GLM 4.7 level models should be kept, in order to keep compatibility with non-compile install options. The main program needs to support the models shown below, thereabouts, we need complete handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response, in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
 ```
 GLM
@@ -478,7 +478,8 @@ Llama
 Kimi
 Deepseek
 ```
-- TTS button has moved from tools to the bottom of given output, due to inference completing at unknown times therefore I do not intend reading to be automatic, as it typically will happen in an untimely mannor, however with the decision against think tool, we should have a tool button for it, just so it auto reads if the user wants that, while still having the ability to not use that on automatic, and instead click the play icon at the bottom of the output, ie keep the embedded icons as they are, but put back auto-reading tool button also. 
+- TTS being swapped out from Corqui to Kokoro. Kokoro models are half the size, so quicker generation and minimal quality loss compared to Corqui. I think Kokoro is new, it didnt pop up in previous research only conducted a few month ago.
+- STT - We could have a STT button in the tools section, enabling the input box to switch to a sample display and a button, the user would click and hold the button to record, and then let go of mouse when they finished recording, and then the wave appear in the box, then AI translate this into words, these words are then shown/editable in the text input box, and the wave record box will hide, but there will be a new button at bottom of text input when STT is enabled, to switch back to the STT Recording box and hide the text box again, so the user can re-record (blanking the previous recorded text upon pressing record). if the user selects STT again to disable it then, the wave box will hide, the text input box will be shown, and the Re-Record button will be hidden. Hmm. Is this the best way to do this? needs a brainstorm. 
 
 ### Development (reasoning notes)
 - Think/NoThink button turned out to be bad idea, because quantized highly trained models are designed to either be a Thinking or Non-Thinking model, and thinking models simply, do not work well without or are unable to stop using, thinking mode. While one could say it would be useful to have a thinking mode button for non-thinking models, I consider current non-thinking models to be Nieche or low performers.
