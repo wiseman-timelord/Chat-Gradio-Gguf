@@ -1,5 +1,5 @@
 # scripts/configure.py
-# v2: Targets Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.13 / Gradio 5.x / PyQt6
+# v2: Targets Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.12 / Gradio 5.x / PyQt6
 
 import json
 import configparser
@@ -122,14 +122,18 @@ SOUND_SAMPLE_RATE_OPTIONS = [44100, 48000]
 # TTS (Text-to-Speech) Configuration
 # =============================================================================
 TTS_ENABLED = False
-TTS_ENGINE = "none"           # Detected at runtime by initialize_tts() in tools.py
-TTS_AUDIO_BACKEND = "none"    # Detected at runtime: "windows", "pulseaudio", "pipewire", "none"
+TTS_ENGINE = "none"
+TTS_AUDIO_BACKEND = "none"
 TTS_VOICE = None
 TTS_VOICE_NAME = None
 MAX_TTS_LENGTH = 4500
-COQUI_VOICE_ID = None                    # Coqui speaker ID (e.g., "p243") — set from constants.ini
-COQUI_VOICE_ACCENT = None                # Coqui voice accent (e.g., "british") — set from constants.ini
-COQUI_MODEL = "tts_models/en/vctk/vits"  # Coqui model name — set from constants.ini
+KOKORO_VOICE = "af_heart"
+KOKORO_LANG_CODE = "a"
+# New pack-related variables
+TTS_PACK = 1
+TTS_ENABLED_VOICES = []    # list of voice IDs (strings)
+TTS_DEFAULT_VOICE_ID = None
+TTS_DEFAULT_VOICE_NAME = None
 
 # =============================================================================
 # Per-Message TTS Button State (4-phase cycle: play -> generating -> playing -> idle)
@@ -611,9 +615,10 @@ def load_system_ini():
 
         global PLATFORM, BACKEND_TYPE, VULKAN_AVAILABLE, EMBEDDING_MODEL_NAME
         global EMBEDDING_BACKEND, GRADIO_VERSION, LLAMA_CLI_PATH, LLAMA_BIN_PATH
-        global OS_VERSION, WINDOWS_VERSION, COQUI_VOICE_ID, COQUI_VOICE_ACCENT, COQUI_MODEL
+        global OS_VERSION, WINDOWS_VERSION, KOKORO_LANG_CODE
         global GRAPHICS_ACCELERATION, QT_VERSION, DX_FEATURE_LEVEL
         global LLAMA_WHEEL_VERSION
+        global TTS_PACK, TTS_ENABLED_VOICES, TTS_DEFAULT_VOICE_ID, TTS_DEFAULT_VOICE_NAME
 
         PLATFORM = system.get('platform')
         BACKEND_TYPE = system.get('backend_type', 'CPU_CPU')
@@ -649,19 +654,27 @@ def load_system_ini():
         else:
             WINDOWS_VERSION = None
 
-        # Load TTS configuration (Coqui)
+        # Load TTS configuration from [tts] section (written by installer).
+        # These are installer decisions and are authoritative — the JSON never
+        # overrides them.
         if 'tts' in config:
-            tts_section = config['tts']
-            COQUI_VOICE_ID = tts_section.get('coqui_voice_id', 'p225,p226')
-            COQUI_VOICE_ACCENT = tts_section.get('coqui_voice_accent', 'english')
-            COQUI_MODEL = tts_section.get('coqui_model', 'tts_models/en/vctk/vits')
-            print(f"[INI] Coqui Voice: {COQUI_VOICE_ID} ({COQUI_VOICE_ACCENT})")
-            print(f"[INI] Coqui Model: {COQUI_MODEL}")
+            tts_section          = config['tts']
+            TTS_PACK             = tts_section.getint('tts_pack', 1)
+            TTS_DEFAULT_VOICE_ID = tts_section.get('tts_default_voice_id', 'bm_george')
+            TTS_DEFAULT_VOICE_NAME = tts_section.get('tts_default_voice_name', 'George — British Male')
+            enabled_str          = tts_section.get('tts_enabled_voices', '')
+            TTS_ENABLED_VOICES   = [v.strip() for v in enabled_str.split(',') if v.strip()]
+            # KOKORO_LANG_CODE: derive from default voice prefix (am_/af_ -> 'a', bm_/bf_ -> 'b')
+            KOKORO_LANG_CODE     = 'b' if TTS_DEFAULT_VOICE_ID.startswith('b') else 'a'
+            print(f"[INI] TTS pack {TTS_PACK}: {len(TTS_ENABLED_VOICES)} voice(s) enabled, "
+                  f"default={TTS_DEFAULT_VOICE_ID} (lang={KOKORO_LANG_CODE})")
         else:
-            print("[INI] TTS section not found - using default Coqui settings")
-            COQUI_VOICE_ID = "p225,p226"
-            COQUI_VOICE_ACCENT = "english"
-            COQUI_MODEL = "tts_models/en/vctk/vits"
+            print("[INI] No [tts] section — TTS will be disabled")
+            TTS_PACK             = 1
+            TTS_DEFAULT_VOICE_ID = None
+            TTS_DEFAULT_VOICE_NAME = None
+            TTS_ENABLED_VOICES   = []
+            KOKORO_LANG_CODE     = 'a' 
 
         return True
 
@@ -677,6 +690,7 @@ def load_config():
     global PRINT_RAW_OUTPUT, CPU_THREADS, BLEEP_ON_EVENTS, USE_PYTHON_BINDINGS
     global LAYER_ALLOCATION_MODE, SELECTED_GPU, SELECTED_CPU, SOUND_OUTPUT_DEVICE
     global SOUND_SAMPLE_RATE, TTS_ENABLED, TTS_VOICE, TTS_VOICE_NAME, MAX_TTS_LENGTH
+    global TTS_PACK, TTS_ENABLED_VOICES, TTS_DEFAULT_VOICE_ID, TTS_DEFAULT_VOICE_NAME
     global AVAILABLE_MODELS
 
     if not CONFIG_PATH.exists():
@@ -728,8 +742,11 @@ def load_config():
     else:
         SOUND_OUTPUT_DEVICE = raw_sound_device if raw_sound_device else "default"
     SOUND_SAMPLE_RATE = model_settings.get("sound_sample_rate", 44100)
-    TTS_ENABLED = model_settings.get("tts_enabled", False)
-    TTS_VOICE = model_settings.get("tts_voice")
+    # TTS runtime state — only live user selections come from JSON.
+    # Pack, enabled voices, and default voice are always read from constants.ini
+    # by load_system_ini() which runs before load_config().
+    TTS_ENABLED    = model_settings.get("tts_enabled", False)
+    TTS_VOICE      = model_settings.get("tts_voice")
     TTS_VOICE_NAME = model_settings.get("tts_voice_name")
     MAX_TTS_LENGTH = model_settings.get("max_tts_length", 4500)
 
@@ -798,6 +815,9 @@ def save_config():
             "layer_allocation_mode": LAYER_ALLOCATION_MODE,
             "sound_output_device": SOUND_OUTPUT_DEVICE,
             "sound_sample_rate": SOUND_SAMPLE_RATE,
+            # TTS runtime state — only the user's live selections are saved here.
+            # Pack, enabled voice list, and default voice come from constants.ini
+            # (written by the installer) and are never round-tripped through JSON.
             "tts_enabled": TTS_ENABLED,
             "tts_voice": TTS_VOICE,
             "tts_voice_name": TTS_VOICE_NAME,

@@ -1,6 +1,7 @@
 # launcher.py - The entry point of the main program.
-# v2: Targets Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.13 / Gradio 5.x / PyQt6
+# v2: Targets Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.12 / Gradio 5.x / PyQt6
 # Pydantic v2 shim is NOT required — Gradio 5.x is natively compatible with Pydantic v2.
+# Note: Python 3.13 is not supported — Kokoro TTS requires Python <3.13.
 
 import sys as _sys
 import os as _os
@@ -18,32 +19,6 @@ _os.environ["SENTENCE_TRANSFORMERS_HOME"] = _cache_dir
 _os.environ["CUDA_VISIBLE_DEVICES"] = ""       # Force CPU mode for embeddings
 _os.environ["HF_HUB_OFFLINE"] = "1"            # CRITICAL: fully offline embedding model loading
 _os.environ["TRANSFORMERS_OFFLINE"] = "1"
-
-# =============================================================================
-# STEP 1b: Stub torchcodec BEFORE any imports that might trigger it.
-# torchaudio pulls torchcodec as a transitive dependency; torchcodec tries to
-# load FFmpeg DLLs at import time, which fails on Windows without a full FFmpeg
-# "shared" install.  We don't use any FFmpeg / video-decoding features, so we
-# pre-register dummy stub modules so the real torchcodec never gets imported.
-# =============================================================================
-import types as _types
-import importlib.util as _importlib_util
-
-def _make_stub(name: str) -> _types.ModuleType:
-    """Create a stub module with a proper __spec__ so guards like
-    `if module.__spec__ is None: raise …` (torchaudio, torchcodec) don't trip."""
-    m = _types.ModuleType(name)
-    m.__spec__ = _importlib_util.spec_from_loader(name, loader=None)
-    return m
-
-if "torchcodec" not in _sys.modules:
-    _sys.modules["torchcodec"] = _make_stub("torchcodec")
-    for _sub in (
-        "torchcodec._internally_replaced_utils",
-        "torchcodec.decoders",
-        "torchcodec.decoders._core",
-    ):
-        _sys.modules[_sub] = _make_stub(_sub)
 
 # =============================================================================
 # STEP 2: Suppress library logging configuration calls before any imports.

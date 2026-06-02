@@ -1,5 +1,5 @@
 # scripts/tools.py
-# v2: Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.13 / Gradio 5.x
+# v2: Windows 10-11 / Ubuntu 24-25 / Python 3.11-3.12 / Gradio 5.x
 """
 Centralized tools module for web search and TTS.
 
@@ -7,7 +7,8 @@ Search Tools:
 - Web Search: Comprehensive multi-source web search with parallel page fetching
 
 TTS Tools:
-- Text-to-Speech using Coqui TTS (VCTK model) on all supported platforms
+- Text-to-Speech using Kokoro TTS (kokoro>=0.9.4) on all supported platforms
+- G2P via misaki[en] — no espeak dependency on any platform
 - Audio playback via winsound (Windows) or PipeWire/PulseAudio/ALSA (Linux)
 """
 
@@ -488,50 +489,81 @@ def format_search_status_for_chat(search_metadata: dict) -> str:
 # TTS (TEXT-TO-SPEECH) FUNCTIONS
 # =============================================================================
 
-# TTS thread management
+# ---------------------------------------------------------------------------
+# Thread management
+# ---------------------------------------------------------------------------
 _tts_lock = threading.Lock()
 _tts_thread = None
 _tts_stop_flag = threading.Event()
 
+# ---------------------------------------------------------------------------
+# Kokoro pipeline cache
+# One KPipeline instance per lang_code kept alive between calls to avoid
+# the model-load overhead on every utterance.
+# ---------------------------------------------------------------------------
+_kokoro_pipelines: dict = {}        # lang_code -> KPipeline
+_kokoro_model = None                # single shared KModel instance (weights loaded once)
+_kokoro_pipeline_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# VOICE CATALOGUE
+# ---------------------------------------------------------------------------
+# 10 curated voices across American and British English.
+# id        — passed verbatim to KPipeline()(text, voice=...)
+# lang_code — passed to KPipeline(lang_code=...)  'a'=American  'b'=British
+# ---------------------------------------------------------------------------
+KOKORO_VOICES = [
+    {"id": "af_heart",   "name": "Heart — American Female",   "lang_code": "a", "gender": "female"},
+    {"id": "af_bella",   "name": "Bella — American Female",   "lang_code": "a", "gender": "female"},
+    {"id": "af_nova",    "name": "Nova — American Female",    "lang_code": "a", "gender": "female"},
+    {"id": "af_sky",     "name": "Sky — American Female",     "lang_code": "a", "gender": "female"},
+    {"id": "am_adam",    "name": "Adam — American Male",      "lang_code": "a", "gender": "male"},
+    {"id": "am_michael", "name": "Michael — American Male",   "lang_code": "a", "gender": "male"},
+    {"id": "bf_emma",    "name": "Emma — British Female",     "lang_code": "b", "gender": "female"},
+    {"id": "bf_alice",   "name": "Alice — British Female",    "lang_code": "b", "gender": "female"},
+    {"id": "bm_george",  "name": "George — British Male",     "lang_code": "b", "gender": "male"},
+    {"id": "bm_lewis",   "name": "Lewis — British Male",      "lang_code": "b", "gender": "male"},
+]
+
+_VOICE_BY_ID   = {v["id"]:   v for v in KOKORO_VOICES}
+_VOICE_BY_NAME = {v["name"]: v for v in KOKORO_VOICES}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+
+def get_enabled_voices() -> List[Dict]:
+    """Return list of voice dicts filtered by the current TTS pack."""
+    if cfg.TTS_ENABLED_VOICES:
+        return [v for v in KOKORO_VOICES if v["id"] in cfg.TTS_ENABLED_VOICES]
+    # Fallback: all voices (used during initialisation or if config not loaded)
+    return KOKORO_VOICES
+
+def _kokoro_cache_dir() -> Path:
+    """Local directory where Kokoro stores its downloaded model files."""
+    d = Path(__file__).parent.parent / "data" / "tts_models" / "kokoro"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
 
 def detect_tts_engine() -> str:
-    """
-    Detect available TTS engine. v2: Coqui TTS only.
-
-    Returns:
-        str: "coqui" if available, "none" if not installed or misconfigured.
-    """
-    if cfg.PLATFORM == "windows":
-        base_dir = Path(__file__).parent.parent
-        espeak_dll = base_dir / "data" / "espeak-ng" / "libespeak-ng.dll"
-        espeak_exe = base_dir / "data" / "espeak-ng" / "espeak-ng.exe"
-
-        if not espeak_dll.exists():
-            print(f"[TTS] espeak-ng DLL not found: {espeak_dll}")
-            print("[TTS] Re-run installer to repair Coqui installation.")
-            return "none"
-
-        espeak_dir = str(base_dir / "data" / "espeak-ng")
-        os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = str(espeak_dll)
-        os.environ["PHONEMIZER_ESPEAK_PATH"]    = str(espeak_exe)
-        os.environ["ESPEAK_DATA_PATH"]           = str(base_dir / "data" / "espeak-ng" / "espeak-ng-data")
-        os.environ["PATH"]                       = espeak_dir + os.pathsep + os.environ.get("PATH", "")
-
+    """Return 'kokoro' if the kokoro package is importable, else 'none'."""
     try:
-        from TTS.api import TTS  # noqa: F401
-        return "coqui"
+        import kokoro  # noqa: F401
+        return "kokoro"
     except ImportError as e:
-        print(f"[TTS] Coqui TTS import failed: {e}")
-        print("[TTS] Re-run installer to repair Coqui installation.")
+        print(f"[TTS] Kokoro import failed: {e}")
+        print("[TTS] Re-run the installer to repair the Kokoro installation.")
         return "none"
 
 
 def detect_audio_backend() -> str:
-    """
-    Detect audio playback backend with functional testing.
+    """Detect audio playback backend.
 
-    Returns:
-        str: "windows", "pipewire", "pulseaudio", "alsa", or "none"
+    Returns: "windows" | "pipewire" | "pulseaudio" | "alsa" | "none"
     """
     if cfg.PLATFORM == "windows":
         return "windows"
@@ -565,292 +597,229 @@ def detect_audio_backend() -> str:
     return "none"
 
 
-def _get_coqui_voices() -> List[Dict[str, str]]:
-    """Get available Coqui TTS voices filtered to the installed accent.
-
-    The VCTK multi-speaker model contains ALL 109 speakers in a single file.
-    No per-voice installation is needed — every speaker ID works from the
-    same model download. We filter the dropdown to the accent the user
-    chose during installation (stored in constants.ini as coqui_voice_accent).
-
-    VCTK model speaker mapping (inverted vs corpus metadata — known bug):
-      p229 = British Male      p243 = British Female
-      p231 = American Male     p230 = American Female
-    """
-    accent_voices = {
-        "english": [
-            {"id": "p226", "name": "English (Male)",   "gender": "male"},
-            {"id": "p225", "name": "English (Female)", "gender": "female"},
-        ],
-        "british": [
-            {"id": "p229", "name": "British (Male)",   "gender": "male"},
-            {"id": "p243", "name": "British (Female)", "gender": "female"},
-        ],
-        "american": [
-            {"id": "p231", "name": "American (Male)",   "gender": "male"},
-            {"id": "p230", "name": "American (Female)", "gender": "female"},
-        ],
-        "scottish":       [{"id": "p234", "name": "Scottish",        "gender": "male"}],
-        "irish":          [{"id": "p245", "name": "Irish",           "gender": "male"}],
-        "indian":         [{"id": "p248", "name": "Indian",          "gender": "male"}],
-        "canadian":       [{"id": "p302", "name": "Canadian",        "gender": "male"}],
-        "south_african":  [{"id": "p323", "name": "South African",   "gender": "male"}],
-        "welsh":          [{"id": "p253", "name": "Welsh",           "gender": "male"}],
-        "northern_irish": [{"id": "p292", "name": "Northern Irish",  "gender": "male"}],
-        "australian":     [{"id": "p303", "name": "Australian",      "gender": "male"}],
-        "new_zealand":    [{"id": "p316", "name": "New Zealand",     "gender": "male"}],
-    }
-
-    installed_accent = getattr(cfg, 'COQUI_VOICE_ACCENT', 'english')
-    raw_voice_id = getattr(cfg, 'COQUI_VOICE_ID', 'p226')
-    default_voice_id = raw_voice_id.split(',')[0].strip() if raw_voice_id else 'p226'
-
-    accent_voice_list = accent_voices.get(installed_accent)
-    if not accent_voice_list:
-        return [{'id': default_voice_id, 'name': f"{installed_accent.title()} (Default)", 'language': 'en'}]
-
-    voices = []
-    for v in accent_voice_list:
-        entry = {'id': v['id'], 'name': v['name'], 'language': 'en'}
-        if v['id'] == default_voice_id:
-            voices.insert(0, entry)
-        else:
-            voices.append(entry)
-
-    if not any(v['id'] == default_voice_id for v in voices):
-        voices.insert(0, {'id': default_voice_id, 'name': f"{installed_accent.title()} (Default)", 'language': 'en'})
-
+def _get_kokoro_voices() -> List[Dict[str, str]]:
+    """Return enabled voices, with the configured default voice sorted first."""
+    saved_id = getattr(cfg, "TTS_VOICE", None) or getattr(cfg, "TTS_DEFAULT_VOICE_ID", None)
+    voices = list(get_enabled_voices()) or list(KOKORO_VOICES)
+    if saved_id and saved_id in _VOICE_BY_ID:
+        voices = sorted(voices, key=lambda v: (v["id"] != saved_id))
     return voices
 
 
 def get_voice_choices() -> List[str]:
-    """Get voice names for UI dropdown."""
-    voices = _get_coqui_voices()
-    if not voices:
-        return ["No voices available"]
-    return [v['name'] for v in voices]
+    """Return voice display names for the UI dropdown (filtered by pack)."""
+    voices = get_enabled_voices()
+    # Sort so that default voice appears first (already handled by _get_kokoro_voices)
+    # but we must also apply the same sorting to enabled voices.
+    saved_id = getattr(cfg, "TTS_VOICE", None)
+    if saved_id and saved_id in [v["id"] for v in voices]:
+        voices = sorted(voices, key=lambda v: (v["id"] != saved_id))
+    return [v["name"] for v in voices] if voices else ["No voices available"]
 
 
 def get_voice_id_by_name(voice_name: str) -> Optional[str]:
-    """Get voice ID from display name."""
-    voices = _get_coqui_voices()
-    if not voices:
-        return None
-    for voice in voices:
-        if voice['name'] == voice_name:
-            return voice['id']
-    return None
+    """Resolve a display name to a Kokoro voice ID."""
+    entry = _VOICE_BY_NAME.get(voice_name)
+    return entry["id"] if entry else None
+
+
+def verify_tts_voice(voice_id: str) -> tuple[bool, str]:
+    """Check that voice_id has a local .pt file in the snapshot.
+
+    Returns (ok: bool, message: str).  Called after the user saves a voice
+    selection so the UI can report a missing file immediately.
+    """
+    if not voice_id:
+        return False, "No voice selected."
+    snapshot = _find_kokoro_snapshot()
+    if snapshot is None:
+        return False, "Kokoro model snapshot not found — re-run the installer."
+    voice_pt = snapshot / "voices" / f"{voice_id}.pt"
+    if voice_pt.is_file():
+        return True, f"Voice ready: {voice_id}"
+    return False, (
+        f"Voice file not installed: {voice_id}.pt\n"
+        f"Re-run the installer and select this voice pack, "
+        f"or manually run: pipeline.load_single_voice('{voice_id}')"
+    )
 
 
 def get_sample_rate_choices() -> List[int]:
-    """Get available sample rate options."""
-    return [44100, 48000]
+    """Kokoro synthesises at 24 000 Hz; expose common playback rates for the UI."""
+    return [24000, 44100, 48000]
 
 
-def speak_text(text: str, voice_id: Optional[str] = None,
-               output_device: Optional[str] = None,
-               sample_rate: Optional[int] = None,
-               blocking: bool = False) -> bool:
-    """Speak text via TTS in a background thread."""
-    global _tts_thread
+# ---------------------------------------------------------------------------
+# Pipeline management
+# ---------------------------------------------------------------------------
 
-    if not getattr(cfg, 'TTS_ENABLED', False):
-        return False
+def _find_kokoro_snapshot() -> Optional[Path]:
+    """Return the local HuggingFace snapshot directory for hexgrad/Kokoro-82M.
 
-    if detect_tts_engine() == "none":
-        print("[TTS] No TTS engine available")
-        return False
-
-    # Apply shared sound settings as fallback for any unspecified parameters
-    if not voice_id:
-        voice_id = getattr(cfg, 'TTS_VOICE', None)
-    if not output_device:
-        output_device = getattr(cfg, 'SOUND_OUTPUT_DEVICE', None)
-    if not sample_rate:
-        sample_rate = getattr(cfg, 'SOUND_SAMPLE_RATE', 44100)
-
-    _tts_thread = threading.Thread(
-        target=_speak_thread,
-        args=(text, voice_id, output_device, sample_rate),
-        daemon=True
-    )
-    _tts_thread.start()
-
-    if blocking:
-        _tts_thread.join()
-
-    return True
-
-
-def _speak_thread(text: str, voice_id: Optional[str],
-                  output_device: Optional[str], sample_rate: int):
-    """Background thread for TTS. v2: Coqui only."""
-    with _tts_lock:
-        try:
-            _speak_coqui(text, voice_id, output_device, sample_rate)
-        except Exception as e:
-            print(f"[TTS] Speech error: {e}")
-
-
-def _speak_coqui(text: str, voice_id: Optional[str],
-                 output_device: Optional[str], sample_rate: int):
-    """Speak text using Coqui TTS (VCTK model).
-
-    IMPORTANT: espeak-ng environment variables must be set BEFORE importing TTS
-    on Windows, as the phonemizer library checks them at import time.
-    Uses local project copy of espeak-ng, NOT Program Files.
+    Looks inside data/tts_models/kokoro/hub/models--hexgrad--Kokoro-82M/snapshots/
+    and returns the first (and normally only) snapshot subdirectory found.
+    Returns None if not found.
     """
+    hub_dir = _kokoro_cache_dir() / "hub" / "models--hexgrad--Kokoro-82M" / "snapshots"
+    if not hub_dir.is_dir():
+        return None
+    snapshots = [d for d in hub_dir.iterdir() if d.is_dir()]
+    return snapshots[0] if snapshots else None
+
+
+def _get_or_create_pipeline(lang_code: str):
+    """Return a cached KPipeline for *lang_code*, creating it on first call.
+
+    Both 'a' (American) and 'b' (British) pipelines share the same underlying
+    KModel instance; only the G2P dialect differs.  Loading from local snapshot
+    paths bypasses huggingface_hub entirely — no network access needed and the
+    HF_HUB_OFFLINE flag set by launcher.py is irrelevant.
+    """
+    global _kokoro_model
+    from kokoro import KModel, KPipeline
+
+    with _kokoro_pipeline_lock:
+        if lang_code not in _kokoro_pipelines:
+            snapshot = _find_kokoro_snapshot()
+            if snapshot is None:
+                raise FileNotFoundError(
+                    "Kokoro model snapshot not found in data/tts_models/kokoro/hub. "
+                    "Re-run the installer to download the model."
+                )
+
+            config_path = str(snapshot / "config.json")
+            model_path  = str(snapshot / "kokoro-v1_0.pth")
+
+            if not os.path.isfile(config_path):
+                raise FileNotFoundError(f"Kokoro config.json not found: {config_path}")
+            if not os.path.isfile(model_path):
+                raise FileNotFoundError(f"Kokoro model weights not found: {model_path}")
+
+            print(f"[TTS] Loading Kokoro pipeline (lang_code='{lang_code}')...")
+            print(f"[TTS] Snapshot: {snapshot}")
+
+            # Load model weights once; reuse the same KModel instance across
+            # all language pipelines to save ~300 MB of duplicate RAM.
+            if _kokoro_model is None:
+                _kokoro_model = KModel(
+                    repo_id="hexgrad/Kokoro-82M",
+                    config=config_path,
+                    model=model_path,
+                )
+                print("[TTS] KModel weights loaded from local snapshot")
+
+            _kokoro_pipelines[lang_code] = KPipeline(
+                lang_code=lang_code,
+                repo_id="hexgrad/Kokoro-82M",
+                model=_kokoro_model,
+            )
+            print(f"[TTS] Kokoro pipeline ready (lang_code='{lang_code}')")
+        return _kokoro_pipelines[lang_code]
+
+
+# ---------------------------------------------------------------------------
+# Synthesis
+# ---------------------------------------------------------------------------
+
+def _synthesize_kokoro_to_file(text: str, voice_id: Optional[str] = None) -> Optional[str]:
+    """Synthesise *text* with Kokoro and write a WAV to the temp directory.
+
+    Returns the WAV file path on success, None on failure.
+    """
+    import soundfile as sf
+    import numpy as np
+
+    # Resolve voice — user's live TTS_VOICE selection takes priority, then
+    # the pack default, then the first enabled voice.  Never fall back to a
+    # hardcoded id that may not be installed.
+    enabled    = get_enabled_voices()
+    enabled_ids = [v["id"] for v in enabled]
+
+    def _pick(vid):
+        return _VOICE_BY_ID.get(vid) if vid and vid in _VOICE_BY_ID else None
+
+    entry = (
+        _pick(voice_id)
+        or _pick(getattr(cfg, "TTS_VOICE", None))
+        or _pick(getattr(cfg, "TTS_DEFAULT_VOICE_ID", None))
+        or (enabled[0] if enabled else None)
+        or KOKORO_VOICES[0]
+    )
+    effective_id   = entry["id"]
+    effective_lang = entry["lang_code"]
+
+    # Resolve the local .pt path — KPipeline skips hf_hub_download when
+    # the voice argument ends with '.pt'.
+    snapshot = _find_kokoro_snapshot()
+    if snapshot is None:
+        print("[TTS] Kokoro snapshot not found — re-run installer")
+        return None
+    voice_pt = snapshot / "voices" / f"{effective_id}.pt"
+    if not voice_pt.is_file():
+        print(f"[TTS] Voice file not found: {voice_pt}")
+        # Fall back to first installed voice rather than silently using wrong voice
+        for fallback_id in enabled_ids:
+            fb_pt = snapshot / "voices" / f"{fallback_id}.pt"
+            if fb_pt.is_file():
+                print(f"[TTS] Falling back to installed voice: {fallback_id}")
+                entry          = _VOICE_BY_ID[fallback_id]
+                effective_id   = fallback_id
+                effective_lang = entry["lang_code"]
+                voice_pt       = fb_pt
+                break
+        else:
+            print("[TTS] No installed voice .pt files found in snapshot")
+            return None
+
+    print(f"[TTS] Kokoro synthesizing: voice={effective_id}, lang={effective_lang}")
+
     try:
-        base_dir = Path(__file__).parent.parent
-        espeak_dir = base_dir / "data" / "espeak-ng"
-
-        if cfg.PLATFORM == "windows":
-            espeak_dll = espeak_dir / "libespeak-ng.dll"
-            espeak_exe = espeak_dir / "espeak-ng.exe"
-            espeak_data = espeak_dir / "espeak-ng-data"
-
-            if not espeak_dll.exists():
-                print(f"[TTS] ERROR: espeak-ng not found at {espeak_dir}")
-                print("[TTS] Please run the installer again and select Coqui TTS")
-                return
-
-            os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = str(espeak_dll)
-            os.environ["PHONEMIZER_ESPEAK_PATH"] = str(espeak_exe)
-            os.environ["ESPEAK_DATA_PATH"] = str(espeak_data)
-
-        from TTS.api import TTS
-
-        tts_model_dir = base_dir / "data" / "tts_models"
-        os.environ["TTS_HOME"] = str(tts_model_dir)
-
-        model_name = getattr(cfg, 'COQUI_MODEL', 'tts_models/en/vctk/vits')
-
-        if not voice_id:
-            voice_id = getattr(cfg, 'COQUI_VOICE_ID', 'p243')
-
-        print(f"[TTS] Coqui synthesizing with voice {voice_id}...")
-
-        tts = TTS(model_name=model_name, progress_bar=False)
-
-        temp_dir = Path(cfg.TEMP_DIR) if cfg.TEMP_DIR else base_dir / "data" / "temp"
-        temp_dir.mkdir(parents=True, exist_ok=True)
-        temp_wav = temp_dir / f"coqui_speech_{os.getpid()}.wav"
-
-        if _tts_stop_flag.is_set():
-            return
-
-        tts.tts_to_file(text=text, file_path=str(temp_wav), speaker=voice_id)
-
-        if not temp_wav.exists():
-            print("[TTS] Coqui failed to generate audio file")
-            return
-
-        if _tts_stop_flag.is_set():
-            temp_wav.unlink(missing_ok=True)
-            return
-
-        _play_audio_file(str(temp_wav), output_device)
-
-    except ImportError as e:
-        print(f"[TTS] Coqui TTS not installed: {e}")
-        print("[TTS] Install with: pip install coqui-tts")
+        pipeline = _get_or_create_pipeline(effective_lang)
     except Exception as e:
-        print(f"[TTS] Coqui error: {e}")
+        print(f"[TTS] Failed to load Kokoro pipeline: {e}")
+        return None
+
+    temp_dir = Path(cfg.TEMP_DIR) if cfg.TEMP_DIR else Path(__file__).parent.parent / "data" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    wav_path = str(temp_dir / f"kokoro_{int(time.time() * 1000)}.wav")
+
+    try:
+        chunks = []
+        # Pass the full local .pt path — KPipeline detects the .pt suffix and
+        # loads from disk, bypassing hf_hub_download entirely.
+        for _gs, _ps, audio in pipeline(text, voice=str(voice_pt), speed=1.0):
+            if _tts_stop_flag.is_set():
+                print("[TTS] Synthesis cancelled")
+                return None
+            if audio is not None and len(audio) > 0:
+                chunks.append(audio)
+
+        if not chunks:
+            print("[TTS] Kokoro produced no audio chunks")
+            return None
+
+        combined = np.concatenate(chunks)
+        sf.write(wav_path, combined, 24000)
+
+        if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
+            print("[TTS] Kokoro wrote an empty file")
+            return None
+
+        print(f"[TTS] Synthesized -> {wav_path}")
+        return wav_path
+
+    except Exception as e:
+        print(f"[TTS] Kokoro synthesis error: {e}")
         import traceback
         traceback.print_exc()
-    finally:
-        try:
-            if 'temp_wav' in locals() and temp_wav.exists():
-                temp_wav.unlink()
-        except:
-            pass
+        return None
 
 
-def _play_audio_file(file_path: str, output_device: Optional[str] = None):
-    """Play an audio file using the best available backend."""
-    if cfg.PLATFORM == "windows":
-        try:
-            import winsound
-            winsound.PlaySound(file_path, winsound.SND_FILENAME)
-            return
-        except:
-            pass
-        try:
-            from playsound import playsound
-            playsound(file_path)
-            return
-        except:
-            pass
-        print("[TTS] No Windows audio playback available")
-        return
+def synthesize_text_to_file(text: str, voice_id: Optional[str] = None) -> Optional[str]:
+    """Synthesise *text* to a WAV file without playing it.
 
-    # Linux — build environment for user audio session access
-    env = os.environ.copy()
-    original_uid = os.getuid() if hasattr(os, 'getuid') else None
-    sudo_user = os.environ.get('SUDO_USER')
-
-    if original_uid == 0 and sudo_user:
-        try:
-            import pwd
-            user_info = pwd.getpwnam(sudo_user)
-            user_uid = user_info.pw_uid
-            user_home = user_info.pw_dir
-
-            env['HOME'] = user_home
-            env['USER'] = sudo_user
-
-            runtime_dir = f"/run/user/{user_uid}"
-            if Path(runtime_dir).exists():
-                env['XDG_RUNTIME_DIR'] = runtime_dir
-
-                pulse_path = f"{runtime_dir}/pulse"
-                if Path(pulse_path).exists():
-                    env['PULSE_RUNTIME_PATH'] = pulse_path
-
-                pipewire_path = f"{runtime_dir}/pipewire-0"
-                if Path(pipewire_path).exists():
-                    env['PIPEWIRE_RUNTIME_DIR'] = runtime_dir
-        except Exception as e:
-            print(f"[TTS] Could not setup user audio env: {e}")
-
-    played = False
-
-    # Try PipeWire first
-    if not played:
-        try:
-            subprocess.run(["pw-play", file_path], timeout=120, check=True,
-                           env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-            played = True
-            print("[TTS] Playback via PipeWire")
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
-
-    # Try PulseAudio
-    if not played:
-        try:
-            subprocess.run(["paplay", file_path], timeout=120, check=True,
-                           env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-            played = True
-            print("[TTS] Playback via PulseAudio")
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
-
-    # Try ALSA
-    if not played:
-        try:
-            subprocess.run(["aplay", "-q", file_path], timeout=120, check=True,
-                           env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-            played = True
-            print("[TTS] Playback via ALSA")
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
-
-    if not played:
-        print("[TTS] ERROR: All audio backends failed")
-
-
-def synthesize_text_to_file(text, voice_id=None):
-    """Synthesize text to a WAV file without playing. Returns the file path or None."""
+    Returns the WAV path or None on failure.
+    """
     if cfg.TTS_ENGINE == "none":
         print("[TTS] No TTS engine available")
         return None
@@ -864,94 +833,29 @@ def synthesize_text_to_file(text, voice_id=None):
         print("[TTS] Text empty after cleaning")
         return None
 
-    if len(text) > cfg.MAX_TTS_LENGTH:
-        print(f"[TTS] Text truncated from {len(text)} to {cfg.MAX_TTS_LENGTH} chars")
-        text = text[:cfg.MAX_TTS_LENGTH]
+    max_len = getattr(cfg, "MAX_TTS_LENGTH", 4500)
+    if len(text) > max_len:
+        print(f"[TTS] Text truncated from {len(text)} to {max_len} chars")
+        text = text[:max_len]
 
-    if cfg.TTS_ENGINE == "coqui":
-        return _synthesize_coqui_to_file(text, voice_id)
-
-    print(f"[TTS] Unsupported engine: {cfg.TTS_ENGINE}")
-    return None
-
-
-def _synthesize_coqui_to_file(text, voice_id=None):
-    """Synthesize text to WAV using Coqui TTS. Returns WAV path or None."""
-    if not text or not text.strip():
-        print("[TTS] Empty text, skipping")
-        return None
-
-    effective_voice_id = voice_id or cfg.COQUI_VOICE_ID or "p225"
-    if "," in effective_voice_id:
-        effective_voice_id = effective_voice_id.split(",")[0].strip()
-
-    wav_path = os.path.join(cfg.TEMP_DIR, f"tts_msg_{int(time.time()*1000)}.wav")
-
-    try:
-        base_dir = Path(__file__).parent.parent
-
-        if cfg.PLATFORM == "windows":
-            espeak_dir = base_dir / "data" / "espeak-ng"
-            espeak_dll = espeak_dir / "libespeak-ng.dll"
-            espeak_exe = espeak_dir / "espeak-ng.exe"
-            espeak_data = espeak_dir / "espeak-ng-data"
-
-            if not espeak_dll.exists():
-                print(f"[TTS] ERROR: espeak-ng not found at {espeak_dir}")
-                return None
-
-            os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = str(espeak_dll)
-            os.environ["PHONEMIZER_ESPEAK_PATH"] = str(espeak_exe)
-            os.environ["ESPEAK_DATA_PATH"] = str(espeak_data)
-
-        from TTS.api import TTS
-
-        tts_model_dir = base_dir / "data" / "tts_models"
-        os.environ["TTS_HOME"] = str(tts_model_dir)
-
-        model_name = getattr(cfg, 'COQUI_MODEL', 'tts_models/en/vctk/vits')
-
-        print(f"[TTS] Coqui synthesizing with voice {effective_voice_id}...")
-
-        tts = TTS(model_name=model_name, progress_bar=False)
-
-        if _tts_stop_flag.is_set():
-            return None
-
-        tts.tts_to_file(text=text, file_path=wav_path, speaker=effective_voice_id)
-
-        if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
-            print("[TTS] Synthesis produced empty file")
-            return None
-
-        print(f"[TTS] Synthesized -> {wav_path}")
-        return wav_path
-
-    except ImportError as e:
-        print(f"[TTS] Coqui TTS not installed: {e}")
-        return None
-    except Exception as e:
-        print(f"[TTS] Synthesis error: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+    return _synthesize_kokoro_to_file(text, voice_id)
 
 
 def synthesize_last_response(session_messages: list) -> Optional[str]:
-    """Synthesize TTS audio from the last AI response (blocking).
-    Returns the path to the generated WAV file, or None on failure.
-    Does NOT play the audio — call play_tts_audio() separately.
-    """
-    if not getattr(cfg, 'TTS_ENABLED', False):
-        return None
+    """Synthesise TTS audio from the last AI response (non-blocking path).
 
+    Returns the WAV path or None on failure.  Does NOT play — call
+    play_tts_audio() separately.
+    """
+    if not getattr(cfg, "TTS_ENABLED", False):
+        return None
     if not session_messages:
         return None
 
     last_response = None
     for msg in reversed(session_messages):
-        if msg.get('role') == 'assistant':
-            last_response = msg.get('content', '')
+        if msg.get("role") == "assistant":
+            last_response = msg.get("content", "")
             break
     if not last_response:
         return None
@@ -960,104 +864,172 @@ def synthesize_last_response(session_messages: list) -> Optional[str]:
     if not text:
         return None
 
-    max_len = getattr(cfg, 'MAX_TTS_LENGTH', 4500)
+    max_len = getattr(cfg, "MAX_TTS_LENGTH", 4500)
     if len(text) > max_len:
         text = text[:max_len] + "... Response truncated for speech."
 
-    voice_id = getattr(cfg, 'TTS_VOICE', None)
+    return synthesize_text_to_file(text, getattr(cfg, "TTS_VOICE", None))
 
-    try:
-        base_dir = Path(__file__).parent.parent
 
-        if cfg.PLATFORM == "windows":
-            espeak_dir = base_dir / "data" / "espeak-ng"
-            espeak_dll = espeak_dir / "libespeak-ng.dll"
-            espeak_exe = espeak_dir / "espeak-ng.exe"
-            espeak_data = espeak_dir / "espeak-ng-data"
+# ---------------------------------------------------------------------------
+# Audio playback
+# ---------------------------------------------------------------------------
 
-            if not espeak_dll.exists():
-                print(f"[TTS] ERROR: espeak-ng not found at {espeak_dir}")
-                return None
+def _play_audio_file(file_path: str, output_device: Optional[str] = None):
+    """Play an audio file using the best available backend."""
+    if cfg.PLATFORM == "windows":
+        try:
+            import winsound
+            winsound.PlaySound(file_path, winsound.SND_FILENAME)
+            return
+        except Exception:
+            pass
+        try:
+            from playsound import playsound
+            playsound(file_path)
+            return
+        except Exception:
+            pass
+        print("[TTS] No Windows audio playback available")
+        return
 
-            os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = str(espeak_dll)
-            os.environ["PHONEMIZER_ESPEAK_PATH"] = str(espeak_exe)
-            os.environ["ESPEAK_DATA_PATH"] = str(espeak_data)
+    # Linux — build environment for user audio session access
+    env = os.environ.copy()
+    original_uid = os.getuid() if hasattr(os, "getuid") else None
+    sudo_user = os.environ.get("SUDO_USER")
 
-        from TTS.api import TTS
+    if original_uid == 0 and sudo_user:
+        try:
+            import pwd
+            user_info = pwd.getpwnam(sudo_user)
+            user_uid  = user_info.pw_uid
+            user_home = user_info.pw_dir
+            env["HOME"] = user_home
+            env["USER"] = sudo_user
+            runtime_dir = f"/run/user/{user_uid}"
+            if Path(runtime_dir).exists():
+                env["XDG_RUNTIME_DIR"] = runtime_dir
+                pulse_path = f"{runtime_dir}/pulse"
+                if Path(pulse_path).exists():
+                    env["PULSE_RUNTIME_PATH"] = pulse_path
+                pipewire_path = f"{runtime_dir}/pipewire-0"
+                if Path(pipewire_path).exists():
+                    env["PIPEWIRE_RUNTIME_DIR"] = runtime_dir
+        except Exception as e:
+            print(f"[TTS] Could not set up user audio env: {e}")
 
-        tts_model_dir = base_dir / "data" / "tts_models"
-        os.environ["TTS_HOME"] = str(tts_model_dir)
+    played = False
 
-        model_name = getattr(cfg, 'COQUI_MODEL', 'tts_models/en/vctk/vits')
+    if not played:
+        try:
+            subprocess.run(["pw-play", file_path], timeout=120, check=True,
+                           env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            played = True
+            print("[TTS] Playback via PipeWire")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
 
-        if not voice_id:
-            voice_id = getattr(cfg, 'COQUI_VOICE_ID', 'p225,p226')
+    if not played:
+        try:
+            subprocess.run(["paplay", file_path], timeout=120, check=True,
+                           env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            played = True
+            print("[TTS] Playback via PulseAudio")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
 
-        print(f"[TTS] Coqui synthesizing with voice {voice_id}...")
+    if not played:
+        try:
+            subprocess.run(["aplay", "-q", file_path], timeout=120, check=True,
+                           env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            played = True
+            print("[TTS] Playback via ALSA")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
 
-        tts = TTS(model_name=model_name, progress_bar=False)
-
-        temp_dir = Path(cfg.TEMP_DIR) if cfg.TEMP_DIR else base_dir / "data" / "temp"
-        temp_dir.mkdir(parents=True, exist_ok=True)
-        temp_wav = temp_dir / f"coqui_speech_{os.getpid()}.wav"
-
-        if _tts_stop_flag.is_set():
-            return None
-
-        tts.tts_to_file(text=text, file_path=str(temp_wav), speaker=voice_id)
-
-        if not temp_wav.exists():
-            print("[TTS] Coqui failed to generate audio file")
-            return None
-
-        print(f"[TTS] Synthesis complete: {temp_wav}")
-        return str(temp_wav)
-
-    except ImportError as e:
-        print(f"[TTS] Coqui TTS not installed: {e}")
-        return None
-    except Exception as e:
-        print(f"[TTS] Synthesis error: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+    if not played:
+        print("[TTS] ERROR: All audio backends failed")
 
 
 def play_tts_audio(wav_path: str, output_device: Optional[str] = None):
-    """Play a synthesized TTS audio file (blocking) and clean up.
-
-    Args:
-        wav_path:      Path to the WAV file to play
-        output_device: Audio output device (None = system default)
-    """
+    """Play a synthesised TTS WAV file (blocking) then delete it."""
     if not wav_path or wav_path == "__played__":
         return
-
     try:
         if not Path(wav_path).exists():
             print(f"[TTS] Audio file not found: {wav_path}")
             return
-
         if _tts_stop_flag.is_set():
             return
-
         if output_device is None:
-            output_device = getattr(cfg, 'SOUND_OUTPUT_DEVICE', 'Default Sound Device')
+            output_device = getattr(cfg, "SOUND_OUTPUT_DEVICE", "Default Sound Device")
         if output_device == "Default Sound Device":
             output_device = "default"
-
         print(f"[TTS] Playing audio: {wav_path}")
         _play_audio_file(wav_path, output_device)
         print("[TTS] Playback complete")
-
     except Exception as e:
         print(f"[TTS] Playback error: {e}")
     finally:
         try:
             if Path(wav_path).exists():
                 Path(wav_path).unlink()
-        except:
+        except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Threading helpers
+# ---------------------------------------------------------------------------
+
+def _speak_thread(text: str, voice_id: Optional[str],
+                  output_device: Optional[str], _sample_rate: int):
+    """Background thread: synthesise then play."""
+    wav = None
+    with _tts_lock:
+        try:
+            wav = _synthesize_kokoro_to_file(text, voice_id)
+            if wav and not _tts_stop_flag.is_set():
+                _play_audio_file(wav, output_device)
+        except Exception as e:
+            print(f"[TTS] Speech error: {e}")
+        finally:
+            if wav and Path(wav).exists():
+                try:
+                    Path(wav).unlink()
+                except Exception:
+                    pass
+
+
+def speak_text(text: str, voice_id: Optional[str] = None,
+               output_device: Optional[str] = None,
+               sample_rate: Optional[int] = None,
+               blocking: bool = False) -> bool:
+    """Speak *text* via Kokoro TTS in a background thread."""
+    global _tts_thread
+
+    if not getattr(cfg, "TTS_ENABLED", False):
+        return False
+    if detect_tts_engine() == "none":
+        print("[TTS] No TTS engine available")
+        return False
+
+    if not voice_id:
+        voice_id = getattr(cfg, "TTS_VOICE", None)
+    if not output_device:
+        output_device = getattr(cfg, "SOUND_OUTPUT_DEVICE", None)
+    if not sample_rate:
+        sample_rate = getattr(cfg, "SOUND_SAMPLE_RATE", 24000)
+
+    _tts_thread = threading.Thread(
+        target=_speak_thread,
+        args=(text, voice_id, output_device, sample_rate),
+        daemon=True,
+    )
+    _tts_thread.start()
+    if blocking:
+        _tts_thread.join()
+    return True
 
 
 def stop_speaking():
@@ -1074,137 +1046,138 @@ def clear_tts_stop():
 
 
 def is_speaking() -> bool:
-    """Check if TTS is currently active."""
+    """Return True if TTS is actively playing."""
     global _tts_thread
     return _tts_thread is not None and _tts_thread.is_alive()
 
 
-def initialize_tts():
-    """Initialize TTS system. Called during startup AFTER load_config."""
-    engine = detect_tts_engine()
+# ---------------------------------------------------------------------------
+# Initialisation
+# ---------------------------------------------------------------------------
+
+def initialize_tts() -> bool:
+    """Initialise the TTS system.  Called during startup AFTER load_config()."""
+    engine  = detect_tts_engine()
     backend = detect_audio_backend()
 
-    cfg.TTS_ENGINE = engine
+    cfg.TTS_ENGINE        = engine
     cfg.TTS_AUDIO_BACKEND = backend
-    cfg.TTS_ENABLED = (engine != "none")   # <-- ADD THIS LINE
+    cfg.TTS_ENABLED       = (engine != "none")
 
-    if engine == "coqui":
-        coqui_voice = getattr(cfg, 'COQUI_VOICE_ID', 'p243')
-        coqui_accent = getattr(cfg, 'COQUI_VOICE_ACCENT', 'british')
-        print(f"[TTS] Engine: Coqui TTS (voice: {coqui_voice}, accent: {coqui_accent})")
+    if engine == "kokoro":
+        enabled  = get_enabled_voices()
+        start_id = getattr(cfg, "TTS_VOICE", None) or getattr(cfg, "TTS_DEFAULT_VOICE_ID", None)
+        entry = (_VOICE_BY_ID.get(start_id)
+                 or (enabled[0] if enabled else None)
+                 or KOKORO_VOICES[0])
+        print(f"[TTS] Engine: Kokoro TTS (voice: {entry['name']})")
     else:
-        print(f"[TTS] Engine: {engine}")
+        print(f"[TTS] Engine: {engine} (TTS disabled)")
     print(f"[TTS] Audio Backend: {backend}")
 
-    voices = _get_coqui_voices()
-    voice_ids = [v['id'] for v in voices]
-
+    voices = get_enabled_voices()
     if voices:
-        saved_id   = getattr(cfg, 'TTS_VOICE', None)
-        saved_name = getattr(cfg, 'TTS_VOICE_NAME', None)
-        voice_names = [v['name'] for v in voices]
+        # First, try to honour the saved config
+        saved_id    = getattr(cfg, "TTS_VOICE",      None)
+        saved_name  = getattr(cfg, "TTS_VOICE_NAME", None)
+        voice_ids   = [v["id"]   for v in voices]
+        voice_names = [v["name"] for v in voices]
 
         if saved_id and saved_id in voice_ids:
-            for v in voices:
-                if v['id'] == saved_id:
-                    cfg.TTS_VOICE = v['id']
-                    cfg.TTS_VOICE_NAME = v['name']
-                    break
+            entry = _VOICE_BY_ID[saved_id]
+            cfg.TTS_VOICE      = entry["id"]
+            cfg.TTS_VOICE_NAME = entry["name"]
             print(f"[TTS] Voice from config: {cfg.TTS_VOICE_NAME} ({cfg.TTS_VOICE})")
         elif saved_name and saved_name in voice_names:
-            for v in voices:
-                if v['name'] == saved_name:
-                    cfg.TTS_VOICE = v['id']
-                    cfg.TTS_VOICE_NAME = v['name']
-                    break
+            entry = _VOICE_BY_NAME[saved_name]
+            cfg.TTS_VOICE      = entry["id"]
+            cfg.TTS_VOICE_NAME = entry["name"]
             print(f"[TTS] Voice from config: {cfg.TTS_VOICE_NAME} ({cfg.TTS_VOICE})")
         else:
-            cfg.TTS_VOICE = voices[0]['id']
-            cfg.TTS_VOICE_NAME = voices[0]['name']
-            print(f"[TTS] Default voice: {voices[0]['name']}")
+            # Use the pack's default voice if available, otherwise first enabled voice
+            default_id = getattr(cfg, "TTS_DEFAULT_VOICE_ID", None)
+            if default_id and default_id in voice_ids:
+                entry = _VOICE_BY_ID[default_id]
+            else:
+                entry = voices[0]
+            cfg.TTS_VOICE      = entry["id"]
+            cfg.TTS_VOICE_NAME = entry["name"]
+            print(f"[TTS] Default voice from pack: {cfg.TTS_VOICE_NAME} ({cfg.TTS_VOICE})")
     else:
-        cfg.TTS_VOICE = None
+        cfg.TTS_VOICE      = None
         cfg.TTS_VOICE_NAME = "No voices available"
-        print("[TTS] No voices detected")
+        print("[TTS] No voices enabled")
 
     return engine != "none"
 
 
 def get_tts_status() -> str:
-    """Get TTS status string for display."""
-    enabled = getattr(cfg, 'TTS_ENABLED', False)
+    """Return a human-readable TTS status string for the UI."""
+    enabled = getattr(cfg, "TTS_ENABLED", False)
     if enabled:
-        voice = getattr(cfg, 'TTS_VOICE_NAME', 'Default')
-        return f"TTS: ON (Coqui - {voice})"
-    return "TTS: OFF (Coqui)"
+        voice = getattr(cfg, "TTS_VOICE_NAME", "Default")
+        return f"TTS: ON (Kokoro — {voice})"
+    return "TTS: OFF (Kokoro)"
 
+
+# ---------------------------------------------------------------------------
+# Text cleaning
+# ---------------------------------------------------------------------------
 
 def _clean_text_for_tts(text: str) -> str:
-    """Shared text cleaning pipeline applied before any TTS synthesis."""
-    # Remove the "AI-Chat:" prefix line (may appear at beginning)
-    text = re.sub(r'^AI-Chat:\s*\n?', '', text, flags=re.MULTILINE)
-
-    # Remove HTML tags first
-    text = re.sub(r'<[^>]+>', '', text)
-
-    # Remove any line that consists of "Thinking" followed by dots/spaces
-    # (?m) enables multiline mode, \r? handles Windows line endings
-    text = re.sub(r'(?m)^Thinking[.\s]+\r?\n?', '', text)
-
-    # Collapse multiple blank lines that may have been created
-    text = re.sub(r'\n\s*\n', '\n', text)
-
-    # Then apply the existing cleaning rules (code blocks, markdown, etc.)
-    text = re.sub(r'```[\s\S]*?```', '', text)
-    text = re.sub(r'`[^`]+`', '', text)
-    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-    text = re.sub(r'!\[.*?\]\([^)]+\)', '', text)
-    text = re.sub(r'\*\*', '', text)
-    text = re.sub(r'\*',   '', text)
-    text = re.sub(r'~~',   '', text)
-    text = re.sub(r'(?<!\w)_|_(?!\w)', '', text)
-    text = re.sub(r'[#•→⇒★☆]|[-=]{2,}', ' ', text)
-    text = re.sub(r'[^\w\s.,!?;:\'"()-]', ' ', text)
-    text = re.sub(r'\s+', ' ', text)
+    """Shared text-cleaning pipeline applied before any TTS synthesis."""
+    text = re.sub(r"^AI-Chat:\s*\n?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"(?m)^Thinking[.\s]+\r?\n?", "", text)
+    text = re.sub(r"\n\s*\n", "\n", text)
+    text = re.sub(r"```[\s\S]*?```", "", text)
+    text = re.sub(r"`[^`]+`", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"!\[.*?\]\([^)]+\)", "", text)
+    text = re.sub(r"\*\*", "", text)
+    text = re.sub(r"\*",   "", text)
+    text = re.sub(r"~~",   "", text)
+    text = re.sub(r"(?<!\w)_|_(?!\w)", "", text)
+    text = re.sub(r"[#•→⇒★☆]|[-=]{2,}", " ", text)
+    text = re.sub(r"[^\w\s.,!?;:\'\"()-]", " ", text)
+    text = re.sub(r"\s+", " ", text)
     return text.strip()
 
+
+# ---------------------------------------------------------------------------
+# Public helper used by display.py
+# ---------------------------------------------------------------------------
 
 def speak_last_response(session_messages: list) -> str:
     """Speak the last AI response from session messages.
 
-    Args:
-        session_messages: List of message dicts
-
-    Returns:
-        Status message string
+    Returns a status string.
     """
-    if not getattr(cfg, 'TTS_ENABLED', False):
+    if not getattr(cfg, "TTS_ENABLED", False):
         return "TTS is disabled"
-
     if not session_messages:
         return "No messages to speak"
 
     last_response = None
     for msg in reversed(session_messages):
-        if msg.get('role') == 'assistant':
-            last_response = msg.get('content', '')
+        if msg.get("role") == "assistant":
+            last_response = msg.get("content", "")
             break
 
     if not last_response:
         return "No AI response to speak"
 
     text = _clean_text_for_tts(last_response)
-
     if not text:
         return "Response has no speakable content after cleaning"
 
-    max_len = getattr(cfg, 'MAX_TTS_LENGTH', 4500)
+    max_len = getattr(cfg, "MAX_TTS_LENGTH", 4500)
     if len(text) > max_len:
         text = text[:max_len] + "... Response truncated for speech."
 
-    voice_id      = getattr(cfg, 'TTS_VOICE', None)
-    output_device = getattr(cfg, 'SOUND_OUTPUT_DEVICE', None)
-    sample_rate   = getattr(cfg, 'SOUND_SAMPLE_RATE', 44100)
+    voice_id      = getattr(cfg, "TTS_VOICE",           None)
+    output_device = getattr(cfg, "SOUND_OUTPUT_DEVICE",  None)
+    sample_rate   = getattr(cfg, "SOUND_SAMPLE_RATE",    24000)
 
     if speak_text(text, voice_id, output_device, sample_rate):
         return "Speaking response..."

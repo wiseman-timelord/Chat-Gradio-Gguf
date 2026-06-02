@@ -63,7 +63,7 @@ from scripts.tools import (
     format_search_status_for_chat, web_search, format_web_search_status_for_chat,
     get_voice_choices, get_sample_rate_choices,
     speak_last_response, stop_speaking, get_tts_status, initialize_tts,
-    get_voice_id_by_name, speak_text,
+    get_voice_id_by_name, verify_tts_voice, speak_text,
     synthesize_text_to_file, play_tts_audio
 )
 
@@ -1141,12 +1141,16 @@ def extract_search_query(user_input: str) -> str:
 
 
 def update_tts_voice(voice_name):
-    """Update the selected TTS voice."""
+    """Update the selected TTS voice and verify the .pt file is installed."""
     voice_id = get_voice_id_by_name(voice_name)
-    cfg.TTS_VOICE = voice_id
+    cfg.TTS_VOICE      = voice_id
     cfg.TTS_VOICE_NAME = voice_name
     save_config()
-    return f"Voice set to: {voice_name}"
+    ok, msg = verify_tts_voice(voice_id)
+    if ok:
+        return f"Voice set to: {voice_name}"
+    else:
+        return f"Voice set to: {voice_name} — WARNING: {msg}"
 
 
 def update_sound_sample_rate(sample_rate):
@@ -1636,6 +1640,14 @@ def toggle_web_search(current_web_state):
         gr.update(variant=web_variant),
     )
 
+def update_tts_dropdown():
+    """Refresh TTS voice dropdown choices based on enabled voices."""
+    choices = get_voice_choices()
+    # Ensure current value is among new choices; fallback to first available
+    current = cfg.TTS_VOICE_NAME
+    if current not in choices and choices:
+        current = choices[0]
+    return gr.update(choices=choices, value=current)
 
 def toggle_tts_speak(current_tts_state):
     """Toggle Auto TTS Speak (automatically speak AI responses when enabled)."""
@@ -2656,6 +2668,9 @@ def launch_display():
             cfg.TTS_VOICE_NAME        = tts_voice_val    if tts_voice_val    is not None else cfg.TTS_VOICE_NAME
             if tts_voice_val and tts_voice_val != "Default":
                 cfg.TTS_VOICE = get_voice_id_by_name(tts_voice_val)
+                _tts_ok, _tts_warn = verify_tts_voice(cfg.TTS_VOICE)
+                if not _tts_ok:
+                    print(f"[TTS] WARNING: {_tts_warn}")
             cfg.MAX_TTS_LENGTH        = int(tts_max_len_val) if tts_max_len_val is not None else cfg.MAX_TTS_LENGTH
             cfg.SHOW_THINK_PHASE      = bool(show_think_val) if show_think_val is not None else cfg.SHOW_THINK_PHASE
             cfg.BLEEP_ON_EVENTS       = bool(bleep_val)  if bleep_val        is not None else cfg.BLEEP_ON_EVENTS
@@ -2764,6 +2779,10 @@ def launch_display():
             ),
             inputs=[model_dropdown],
             outputs=[conversation_components["user_input"]]
+        ).then(
+            fn=update_tts_dropdown,
+            inputs=[],
+            outputs=[tts_voice]
         )
 
         # JS injection
