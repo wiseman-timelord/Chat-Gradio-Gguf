@@ -1,6 +1,6 @@
 # ![Chat-Windows-Gguf](media/project_banner.jpg)
 Status - v2 Release.
-- Currently on v2.01.x, Improvements/corrections to several things in this subversion, see release notes.  Currently confirmed working on Windows 10 and I would assume windows 11 may be ok, but at some point Ubuntu 24-25 side must be checked. Possibly it will happen when I get to the end of v2 development plan, see development section. 
+- Currently on v2.02.x, see release notes.  Currently confirmed working on Windows 10 and I would assume windows 11 may be ok, but at some point Ubuntu 24-25 side must be checked. Possibly it will happen when I get to the end of v2 development plan, see development section. 
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 10-11 (WSL not required) and Ubuntu 24-25, with any Gpu on GGUF models through Python ~3.11-~3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration.
@@ -506,7 +506,6 @@ Llama
 Kimi
 Deepseek
 ```
-- TTS being swapped out from Corqui to Kokoro. Kokoro models are half the size, so quicker generation and minimal quality loss compared to Corqui. I think Kokoro is new, it didnt pop up in previous research only conducted a few month ago.
 - STT - We could have a STT button in the tools section, enabling the input box to switch to a sample display and a button, the user would click and hold the button to record, and then let go of mouse when they finished recording, and then the wave appear in the box, then AI translate this into words, these words are then shown/editable in the text input box, and the wave record box will hide, but there will be a new button at bottom of text input when STT is enabled, to switch back to the STT Recording box and hide the text box again, so the user can re-record (blanking the previous recorded text upon pressing record). if the user selects STT again to disable it then, the wave box will hide, the text input box will be shown, and the Re-Record button will be hidden. Hmm. Is this the best way to do this? needs a brainstorm. 
 
 ### Development (reasoning notes)
