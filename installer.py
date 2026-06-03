@@ -1578,16 +1578,16 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
 # Replaces Coqui TTS. No espeak-ng on any platform — misaki handles G2P.
 # =============================================================================
 
-def install_kokoro_tts(kokoro_voice: dict, enabled_voice_ids: list = None) -> bool:
-    """Install Kokoro TTS and pre-download all enabled voice .pt files.
+def install_kokoro_tts(kokoro_voice: dict) -> bool:
+    """Install Kokoro TTS and pre-download the voice model (~300 MB).
 
     Steps:
     1. pip install kokoro>=0.9.4  (pulls misaki[en] automatically for G2P)
     2. soundfile>=0.12.1 for WAV I/O
-    3. Download Kokoro-82M model weights via KModel (stored under HF_HOME/hub)
-    4. Download every enabled voice .pt file from the hub
-    5. Run a short synthesis test with the default voice to confirm model works
-    6. Returns True on success, sys.exit(1) on unrecoverable error
+    3. Download Kokoro-82M ONNX model on first KPipeline init, stored in
+       data/tts_models/kokoro/ via HF_HOME redirect
+    4. Run a short synthesis test to confirm the model works
+    5. Returns True on success, sys.exit(1) on unrecoverable error
 
     No espeak-ng is installed on any platform. Kokoro uses misaki for English
     G2P with fallback=None — this is fully self-contained.
@@ -1597,10 +1597,8 @@ def install_kokoro_tts(kokoro_voice: dict, enabled_voice_ids: list = None) -> bo
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                     ("python.exe" if PLATFORM == "windows" else "python"))
 
-    voice_id         = kokoro_voice["id"]
-    lang_code        = kokoro_voice["lang_code"]
-    # All voice IDs to pre-download; at minimum the default voice
-    all_voice_ids    = list(dict.fromkeys([voice_id] + (enabled_voice_ids or [])))
+    voice_id   = kokoro_voice["id"]
+    lang_code  = kokoro_voice["lang_code"]
 
     print_status("Installing Kokoro TTS...")
     if not pip_install_with_retry(pip_exe, "kokoro>=0.9.4",
@@ -1625,49 +1623,23 @@ def install_kokoro_tts(kokoro_voice: dict, enabled_voice_ids: list = None) -> bo
 
     print_status(f"Downloading Kokoro-82M model (~300 MB) and testing voice '{voice_id}'...")
 
-    # Build a Python list literal for embedding in the download script
-    voice_ids_literal = repr(all_voice_ids)
-
     download_script = f'''
 import os, sys
 os.environ["HF_HOME"] = r"{tts_model_dir_safe}"
 os.environ["HF_HUB_OFFLINE"] = "0"
 
 print("[KOKORO] Importing kokoro...", flush=True)
-from kokoro import KModel, KPipeline
+from kokoro import KPipeline
 import soundfile as sf
 import numpy as np
 
-# --- Step 1: load model weights (downloads ~300 MB on first run) ---
-print("[KOKORO] Initialising KModel (lang_code={lang_code})...", flush=True)
-model = KModel(repo_id="hexgrad/Kokoro-82M")
-print("[KOKORO] KModel ready", flush=True)
+print("[KOKORO] Initialising pipeline (lang_code={repr(lang_code)})...", flush=True)
+pipeline = KPipeline(lang_code="{lang_code}")
+print("[KOKORO] Pipeline ready", flush=True)
 
-# --- Step 2: create pipeline with shared model ---
-pipeline = KPipeline(lang_code="{lang_code}", repo_id="hexgrad/Kokoro-82M", model=model)
-
-# --- Step 3: pre-download every enabled voice .pt ---
-all_voice_ids = {voice_ids_literal}
-print(f"[KOKORO] Pre-downloading {{len(all_voice_ids)}} voice file(s): {{all_voice_ids}}", flush=True)
-for vid in all_voice_ids:
-    try:
-        pipeline.load_single_voice(vid)
-        print(f"[KOKORO] Voice {{vid}} ready", flush=True)
-    except Exception as e:
-        print(f"[KOKORO] WARNING: could not download voice {{vid}}: {{e}}", flush=True)
-
-# --- Step 4: synthesis test with default voice ---
 print("[KOKORO] Running test synthesis (voice={voice_id})...", flush=True)
-# Pass the local .pt path directly — avoids hub lookup at runtime too
-import huggingface_hub as _hfh
-voices_dir = os.path.join(_hfh.constants.HF_HUB_CACHE,
-    "models--hexgrad--Kokoro-82M", "snapshots")
-snap = next((os.path.join(voices_dir, d) for d in os.listdir(voices_dir)
-             if os.path.isdir(os.path.join(voices_dir, d))), None) if os.path.isdir(voices_dir) else None
-voice_arg = os.path.join(snap, "voices", "{voice_id}.pt") if snap else "{voice_id}"
-
 chunks = []
-for gs, ps, audio in pipeline("Kokoro installation test.", voice=voice_arg, speed=1.0):
+for gs, ps, audio in pipeline("Kokoro installation test.", voice="{voice_id}", speed=1.0):
     if audio is not None:
         chunks.append(audio)
 
@@ -1690,7 +1662,7 @@ print("[KOKORO] Test passed — model ready")
         with open(temp_script, "w", encoding="utf-8") as f:
             f.write(download_script)
 
-        result = subprocess.run([python_exe, str(temp_script)], timeout=1200)
+        result = subprocess.run([python_exe, str(temp_script)], timeout=2400)
         temp_script.unlink(missing_ok=True)
 
         test_wav = TEMP_DIR / "kokoro_test.wav"
@@ -1704,7 +1676,7 @@ print("[KOKORO] Test passed — model ready")
         return True
 
     except subprocess.TimeoutExpired:
-        print_status("Kokoro TTS installation timed out (>20 min)", False)
+        print_status("Kokoro TTS installation timed out (>40 min)", False)
         sys.exit(1)
     except Exception as e:
         print_status(f"Kokoro TTS installation failed: {e}", False)
@@ -1795,7 +1767,7 @@ print(f"SUCCESS: Model loaded, dimension: {{dim}}", flush=True)
         for line in process.stdout:
             print(f"    {line.rstrip()}")
 
-        process.wait(timeout=1200)
+        process.wait(timeout=2400)
 
         script_path.unlink(missing_ok=True)
 
@@ -3042,7 +3014,7 @@ def install():
         print_status("WARNING: spaCy model download failed, session labeling may not work", False)
 
     if tts_engine == "kokoro" and kokoro_voice:
-        if not install_kokoro_tts(kokoro_voice, enabled_ids):
+        if not install_kokoro_tts(kokoro_voice):
             sys.exit(1)
 
     if not download_extract_backend(backend):
@@ -3065,7 +3037,7 @@ def install():
                 if not initialize_embedding_cache(embedding_model):
                     sys.exit(1)
                 if tts_engine == "kokoro" and kokoro_voice:
-                    if not install_kokoro_tts(kokoro_voice, enabled_ids):
+                    if not install_kokoro_tts(kokoro_voice):
                         sys.exit(1)
                 if not download_extract_backend(backend):
                     sys.exit(1)
