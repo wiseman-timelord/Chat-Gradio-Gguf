@@ -30,12 +30,16 @@ LLAMACPP_PYTHON_PREBUILT_VERSION = "v0.3.16"
 #   LLAMACPP_PYTHON_VERSION — resolved at install time to the latest GitHub
 #     release tag. Falls back to LLAMACPP_PYTHON_VERSION_FALLBACK if unreachable.
 LLAMACPP_PYTHON_VERSION = None
-LLAMACPP_PYTHON_VERSION_FALLBACK = "v0.3.20"
+LLAMACPP_PYTHON_VERSION_FALLBACK = "v0.3.26" 
+#   LLAMACPP_PYTHON_COMPILE_DISPLAY — display-only string for the backend menu.
+#     Never used in pip commands; the compile path resolves the real version
+#     from the GitHub API at install time.
+LLAMACPP_PYTHON_COMPILE_DISPLAY = "v0.3.26"  
 # Set during install_python_deps() once the wheel is confirmed installed.
 # Written to constants.ini by update_ini_wheel_version() so the main program
 # can display it in the About/Debug tab.
 _INSTALLED_LLAMA_WHEEL_VERSION = None
-LLAMACPP_TARGET_VERSION = "b8882"
+LLAMACPP_TARGET_VERSION = "b9542"
 WIN_COMPILE_TEMP = Path("C:/temp_build")
 LINUX_COMPILE_TEMP = None
 _INSTALL_PROCESSES = set()
@@ -68,38 +72,36 @@ PROTECTED_DIRECTORIES = [
 EMBEDDING_MODELS = {
     "1": {
         "name": "BAAI/bge-small-en-v1.5",
-        "display": "Bge-Small-En v1.5 (Legacy/Fastest - 132MB)",
+        "display": "Smaller/Faster Install - Bge-Small-English v1.5",
         "size_mb": 132
     },
     "2": {
         "name": "BAAI/bge-base-en-v1.5",
-        "display": "Bge-Base-En v1.5 (Recommended/Regular - 425MB)",
+        "display": "Medium/Quality Install - Bge-Base-English v1.5",
         "size_mb": 425
-    },
-    "3": {
-        "name": "BAAI/bge-large-en-v1.5",
-        "display": "Bge-Large-En v1.5 (Huge/Slow/Buggy - 1.35GB)",
-        "size_mb": 1350
     }
 }
 
-# Kokoro TTS voice catalogue — shown in the installer accent-selection menu.
-# id        = KPipeline voice argument (passed verbatim at synthesis time)
-# display   = user-facing label shown in the menu
-# lang_code = KPipeline(lang_code=...) value: 'a' = American, 'b' = British
-# gender    = for display only
-KOKORO_VOICE_OPTIONS = [
-    {"id": "af_heart",   "display": "Heart — American Female (Best quality)",   "lang_code": "a", "gender": "female"},
-    {"id": "af_bella",   "display": "Bella — American Female",                  "lang_code": "a", "gender": "female"},
-    {"id": "af_nova",    "display": "Nova — American Female",                   "lang_code": "a", "gender": "female"},
-    {"id": "af_sky",     "display": "Sky — American Female",                    "lang_code": "a", "gender": "female"},
-    {"id": "am_adam",    "display": "Adam — American Male",                     "lang_code": "a", "gender": "male"},
-    {"id": "am_michael", "display": "Michael — American Male",                  "lang_code": "a", "gender": "male"},
-    {"id": "bf_emma",    "display": "Emma — British Female",                    "lang_code": "b", "gender": "female"},
-    {"id": "bf_alice",   "display": "Alice — British Female",                   "lang_code": "b", "gender": "female"},
-    {"id": "bm_george",  "display": "George — British Male",                    "lang_code": "b", "gender": "male"},
-    {"id": "bm_lewis",   "display": "Lewis — British Male",                     "lang_code": "b", "gender": "male"},
-]
+KOKORO_VOICE_PACKS = {
+    "1": {
+        "display": "American Male+Female Pack 2",
+        "detail": "(2 male + 4 female)",
+        "voices": "(Adam, Michael, Heart, Bella, Nova, Sky)",
+        "voice_ids": ["am_adam", "am_michael", "af_heart", "af_bella", "af_nova", "af_sky"],
+        "default_voice_id": "af_heart",
+        "default_voice_name": "Heart — American Female",
+        "lang_code": "a",
+    },
+    "2": {
+        "display": "British Male+Female Pack 2",
+        "detail": "(2 male + 2 female)",
+        "voices": "(George, Lewis, Emma, Alice)",
+        "voice_ids": ["bm_george", "bm_lewis", "bf_emma", "bf_alice"],
+        "default_voice_id": "bm_george",
+        "default_voice_name": "George — British Male",
+        "lang_code": "b",
+    },
+}
 
 PLATFORM = None
 
@@ -316,20 +318,6 @@ else:  # Linux
 
 # =============================================================================
 # v2 BASE REQUIREMENTS
-# Targets: Python 3.11-3.12 / Gradio 5.x / PyQt6
-#
-# Removed from v1:
-#   - numpy<2         (torch 2.2.2 compat pin — not needed for torch 2.5+)
-#   - requests==2.31.0 (pin for Gradio 3.x compat — not needed)
-#   - tokenizers==0.22.2 (pin for Python 3.9 compat — not needed)
-#   - matplotlib>=3.7.0 (was needed by Gradio 3.x internals; Gradio 5 manages it)
-#   - pyvirtualdisplay>=3.0 (Linux headless Qt5 — Qt6 runs natively on Ubuntu 24)
-#   - newspaper3k (Python 3.9 fallback — min is now 3.11)
-#
-# Kokoro TTS additions (replacing Coqui):
-#   + kokoro>=0.9.4   (TTS engine — installs misaki[en] for G2P automatically)
-#   + soundfile>=0.12.1 (WAV I/O — also pulled by kokoro itself)
-#   Note: torchaudio NOT added (was Coqui-specific; Kokoro does not need it)
 # =============================================================================
 BASE_REQ = [
     "numpy>=2.0",
@@ -338,17 +326,18 @@ BASE_REQ = [
     "spacy>=3.8.0",
     "psutil>=6.0.0",
     "ddgs>=9.10.0",
+    "langchain>=0.3.18",            # install base first so langgraph/websockets resolve together
     "langchain-community>=0.3.18",
     "langchain-text-splitters>=0.3.0",
     "faiss-cpu>=1.9.0",
-    "langchain>=0.3.18",
     "pygments>=2.17.0",
     "lxml>=5.2.0,<5.5.0",        # newspaper4k requires lxml<5.5; pin upfront to avoid downgrade
-    "lxml_html_clean>=0.3.0",
     "beautifulsoup4>=4.12.0",
     "aiohttp>=3.10.0",
-    "newspaper4k>=0.9.4.1",      # Python 3.11+ always; newspaper3k branch removed
-    "soundfile>=0.12.1",         # WAV I/O for Kokoro TTS
+    "newspaper4k>=0.9.4.1",      # installs lxml_html_clean as a dependency
+    "lxml_html_clean>=0.3.0",    # explicit pin AFTER newspaper4k to avoid lxml 6.x pull
+    "soundfile>=0.12.1",
+    "kokoro>=0.9.4",
 ]
 
 if PLATFORM == "windows":
@@ -357,7 +346,6 @@ if PLATFORM == "windows":
         "tk==0.1.0",
         "pythonnet==3.0.5",
     ])
-# Linux: no platform-specific extras needed for v2 (pyvirtualdisplay removed)
 
 def clear_screen():
     os.system('cls' if PLATFORM == "windows" else 'clear')
@@ -369,8 +357,7 @@ def backend_requires_compilation(backend: str) -> bool:
 
 
 def detect_windows_version() -> str:
-    """Detect Windows version and cache in global.
-    v2: Only Windows 10/11 are supported."""
+    """Detect Windows version and cache in global."""
     global WINDOWS_VERSION
     if WINDOWS_VERSION is not None:
         return WINDOWS_VERSION
@@ -388,7 +375,6 @@ def detect_windows_version() -> str:
         elif build >= 10240:
             WINDOWS_VERSION = "10"
         else:
-            # Windows 7/8/8.1 — not supported in v2
             WINDOWS_VERSION = "unsupported"
         return WINDOWS_VERSION
     except:
@@ -397,8 +383,7 @@ def detect_windows_version() -> str:
 
 
 def detect_linux_version() -> str:
-    """Detect Ubuntu version and cache in global OS_VERSION.
-    v2: Only Ubuntu 24/25 are supported."""
+    """Detect Ubuntu version and cache in global OS_VERSION."""
     global OS_VERSION
     if OS_VERSION is not None:
         return OS_VERSION
@@ -424,31 +409,16 @@ def detect_linux_version() -> str:
         return "unknown"
 
 def get_dynamic_requirements() -> list:
-    """
-    Build requirements list for Gradio 5.x.
-
-    v2 vs v1:
-    - Gradio 5.x uses Pydantic v2 natively — no shim, no forced pydantic pin.
-    - fastapi, starlette, websockets, jinja2 are all managed by Gradio 5.x itself.
-    - CRITICAL_PINNED set is gone entirely — no force-reinstall phase needed.
-    """
     requirements = BASE_REQ.copy()
-    # Gradio 5.x — upper-bound at <6.0 for stability
     requirements.append("gradio>=5.0.0,<6.0.0")
     return requirements
 
 
 def get_torch_version_for_python() -> str:
-    """
-    v2: All supported Python versions (3.11-3.12) use torch>=2.5.0 unified.
-    No two-tier split needed.
-    """
     return "torch>=2.5.0"
 
 def check_version_compatibility():
-    """Check Python and OS compatibility.
-    v2: Minimum Python 3.11, maximum Python 3.12 (Kokoro TTS upper bound),
-        Windows 10, Ubuntu 24."""
+    """Check Python and OS compatibility."""
     global WINDOWS_VERSION, PYTHON_VERSION, PLATFORM
 
     if sys.version_info < (3, 11):
@@ -496,8 +466,7 @@ def check_version_compatibility():
 
 
 def is_kokoro_compatible() -> bool:
-    """Check if current OS/Python supports Kokoro TTS.
-    v2: Windows 10/11 and Ubuntu 24/25, Python 3.11-3.12."""
+    """Check if current OS/Python supports Kokoro TTS."""
     if sys.version_info >= (3, 13):
         return False
 
@@ -517,7 +486,7 @@ def is_kokoro_compatible() -> bool:
 
 
 # =============================================================================
-# INSTALLATION HELPERS — unchanged from v1 unless noted
+# INSTALLATION HELPERS
 # =============================================================================
 
 def snapshot_pre_existing_processes() -> None:
@@ -595,7 +564,7 @@ def _force_rmtree(path: Path) -> None:
 
 
 def get_optimal_build_threads() -> int:
-    """Return 85% of logical CPU cores for parallel builds. Always auto — no user prompt."""
+    """Return 85% of logical CPU cores for parallel builds."""
     if _USER_BUILD_THREADS is not None:
         return _USER_BUILD_THREADS
     import multiprocessing
@@ -608,7 +577,6 @@ def get_optimal_build_threads() -> int:
 
 # =============================================================================
 # MODULE-LEVEL DETECTION CACHE
-# Populated once by run_detections_once() at installer start.
 # =============================================================================
 _DETECTED_CPU_FEATURES: dict  = {}
 _DETECTED_BUILD_TOOLS:  dict  = {}
@@ -617,6 +585,31 @@ _DETECTED_DX_CAPABLE:   bool  = False
 _DETECTED_DX_LEVEL:     int   = 0
 _DETECTED_DX_NAME:      str   = "Unknown"
 _DETECTIONS_RUN:        bool  = False
+
+
+def detect_build_tools_available() -> dict:
+    """Detect availability of Git, CMake, MSVC, MSBuild."""
+    tools = {"Git": False, "CMake": False, "MSVC": False, "MSBuild": False}
+    
+    if shutil.which("git"):
+        tools["Git"] = True
+    if shutil.which("cmake"):
+        tools["CMake"] = True
+        
+    if PLATFORM == "windows":
+        try:
+            vswhere = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+            if vswhere.exists():
+                result = subprocess.run([str(vswhere), "-latest", "-property", "installationPath"], capture_output=True, text=True, timeout=10)
+                if result.returncode == 0 and result.stdout.strip():
+                    tools["MSVC"] = True
+                    msbuild_path = Path(result.stdout.strip()) / "MSBuild" / "Current" / "Bin" / "MSBuild.exe"
+                    if msbuild_path.exists():
+                        tools["MSBuild"] = True
+        except Exception:
+            pass
+            
+    return tools
 
 
 def run_detections_once() -> None:
@@ -655,11 +648,11 @@ def run_detections_once() -> None:
     print(f"[DETECT] Vulkan: {'YES' if _DETECTED_VULKAN else 'NO'} | DX: {_DETECTED_DX_NAME}")
     print(f"[DETECT] Build tools: {', '.join(k for k,v in _DETECTED_BUILD_TOOLS.items() if v) or 'none'}")
 
-def print_header(section: str = "Installer") -> None:
+def print_header(section: str = "Initialization") -> None:
     clear_screen()
     width = shutil.get_terminal_size().columns - 1
     print("=" * width)
-    print(f" Chat-Gradio-Gguf v2 — {section}")
+    print(f"    Chat-Gradio-Gguf v2 — {section}")
     print("=" * width)
     print()
 
@@ -677,12 +670,10 @@ def create_files_and_directories(backend: str) -> None:
 
 # =============================================================================
 # EMBEDDING BACKEND INSTALLATION
-# v2: Unified torch>=2.5.0 for Python 3.11-3.12
 # =============================================================================
 
 def install_embedding_backend() -> bool:
-    """Install PyTorch CPU and sentence-transformers.
-    v2: Unified path — torch>=2.5.0 supports Python 3.11-3.12 equally."""
+    """Install PyTorch CPU and sentence-transformers."""
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                     ("python.exe" if PLATFORM == "windows" else "python"))
     pip_exe    = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
@@ -692,26 +683,21 @@ def install_embedding_backend() -> bool:
     transformers_version        = "transformers>=4.44.0"
     sentence_transformers_version = "sentence-transformers>=3.3.0"
 
-    # 1. Install PyTorch using the CPU index
-    cpu_index = "https://download.pytorch.org/whl/cpu"
     print_status(f"Installing PyTorch (CPU) — {torch_req}...")
     if not pip_install_with_retry(pip_exe, torch_req,
-                                  ["--index-url", cpu_index,
+                                  ["--index-url", "https://download.pytorch.org/whl/cpu",
                                    "--upgrade-strategy", "only-if-needed"],
                                   max_retries=10, initial_delay=5.0):
         print_status("PyTorch installation failed", False)
         return False
     print_status("PyTorch (CPU) installed")
 
-    # PyTorch's CPU index ships its own pinned setuptools which downgrades the
-    # venv's setuptools.  Reinstall the latest to restore it.
     subprocess.run(
         [pip_exe, "install", "setuptools>=80.0", "--upgrade", "--quiet"],
         capture_output=True, timeout=120
     )
     print_status("setuptools restored after torch install")
 
-    # 2. Install transformers
     print_status(f"Installing {transformers_version}...")
     if not pip_install_with_retry(pip_exe, transformers_version,
                                   ["--upgrade-strategy", "only-if-needed"],
@@ -720,7 +706,6 @@ def install_embedding_backend() -> bool:
         return False
     print_status("transformers installed")
 
-    # 3. Install sentence-transformers
     print_status(f"Installing {sentence_transformers_version}...")
     if not pip_install_with_retry(pip_exe, sentence_transformers_version,
                                   ["--upgrade-strategy", "only-if-needed"],
@@ -729,7 +714,6 @@ def install_embedding_backend() -> bool:
         return False
     print_status("sentence-transformers installed")
 
-    # Verify
     verify_script = '''
 import sys, os
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -767,7 +751,6 @@ except Exception as e:
 
 # =============================================================================
 # QT WEBENGINE INSTALLATION
-# v2: PyQt6 + PyQt6-WebEngine (replaces PyQt5 + PyQtWebEngine)
 # =============================================================================
 
 def install_qt_webengine() -> bool:
@@ -795,35 +778,18 @@ def install_qt_webengine() -> bool:
 
 # =============================================================================
 # LINUX SYSTEM DEPENDENCIES
-# v2: Qt6 apt packages; xvfb and Qt5 packages removed; espeak-ng removed
 # =============================================================================
 
 def install_linux_system_dependencies(backend: str) -> bool:
-    """Install Linux system dependencies.
-    v2: Ubuntu 24-25 only. Qt6 runtime packages. No espeak-ng — Kokoro uses
-    misaki for G2P natively with no system-level phonemiser dependency."""
+    """Install Linux system dependencies."""
     print_status("Installing Linux system dependencies...")
 
     base_packages = [
-        "python3-dev",
-        "build-essential",
-        "libffi-dev",
-        "libssl-dev",
-        # Qt6 XCB / Wayland runtime dependencies
-        "libegl1",
-        "libgl1",
-        "libxkbcommon0",
-        "libxkbcommon-x11-0",
-        "libxcb-cursor0",
-        "libxcb-icccm4",
-        "libxcb-image0",
-        "libxcb-keysyms1",
-        "libxcb-randr0",
-        "libxcb-render-util0",
-        "libxcb-shape0",
-        "libxcb-xinerama0",
-        "libxcb-xkb1",
-        "libxcb1",
+        "python3-dev", "build-essential", "libffi-dev", "libssl-dev",
+        "libegl1", "libgl1", "libxkbcommon0", "libxkbcommon-x11-0",
+        "libxcb-cursor0", "libxcb-icccm4", "libxcb-image0", "libxcb-keysyms1",
+        "libxcb-randr0", "libxcb-render-util0", "libxcb-shape0",
+        "libxcb-xinerama0", "libxcb-xkb1", "libxcb1",
     ]
 
     info = BACKEND_OPTIONS[backend]
@@ -865,7 +831,6 @@ def install_linux_system_dependencies(backend: str) -> bool:
 
 # =============================================================================
 # PYTHON DEPENDENCY INSTALLATION
-# v2: CRITICAL_PINNED section removed. Single-phase install.
 # =============================================================================
 
 def install_python_deps(backend: str) -> bool:
@@ -955,7 +920,7 @@ def install_python_deps(backend: str) -> bool:
 
             if not build_llama_cpp_python_with_flags(build_flags):
                 return False
-            _INSTALLED_LLAMA_WHEEL_VERSION = get_latest_llamacpp_python_version()
+            _INSTALLED_LLAMA_WHEEL_VERSION = LLAMACPP_PYTHON_VERSION
 
         print_status("Python dependencies installed successfully")
         return True
@@ -968,12 +933,11 @@ def install_python_deps(backend: str) -> bool:
 def install_optional_file_support() -> bool:
     """Install optional file format libraries"""
     print_status("Installing optional file format support...")
-
     optional_packages = [
-        "PyPDF2>=3.0.0",
-        "python-docx>=1.1.0",
-        "openpyxl>=3.1.0",
-        "python-pptx>=1.0.0",
+         "PyPDF2>=3.0.0",
+         "python-docx>=1.1.0",
+         "openpyxl>=3.1.0",
+         "python-pptx>=1.0.0",
     ]
 
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
@@ -985,13 +949,13 @@ def install_optional_file_support() -> bool:
             print_status(f"  Installed {package.split('>=')[0]}")
         except subprocess.CalledProcessError:
             print_status(f"  Optional package {package.split('>=')[0]} failed", False)
+            return False  # <--- CHANGED: Return False instead of continuing
 
     return True
 
 
 # =============================================================================
 # SYSTEM INI CREATION
-# v2: qt_version = 6, gradio_version = 5.x, Kokoro TTS keys
 # =============================================================================
 
 def create_system_ini(platform, os_version, python_version,
@@ -1033,8 +997,10 @@ def create_system_ini(platform, os_version, python_version,
             if tts_enabled_voices:
                 f.write(f"tts_enabled_voices = {','.join(tts_enabled_voices)}\n")
             else:
-                # fallback: all voices
-                all_ids = [v["id"] for v in KOKORO_VOICE_OPTIONS]
+                # fallback: all voices from all packs
+                all_ids = []
+                for pack in KOKORO_VOICE_PACKS.values():
+                    all_ids.extend(pack["voice_ids"])
                 f.write(f"tts_enabled_voices = {','.join(all_ids)}\n")
 
         print_status("System information file created")
@@ -1085,8 +1051,14 @@ def create_venv() -> bool:
         if not python_exe.exists():
             raise FileNotFoundError(f"Python executable not found at {python_exe}")
 
-        subprocess.run([str(pip_exe), "install", "--upgrade", "pip"],
-                      capture_output=True, timeout=120)
+        # Use 'python -m pip' (not the pip shim) — the correct, reliable upgrade path.
+        # Stream output so failures are visible rather than silently swallowed.
+        pip_upgrade = subprocess.run(
+            [str(python_exe), "-m", "pip", "install", "--upgrade", "pip"],
+            capture_output=True, text=True, timeout=120
+        )
+        if pip_upgrade.returncode != 0:
+            print(f"  pip upgrade warning: {pip_upgrade.stderr.strip()[:200]}")
         print_status("Upgraded pip to latest version")
         print_status("Verified virtual environment setup")
         return True
@@ -1305,7 +1277,7 @@ def pip_install_with_retry(pip_exe: str, package: str, extra_args: list = None,
 
 
 # =============================================================================
-# PREBUILT WHEEL URL HELPERS — unchanged from v1
+# PREBUILT WHEEL URL HELPERS
 # =============================================================================
 
 def _get_prebuilt_wheel_urls() -> list:
@@ -1319,1751 +1291,815 @@ def _get_prebuilt_wheel_urls() -> list:
         sources.append({
             "type": "url",
             "label": f"eswarthammana/llama-cpp-wheels {wheel_version}",
-            "value": f"https://github.com/eswarthammana/llama-cpp-wheels/releases/download/v{wheel_version}/{filename}",
-        })
-        sources.append({
-            "type": "index",
-            "label": f"abetlen CPU index {wheel_version}",
-            "value": f"llama-cpp-python=={wheel_version}",
-            "extra_index": "https://abetlen.github.io/llama-cpp-python/whl/cpu",
+            "value": f"https://github.com/eswarthammana/llama-cpp-wheels/releases/download/{LLAMACPP_PYTHON_PREBUILT_VERSION}/{filename}"
         })
     else:
-        filename = f"llama_cpp_python-{wheel_version}-{py_tag}-{py_tag}-linux_x86_64.whl"
+        filename = f"llama_cpp_python-{wheel_version}-{py_tag}-{py_tag}-manylinux_2_31_x86_64.manylinux_2_17_x86_64.whl"
         sources.append({
             "type": "url",
             "label": f"eswarthammana/llama-cpp-wheels {wheel_version}",
-            "value": f"https://github.com/eswarthammana/llama-cpp-wheels/releases/download/v{wheel_version}/{filename}",
-        })
-        sources.append({
-            "type": "index",
-            "label": f"abetlen CPU index {wheel_version}",
-            "value": f"llama-cpp-python=={wheel_version}",
-            "extra_index": "https://abetlen.github.io/llama-cpp-python/whl/cpu",
+            "value": f"https://github.com/eswarthammana/llama-cpp-wheels/releases/download/{LLAMACPP_PYTHON_PREBUILT_VERSION}/{filename}"
         })
 
     sources.append({
         "type": "pypi",
-        "label": f"PyPI llama-cpp-python=={wheel_version} (--prefer-binary)",
-        "value": f"llama-cpp-python=={wheel_version}",
+        "label": f"PyPI llama-cpp-python {wheel_version}",
+        "value": f"llama-cpp-python=={wheel_version}"
     })
 
     return sources
 
 
 def get_latest_llamacpp_python_version() -> str:
-    global LLAMACPP_PYTHON_VERSION
-    if LLAMACPP_PYTHON_VERSION is not None:
-        return LLAMACPP_PYTHON_VERSION
-
-    api_url = "https://api.github.com/repos/abetlen/llama-cpp-python/releases/latest"
+    """Fetch the latest llama-cpp-python release tag from GitHub.
+    Returns a tag like 'v0.3.26' — always a real version that pip accepts.
+    Filters out pre-release/special tags like v0.3.26-hip-radeon."""
     try:
-        import urllib.request, json as _json
-        req = urllib.request.Request(
-            api_url,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "Chat-Gradio-Gguf-Installer/2.0",
-            }
+        import requests
+        import re
+        
+        # Use /releases (not /releases/latest) to get all releases
+        response = requests.get(
+            "https://api.github.com/repos/abetlen/llama-cpp-python/releases",
+            timeout=10
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = _json.loads(resp.read().decode("utf-8"))
-        tag = data.get("tag_name", "").strip()
-        if tag and tag.startswith("v"):
-            base_tag = re.sub(r'-(cu[0-9]+|metal|rocm[0-9.]*|sycl)$', '',
-                              tag, flags=re.IGNORECASE)
-            LLAMACPP_PYTHON_VERSION = base_tag
-            return base_tag
-    except Exception:
-        pass
+        
+        if response.status_code == 200:
+            releases = response.json()
+            
+            # Pattern for standard version tags: v0.3.26 or 0.3.26
+            # Excludes tags with suffixes like -hip-radeon, -cuda, -rc1, etc.
+            version_pattern = re.compile(r'^v?\d+\.\d+\.\d+$')
+            
+            # First, try to find a non-prerelease standard version
+            for release in releases:
+                tag = release.get("tag_name", "")
+                if release.get("prerelease"):
+                    continue
+                if version_pattern.match(tag):
+                    print(f"[GITHUB] Latest llama-cpp-python release: {tag}")
+                    return tag
+            
+            # If no non-prerelease standard version found, try all releases
+            for release in releases:
+                tag = release.get("tag_name", "")
+                if version_pattern.match(tag):
+                    print(f"[GITHUB] Latest llama-cpp-python release (pre-release): {tag}")
+                    return tag
+            
+            # If still no valid version found, use fallback
+            print(f"[GITHUB] No valid version found, using fallback: {LLAMACPP_PYTHON_VERSION_FALLBACK}")
+            return LLAMACPP_PYTHON_VERSION_FALLBACK
+        else:
+            print(f"[GITHUB] Failed to fetch releases (HTTP {response.status_code}), using fallback")
+            return LLAMACPP_PYTHON_VERSION_FALLBACK
+            
+    except Exception as e:
+        print(f"[GITHUB] Failed to fetch latest version: {e}")
+        return LLAMACPP_PYTHON_VERSION_FALLBACK
 
-    LLAMACPP_PYTHON_VERSION = LLAMACPP_PYTHON_VERSION_FALLBACK
-    return LLAMACPP_PYTHON_VERSION_FALLBACK
-
-
-# =============================================================================
-# LLAMA-CPP-PYTHON COMPILE — unchanged from v1
-# =============================================================================
 
 def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
-    """Build llama-cpp-python from source with optimal CPU flags."""
-    global _DID_COMPILATION
-    _DID_COMPILATION = True
-
-    snapshot_pre_existing_processes()
-    print_status("Building llama-cpp-python from source (10-20 minutes)")
-
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                    ("python.exe" if PLATFORM == "windows" else "python"))
-    pip_exe    = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                    ("pip.exe"    if PLATFORM == "windows" else "pip"))
-
-    build_threads = get_optimal_build_threads()
-    print(f"  Using {build_threads} parallel build threads (85% of logical cores)")
-
+    """Build llama-cpp-python from source with the given CMAKE flags.
+    Version is resolved from the GitHub API (real PyPI version), never
+    from the display-only LLAMACPP_PYTHON_COMPILE_DISPLAY constant."""
+    global LLAMACPP_PYTHON_VERSION
+    print_status("Compiling llama-cpp-python from source (this may take a while)...")
+    
+    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                 ("pip.exe" if PLATFORM == "windows" else "pip"))
+    
+    # Resolve version — always a real PyPI-compatible version string
+    if LLAMACPP_PYTHON_VERSION is None:
+        LLAMACPP_PYTHON_VERSION = get_latest_llamacpp_python_version()
+    
+    # Strip leading 'v' for pip; the tag is like 'v0.3.26' → '0.3.26'
+    raw_version = LLAMACPP_PYTHON_VERSION.lstrip("v")
+    pkg_spec = f"llama-cpp-python=={raw_version}"
+    
+    print_status(f"Building llama-cpp-python version {raw_version} from source...")
+    
     env = os.environ.copy()
-    env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(build_threads)
-    env["FORCE_CMAKE"] = "1"
-
-    cpu_features = detect_cpu_features()
-    if cpu_features.get("AVX2"):  build_flags["GGML_AVX2"] = "ON"
-    if cpu_features.get("AVX"):   build_flags["GGML_AVX"]  = "ON"
-    if cpu_features.get("FMA"):   build_flags["GGML_FMA"]  = "ON"
-    if cpu_features.get("F16C"):  build_flags["GGML_F16C"] = "ON"
-
-    build_flags["GGML_CURL"] = "OFF"
-    build_flags["LLAMA_CURL"] = "OFF"
-    build_flags["GGML_OPENMP"] = "ON"
-
-    cmake_args = [f"-D{flag}={value}" for flag, value in build_flags.items()]
-    env["CMAKE_ARGS"] = " ".join(cmake_args)
-    for flag, value in build_flags.items():
-        env[flag] = value
-
+    cmake_args = []
+    for key, value in build_flags.items():
+        cmake_args.append(f"-D{key}={value}")
+    
     if cmake_args:
-        print(f"  Build flags: {', '.join(f'{k}={v}' for k, v in build_flags.items())}")
-
-    if PLATFORM == "windows":
-        env["CL"] = f"/MP{build_threads}"
-        if VS_GENERATOR:
-            env["CMAKE_GENERATOR"] = VS_GENERATOR
-            env["CMAKE_GENERATOR_PLATFORM"] = "x64"
-    else:
-        env["MAKEFLAGS"] = f"-j{build_threads}"
-
-    print_status("Installing build backend dependencies (scikit-build-core, cmake, ninja)...")
-    build_backend_deps = [
-        "scikit-build-core>=0.9.0",
-        "cmake>=3.20",
-        "ninja",
-        "setuptools>=80.0",
-        "wheel",
-    ]
-    for dep in build_backend_deps:
-        pip_install_with_retry(pip_exe, dep, max_retries=5, initial_delay=3.0)
-    print_status("Build backend dependencies installed")
-
-    compile_version = get_latest_llamacpp_python_version()
-    repo_dir = TEMP_DIR / "llama-cpp-python"
-
-    _PROGRESS_KW = ("counting", "compressing", "receiving", "resolving", "deltum")
-    _INFO_KW     = ("cloning", "submodule", "registered", "checked out", "remote:", "total")
-    _ERROR_KW    = ("error", "fatal", "warning")
-
-    def _print_clone_line(line: str) -> None:
-        ll = line.lower()
-        if any(kw in ll for kw in _ERROR_KW):
-            print(f"\n  [!] {line[:120]}", flush=True)
-        elif any(kw in ll for kw in _PROGRESS_KW):
-            print(f"\r  {line[:100]:<100}", end="", flush=True)
-        elif any(kw in ll for kw in _INFO_KW):
-            print(f"\n  {line}", flush=True)
-
+        env["CMAKE_ARGS"] = " ".join(cmake_args)
+        print_status(f"CMAKE_ARGS: {env['CMAKE_ARGS']}")
+    
+    env["FORCE_CMAKE"] = "1"
+    
     try:
-        if repo_dir.exists():
-            _force_rmtree(repo_dir)
-
-        print_status(f"Cloning llama-cpp-python {compile_version}...")
-
-        max_retries = 5
-        retry_delay = 10
-        clone_success = False
-
-        for attempt in range(max_retries):
-            if repo_dir.exists():
-                _force_rmtree(repo_dir)
-
-            clone_proc = subprocess.Popen(
-                ["git", "clone", "--progress", "--depth", "1",
-                 "--branch", compile_version,
-                 "--recurse-submodules", "--shallow-submodules",
-                 LLAMACPP_PYTHON_GIT_REPO, str(repo_dir)],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, env=env
-            )
-
-            for raw in clone_proc.stdout:
-                line = raw.rstrip("\n\r")
-                if line:
-                    _print_clone_line(line)
-
-            clone_proc.wait()
-            print()
-            if clone_proc.returncode == 0:
-                clone_success = True
-                break
-            else:
-                if attempt < max_retries - 1:
-                    print(f"  Clone failed, retrying in {retry_delay}s...")
-                    time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 2, 120)
-
-        if not clone_success:
-            print_status("Failed to clone llama-cpp-python after retries", False)
-            return False
-
-        print_status("Repository cloned — building wheel...")
-
-        build_start = time.time()
-        HEARTBEAT_INTERVAL = 30
-
-        process = subprocess.Popen(
-            [pip_exe, "install", "--no-build-isolation", repo_dir],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, env=env
-        )
-        track_process(process.pid)
-
-        full_output = []
-        last_print_time = [time.time()]
-        current_phase   = [None]
-
-        def _phase_for(line_s):
-            if "building" in line_s:    return "Building..."
-            if "compiling" in line_s:   return "Compiling..."
-            if "linking" in line_s:     return "Linking..."
-            if "installing" in line_s:  return "Installing..."
-            return None
-
-        for line in process.stdout:
-            line_s = line.rstrip()
-            if not line_s:
-                continue
-            full_output.append(line_s)
-            now   = time.time()
-            phase = _phase_for(line_s.lower())
-            is_error = any(x in line_s.lower() for x in ["error", "fatal", "failed"])
-
-            if is_error:
-                print(f"\n  [!] {line_s[:120]}", flush=True)
-                last_print_time[0] = now
-                current_phase[0]   = None
-            elif phase:
-                if phase != current_phase[0]:
-                    elapsed = int(now - build_start)
-                    print(f"\n  [{elapsed:>4}s] {phase}", end="", flush=True)
-                    current_phase[0]   = phase
-                    last_print_time[0] = now
-
-            if now - last_print_time[0] >= HEARTBEAT_INTERVAL:
-                elapsed = int(now - build_start)
-                print(f"\n  [{elapsed:>4}s] Still building... (please wait)", end="", flush=True)
-                last_print_time[0] = now
-
-        print(flush=True)
-        process.wait()
-
-        if process.returncode == 0:
-            print_status("llama-cpp-python built and installed")
-            return True
-        else:
-            print_status("llama-cpp-python build failed", False)
-            print("  Build output (last 20 lines):")
-            for line in full_output[-20:]:
-                if "error" in line.lower() or "fatal" in line.lower():
-                    print(f"    >>> {line[:100]}")
-                else:
-                    print(f"    {line[:100]}")
-            return False
-
-    except Exception as e:
-        print_status(f"Build error: {e}", False)
-        return False
-    finally:
-        if repo_dir.exists():
-            _force_rmtree(repo_dir)
-
-
-# =============================================================================
-# KOKORO TTS INSTALLATION
-# Replaces Coqui TTS. No espeak-ng on any platform — misaki handles G2P.
-# =============================================================================
-
-def install_kokoro_tts(kokoro_voice: dict) -> bool:
-    """Install Kokoro TTS and pre-download the voice model (~300 MB).
-
-    Steps:
-    1. pip install kokoro>=0.9.4  (pulls misaki[en] automatically for G2P)
-    2. soundfile>=0.12.1 for WAV I/O
-    3. Download Kokoro-82M ONNX model on first KPipeline init, stored in
-       data/tts_models/kokoro/ via HF_HOME redirect
-    4. Run a short synthesis test to confirm the model works
-    5. Returns True on success, sys.exit(1) on unrecoverable error
-
-    No espeak-ng is installed on any platform. Kokoro uses misaki for English
-    G2P with fallback=None — this is fully self-contained.
-    """
-    pip_exe    = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                    ("pip.exe"    if PLATFORM == "windows" else "pip"))
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                    ("python.exe" if PLATFORM == "windows" else "python"))
-
-    voice_id   = kokoro_voice["id"]
-    lang_code  = kokoro_voice["lang_code"]
-
-    print_status("Installing Kokoro TTS...")
-    if not pip_install_with_retry(pip_exe, "kokoro>=0.9.4",
-                                  max_retries=10, initial_delay=5.0):
-        print_status("kokoro installation failed", False)
-        sys.exit(1)
-    print_status("kokoro installed")
-
-    # soundfile is listed in BASE_REQ but ensure it is present before the
-    # synthesis test that runs next.
-    if not pip_install_with_retry(pip_exe, "soundfile>=0.12.1",
-                                  max_retries=5, initial_delay=3.0):
-        print_status("soundfile installation failed", False)
-        sys.exit(1)
-    print_status("soundfile verified")
-
-    # Pre-download model and run synthesis test
-    tts_model_dir     = BASE_DIR / "data" / "tts_models" / "kokoro"
-    tts_model_dir.mkdir(parents=True, exist_ok=True)
-    tts_model_dir_safe = str(tts_model_dir).replace("\\", "/")
-    temp_wav_safe      = str(TEMP_DIR / "kokoro_test.wav").replace("\\", "/")
-
-    print_status(f"Downloading Kokoro-82M model (~300 MB) and testing voice '{voice_id}'...")
-
-    download_script = f'''
-import os, sys
-os.environ["HF_HOME"] = r"{tts_model_dir_safe}"
-os.environ["HF_HUB_OFFLINE"] = "0"
-
-print("[KOKORO] Importing kokoro...", flush=True)
-from kokoro import KPipeline
-import soundfile as sf
-import numpy as np
-
-print("[KOKORO] Initialising pipeline (lang_code={repr(lang_code)})...", flush=True)
-pipeline = KPipeline(lang_code="{lang_code}")
-print("[KOKORO] Pipeline ready", flush=True)
-
-print("[KOKORO] Running test synthesis (voice={voice_id})...", flush=True)
-chunks = []
-for gs, ps, audio in pipeline("Kokoro installation test.", voice="{voice_id}", speed=1.0):
-    if audio is not None:
-        chunks.append(audio)
-
-if not chunks:
-    print("[FATAL] No audio chunks produced")
-    sys.exit(1)
-
-combined = np.concatenate(chunks)
-sf.write(r"{temp_wav_safe}", combined, 24000)
-
-if not os.path.exists(r"{temp_wav_safe}") or os.path.getsize(r"{temp_wav_safe}") == 0:
-    print("[FATAL] Test WAV not written")
-    sys.exit(1)
-
-print("[KOKORO] Test passed — model ready")
-'''
-
-    temp_script = TEMP_DIR / "install_kokoro_model.py"
-    try:
-        with open(temp_script, "w", encoding="utf-8") as f:
-            f.write(download_script)
-
-        result = subprocess.run([python_exe, str(temp_script)], timeout=2400)
-        temp_script.unlink(missing_ok=True)
-
-        test_wav = TEMP_DIR / "kokoro_test.wav"
-        test_wav.unlink(missing_ok=True)
-
-        if result.returncode != 0:
-            print_status("Kokoro model verification failed (see errors above)", False)
-            sys.exit(1)
-
-        print_status("Kokoro TTS installed and verified")
-        return True
-
-    except subprocess.TimeoutExpired:
-        print_status("Kokoro TTS installation timed out (>40 min)", False)
-        sys.exit(1)
-    except Exception as e:
-        print_status(f"Kokoro TTS installation failed: {e}", False)
-        sys.exit(1)
-    finally:
-        temp_script.unlink(missing_ok=True)
-
-
-# =============================================================================
-# EMBEDDING CACHE INITIALIZATION — unchanged from v1
-# =============================================================================
-
-def initialize_embedding_cache(embedding_model: str) -> bool:
-    """Initialize embedding model cache using sentence-transformers"""
-    print_status(f"Initializing embedding cache for {embedding_model}...")
-
-    cache_dir = BASE_DIR / "data" / "embedding_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                    ("python.exe" if PLATFORM == "windows" else "python"))
-
-    init_script = f'''
-import os
-import sys
-import time
-from pathlib import Path
-
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["TORCH_DEVICE"] = "cpu"
-
-cache_dir = Path(r"{str(cache_dir)}")
-os.environ["TRANSFORMERS_CACHE"] = str(cache_dir.absolute())
-os.environ["HF_HOME"] = str(cache_dir.parent.absolute())
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(cache_dir.absolute())
-
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
-
-print("Importing torch...", flush=True)
-import torch
-torch.set_grad_enabled(False)
-print(f"torch version: {{torch.__version__}}", flush=True)
-print(f"CUDA available: {{torch.cuda.is_available()}} (should be False)", flush=True)
-
-print("Importing sentence_transformers...", flush=True)
-from sentence_transformers import SentenceTransformer
-
-print(f"Loading model: {embedding_model}", flush=True)
-print("This may take several minutes while downloading model files...", flush=True)
-sys.stdout.flush()
-
-model = SentenceTransformer(
-    "{embedding_model}",
-    device="cpu",
-    cache_folder=str(cache_dir.absolute())
-)
-model.eval()
-
-print("Testing embedding...", flush=True)
-test_embedding = model.encode(
-    ["test"],
-    batch_size=1,
-    normalize_embeddings=True,
-    convert_to_tensor=True,
-    show_progress_bar=True
-)
-dim = test_embedding.shape[1] if len(test_embedding.shape) > 1 else len(test_embedding)
-print(f"SUCCESS: Model loaded, dimension: {{dim}}", flush=True)
-'''
-
-    script_path = TEMP_DIR / "init_embedding.py"
-    try:
-        with open(script_path, 'w', encoding='utf-8') as f:
-            f.write(init_script)
-
-        print("Embedding Initialization Output...")
-        print("(This may take 2-10 minutes depending on download speed)")
-
-        process = subprocess.Popen(
-            [python_exe, str(script_path)],
+        proc = subprocess.Popen(
+            [pip_exe, "install", pkg_spec, "--no-cache-dir", "--force-reinstall", "--verbose"],
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1,
-            universal_newlines=True
+            bufsize=1
         )
-
-        for line in process.stdout:
-            print(f"    {line.rstrip()}")
-
-        process.wait(timeout=2400)
-
-        script_path.unlink(missing_ok=True)
-
-        if process.returncode == 0:
-            cache_files = list(cache_dir.rglob("*"))
-            if len(cache_files) > 10:
-                print_status(f"Embedding cache initialized ({len(cache_files)} files)")
-                return True
-            else:
-                print_status("Embedding cache appears incomplete", False)
-                return False
-        else:
-            print_status("Embedding initialization failed", False)
-            return False
-
-    except subprocess.TimeoutExpired:
-        process.kill()
-        print_status("Embedding initialization timed out after 20 minutes", False)
-        print_status("Check your internet connection and try again", False)
-        return False
-    except Exception as e:
-        print_status(f"Embedding initialization failed: {e}", False)
-        return False
-    finally:
-        script_path.unlink(missing_ok=True)
-
-
-def download_spacy_model() -> bool:
-    """Download spaCy English model during installation."""
-    try:
-        pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                     ("pip.exe" if PLATFORM == "windows" else "pip"))
-
-        print_status("Downloading spaCy language model...")
-
-        filename = "en_core_web_sm-3.8.0-py3-none-any.whl"
-        url      = (f"https://github.com/explosion/spacy-models/releases/download/"
-                    f"en_core_web_sm-3.8.0/{filename}")
-        whl_path = TEMP_DIR / filename
-
-        download_with_progress(url, whl_path, "Downloading spaCy model")
-
-        print_status("Installing spaCy model...")
-        result = subprocess.run(
-            [pip_exe, "install", "--no-cache-dir", str(whl_path)],
-            capture_output=True, text=True, timeout=600
-        )
-
-        whl_path.unlink(missing_ok=True)
-
-        if result.returncode == 0:
-            print_status("spaCy model installed")
+        
+        for line in proc.stdout:
+            line = line.rstrip()
+            if any(kw in line.lower() for kw in ("error", "failed", "building", "installing", "success")):
+                print(f"    {line}", flush=True)
+        
+        proc.wait()
+        
+        if proc.returncode == 0:
+            print_status("llama-cpp-python compiled and installed successfully")
             return True
         else:
-            print_status(f"spaCy install failed (code {result.returncode})", False)
+            print_status("llama-cpp-python compilation failed", False)
             return False
-
+            
     except Exception as e:
-        print_status(f"spaCy error: {e}", False)
+        print_status(f"Compilation error: {e}", False)
         return False
 
 
-def download_with_progress(url: str, filepath: Path, description: str = "Downloading",
-                          max_retries: int = 10, initial_delay: float = 5.0) -> None:
-    """Download file with progress bar and retry."""
-    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                    ("python.exe" if PLATFORM == "windows" else "python"))
-
-    download_script = f'''
-import requests, time, sys
-from pathlib import Path
-
-def format_bytes(b):
-    for unit in ["B","KB","MB","GB"]:
-        if b < 1024.0: return f"{{b:.1f}}{{unit}}"
-        b /= 1024.0
-    return f"{{b:.1f}}TB"
-
-def progress_bar(current, total, width=30):
-    if total == 0: return "[" + "=" * width + "] 100%"
-    filled = int(width * current // total)
-    bar = "=" * filled + "-" * (width - filled)
-    pct = 100 * current // total
-    return f"[{{bar}}] {{pct}}% ({{format_bytes(current)}}/{{format_bytes(total)}})"
-
-filepath = Path(r"{str(filepath)}")
-max_retries = {max_retries}
-delay = {initial_delay}
-
-for attempt in range(max_retries):
-    try:
-        existing_size = filepath.stat().st_size if filepath.exists() else 0
-        headers = {{"Range": f"bytes={{existing_size}}-"}} if existing_size > 0 else {{}}
-        response = requests.get("{url}", stream=True, headers=headers, timeout=60)
-        if response.status_code == 416:
-            print(f"\\r{description}: Already complete", flush=True); break
-        elif response.status_code == 206:
-            total_size = existing_size + int(response.headers.get("content-length", 0))
-        elif response.status_code == 200:
-            total_size = int(response.headers.get("content-length", 0))
-            existing_size = 0; filepath.unlink(missing_ok=True)
-        else:
-            response.raise_for_status()
-        downloaded = existing_size
-        last_update = 0
-        with open(filepath, "ab" if existing_size > 0 else "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk); downloaded += len(chunk)
-                    if total_size > 0:
-                        pct = int(100 * downloaded / total_size)
-                        if pct > last_update:
-                            print(f"\\r{description}: {{progress_bar(downloaded, total_size)}}", end="", flush=True)
-                            last_update = pct
-        print(f"\\r{description}: {{progress_bar(total_size, total_size)}} - Complete", flush=True)
-        break
-    except Exception as e:
-        print(f"\\n{description}: Error - {{e}}", flush=True)
-        if attempt < max_retries - 1:
-            print(f"{description}: Retry {{attempt+1}}/{{max_retries}} in {{delay:.0f}}s...", flush=True)
-            time.sleep(delay); delay = min(delay * 2, 300)
-        else:
-            filepath.unlink(missing_ok=True)
-            print(f"{description}: FAILED after {{max_retries}} attempts", flush=True)
-            sys.exit(1)
-'''
-
-    download_script_path = TEMP_DIR / "download_file.py"
-    try:
-        with open(download_script_path, 'w') as f:
-            f.write(download_script)
-        subprocess.run([python_exe, str(download_script_path)], check=True, timeout=3600)
-    except subprocess.CalledProcessError as e:
-        filepath.unlink(missing_ok=True)
-        raise Exception(f"Download failed: {e}")
-    except subprocess.TimeoutExpired:
-        filepath.unlink(missing_ok=True)
-        raise Exception("Download timed out")
-    finally:
-        download_script_path.unlink(missing_ok=True)
-
-
 # =============================================================================
-# BINARY DOWNLOAD/EXTRACT — unchanged from v1
+# NEW MENU FUNCTIONS
 # =============================================================================
 
-def compile_llama_cpp_binary(backend: str, info: dict) -> bool:
-    """Compile llama.cpp binaries from source"""
-    import traceback
-    global _DID_COMPILATION
-    _DID_COMPILATION = True
-
-    snapshot_pre_existing_processes()
-    print_status("Compiling llama.cpp binaries from source (15-30 minutes)...")
-
-    dest_path = BASE_DIR / info["dest"]
-    dest_path.mkdir(parents=True, exist_ok=True)
-
-    llamacpp_src = TEMP_DIR / "llama.cpp"
-
-    import multiprocessing
-    try:
-        total_threads = multiprocessing.cpu_count()
-    except:
-        total_threads = 4
-    build_threads = max(1, int(total_threads * 0.85))
-    print(f"  Building with {build_threads} of {total_threads} threads (85%)")
-
-    env = os.environ.copy()
-    env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(build_threads)
-    if PLATFORM == "windows":
-        env["FORCE_CMAKE"] = "1"
-        env["CL"] = f"/MP{build_threads}"
-    else:
-        env["MAKEFLAGS"] = f"-j{build_threads}"
-
-    try:
-        subprocess.run(["git", "config", "--global", "http.lowSpeedLimit", "200"],
-                      capture_output=True)
-        subprocess.run(["git", "config", "--global", "http.lowSpeedTime",  "240"],
-                      capture_output=True)
-
-        if llamacpp_src.exists():
-            _force_rmtree(llamacpp_src)
-
-        print_status("Cloning llama.cpp repository...")
-
-        max_retries = 5
-        retry_delay = 15
-        for attempt in range(max_retries):
-            try:
-                process = subprocess.Popen([
-                    "git", "clone", "--depth", "1", "--progress",
-                    LLAMACPP_GIT_REPO, str(llamacpp_src)
-                ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                   text=True, bufsize=1, env=env)
-
-                for raw in process.stdout:
-                    line = raw.rstrip("\n\r")
-                    if not line:
-                        continue
-                    ll = line.lower()
-                    if any(x in ll for x in ["error", "fatal"]):
-                        print(f"\n  [!] {line[:120]}", flush=True)
-                    elif any(x in ll for x in ["receiving", "resolving", "counting", "compressing"]):
-                        print(f"\r  {line[:100]:<100}", end="", flush=True)
-                    elif any(x in ll for x in ["cloning", "remote:", "total"]):
-                        print(f"\n  {line}", flush=True)
-
-                process.wait(timeout=600)
-                print()
-                if process.returncode == 0:
-                    break
-                else:
-                    raise subprocess.CalledProcessError(process.returncode, "git clone")
-
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                if llamacpp_src.exists():
-                    _force_rmtree(llamacpp_src)
-                if attempt < max_retries - 1:
-                    print(f"\n  Clone failed, retrying in {retry_delay}s...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                else:
-                    print_status("Failed to clone llama.cpp after retries", False)
-                    return False
-
-        print_status("Repository cloned")
-
-        build_dir = llamacpp_src / "build"
-        build_dir.mkdir(exist_ok=True)
-
-        cmake_args = [
-            "cmake", "..",
-            "-DCMAKE_BUILD_TYPE=Release",
-            f"-DCMAKE_BUILD_PARALLEL_LEVEL={build_threads}",
-            "-DLLAMA_CURL=OFF",
-            "-DLLAMA_BUILD_SERVER=OFF",
-            "-DLLAMA_SERVER_UI=OFF",
-        ]
-
-        cpu_features = detect_cpu_features()
-        if cpu_features.get("AVX"):   cmake_args.append("-DGGML_AVX=ON")
-        if cpu_features.get("AVX2"):  cmake_args.append("-DGGML_AVX2=ON")
-        if cpu_features.get("FMA"):   cmake_args.append("-DGGML_FMA=ON")
-        if cpu_features.get("F16C"):  cmake_args.append("-DGGML_F16C=ON")
-
-        build_flags = info.get("build_flags", {})
-        if build_flags.get("GGML_VULKAN"):
-            cmake_args.append("-DGGML_VULKAN=ON")
-
-        if PLATFORM == "windows":
-            if VS_GENERATOR:
-                cmake_args.extend(["-G", VS_GENERATOR, "-A", "x64"])
-            else:
-                cmake_args.extend(["-A", "x64"])
-
-        print_status("Configuring build...")
-        result = subprocess.run(cmake_args, cwd=build_dir, capture_output=True, text=True, env=env)
-        if result.returncode != 0:
-            print_status(f"CMake configure failed: {result.stderr[:200]}", False)
-            return False
-
-        print_status("Building binaries...")
-        if PLATFORM == "windows":
-            build_cmd = ["cmake", "--build", ".", "--config", "Release",
-                         "--parallel", str(build_threads)]
-        else:
-            build_cmd = ["cmake", "--build", ".", "--parallel", str(build_threads)]
-
-        process = subprocess.Popen(
-            build_cmd, cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, env=env
-        )
-        track_process(process.pid)
-
-        bin_build_start = time.time()
-        last_bin_print  = [time.time()]
-        HEARTBEAT_INTERVAL = 30
-
-        for line in process.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            now = time.time()
-            is_error    = any(x in line.lower() for x in ["error", "fatal", "failed"])
-            is_progress = any(x in line.lower() for x in ["building", "compiling", "linking", "["])
-            if is_error:
-                print(f"\n  [!] {line[:120]}", flush=True)
-                last_bin_print[0] = now
-            elif is_progress:
-                elapsed = int(now - bin_build_start)
-                print(f"\r  [{elapsed:>4}s] {line[:100]}", end="", flush=True)
-                last_bin_print[0] = now
-            if now - last_bin_print[0] >= HEARTBEAT_INTERVAL:
-                elapsed = int(now - bin_build_start)
-                print(f"\n  [{elapsed:>4}s] Still building...", end="", flush=True)
-                last_bin_print[0] = now
-
-        process.wait()
-        print()
-
-        if process.returncode != 0:
-            print_status("Build failed", False)
-            return False
-
-        print_status("Copying binaries...")
-        if PLATFORM == "windows":
-            bin_src = build_dir / "bin" / "Release"
-        else:
-            bin_src = build_dir / "bin"
-
-        if not bin_src.exists():
-            bin_src = build_dir
-
-        for item in bin_src.iterdir():
-            if item.is_file():
-                shutil.copy2(item, dest_path / item.name)
-
-        cli_path = BASE_DIR / info["cli_path"]
-        if not cli_path.exists():
-            print_status(f"llama-cli not found at {cli_path}", False)
-            return False
-
-        if PLATFORM == "linux":
-            os.chmod(cli_path, 0o755)
-
-        print_status("llama.cpp binaries compiled successfully")
-        return True
-
-    except Exception as e:
-        print_status(f"Compilation failed: {e}", False)
-        traceback.print_exc()
-        return False
-    finally:
-        if llamacpp_src.exists():
-            _force_rmtree(llamacpp_src)
-
-
-def copy_linux_binaries(src_path: Path, dest_path: Path) -> None:
-    subdirs = [d for d in src_path.iterdir() if d.is_dir()]
-    if len(subdirs) == 1 and subdirs[0].name.startswith("llama-"):
-        actual_src = subdirs[0]
-        if (actual_src / "bin").exists():
-            actual_src = actual_src / "bin"
-    elif (src_path / "bin").exists():
-        actual_src = src_path / "bin"
-    else:
-        actual_src = src_path
-
-    copied_count = 0
-    for item in actual_src.iterdir():
-        if item.is_file():
-            dest = dest_path / item.name
-            shutil.copy2(item, dest)
-            if not item.suffix or item.suffix in ['.so']:
-                os.chmod(dest, 0o755)
-            copied_count += 1
-
-    lib_candidates = [src_path / "lib",
-                      subdirs[0] / "lib" if len(subdirs) == 1 else None]
-    for lib_dir in lib_candidates:
-        if lib_dir and lib_dir.exists():
-            for item in lib_dir.iterdir():
-                if item.is_file() and '.so' in item.name:
-                    dest = dest_path / item.name
-                    shutil.copy2(item, dest)
-                    os.chmod(dest, 0o755)
-                    copied_count += 1
-
-    if copied_count > 0:
-        print_status(f"Copied {copied_count} binary files")
-
-
-def download_extract_backend(backend: str) -> bool:
-    """Download and extract backend binaries"""
-    import zipfile, tarfile
-
-    info = BACKEND_OPTIONS[backend]
-
-    if info.get("compile_binary"):
-        return compile_llama_cpp_binary(backend, info)
-
-    if not info["url"]:
-        print_status("No backend download required for this option")
-        return True
-
-    print_status("Downloading backend binaries...")
-    url = info["url"]
-    if url.endswith(".tar.gz"):
-        temp_archive = TEMP_DIR / "backend.tar.gz"
-        is_tarball   = True
-    else:
-        temp_archive = TEMP_DIR / "backend.zip"
-        is_tarball   = False
-
-    try:
-        download_with_progress(url, temp_archive, "Downloading backend")
-        print_status("Extracting backend...")
-
-        dest_path = BASE_DIR / info["dest"]
-        dest_path.mkdir(parents=True, exist_ok=True)
-
-        if is_tarball:
-            with tarfile.open(temp_archive, 'r:gz') as tf:
-                members = tf.getmembers()
-                total   = len(members)
-                for i, member in enumerate(members):
-                    tf.extract(member, dest_path,
-                               filter='data' if sys.version_info >= (3, 12) else None)
-                    if i % 25 == 0 or i == total - 1:
-                        print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
-                print()
-        else:
-            with zipfile.ZipFile(temp_archive, 'r') as zf:
-                members = zf.namelist()
-                total   = len(members)
-                for i, m in enumerate(members):
-                    zf.extract(m, dest_path)
-                    if i % 25 == 0 or i == total - 1:
-                        print(f"\rExtracting: {simple_progress_bar(i + 1, total)}", end='', flush=True)
-                print()
-
-        if PLATFORM == "linux":
-            copy_linux_binaries(dest_path, dest_path)
-
-        cli_path = BASE_DIR / info["cli_path"]
-        if not cli_path.exists():
-            raise FileNotFoundError(f"llama-cli not found: {cli_path}")
-
-        if PLATFORM == "linux":
-            os.chmod(cli_path, 0o755)
-
-        print_status("Backend ready")
-        return True
-
-    except Exception as e:
-        print_status(f"Backend install failed: {e}", False)
-        return False
-    finally:
-        temp_archive.unlink(missing_ok=True)
-
-
-def clean_compile_temp() -> None:
-    if PLATFORM == "windows" and WIN_COMPILE_TEMP.exists():
-        try:
-            _force_rmtree(WIN_COMPILE_TEMP)
-            print_status("Cleaned up compilation temp folder")
-        except:
-            pass
-
-
-# =============================================================================
-# BUILD TOOL DETECTION — unchanged from v1
-# =============================================================================
-
-def _path_prepend(bin_dir: str) -> None:
-    current_entries = os.environ.get("PATH", "").split(os.pathsep)
-    if bin_dir not in current_entries:
-        os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
-
-
-def _vs_base_dirs():
-    pf   = Path(os.environ.get("ProgramFiles",      r"C:\Program Files"))
-    pf86 = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
-    vs_pf   = pf   / "Microsoft Visual Studio"
-    vs_pf86 = pf86 / "Microsoft Visual Studio"
-    return [
-        ("2022", vs_pf,   vs_pf86),
-        ("2019", vs_pf86, vs_pf),
-        ("2017", vs_pf86, vs_pf),
-    ]
-
-
-def detect_build_tools_available() -> dict:
-    global VS_GENERATOR
-    tools = {"Git": False, "CMake": False, "MSVC": False, "MSBuild": False}
-
-    if shutil.which("git"):
-        tools["Git"] = True
-
-    if PLATFORM == "windows":
-        _EDITIONS      = ["Community", "Professional", "Enterprise", "BuildTools"]
-        _VS_GENERATORS = {"2022": "Visual Studio 17 2022",
-                          "2019": "Visual Studio 16 2019",
-                          "2017": "Visual Studio 15 2017"}
-        _MSBUILD_SUBPATH = {"2022": Path("MSBuild")/"Current"/"Bin"/"MSBuild.exe",
-                            "2019": Path("MSBuild")/"Current"/"Bin"/"MSBuild.exe",
-                            "2017": Path("MSBuild")/"15.0"/"Bin"/"MSBuild.exe"}
-        _CMAKE_VS_SUBPATH = (Path("Common7") / "IDE" / "CommonExtensions" /
-                             "Microsoft" / "CMake" / "CMake" / "bin" / "cmake.exe")
-
-        if shutil.which("cmake"):
-            tools["CMake"] = True
-
-        if not tools["CMake"]:
-            _pf   = os.environ.get("ProgramFiles",      r"C:\Program Files")
-            _pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
-            for candidate in [
-                Path(_pf)   / "CMake" / "bin" / "cmake.exe",
-                Path(_pf86) / "CMake" / "bin" / "cmake.exe",
-            ]:
-                if candidate.exists():
-                    tools["CMake"] = True
-                    _path_prepend(str(candidate.parent))
-                    break
-
-        for year, primary, fallback in _vs_base_dirs():
-            for vs_base in (primary, fallback):
-                if not vs_base.exists():
-                    continue
-                for edition in _EDITIONS:
-                    edition_path = vs_base / year / edition
-                    vc_tools = edition_path / "VC" / "Tools" / "MSVC"
-                    if vc_tools.exists():
-                        tools["MSVC"] = True
-                        if not VS_GENERATOR:
-                            VS_GENERATOR = _VS_GENERATORS.get(year, "")
-                    msbuild_path = edition_path / _MSBUILD_SUBPATH[year]
-                    if msbuild_path.exists():
-                        tools["MSBuild"] = True
-                        _path_prepend(str(msbuild_path.parent))
-                    if not tools["CMake"]:
-                        cmake_vs = edition_path / _CMAKE_VS_SUBPATH
-                        if cmake_vs.exists():
-                            tools["CMake"] = True
-                            _path_prepend(str(cmake_vs.parent))
-
-    else:
-        if shutil.which("cmake"):
-            tools["CMake"] = True
-        if shutil.which("make") or shutil.which("ninja"):
-            tools["MSVC"] = True
-
-    return tools
-
-
-# =============================================================================
-# CONFIG CREATION — unchanged from v1
-# =============================================================================
-
-def create_config(backend: str, embedding_model: str,
-                  tts_pack: int = 1,
-                  tts_default_voice_id: str = None,
-                  tts_default_voice_name: str = None,
-                  tts_enabled_voices: list = None) -> None:
-    config_path = BASE_DIR / "data" / "persistent.json"
-    vulkan_enabled = "vulkan" in backend.lower()
-    layer_mode     = "VRAM_SRAM" if vulkan_enabled else "SRAM_ONLY"
-    default_vram   = 8192 if vulkan_enabled else 0
-    optimal_threads = get_optimal_build_threads()
-    if PLATFORM == "windows":
-        default_sound_device = "Default Sound Device"
-    else:
-        default_sound_device = "default"
-
-    # Default voice if none provided
-    if tts_default_voice_id is None:
-        tts_default_voice_id = "af_heart"
-        tts_default_voice_name = "Heart — American Female"
-    if tts_enabled_voices is None:
-        tts_enabled_voices = ["am_adam", "af_heart"]  # pack 1 as fallback
-
-    config = {
-        "model_settings": {
-            "layer_allocation_mode": layer_mode,
-            "model_dir": "models",
-            "model_name": "Select_a_model...",
-            "context_size": 32768,
-            "vram_size": default_vram,
-            "temperature": 0.66,
-            "repeat_penalty": 1.1,
-            "selected_gpu": "Auto",
-            "selected_cpu": "Auto-Select",
-            "mmap": True,
-            "mlock": False,
-            "n_batch": 2048,
-            "dynamic_gpu_layers": True,
-            "max_history_slots": 8,
-            "max_attach_slots": 6,
-            "session_log_height": 650,
-            "show_think_phase": False,
-            "print_raw_output": False,
-            "cpu_threads": optimal_threads,
-            "bleep_on_events": True,
-            "use_python_bindings": True,
-            "sound_output_device": default_sound_device,
-            "sound_sample_rate": 44100,
-            "tts_enabled": False,
-            "tts_voice": None,
-            "tts_voice_name": None,
-            "max_tts_length": 4500,
-            "tts_pack": tts_pack,
-            "tts_enabled_voices": tts_enabled_voices,
-            "tts_default_voice_id": tts_default_voice_id,
-            "tts_default_voice_name": tts_default_voice_name,
-        }
-    }
-
-    try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, "w", encoding='utf-8') as f:
-            json.dump(config, f, indent=4)
-        print_status("Configuration file created")
-    except Exception as e:
-        print_status(f"Failed to create config: {e}", False)
-        sys.exit(1)
-
-
-# =============================================================================
-# INSTALL MODE HELPERS
-# =============================================================================
-
-def select_install_mode() -> str:
-    print_header("Installation")
-    print("\n\n\n\n")
-    print("   1. Clean Install (Purge First)\n")
-    print("   2. Check/Install (Fix Missing Packages/Libraries)\n")
-    print("   3. Refresh Configs (Only Remake Ini/Json)\n")
-    print("\n\n\n\n")
-    print("-" * (shutil.get_terminal_size().columns - 1))
+def _get_menu_choice(num_options: int, prompt: str = None) -> str:
+    """Get and validate menu selection. Returns '1'-'N' or 'A' for abandon."""
     while True:
-        choice = input("Selection; Menu Options = 1-3, Abandon Install = A: ").strip().upper()
-        if choice == "A":
-            print("Abandoning installation...")
-            sys.exit(0)
-        if choice == "1":
-            return "clean"
-        if choice == "2":
-            return "check"
-        if choice == "3":
-            return "refresh"
-        print("Invalid selection. Please enter 1, 2, 3, or A.")
+        try:
+            raw = input(prompt or f"Selection; Menu Options = 1-{num_options}, Abandon = A: ").strip()
+            if raw.upper() == 'A':
+                return 'A'
+            if raw.isdigit() and 1 <= int(raw) <= num_options:
+                return raw
+            print(f"  Invalid selection. Enter 1-{num_options} or A to abandon.")
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return 'A'
 
 
-def _read_existing_ini() -> dict:
-    import configparser
-    ini_path = BASE_DIR / "data" / "constants.ini"
-    if not ini_path.exists():
-        return None
-    try:
-        config = configparser.ConfigParser()
-        config.read(ini_path, encoding='utf-8')
-        if 'system' not in config:
-            return None
-        sys_sec = config['system']
-        result = {
-            'platform':            sys_sec.get('platform',        PLATFORM),
-            'os_version':          sys_sec.get('os_version',      'unknown'),
-            'python_version':      sys_sec.get('python_version',
-                                               f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"),
-            'backend_type':        sys_sec.get('backend_type',    'CPU_CPU'),
-            'embedding_model':     sys_sec.get('embedding_model', 'BAAI/bge-small-en-v1.5'),
-            'vulkan_available':    sys_sec.getboolean('vulkan_available', False),
-            'windows_version':     sys_sec.get('windows_version', None),
-            'llama_cli_path':      sys_sec.get('llama_cli_path',  None),
-            'llama_bin_path':      sys_sec.get('llama_bin_path',  None),
-            'llama_wheel_version': sys_sec.get('llama_wheel_version', None),
-            'tts_engine':          'kokoro',
-            'kokoro_voice_id':     None,
-            'kokoro_lang_code':    None,
-            'tts_pack':            1,
-            'tts_default_voice_id': None,
-            'tts_default_voice_name': None,
-            'tts_enabled_voices':  [],
-        }
-        if 'tts' in config:
-            tts_sec = config['tts']
-            result['tts_engine']           = tts_sec.get('tts_type', 'kokoro')
-            result['kokoro_voice_id']      = tts_sec.get('kokoro_voice_id', None)
-            result['kokoro_lang_code']     = tts_sec.get('kokoro_lang_code', None)
-            result['tts_pack']             = tts_sec.getint('tts_pack', 1)
-            result['tts_default_voice_id'] = tts_sec.get('tts_default_voice_id')
-            result['tts_default_voice_name'] = tts_sec.get('tts_default_voice_name')
-            enabled_str = tts_sec.get('tts_enabled_voices', '')
-            result['tts_enabled_voices']   = [v.strip() for v in enabled_str.split(',') if v.strip()]
-        return result
-    except Exception as e:
-        print_status(f"Could not read constants.ini: {e}", False)
-        return None
+def show_main_menu() -> str:
+    """Display the first installation menu with system detections."""
+    run_detections_once()
 
-def _backend_type_to_string(backend_type: str) -> str:
-    if backend_type == "VULKAN_VULKAN":
-        return "Compile Vulkan Binaries / Compile Vulkan Wheel"
-    elif backend_type == "VULKAN_CPU":
-        return "Download Vulkan Binary / Default CPU Wheel"
-    else:
-        return "Download CPU Binary / Default CPU Wheel"
-
-
-def _select_tts_pack() -> tuple:
-    """Interactive menu for TTS pack selection.
-    Returns (pack_number, default_voice_id, default_voice_name)
-    """
     width = shutil.get_terminal_size().columns - 1
+
+    print_header("Install Method")
+
+    # ── System Detections ──────────────────────────────────────────────
     print()
+    print("System Detections...")
+
+    # CPU Features
+    cpu_feats = [k for k, v in _DETECTED_CPU_FEATURES.items() if v]
+    cpu_str = " | ".join(cpu_feats) if cpu_feats else "baseline"
+    print(f"   CPU Features : {cpu_str}")
+
+    # Build Tools
+    build_ok = [k for k, v in _DETECTED_BUILD_TOOLS.items() if v]
+    build_str = " | ".join(f"{k} OK" for k in build_ok) if build_ok else "none detected"
+    print(f"   Build Tools  : {build_str}")
+
+    # Platform
+    if PLATFORM == "windows":
+        win_ver = WINDOWS_VERSION or detect_windows_version() or "unknown"
+        plat_str = f"Windows {win_ver}"
+    else:
+        linux_ver = OS_VERSION or detect_linux_version() or "unknown"
+        plat_str = f"Ubuntu {linux_ver}"
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+    print(f"   Platform     : {plat_str} | Python {py_ver}")
+
+    # GPU
+    gpu_parts = []
+    if _DETECTED_DX_NAME and _DETECTED_DX_NAME != "Unknown":
+        gpu_parts.append(f"DX{_DETECTED_DX_NAME}")
+    gpu_parts.append(f"Vulkan: {'YES' if _DETECTED_VULKAN else 'NO'}")
+    print(f"   GPU          : {' | '.join(gpu_parts)}")
+
+    print()
+    print("-" * width)
+    print()
+    print("   1. Clean Install (Purge First)")
+    print()
+    print("   2. Check/Install (Fix Missing Packages/Libraries)")
+    print()
+    print("   3. Refresh Configs (Only Remake Ini/Json)")
+    print()
+    print()
+    print("=" * width)
+
+    return _get_menu_choice(3, "Selection; Menu Options = 1-3, Abandon Install = A: ")
+
+
+def show_embedding_menu() -> str:
+    """Display embedding model selection menu."""
+    width = shutil.get_terminal_size().columns - 1
+
+    print_header("Embeddings Size")
+    print()
+    print()
+    print()
+    print()
+    print()
+    print()
+    print()
+    print("   1) Smaller/Faster Install - Bge-Small-English v1.5")
+    print()
+    print("   2) Medium/Quality Install - Bge-Base-English v1.5")
+    print()
+    print()
+    print()
+    print()
+    print()
+    print()
+    print()
+    print("=" * width)
+
+    return _get_menu_choice(2, "Selection; Menu Options = 1-2, Abandon Install = A: ")
+
+
+def show_backend_menu() -> str:
+    """Display backend selection menu with wheel version info."""
+    width = shutil.get_terminal_size().columns - 1
+
+    print_header("Llama.Cpp Backend")
+    print()
+    print()
+    print()
+    print()
+
+    # Display-only versions — LLAMACPP_PYTHON_COMPILE_DISPLAY is for the menu
+    # only and is NEVER passed to pip.  The compile path resolves the real
+    # version from the GitHub API at build time.
+    prebuilt_ver = LLAMACPP_PYTHON_PREBUILT_VERSION
+    compile_ver = LLAMACPP_PYTHON_COMPILE_DISPLAY
+
+    print(f"   1) Download CPU Binary / Default CPU Wheel (Wheel {prebuilt_ver})")
+    print()
+    print(f"   2) Download Vulkan Binary / Default CPU Wheel (Wheel {prebuilt_ver})")
+    print()
+    print(f"   3) Compile CPU Binaries / Compile CPU Wheel (Wheel {compile_ver})")
+    print()
+    print(f"   4) Compile Vulkan Binaries / Compile Vulkan Wheel (Wheel {compile_ver})")
+    print()
+    print()
+    print()
+    print()
+    print()
+    print("=" * width)
+
+    return _get_menu_choice(4, "Selection; Menu Options =1-4, Abandon=A: ")
+
+
+def show_tts_menu() -> str:
+    """Display TTS voice pack selection menu."""
+    width = shutil.get_terminal_size().columns - 1
+
+    clear_screen()
     print("=" * width)
     print(" Kokoro TTS — Voice Pack Selection")
     print("=" * width)
     print()
     print()
-    print("  Kokoro TTS contains all voices in a single ~300 MB model file.")
-    print("  Choose which voices are enabled in the main program’s dropdown.")
-    print()
-    print("  1) American Male+Female Pack 1  (1 male + 1 female)")
-    print("     (Adam, Heart)")
-    print()
-    print("  2) American Male+Female Pack 2  (2 male + 4 female)")
-    print("     (Adam, Michael, Heart, Bella, Nova, Sky)")
-    print()
-    print("  3) British Male+Female Pack 1   (1 male + 1 female)")
-    print("     (George, Emma)")
-    print()
-    print("  4) British Male+Female Pack 2   (2 male + 2 female)")
-    print("     (George, Lewis, Emma, Alice)")
     print()
     print()
-    print("-" * width)
-
-    while True:
-        choice = input("Selection; Pack = 1-4, Abandon = A: ").strip().upper()
-        if choice == "A":
-            print("Abandoning installation...")
-            sys.exit(0)
-        if choice in ("1", "2", "3", "4"):
-            pack = int(choice)
-            if pack == 1:
-                default_id = "am_adam"
-                default_name = "Adam — American Male"
-                enabled_ids = ["am_adam", "af_heart"]
-            elif pack == 2:
-                default_id = "af_heart"
-                default_name = "Heart — American Female"
-                enabled_ids = ["am_adam", "am_michael",
-                               "af_heart", "af_bella", "af_nova", "af_sky"]
-            elif pack == 3:
-                default_id = "bm_george"
-                default_name = "George — British Male"
-                enabled_ids = ["bm_george", "bf_emma"]
-            else:  # pack == 4
-                default_id = "bf_emma"
-                default_name = "Emma — British Female"
-                enabled_ids = ["bm_george", "bm_lewis", "bf_emma", "bf_alice"]
-            print_status(f"Pack {pack} selected. Default voice: {default_name}")
-            # Return pack number, default id, default name, and the full list of enabled IDs
-            return pack, default_id, default_name, enabled_ids
-        print("Invalid selection. Please enter 1, 2, 3, or 4.")
-
-
-def select_backend_and_install_size():
-    width = shutil.get_terminal_size().columns - 1
-    print_header("Backend & Install Size")
-
-    tools          = _DETECTED_BUILD_TOOLS
-    missing_tools  = [t for t, avail in tools.items() if not avail and t in ("Git", "CMake", "MSVC")]
-    all_backend_opts = list(BACKEND_OPTIONS.keys())
-    build_possible   = len(missing_tools) == 0
-    backend_opts     = []
-
-    for backend in all_backend_opts:
-        info = BACKEND_OPTIONS[backend]
-        requires_compile = info.get("compile_binary", False) or info.get("compile_wheel", False)
-        if requires_compile and not build_possible:
-            continue
-        backend_opts.append(backend)
-
-    compile_ver  = get_latest_llamacpp_python_version()
-    prebuilt_ver = LLAMACPP_PYTHON_PREBUILT_VERSION
-
-    def _wheel_label(backend_name: str) -> str:
-        info = BACKEND_OPTIONS[backend_name]
-        if info.get("compile_wheel"):
-            return f"Wheel {compile_ver}"
-        return f"Wheel {prebuilt_ver}"
-
-    feat_str = " | ".join(k for k, v in _DETECTED_CPU_FEATURES.items()
-                          if v and k in ("AVX", "AVX2", "AVX512", "FMA", "F16C"))
-    feat_str = feat_str or "SSE3"
-
-    tool_parts = [f"{name} {'OK' if avail else '--'}" for name, avail in tools.items()]
-    tool_str   = " | ".join(tool_parts)
-
-    if PLATFORM == "windows":
-        os_str = f"Windows {WINDOWS_VERSION or detect_windows_version() or '?'}"
-        vk_str = "YES" if is_vulkan_installed() else "NO"
-        dx_str = f"DX{_DETECTED_DX_NAME}"
-        print(f"System Detections...")
-        print(f"   CPU Features : {feat_str}")
-        print(f"   Build Tools  : {tool_str}")
-        print(f"   Platform     : {os_str} | Python {sys.version_info.major}.{sys.version_info.minor}")
-        print(f"   GPU          : {dx_str} | Vulkan: {vk_str}")
-    else:
-        os_str = f"Ubuntu {OS_VERSION or detect_linux_version() or '?'}"
-        vk_str = "YES" if is_vulkan_installed() else "NO"
-        print(f"System Detections...")
-        print(f"   CPU Features : {feat_str}")
-        print(f"   Build Tools  : {tool_str}")
-        print(f"   Platform     : {os_str} | Python {sys.version_info.major}.{sys.version_info.minor}")
-        print(f"   Vulkan       : {vk_str}")
     print()
-
-    print("Backend Options...")
-    for i, backend in enumerate(backend_opts, 1):
-        print(f"   {i}) {backend} ({_wheel_label(backend)})")
-
-    if not build_possible:
-        print(f"   ---")
-        for backend in all_backend_opts:
-            if backend not in backend_opts:
-                print(f"   -) {backend} ({_wheel_label(backend)}) (Missing: {', '.join(missing_tools)})")
+    print()
+    
+    for key in sorted(KOKORO_VOICE_PACKS.keys()):
+        pack = KOKORO_VOICE_PACKS[key]
+        print(f"  {key}) {pack['display']}  {pack['detail']}")
+        print(f"     {pack['voices']}")
+        print()
 
     print()
-
-    print("Install Size...")
-    print(f"   a) Smaller Install - Bge-Small-En v1.5 + Kokoro TTS (faster)")
-    print(f"   b) Medium Install - Bge-Base-En v1.5  + Kokoro TTS (quality)")
-
+    print()
+    print()
+    print()
     print()
     print("=" * width)
 
-    max_backend = len(backend_opts)
-    prompt = f"Selection; Backend=1-{max_backend}, Size=a-b, Abandon=A; (e.g. 2b): "
-    choice = input(prompt).strip().lower()
-
-    if choice == "a":
-        print("Abandoning installation...")
-        sys.exit(0)
-
-    choice = choice.replace(" ", "").replace("-", "")
-
-    while True:
-        if len(choice) >= 2 and choice[0].isdigit() and choice[1] in "ab":
-            backend_num = int(choice[0])
-            size_letter = choice[1]
-
-            if 1 <= backend_num <= len(backend_opts):
-                selected_backend = backend_opts[backend_num - 1]
-
-                if size_letter == "a":
-                    embedding_model = EMBEDDING_MODELS["1"]["name"]
-                else:
-                    embedding_model = EMBEDDING_MODELS["2"]["name"]
-
-                # --- NEW: TTS pack selection (replaces voice selection) ---
-                pack, default_id, default_name, enabled_ids = _select_tts_pack()
-                tts_engine = "kokoro"  # always kokoro now; no skip option
-                time.sleep(1)
-                return (selected_backend, embedding_model, tts_engine,
-                        pack, default_id, default_name, enabled_ids)
-
-        print("Invalid selection. Please enter a valid combination (e.g. 2b).")
-        choice = input(prompt).strip().lower()
-        if choice == "a":
-            sys.exit(0)
-        choice = choice.replace(" ", "").replace("-", "")
+    return _get_menu_choice(len(KOKORO_VOICE_PACKS), "Selection; Menu Options = 1-2, Abandon = A: ")
 
 
-def validate_installation(backend: str, embedding_model: str, tts_engine: str) -> bool:
-    """Comprehensive validation of installation integrity."""
-    print_status("Validating installation integrity...")
+# =============================================================================
+# NEW INSTALLATION FLOW FUNCTIONS
+# =============================================================================
 
-    python_exe_path = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / \
-                      ("python.exe" if PLATFORM == "windows" else "python")
-    python_exe = str(python_exe_path)
+def _determine_backend_type(backend: str) -> str:
+    """Map backend menu selection to BACKEND_TYPE string used by configure.py."""
+    info = BACKEND_OPTIONS[backend]
+    vulkan_binary = info.get("vulkan_required", False) or "Vulkan" in backend
+    vulkan_wheel = info.get("build_flags", {}).get("GGML_VULKAN") == "1"
 
-    if not python_exe_path.exists():
-        print_status("Python executable missing from venv", False)
+    if vulkan_binary and vulkan_wheel:
+        return "VULKAN_VULKAN"
+    elif vulkan_binary:
+        return "VULKAN_CPU"
+    else:
+        return "CPU_CPU"
+
+
+def download_kokoro_voices(pack_key: str) -> bool:
+    """Download Kokoro TTS model and voice files for the selected pack.
+
+    Strategy:
+      Phase 1 — Download the main Kokoro model weights via snapshot_download.
+                 Avoids running inference just to trigger the download, and gives
+                 real progress output via live stdout streaming.
+      Phase 2 — Download each voice .pt file explicitly with hf_hub_download.
+                 Voice files are ~2 MB each; no inference needed.
+      Phase 3 — Warm-up: create KPipeline once to verify the install is functional.
+                 Fast (model already on disk) and catches import/path errors early.
+    """
+    pack = KOKORO_VOICE_PACKS.get(pack_key)
+    if not pack:
+        print_status("Invalid TTS pack selection", False)
         return False
 
-    all_passed = True
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                    ("python.exe" if PLATFORM == "windows" else "python"))
 
-    print("\n=== Core Library Validation ===")
-    core_libs = [
-        ("gradio",               "gradio"),
-        ("numpy",                "numpy"),
-        ("torch",                "torch"),
-        ("sentence_transformers","sentence_transformers"),
-        ("llama_cpp",            "llama_cpp"),
-        ("spacy",                "spacy"),
-        ("PyQt6",                "PyQt6"),
-    ]
+    voice_ids = pack["voice_ids"]
+    lang_code  = pack["lang_code"]
+    hf_cache   = str(BASE_DIR / "data" / "tts_models" / "kokoro" / "hub")
 
-    for pkg_name, import_name in core_libs:
-        try:
-            result = subprocess.run(
-                [python_exe, "-c", f"import {import_name}; print('OK')"],
-                capture_output=True, text=True, timeout=30
-            )
-            if result.returncode == 0 and "OK" in result.stdout:
-                print_status(f"  {pkg_name} OK")
-            else:
-                print_status(f"  {pkg_name} FAILED", False)
-                all_passed = False
-        except Exception as e:
-            print_status(f"  {pkg_name} ERROR: {e}", False)
-            all_passed = False
-
-    print("\n=== Embedding Model Validation ===")
-    cache_dir = BASE_DIR / "data" / "embedding_cache"
-    if cache_dir.exists():
-        test_code = f'''
-import os
-os.environ["TRANSFORMERS_CACHE"] = r"{str(cache_dir.absolute())}"
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = r"{str(cache_dir.absolute())}"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-try:
-    from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer("{embedding_model}", device="cpu",
-                                cache_folder=r"{str(cache_dir.absolute())}")
-    result = model.encode(["validation test"], convert_to_tensor=True)
-    print("OK")
-except Exception as e:
-    print(f"Error: {{e}}")
-'''
-        try:
-            result = subprocess.run([python_exe, "-c", test_code],
-                                   capture_output=True, text=True, timeout=120)
-            if result.returncode == 0 and "OK" in result.stdout:
-                print_status(f"  Embedding model verified ({embedding_model})")
-            else:
-                print_status("  Embedding model failed to load", False)
-                all_passed = False
-        except Exception as e:
-            print_status(f"  Embedding validation error: {e}", False)
-            all_passed = False
-    else:
-        print_status("  Embedding cache directory missing", False)
-        all_passed = False
-
-    print("\n=== spaCy Model Validation ===")
-    try:
-        result = subprocess.run(
-            [python_exe, "-c",
-             "import spacy; nlp = spacy.load('en_core_web_sm'); print('OK')"],
-            capture_output=True, text=True, timeout=15
-        )
-        if result.returncode == 0 and "OK" in result.stdout:
-            print_status("  en_core_web_sm model available")
-        else:
-            print_status("  en_core_web_sm model not found", False)
-            all_passed = False
-    except Exception as e:
-        print_status(f"  spaCy model check failed: {e}", False)
-        all_passed = False
-
-    print("\n=== TTS Validation ===")
-    if tts_engine == "kokoro":
-        tts_model_dir = BASE_DIR / "data" / "tts_models" / "kokoro"
-        test_code = f'''
+    download_script = f'''
 import os, sys
-os.environ["HF_HOME"] = r"{str(tts_model_dir)}"
-os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["HF_HOME"]                       = r"{hf_cache}"
+os.environ["HUGGINGFACE_HUB_CACHE"]         = r"{hf_cache}"
+os.environ["CUDA_VISIBLE_DEVICES"]          = ""
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"   # suppress Windows symlink noise
+os.environ["HF_HUB_VERBOSITY"]             = "warning" # suppress unauthenticated-rate-limit info
+
+REPO_ID   = "hexgrad/Kokoro-82M"
+VOICE_IDS = {voice_ids!r}
+LANG_CODE = "{lang_code}"
+
+# ── Phase 1: model weights ──────────────────────────────────────────
+print("[TTS] Phase 1/3 — Downloading Kokoro model weights...", flush=True)
+try:
+    from huggingface_hub import snapshot_download
+    local_dir = snapshot_download(
+        repo_id=REPO_ID,
+        cache_dir=r"{hf_cache}",
+        ignore_patterns=["*.md", "*.txt", "*.gitattributes"],
+    )
+    print(f"[TTS] Model weights downloaded to: {{local_dir}}", flush=True)
+except Exception as e:
+    print(f"[TTS] ERROR downloading model weights: {{e}}", flush=True)
+    import traceback; traceback.print_exc()
+    sys.exit(1)
+
+# ── Phase 2: voice .pt files ────────────────────────────────────────
+print(f"[TTS] Phase 2/3 — Downloading {{len(VOICE_IDS)}} voice file(s)...", flush=True)
+failed_voices = []
+try:
+    from huggingface_hub import hf_hub_download
+    for vid in VOICE_IDS:
+        filename = f"voices/{{vid}}.pt"
+        try:
+            path = hf_hub_download(
+                repo_id=REPO_ID,
+                filename=filename,
+                cache_dir=r"{hf_cache}",
+            )
+            print(f"[TTS]   Voice OK: {{vid}}", flush=True)
+        except Exception as e:
+            print(f"[TTS]   WARNING: could not download {{vid}}: {{e}}", flush=True)
+            failed_voices.append(vid)
+except Exception as e:
+    print(f"[TTS] ERROR in voice download phase: {{e}}", flush=True)
+    import traceback; traceback.print_exc()
+    sys.exit(1)
+
+if failed_voices:
+    print(f"[TTS] {{len(failed_voices)}} voice(s) failed: {{failed_voices}}", flush=True)
+    sys.exit(1)
+
+# ── Phase 3: warm-up / verify ───────────────────────────────────────
+print("[TTS] Phase 3/3 — Verifying Kokoro pipeline (warm-up)...", flush=True)
 try:
     from kokoro import KPipeline
-    import soundfile as sf, numpy as np
-    pipeline = KPipeline(lang_code="a")
-    chunks = [audio for _gs, _ps, audio in
-              pipeline("Validation.", voice="af_heart", speed=1.0)
-              if audio is not None]
-    assert chunks, "No audio produced"
-    print("OK")
+    pipeline = KPipeline(lang_code=LANG_CODE, repo_id=REPO_ID)
+    print("[TTS] KPipeline created successfully — Kokoro is ready.", flush=True)
 except Exception as e:
-    print(f"Error: {{e}}")
+    print(f"[TTS] ERROR during pipeline warm-up: {{e}}", flush=True)
+    import traceback; traceback.print_exc()
+    sys.exit(1)
+
+print("[TTS] All phases complete.", flush=True)
+sys.exit(0)
 '''
-        try:
-            result = subprocess.run([python_exe, "-c", test_code],
-                                    capture_output=True, text=True, timeout=60)
-            if result.returncode == 0 and "OK" in result.stdout:
-                print_status("  Kokoro TTS verified")
-            else:
-                print_status("  Kokoro TTS failed validation", False)
-                all_passed = False
-        except Exception as e:
-            print_status(f"  Kokoro TTS validation error: {e}", False)
-            all_passed = False
-    else:
-        print_status("  TTS skipped (not installed)")
 
-    print("\n=== Backend Binary Validation ===")
-    info     = BACKEND_OPTIONS.get(backend, {})
-    cli_path = info.get("cli_path")
-    if cli_path:
-        cli_full_path = BASE_DIR / cli_path
-        if cli_full_path.exists():
-            print_status(f"  llama-cli found: {cli_full_path.name}")
-            if PLATFORM == "linux" and not os.access(cli_full_path, os.X_OK):
-                print_status("  llama-cli not executable", False)
-                all_passed = False
-        else:
-            print_status(f"  llama-cli not found: {cli_path}", False)
-            all_passed = False
-    else:
-        print_status("  Python bindings mode: No binary needed")
+    script_path = TEMP_DIR / "download_kokoro.py"
+    try:
+        script_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write(download_script)
 
-    print("\n=== Configuration Validation ===")
-    for path_obj, label in [
-        (BASE_DIR / "data" / "constants.ini",  "constants.ini"),
-        (BASE_DIR / "data" / "persistent.json", "persistent.json"),
-    ]:
-        if path_obj.exists():
-            if label.endswith(".json"):
-                try:
-                    with open(path_obj, 'r') as f:
-                        json.load(f)
-                    print_status(f"  {label} valid")
-                except Exception as e:
-                    print_status(f"  {label} corrupted: {e}", False)
-                    all_passed = False
-            else:
-                print_status(f"  {label} exists")
-        else:
-            print_status(f"  {label} missing", False)
-            all_passed = False
+        print(f"  Downloading Kokoro TTS ({pack['display']}) — output below:")
+        print(f"  (model ~82 MB + {len(voice_ids)} voice file(s) ~2 MB each)")
+        print()
 
-    print(f"\n{'=' * 50}")
-    if all_passed:
-        print_status("All validations passed!")
-    else:
-        print_status("Some checks failed", False)
-        print("  Re-run installer with 'Clean Install' to fix issues.")
-    print(f"{'=' * 50}\n")
-
-    return all_passed
-
-
-# =============================================================================
-# MAIN INSTALL FLOW
-# =============================================================================
-
-def install():
-    global WINDOWS_VERSION, OS_VERSION
-
-    run_initial_detection()
-
-    if not check_version_compatibility():
-        sys.exit(1)
-
-    install_mode = select_install_mode()
-
-    python_version = (f"{sys.version_info.major}.{sys.version_info.minor}"
-                      f".{sys.version_info.micro}")
-
-    windows_version = None
-    if PLATFORM == "windows":
-        WINDOWS_VERSION  = detect_windows_version() or "unknown"
-        os_version       = WINDOWS_VERSION
-        windows_version  = WINDOWS_VERSION
-        vulkan_available = is_vulkan_installed()
-    else:
-        OS_VERSION       = detect_linux_version() or "unknown"
-        os_version       = OS_VERSION
-        vulkan_available = is_vulkan_installed()
-
-    dx11_capable     = _DETECTED_DX_CAPABLE
-    dx_feature_level = _DETECTED_DX_LEVEL
-
-    # ── Refresh Configs mode ──────────────────────────────────────────────────
-    if install_mode == "refresh":
-        existing = _read_existing_ini()
-        if existing is None:
-            print_status(
-                "No existing configuration found - cannot refresh. "
-                "Please run a Clean Install first.", False
-            )
-            sys.exit(1)
-
-        print_header("Installation")
-        print(f"Refreshing configuration files for {APP_NAME}...\n")
-
-        create_system_ini(
-            platform             = PLATFORM,
-            os_version           = os_version,
-            python_version       = python_version,
-            backend_type         = existing['backend_type'],
-            embedding_model      = existing['embedding_model'],
-            windows_version      = windows_version,
-            vulkan_available     = existing['vulkan_available'],
-            llama_cli_path       = existing['llama_cli_path'],
-            llama_bin_path       = existing['llama_bin_path'],
-            tts_engine           = existing.get('tts_engine', 'kokoro'),
-            tts_pack             = existing.get('tts_pack', 1),
-            tts_default_voice_id = existing.get('tts_default_voice_id'),
-            tts_default_voice_name = existing.get('tts_default_voice_name'),
-            tts_enabled_voices   = existing.get('tts_enabled_voices', []),
-            browser_acceleration = dx11_capable,
-            dx_feature_level     = dx_feature_level,
+        # Stream output live — user can see progress and it doesn't look like a hang.
+        # Timeout is a wall-clock deadline (15 min) rather than subprocess.run timeout
+        # which would kill a legitimately slow download mid-stream.
+        proc = subprocess.Popen(
+            [python_exe, str(script_path)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,   # merge stderr into stdout
+            text=True,
+            bufsize=1,                  # line-buffered
         )
-        backend_str = _backend_type_to_string(existing['backend_type'])
-        create_config(backend_str, existing['embedding_model'],
-                      existing.get('tts_pack', 1),
-                      existing.get('tts_default_voice_id'),
-                      existing.get('tts_default_voice_name'),
-                      existing.get('tts_enabled_voices', []))
-        if existing.get('llama_wheel_version'):
-            update_ini_wheel_version(existing['llama_wheel_version'])
-        print_status("Configuration refresh complete!")
-        print("\nRun the launcher to start Chat-Gradio-Gguf\n")
+
+        timed_out = False
+        deadline  = time.time() + 900   # 15-minute hard cap
+
+        for line in proc.stdout:
+            # Suppress pip's "[notice] A new release of pip is available" noise
+            if line.startswith("[notice]") or "new release of pip" in line:
+                continue
+            print(f"  {line}", end="", flush=True)
+            if time.time() > deadline:
+                proc.kill()
+                timed_out = True
+                break
+
+        proc.wait()
+        script_path.unlink(missing_ok=True)
+
+        if timed_out:
+            print_status("Kokoro TTS download timed out (>15 min). "
+                         "Check your internet connection and try again.", False)
+            return False
+
+        if proc.returncode == 0:
+            print()
+            print_status(f"Kokoro TTS installed: {pack['display']}")
+            return True
+        else:
+            print()
+            print_status("Kokoro TTS download failed — see output above for details.", False)
+            return False
+
+    except Exception as e:
+        print_status(f"Kokoro TTS download error: {e}", False)
+        script_path.unlink(missing_ok=True)
+        return False
+
+
+def download_embedding_model(model_name: str) -> bool:
+    """Download the selected embedding model to local cache."""
+    python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
+                     ("python.exe" if PLATFORM == "windows" else "python"))
+    cache_dir = str(BASE_DIR / "data" / "embedding_cache")
+    cache_parent = str(BASE_DIR / "data")
+
+    script = f'''
+import os, sys
+os.environ["TRANSFORMERS_CACHE"] = r"{cache_dir}"
+os.environ["HF_HOME"] = r"{cache_parent}"
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = r"{cache_dir}"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+print("[EMBED] Downloading and initializing embedding model: {model_name}")
+try:
+    from sentence_transformers import SentenceTransformer
+    from transformers import AutoTokenizer
+    
+    # Initialize model (downloads weights, config, pooling)
+    print("[EMBED] Loading SentenceTransformer model...")
+    model = SentenceTransformer("{model_name}", cache_folder=r"{cache_dir}")
+    
+    # Explicitly download and cache tokenizer files (vocab, merges, etc.)
+    print("[EMBED] Downloading and caching tokenizer files...")
+    tokenizer = AutoTokenizer.from_pretrained("{model_name}", cache_folder=r"{cache_dir}")
+    
+    # Run a test encode to ensure all runtime files are loaded/cached
+    print("[EMBED] Running test encoding to finalize cache...")
+    test = model.encode(["test"], convert_to_numpy=True, show_progress_bar=False)
+    
+    print(f"[EMBED] Model and tokenizer fully initialized and cached (dim={{test.shape[1]}})")
+    sys.exit(0)
+except Exception as e:
+    print(f"[EMBED] Error: {{e}}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+'''
+    script_path = TEMP_DIR / "download_embedding.py"
+    try:
+        script_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write(script)
+
+        print_status(f"Downloading embedding model: {model_name}...")
+        result = subprocess.run(
+            [python_exe, str(script_path)],
+            capture_output=True, text=True, timeout=600
+        )
+
+        if result.stdout:
+            for line in result.stdout.strip().split('\n'):
+                if line.strip():
+                    print(f"  {line}")
+
+        script_path.unlink(missing_ok=True)
+
+        if result.returncode == 0:
+            print_status(f"Embedding model installed: {model_name}")
+            return True
+        else:
+            print_status("Embedding model download failed", False)
+            if result.stderr:
+                print(f"  Error: {result.stderr[:200]}")
+            return False
+
+    except Exception as e:
+        print_status(f"Embedding model download error: {e}", False)
+        script_path.unlink(missing_ok=True)
+        return False
+
+
+def create_persistent_json(embedding_model: str = None):
+    """Create the persistent.json configuration file with defaults."""
+    json_path = BASE_DIR / "data" / "persistent.json"
+
+    # Read existing JSON to preserve user settings if it exists
+    existing = {}
+    if json_path.exists():
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+
+    model_settings = existing.get("model_settings", {})
+
+    defaults = {
+        "model_dir": "models",
+        "model_name": "Select_a_model...",
+        "context_size": 32768,
+        "vram_size": 8192,
+        "temperature": 0.66,
+        "repeat_penalty": 1.1,
+        "selected_gpu": None,
+        "selected_cpu": "Auto-Select",
+        "mmap": True,
+        "mlock": True,
+        "n_batch": 1024,
+        "dynamic_gpu_layers": True,
+        "max_history_slots": 12,
+        "max_attach_slots": 6,
+        "session_log_height": 650,
+        "show_think_phase": False,
+        "print_raw_output": False,
+        "cpu_threads": None,
+        "bleep_on_events": False,
+        "use_python_bindings": True,
+        "layer_allocation_mode": "SRAM_ONLY",
+        "sound_output_device": "Default Sound Device",
+        "sound_sample_rate": 44100,
+        "tts_enabled": False,
+        "tts_voice": None,
+        "tts_voice_name": None,
+        "max_tts_length": 4500,
+    }
+
+    for key, default_val in defaults.items():
+        if key not in model_settings:
+            model_settings[key] = default_val
+
+    config = {"model_settings": model_settings}
+
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)
+
+    print_status("Persistent configuration file created")
+
+
+def refresh_configs():
+    """Only regenerate INI/JSON files without reinstalling packages."""
+    import configparser as _cp
+
+    print_status("Refreshing configuration files...")
+
+    ini_path = BASE_DIR / "data" / "constants.ini"
+    if not ini_path.exists():
+        print_status("No existing constants.ini found — cannot refresh", False)
         return
 
-    # ── Clean Install / Check+Install modes ──────────────────────────────────
-    if install_mode == "check":
-        existing = _read_existing_ini()
-        if existing is not None:
-            # Restore all settings from existing constants.ini
-            backend          = _backend_type_to_string(existing['backend_type'])
-            embedding_model  = existing['embedding_model']
-            tts_engine       = existing['tts_engine']
-            tts_pack         = existing.get('tts_pack', 1)
-            default_id       = existing.get('tts_default_voice_id')
-            default_name     = existing.get('tts_default_voice_name')
-            enabled_ids      = existing.get('tts_enabled_voices', [])
-            # For the TTS test we need a voice dict; pick the default voice.
-            kokoro_voice = None
-            if tts_engine == "kokoro" and default_id:
-                # Find the voice entry in KOKORO_VOICE_OPTIONS
-                kokoro_voice = next((v for v in KOKORO_VOICE_OPTIONS if v["id"] == default_id), None)
-                if not kokoro_voice and enabled_ids:
-                    # Fallback to first enabled voice
-                    kokoro_voice = next((v for v in KOKORO_VOICE_OPTIONS if v["id"] == enabled_ids[0]), None)
-            if not kokoro_voice and tts_engine == "kokoro":
-                # Ultimate fallback
-                kokoro_voice = KOKORO_VOICE_OPTIONS[0]
-            print_status("Existing configuration read - skipping backend/TTS menus")
-        else:
-            print_status("No existing configuration found - showing setup menus", False)
-            time.sleep(2)
-            backend, embedding_model, tts_engine, tts_pack, default_id, default_name, enabled_ids = select_backend_and_install_size()
-            # Build a voice dict for the TTS test from the default voice
-            kokoro_voice = next((v for v in KOKORO_VOICE_OPTIONS if v["id"] == default_id), KOKORO_VOICE_OPTIONS[0])
-    else:
-        # Clean install – always ask for pack
-        backend, embedding_model, tts_engine, tts_pack, default_id, default_name, enabled_ids = select_backend_and_install_size()
-        kokoro_voice = next((v for v in KOKORO_VOICE_OPTIONS if v["id"] == default_id), KOKORO_VOICE_OPTIONS[0])
+    try:
+        cfg_ini = _cp.ConfigParser()
+        cfg_ini.read(ini_path, encoding='utf-8')
 
-    # Resolve backend_type token
-    if backend in ["Download CPU Binary / Default CPU Wheel",
-                   "Compile CPU Binaries / Compile CPU Wheel"]:
-        backend_type     = "CPU_CPU"
-        vulkan_available = False
-    elif backend == "Download Vulkan Binary / Default CPU Wheel":
-        backend_type     = "VULKAN_CPU"
-        vulkan_available = True
-    elif backend in ["Download Vulkan Binary / Compile Vulkan Wheel",
-                     "Compile Vulkan Binaries / Compile Vulkan Wheel"]:
-        backend_type     = "VULKAN_VULKAN"
-        vulkan_available = True
-    else:
-        backend_type     = "CPU_CPU"
-        vulkan_available = False
+        system = cfg_ini['system']
 
-    print_header("Installation")
+        platform_val = system.get('platform', PLATFORM)
+        os_version = system.get('os_version', 'unknown')
+        python_version = system.get('python_version', f"{sys.version_info.major}.{sys.version_info.minor}")
+        backend_type = system.get('backend_type', 'CPU_CPU')
+        embedding_model = system.get('embedding_model', 'BAAI/bge-small-en-v1.5')
+        vulkan_available = system.getboolean('vulkan_available', False)
+        llama_cli_path = system.get('llama_cli_path', None)
+        llama_bin_path = system.get('llama_bin_path', None)
+        windows_version = system.get('windows_version', None)
+        dx_feature_level = system.getint('dx_feature_level', 0)
+        browser_acceleration = system.getboolean('browser_acceleration', True)
 
-    if PLATFORM == "windows":
-        os_display = f"Windows {WINDOWS_VERSION}" if WINDOWS_VERSION else "Windows"
-    else:
-        os_display = f"Ubuntu {OS_VERSION}" if OS_VERSION else "Ubuntu"
+        # TTS settings from existing INI
+        tts_section = cfg_ini['tts'] if 'tts' in cfg_ini else {}
+        tts_pack = int(tts_section.get('tts_pack', '1'))
+        tts_default_voice_id = tts_section.get('tts_default_voice_id', 'af_heart')
+        tts_default_voice_name = tts_section.get('tts_default_voice_name', 'Heart — American Female')
+        tts_enabled_str = tts_section.get('tts_enabled_voices', '')
+        tts_enabled_voices = [v.strip() for v in tts_enabled_str.split(',') if v.strip()]
 
-    py_ver     = f"{sys.version_info.major}.{sys.version_info.minor}"
-    mode_label = "Check/Install" if install_mode == "check" else "Clean Install"
+    except Exception as e:
+        print_status(f"Could not read existing INI: {e}", False)
+        return
 
-    print(f"Installing {APP_NAME} v2 on {os_display} with Python {py_ver}")
-    print(f"  Mode: {mode_label}")
-    print(f"  Route: {backend}")
-    print(f"  Llama.Cpp {LLAMACPP_TARGET_VERSION}")
-    print(f"  Embedding: {embedding_model}")
-
-    if PLATFORM == "windows":
-        fl_str = f"0x{dx_feature_level:04x}"
-        print(f"  GPU: DirectX Feature Level {fl_str}")
-
-    if tts_engine == "kokoro" and kokoro_voice:
-        voice_id = kokoro_voice.get("id", "unknown")
-        lang_code = kokoro_voice.get("lang_code", "a")
-        print(f"  TTS: Kokoro ({voice_id} / lang={lang_code})")
-    else:
-        print(f"  TTS: Kokoro (skipped — re-run installer to add TTS)")
-
-    if install_mode == "clean":
-        if TEMP_DIR.exists():
-            shutil.rmtree(TEMP_DIR, ignore_errors=True)
-        if PLATFORM == "windows" and WIN_COMPILE_TEMP.exists():
-            shutil.rmtree(WIN_COMPILE_TEMP, ignore_errors=True)
-
-    TEMP_DIR.mkdir(parents=True, exist_ok=True)
-
-    if install_mode == "clean":
-        if not create_venv():
-            print_status("Virtual environment failed", False)
-            sys.exit(1)
-    else:
-        if not ensure_venv():
-            print_status("Virtual environment failed", False)
-            sys.exit(1)
-
-    print_status("Installing py-cpuinfo for CPU detection...")
-    pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
-                 ("pip.exe" if PLATFORM == "windows" else "pip"))
-    subprocess.run([pip_exe, "install", "py-cpuinfo"], check=True)
-    print_status("py-cpuinfo installed")
-
-    create_files_and_directories(backend)
-
-    info = BACKEND_OPTIONS[backend]
-
+    # Recreate INI with same settings
     create_system_ini(
-        platform             = PLATFORM,
-        os_version           = os_version,
-        python_version       = python_version,
-        backend_type         = backend_type,
-        embedding_model      = embedding_model,
-        windows_version      = windows_version,
-        vulkan_available     = vulkan_available,
-        llama_cli_path       = info["cli_path"],
-        llama_bin_path       = info["dest"],
-        tts_engine           = tts_engine,
-        tts_pack             = tts_pack,
-        tts_default_voice_id = default_id,
-        tts_default_voice_name = default_name,
-        tts_enabled_voices   = enabled_ids,
-        browser_acceleration = dx11_capable,
-        dx_feature_level     = dx_feature_level,
+        platform=platform_val,
+        os_version=os_version,
+        python_version=python_version,
+        backend_type=backend_type,
+        embedding_model=embedding_model,
+        windows_version=windows_version,
+        vulkan_available=vulkan_available,
+        llama_cli_path=llama_cli_path,
+        llama_bin_path=llama_bin_path,
+        tts_engine="kokoro",
+        tts_pack=tts_pack,
+        tts_default_voice_id=tts_default_voice_id,
+        tts_default_voice_name=tts_default_voice_name,
+        tts_enabled_voices=tts_enabled_voices,
+        browser_acceleration=browser_acceleration,
+        dx_feature_level=dx_feature_level,
     )
 
+    # Recreate JSON preserving user settings
+    create_persistent_json(embedding_model)
+
+    print_status("Configuration files refreshed successfully")
+
+
+# =============================================================================
+# MAIN ENTRY POINT
+# =============================================================================
+
+def run_installer():
+    """Main installer flow with new menu structure."""
+
+    if not check_version_compatibility():
+        print("\nSystem requirements not met. Installation cannot continue.")
+        return
+
+    # Run detections early (needed for main menu display)
+    run_detections_once()
+    if PLATFORM == "windows":
+        detect_windows_version()
+    else:
+        detect_linux_version()
+
+    # ── Menu 1: Main Menu ──────────────────────────────────────────────
+    main_choice = show_main_menu()
+    if main_choice == 'A':
+        print("\nInstallation abandoned.")
+        return
+
+    if main_choice == '3':
+        refresh_configs()
+        return
+
+    is_clean_install = (main_choice == '1')
+
+    # ── Menu 2: Embedding Model ────────────────────────────────────────
+    embed_choice = show_embedding_menu()
+    if embed_choice == 'A':
+        print("\nInstallation abandoned.")
+        return
+    embedding_model = EMBEDDING_MODELS[embed_choice]["name"]
+
+    # ── Menu 3: Backend ────────────────────────────────────────────────
+    backend_choice = show_backend_menu()
+    if backend_choice == 'A':
+        print("\nInstallation abandoned.")
+        return
+    backend_keys = list(BACKEND_OPTIONS.keys())
+    backend = backend_keys[int(backend_choice) - 1]
+
+    # ── Menu 4: TTS Voice Pack ─────────────────────────────────────────
+    tts_choice = show_tts_menu()
+    if tts_choice == 'A':
+        print("\nInstallation abandoned.")
+        return
+    voice_pack = KOKORO_VOICE_PACKS[tts_choice]
+
+    # ── Execute Installation ───────────────────────────────────────────
+    clear_screen()
+    print_header("Installing...")
+    if is_clean_install:
+        print_status("Starting Clean Install...")
+        if VENV_DIR.exists():
+            _force_rmtree(VENV_DIR)
+            print_status("Removed existing virtual environment")
+    else:
+        print_status("Starting Check/Install...")
+
+    # Create directories
+    create_files_and_directories(backend)
+
+    # Create/ensure venv
+    if is_clean_install:
+        if not create_venv():
+            return
+    else:
+        if not ensure_venv():
+             return
+
+    # Install system dependencies (Linux only) - NOW FATAL
     if PLATFORM == "linux":
         if not install_linux_system_dependencies(backend):
-            print_status("System dependencies installation failed", False)
-            sys.exit(1)
+            print_status("Linux system dependencies installation failed. Installation aborted.", False)
+            return
 
+    # Install Python dependencies (includes llama-cpp-python wheel) - NOW FATAL
     if not install_python_deps(backend):
-        print_status("Python dependencies failed", False)
-        sys.exit(1)
+        print_status("Python dependency installation failed. Installation aborted.", False)
+        return
 
+    # Install optional file format support - NOW FATAL
+    if not install_optional_file_support():
+        print_status("Optional file support installation failed. Installation aborted.", False)
+        return
+
+    # Download embedding model to cache - NOW FATAL
+    if not download_embedding_model(embedding_model):
+         print_status("Embedding model download failed. Installation aborted.", False)
+         return
+
+    # Download Kokoro TTS model + voices for selected pack - NOW FATAL
+    if not download_kokoro_voices(tts_choice):
+        print_status("Kokoro TTS download failed. Installation aborted.", False)
+        return
+
+    # ── Create configuration files (Only reached if ALL above steps succeeded) ─
+    info = BACKEND_OPTIONS[backend]
+    backend_type = _determine_backend_type(backend)
+    info = BACKEND_OPTIONS[backend]
+    backend_type = _determine_backend_type(backend)
+
+    create_system_ini(
+        platform=PLATFORM,
+        os_version=OS_VERSION or "unknown",
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
+        backend_type=backend_type,
+        embedding_model=embedding_model,
+        windows_version=WINDOWS_VERSION,
+        vulkan_available=_DETECTED_VULKAN,
+        llama_cli_path=info.get("cli_path"),
+        llama_bin_path=info.get("dest"),
+        tts_engine="kokoro",
+        tts_pack=int(tts_choice),
+        tts_default_voice_id=voice_pack["default_voice_id"],
+        tts_default_voice_name=voice_pack["default_voice_name"],
+        tts_enabled_voices=voice_pack["voice_ids"],
+        browser_acceleration=_DETECTED_DX_CAPABLE,
+        dx_feature_level=_DETECTED_DX_LEVEL,
+    )
+
+    # Patch wheel version into INI (written by install_python_deps)
     if _INSTALLED_LLAMA_WHEEL_VERSION:
         update_ini_wheel_version(_INSTALLED_LLAMA_WHEEL_VERSION)
 
-    install_optional_file_support()
+    # Create persistent.json with defaults (preserving existing if present)
+    create_persistent_json(embedding_model)
 
-    if not initialize_embedding_cache(embedding_model):
-        print_status("CRITICAL: Embedding model required by RAG", False)
-        sys.exit(1)
-
-    spacy_ok = download_spacy_model()
-    if not spacy_ok:
-        print_status("WARNING: spaCy model download failed, session labeling may not work", False)
-
-    if tts_engine == "kokoro" and kokoro_voice:
-        if not install_kokoro_tts(kokoro_voice):
-            sys.exit(1)
-
-    if not download_extract_backend(backend):
-        print_status("Backend download failed", False)
-        sys.exit(1)
-
-    create_config(backend, embedding_model, tts_pack, default_id, default_name, enabled_ids)
-
-    if install_mode == "check":
-        print("\n")
-        if not validate_installation(backend, embedding_model, tts_engine):
-            print_status("Validation failed - some components may need reinstallation", False)
-            retry = input("\nWould you like to perform a Clean Install to fix issues? (y/n): ").strip().lower()
-            if retry == "y":
-                print("\nRestarting with Clean Install mode...\n")
-                if not create_venv():
-                    sys.exit(1)
-                if not install_python_deps(backend):
-                    sys.exit(1)
-                if not initialize_embedding_cache(embedding_model):
-                    sys.exit(1)
-                if tts_engine == "kokoro" and kokoro_voice:
-                    if not install_kokoro_tts(kokoro_voice):
-                        sys.exit(1)
-                if not download_extract_backend(backend):
-                    sys.exit(1)
-                validate_installation(backend, embedding_model, tts_engine)
-
+    print()
+    print("=" * (shutil.get_terminal_size().columns - 1))
     print_status("Installation complete!")
-    print("\nRun the launcher to start Chat-Gradio-Gguf v2\n")
+    print("=" * (shutil.get_terminal_size().columns - 1))
+    print()
+    print("  You can now run the application using the launcher.")
+    print()
 
 
-# Protected main block
 if __name__ == "__main__":
+    snapshot_pre_existing_processes()
+    atexit.register(cleanup_build_processes)
     try:
-        if len(sys.argv) < 2 or sys.argv[1].lower() not in ["windows", "linux"]:
-            print("ERROR: Platform argument required (windows/linux)")
-            sys.exit(1)
-        PLATFORM = sys.argv[1].lower()
-        install()
+        run_installer()
     except KeyboardInterrupt:
-        print("\nInstallation cancelled")
-        sys.exit(1)
+        print("\n\nInstallation interrupted by user.")
     except Exception as e:
-        print(f"\nInstallation failed: {e}")
-        sys.exit(1)
+        print(f"\n\nInstallation failed with error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
-        time.sleep(2)
         cleanup_build_processes()
-        if PLATFORM == "windows":
-            clean_compile_temp()
-        sys.exit(0)
