@@ -587,28 +587,97 @@ _DETECTED_DX_NAME:      str   = "Unknown"
 _DETECTIONS_RUN:        bool  = False
 
 
+def _find_cmake_in_vs_installations() -> str | None:
+    """
+    Search for cmake.exe inside Visual Studio / Build Tools installations
+    (2019 and 2022, all editions) using vswhere, then by walking known paths.
+    Returns the directory containing cmake.exe, or None if not found.
+    """
+    prog_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    prog_files     = os.environ.get("ProgramFiles",       r"C:\Program Files")
+
+    # --- Strategy 1: ask vswhere for every install path (all products/versions) ---
+    vswhere_exe = Path(prog_files_x86) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+    install_roots: list[str] = []
+
+    if vswhere_exe.exists():
+        try:
+            result = subprocess.run(
+                [
+                    str(vswhere_exe),
+                    "-all",               # all installed products
+                    "-prerelease",        # include pre-release
+                    "-property", "installationPath",
+                ],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                install_roots = [p.strip() for p in result.stdout.splitlines() if p.strip()]
+        except Exception:
+            pass
+
+    # --- Strategy 2: hard-coded default roots for VS 2019 & 2022, all editions ---
+    #     (catches standalone Build Tools whose vswhere entry may be missing)
+    for base in (prog_files_x86, prog_files):
+        for year in ("2022", "2019"):
+            for edition in (
+                "BuildTools",
+                "Enterprise", "Professional", "Community", "Preview",
+            ):
+                candidate = os.path.join(base, "Microsoft Visual Studio", year, edition)
+                if os.path.isdir(candidate) and candidate not in install_roots:
+                    install_roots.append(candidate)
+
+    # --- Walk each install root looking for cmake.exe under the CMake component ---
+    for root in install_roots:
+        cmake_bin = os.path.join(root, "Common7", "IDE", "CommonExtensions",
+                                 "Microsoft", "CMake", "CMake", "bin")
+        cmake_exe = os.path.join(cmake_bin, "cmake.exe")
+        if os.path.isfile(cmake_exe):
+            return cmake_bin   # found – return the bin directory
+
+    return None
+
+
 def detect_build_tools_available() -> dict:
     """Detect availability of Git, CMake, MSVC, MSBuild."""
     tools = {"Git": False, "CMake": False, "MSVC": False, "MSBuild": False}
-    
+
+    # Git ------------------------------------------------------------------
     if shutil.which("git"):
         tools["Git"] = True
+
+    # CMake ----------------------------------------------------------------
+    # Priority 1: already on PATH
     if shutil.which("cmake"):
         tools["CMake"] = True
-        
+    elif PLATFORM == "windows":
+        # Priority 2: bundled inside VS / Build Tools 2019-2022
+        cmake_bin = _find_cmake_in_vs_installations()
+        if cmake_bin:
+            tools["CMake"] = True
+            # Prepend to PATH so cmake is usable by any subsequent subprocess
+            os.environ["PATH"] = cmake_bin + os.pathsep + os.environ.get("PATH", "")
+
+    # MSVC / MSBuild (Windows only) ----------------------------------------
     if PLATFORM == "windows":
         try:
-            vswhere = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+            vswhere = (Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+                       / "Microsoft Visual Studio" / "Installer" / "vswhere.exe")
             if vswhere.exists():
-                result = subprocess.run([str(vswhere), "-latest", "-property", "installationPath"], capture_output=True, text=True, timeout=10)
+                result = subprocess.run(
+                    [str(vswhere), "-latest", "-property", "installationPath"],
+                    capture_output=True, text=True, timeout=10,
+                )
                 if result.returncode == 0 and result.stdout.strip():
                     tools["MSVC"] = True
-                    msbuild_path = Path(result.stdout.strip()) / "MSBuild" / "Current" / "Bin" / "MSBuild.exe"
+                    msbuild_path = (Path(result.stdout.strip())
+                                   / "MSBuild" / "Current" / "Bin" / "MSBuild.exe")
                     if msbuild_path.exists():
                         tools["MSBuild"] = True
         except Exception:
             pass
-            
+
     return tools
 
 
@@ -1365,6 +1434,14 @@ def build_llama_cpp_python_with_flags(build_flags: dict) -> bool:
     from the display-only LLAMACPP_PYTHON_COMPILE_DISPLAY constant."""
     global LLAMACPP_PYTHON_VERSION
     print_status("Compiling llama-cpp-python from source (this may take a while)...")
+
+    # Ensure cmake is reachable — detection may have found it inside VS Build
+    # Tools but not yet injected it into PATH (e.g. if build is called directly).
+    if PLATFORM == "windows" and not shutil.which("cmake"):
+        cmake_bin = _find_cmake_in_vs_installations()
+        if cmake_bin:
+            os.environ["PATH"] = cmake_bin + os.pathsep + os.environ.get("PATH", "")
+            print_status(f"CMake located at: {cmake_bin}")
     
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                  ("pip.exe" if PLATFORM == "windows" else "pip"))
@@ -1535,13 +1612,21 @@ def show_backend_menu() -> str:
     prebuilt_ver = LLAMACPP_PYTHON_PREBUILT_VERSION
     compile_ver = LLAMACPP_PYTHON_COMPILE_DISPLAY
 
+    cmake_available = _DETECTED_BUILD_TOOLS.get("CMake", False)
+
     print(f"   1) Download CPU Binary / Default CPU Wheel (Wheel {prebuilt_ver})")
     print()
     print(f"   2) Download Vulkan Binary / Default CPU Wheel (Wheel {prebuilt_ver})")
     print()
-    print(f"   3) Compile CPU Binaries / Compile CPU Wheel (Wheel {compile_ver})")
-    print()
-    print(f"   4) Compile Vulkan Binaries / Compile Vulkan Wheel (Wheel {compile_ver})")
+    if cmake_available:
+        print(f"   3) Compile CPU Binaries / Compile CPU Wheel (Wheel {compile_ver})")
+        print()
+        print(f"   4) Compile Vulkan Binaries / Compile Vulkan Wheel (Wheel {compile_ver})")
+    else:
+        print(f"   (Compile options 3 & 4 require CMake — not detected)")
+        print()
+        print(f"   Install CMake via Visual Studio Installer (C++ CMake tools) and")
+        print(f"   RESTART this terminal, or download from https://cmake.org/download/")
     print()
     print()
     print()
@@ -1549,7 +1634,10 @@ def show_backend_menu() -> str:
     print()
     print("=" * width)
 
-    return _get_menu_choice(4, "Selection; Menu Options =1-4, Abandon=A: ")
+    if cmake_available:
+        return _get_menu_choice(4, "Selection; Menu Options =1-4, Abandon=A: ")
+    else:
+        return _get_menu_choice(2, "Selection; Menu Options =1-2, Abandon=A: ")
 
 
 def show_tts_menu() -> str:
@@ -1603,19 +1691,18 @@ def _determine_backend_type(backend: str) -> str:
 
 def download_kokoro_voices(pack_key: str) -> bool:
     """Download Kokoro TTS model and voice files for the selected pack.
-
     Strategy:
       Phase 1 — Download the main Kokoro model weights via snapshot_download.
                  Avoids running inference just to trigger the download, and gives
                  real progress output via live stdout streaming.
       Phase 2 — Download each voice .pt file explicitly with hf_hub_download.
                  Voice files are ~2 MB each; no inference needed.
-      Phase 3 — Warm-up: create KPipeline once to verify the install is functional.
+       Phase 3 — Warm-up: create KPipeline once to verify the install is functional.
                  Fast (model already on disk) and catches import/path errors early.
     """
     pack = KOKORO_VOICE_PACKS.get(pack_key)
     if not pack:
-        print_status("Invalid TTS pack selection", False)
+        print_status("Invalid TTS pack selection ", False)
         return False
 
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
@@ -1626,20 +1713,31 @@ def download_kokoro_voices(pack_key: str) -> bool:
     hf_cache   = str(BASE_DIR / "data" / "tts_models" / "kokoro" / "hub")
 
     download_script = f'''
-import os, sys
+import os, sys, shutil
+import traceback
+
+# Clear stale locks that might cause huggingface_hub to hang indefinitely on Windows
+locks_dir = os.path.join(r"{hf_cache}", "locks")
+if os.path.exists(locks_dir):
+    try:
+        shutil.rmtree(locks_dir)
+        print("[TTS] Cleared stale Hugging Face cache locks.", flush=True)
+    except Exception as e:
+        print(f"[TTS] Warning: Could not clear cache locks: {{e}}", flush=True)
+
 os.environ["HF_HOME"]                       = r"{hf_cache}"
 os.environ["HUGGINGFACE_HUB_CACHE"]         = r"{hf_cache}"
-os.environ["CUDA_VISIBLE_DEVICES"]          = ""
-os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"   # suppress Windows symlink noise
-os.environ["HF_HUB_VERBOSITY"]             = "warning" # suppress unauthenticated-rate-limit info
+os.environ["CUDA_VISIBLE_DEVICES"]          = " "
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "0"  # Enable progress to verify it's not hanging
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_VERBOSITY"]             = "info" # Show info/warnings (e.g., unauthenticated rate limits)
 
 REPO_ID   = "hexgrad/Kokoro-82M"
 VOICE_IDS = {voice_ids!r}
 LANG_CODE = "{lang_code}"
 
 # ── Phase 1: model weights ──────────────────────────────────────────
-print("[TTS] Phase 1/3 — Downloading Kokoro model weights...", flush=True)
+print("[TTS] Phase 1/3 — Downloading Kokoro model weights... ", flush=True)
 try:
     from huggingface_hub import snapshot_download
     local_dir = snapshot_download(
@@ -1647,10 +1745,10 @@ try:
         cache_dir=r"{hf_cache}",
         ignore_patterns=["*.md", "*.txt", "*.gitattributes"],
     )
-    print(f"[TTS] Model weights downloaded to: {{local_dir}}", flush=True)
+    print(f"[TTS] Model weights downloaded to: {{local_dir}} ", flush=True)
 except Exception as e:
-    print(f"[TTS] ERROR downloading model weights: {{e}}", flush=True)
-    import traceback; traceback.print_exc()
+    print(f"[TTS] ERROR downloading model weights: {{e}} ", flush=True)
+    traceback.print_exc()
     sys.exit(1)
 
 # ── Phase 2: voice .pt files ────────────────────────────────────────
@@ -1672,7 +1770,7 @@ try:
             failed_voices.append(vid)
 except Exception as e:
     print(f"[TTS] ERROR in voice download phase: {{e}}", flush=True)
-    import traceback; traceback.print_exc()
+    traceback.print_exc()
     sys.exit(1)
 
 if failed_voices:
@@ -1687,25 +1785,24 @@ try:
     print("[TTS] KPipeline created successfully — Kokoro is ready.", flush=True)
 except Exception as e:
     print(f"[TTS] ERROR during pipeline warm-up: {{e}}", flush=True)
-    import traceback; traceback.print_exc()
+    traceback.print_exc()
     sys.exit(1)
 
 print("[TTS] All phases complete.", flush=True)
 sys.exit(0)
 '''
-
     script_path = TEMP_DIR / "download_kokoro.py"
     try:
         script_path.parent.mkdir(parents=True, exist_ok=True)
         with open(script_path, 'w', encoding='utf-8') as f:
             f.write(download_script)
 
-        print(f"  Downloading Kokoro TTS ({pack['display']}) — output below:")
-        print(f"  (model ~82 MB + {len(voice_ids)} voice file(s) ~2 MB each)")
+        print(f"  Downloading Kokoro TTS ({pack['display']}) — output below: ")
+        print(f"  (model ~82 MB + {len(voice_ids)} voice file(s) ~2 MB each) ")
         print()
 
         # Stream output live — user can see progress and it doesn't look like a hang.
-        # Timeout is a wall-clock deadline (15 min) rather than subprocess.run timeout
+        # Timeout is a wall-clock deadline (15 min) rather than subprocess.run timeout 
         # which would kill a legitimately slow download mid-stream.
         proc = subprocess.Popen(
             [python_exe, str(script_path)],
@@ -1732,21 +1829,21 @@ sys.exit(0)
         script_path.unlink(missing_ok=True)
 
         if timed_out:
-            print_status("Kokoro TTS download timed out (>15 min). "
-                         "Check your internet connection and try again.", False)
+            print_status("Kokoro TTS download timed out (>15 min).  "
+                         "Check your internet connection and try again. ", False)
             return False
 
         if proc.returncode == 0:
             print()
-            print_status(f"Kokoro TTS installed: {pack['display']}")
+            print_status(f"Kokoro TTS installed: {pack['display']} ")
             return True
         else:
             print()
-            print_status("Kokoro TTS download failed — see output above for details.", False)
+            print_status("Kokoro TTS download failed — see output above for details. ", False)
             return False
 
     except Exception as e:
-        print_status(f"Kokoro TTS download error: {e}", False)
+        print_status(f"Kokoro TTS download error: {e} ", False)
         script_path.unlink(missing_ok=True)
         return False
 
