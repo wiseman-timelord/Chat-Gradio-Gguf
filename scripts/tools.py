@@ -1140,6 +1140,7 @@ def _clean_text_for_tts(text: str) -> str:
     text = re.sub(r"(?<!\w)_|_(?!\w)", "", text)
     text = re.sub(r"[#•→⇒★☆]|[-=]{2,}", " ", text)
     text = re.sub(r"[^\w\s.,!?;:\'\"()-]", " ", text)
+    text = text.replace("'", "")   # strip apostrophes so Kokoro reads "don't" as "dont" not "don t"
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 

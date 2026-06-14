@@ -645,14 +645,18 @@ def load_system_ini():
         print(f"[INI] Embedding Model: {EMBEDDING_MODEL_NAME}")
         print(f"[INI] Gradio Version: {GRADIO_VERSION}")
 
+        # Single source of truth: os_version
         OS_VERSION = system.get('os_version', 'unknown')
-        print(f"[INI] OS Version: {OS_VERSION}")
 
         if PLATFORM == "windows":
-            WINDOWS_VERSION = system.get('windows_version', OS_VERSION)
-            print(f"[INI] Windows Version: {WINDOWS_VERSION}")
+            # Extract raw version number for logic if needed
+            WINDOWS_VERSION = OS_VERSION.replace("Windows ", "") if OS_VERSION.startswith("Windows ") else "unknown"
         else:
             WINDOWS_VERSION = None
+
+        print(f"[INI] OS Version: {OS_VERSION}")
+        if PLATFORM == "windows":
+            print(f"[INI] Windows Version: {WINDOWS_VERSION}")
 
         # Load TTS configuration from [tts] section (written by installer).
         # These are installer decisions and are authoritative — the JSON never
