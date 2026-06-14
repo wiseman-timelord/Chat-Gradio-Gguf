@@ -7,6 +7,15 @@ import sys as _sys
 import os as _os
 
 # =============================================================================
+# EARLY PRIVACY & OFFLINE CONFIGURATION
+# Must be set BEFORE any library imports (Gradio, HF, sentence-transformers, etc.)
+# =============================================================================
+_os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
+_os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+_os.environ["HF_HUB_OFFLINE"] = "1"
+_os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+# =============================================================================
 # STEP 1: Set embedding/HF cache env vars BEFORE any library imports.
 # These must be the very first lines so that HuggingFace and sentence-transformers
 # both see the correct paths regardless of import order.
@@ -17,8 +26,6 @@ _os.environ["TRANSFORMERS_CACHE"] = _cache_dir
 _os.environ["HF_HOME"] = _os.path.dirname(_cache_dir)
 _os.environ["SENTENCE_TRANSFORMERS_HOME"] = _cache_dir
 _os.environ["CUDA_VISIBLE_DEVICES"] = ""       # Force CPU mode for embeddings
-_os.environ["HF_HUB_OFFLINE"] = "1"            # CRITICAL: fully offline embedding model loading
-_os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 # =============================================================================
 # STEP 2: Suppress library logging configuration calls before any imports.

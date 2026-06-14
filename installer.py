@@ -1996,19 +1996,18 @@ def refresh_configs():
 
         system = cfg_ini['system']
 
-        platform_val = system.get('platform', PLATFORM)
-        os_version = system.get('os_version', 'unknown')
-        python_version = system.get('python_version', f"{sys.version_info.major}.{sys.version_info.minor}")
-        backend_type = system.get('backend_type', 'CPU_CPU')
-        embedding_model = system.get('embedding_model', 'BAAI/bge-small-en-v1.5')
-        vulkan_available = system.getboolean('vulkan_available', False)
-        llama_cli_path = system.get('llama_cli_path', None)
-        llama_bin_path = system.get('llama_bin_path', None)
-        windows_version = system.get('windows_version', None)
-        dx_feature_level = system.getint('dx_feature_level', 0)
+        platform_val      = system.get('platform', PLATFORM)
+        os_version        = system.get('os_version', 'unknown')
+        python_version    = system.get('python_version', f"{sys.version_info.major}.{sys.version_info.minor}")
+        backend_type      = system.get('backend_type', 'CPU_CPU')
+        embedding_model   = system.get('embedding_model', 'BAAI/bge-small-en-v1.5')
+        vulkan_available  = system.getboolean('vulkan_available', False)
+        llama_cli_path    = system.get('llama_cli_path', None)
+        llama_bin_path    = system.get('llama_bin_path', None)
+        dx_feature_level  = system.getint('dx_feature_level', 0)
         browser_acceleration = system.getboolean('browser_acceleration', True)
 
-        # TTS settings from existing INI
+        # TTS settings
         tts_section = cfg_ini['tts'] if 'tts' in cfg_ini else {}
         tts_pack = int(tts_section.get('tts_pack', '1'))
         tts_default_voice_id = tts_section.get('tts_default_voice_id', 'af_heart')
@@ -2020,14 +2019,13 @@ def refresh_configs():
         print_status(f"Could not read existing INI: {e}", False)
         return
 
-    # Recreate INI with same settings
+    # Recreate INI with single os_version key
     create_system_ini(
         platform=platform_val,
         os_version=os_version,
         python_version=python_version,
         backend_type=backend_type,
         embedding_model=embedding_model,
-        windows_version=windows_version,
         vulkan_available=vulkan_available,
         llama_cli_path=llama_cli_path,
         llama_bin_path=llama_bin_path,
@@ -2040,9 +2038,7 @@ def refresh_configs():
         dx_feature_level=dx_feature_level,
     )
 
-    # Recreate JSON preserving user settings
     create_persistent_json(embedding_model)
-
     print_status("Configuration files refreshed successfully")
 
 
@@ -2154,11 +2150,10 @@ def run_installer():
 
     create_system_ini(
         platform=PLATFORM,
-        os_version=OS_VERSION or "unknown",
+        os_version=f"Windows {WINDOWS_VERSION}" if PLATFORM == "windows" and WINDOWS_VERSION else (OS_VERSION or "unknown"),
         python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
         backend_type=backend_type,
         embedding_model=embedding_model,
-        windows_version=WINDOWS_VERSION,
         vulkan_available=_DETECTED_VULKAN,
         llama_cli_path=info.get("cli_path"),
         llama_bin_path=info.get("dest"),
