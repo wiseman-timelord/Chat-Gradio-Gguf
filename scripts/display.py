@@ -34,7 +34,7 @@ from scripts.configure import (
     MODEL_NAME, MODEL_FOLDER, SESSION_ACTIVE,
     MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT,
     CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
-    VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
+    VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, LOADING_MODE, BACKEND_TYPE,
     ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS,
     TEMP_OPTIONS, REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS,
     SESSION_LOG_HEIGHT_OPTIONS, ATTACH_SLOT_OPTIONS, HISTORY_DIR,
@@ -105,7 +105,7 @@ def close_browser():
     print("[BROWSER] Close requested")
 
 
-def wait_for_gradio(url="http://localhost:7860", timeout=30):
+def wait_for_gradio(url="http://localhost:7869", timeout=30):
     """Wait for Gradio server to be fully ready."""
     import requests
     import time as _time
@@ -126,7 +126,7 @@ def wait_for_gradio(url="http://localhost:7860", timeout=30):
     print("[BROWSER] Timeout waiting for Gradio server")
     return False
 
-def launch_custom_browser(gradio_url="http://localhost:7860",
+def launch_custom_browser(gradio_url="http://localhost:7869",
                           frameless=False, width=1400, height=900,
                           title="Chat-Gradio-Gguf", maximized=False):
     print(f"[BROWSER] Launching at {gradio_url}")
@@ -332,6 +332,7 @@ def get_ini_display_text():
     """Build display string of INI constants NOT shown on the Hardware/Models Config tab."""
     lines = []
     lines.append(f"Platform:  {getattr(cfg, 'PLATFORM', 'N/A')}")
+    lines.append(f"Backend Type:  {getattr(cfg, 'BACKEND_TYPE', 'N/A')}")
     lines.append(f"OS Version:  {getattr(cfg, 'OS_VERSION', 'N/A')}")
     lines.append(f"Gradio Version:  {getattr(cfg, 'GRADIO_VERSION', 'N/A')}")
     lines.append(f"Embedding Model:  {getattr(cfg, 'EMBEDDING_MODEL_NAME', 'N/A')}")
@@ -357,6 +358,7 @@ def get_debug_globals_text():
     lines.append(f"USE_PYTHON_BINDINGS:  {getattr(cfg, 'USE_PYTHON_BINDINGS', 'N/A')}")
     lines.append(f"MMAP:  {getattr(cfg, 'MMAP', 'N/A')}")
     lines.append(f"MLOCK:  {getattr(cfg, 'MLOCK', 'N/A')}")
+    lines.append(f"LOADING_MODE:  {getattr(cfg, 'LOADING_MODE', 'N/A')}")
     lines.append(f"CPU_PHYSICAL_CORES:  {getattr(cfg, 'CPU_PHYSICAL_CORES', 'N/A')}")
     lines.append(f"CPU_LOGICAL_CORES:  {getattr(cfg, 'CPU_LOGICAL_CORES', 'N/A')}")
     lines.append(f"FILTER_MODE:  {getattr(cfg, 'FILTER_MODE', 'N/A')}")
@@ -589,7 +591,8 @@ def update_model_list(model_folder):
 
 def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, cpu_threads, llm_state, models_loaded_state):
     """Explicitly load the currently selected model with current cfg."""
-    if not model_name or model_name in ["Select_a_model...", "No models found", " ", None]:
+    # Check for a valid model name
+    if not model_name or model_name in ["Select_a_model...", "No models found"]:
         return (
             llm_state, models_loaded_state,
             "❌ Error: No valid model selected. Choose a model first.",
@@ -617,16 +620,16 @@ def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, c
             cfg.LOADED_CONTEXT_SIZE = int(ctx_size)
             beep()
             status_msg = f"✅ Model loaded: {model_name} ({cfg.LOADED_CONTEXT_SIZE} ctx)"
-            input_interactive = True
+            input_interactive = True   # ← always interactive when a model is selected
         else:
             status_msg = f"❌ Load failed: {status[:150]}"
-            input_interactive = False
+            input_interactive = True   # ← keep interactive, user can retry
             new_llm = llm_state
             loaded = False
         return (
             new_llm, loaded,
             status_msg, status_msg, status_msg,
-            gr.update(interactive=input_interactive),
+            gr.update(interactive=input_interactive),   # ← always interactive
             get_model_loaded_display(loaded)
         )
     except Exception as e:
@@ -635,7 +638,7 @@ def handle_load_model(model_name, model_folder, vram_size, ctx_size, gpu, cpu, c
         return (
             llm_state, models_loaded_state,
             status_msg, status_msg, status_msg,
-            gr.update(interactive=False),
+            gr.update(interactive=True),   # ← keep interactive on error
             get_model_loaded_display(False)
         )
 
@@ -648,7 +651,7 @@ def handle_unload_model(llm_state, models_loaded_state):
             "ℹ️ No model currently loaded.",
             "ℹ️ No model currently loaded.",
             "ℹ️ No model currently loaded.",
-            gr.update(interactive=False),
+            gr.update(interactive=bool(cfg.MODEL_NAME and cfg.MODEL_NAME not in ["Select_a_model...", "No models found"])),
             get_model_loaded_display(False)
         )
     try:
@@ -662,7 +665,7 @@ def handle_unload_model(llm_state, models_loaded_state):
         return (
             new_llm, new_models_loaded,
             status_msg, status_msg, status_msg,
-            gr.update(interactive=False),
+            gr.update(interactive=bool(cfg.MODEL_NAME and cfg.MODEL_NAME not in ["Select_a_model...", "No models found"])),
             get_model_loaded_display(False)
         )
     except Exception as e:
@@ -671,7 +674,7 @@ def handle_unload_model(llm_state, models_loaded_state):
         return (
             llm_state, models_loaded_state,
             status_msg, status_msg, status_msg,
-            gr.update(interactive=True),
+            gr.update(interactive=bool(cfg.MODEL_NAME and cfg.MODEL_NAME not in ["Select_a_model...", "No models found"])),
             get_model_loaded_display(True)
         )
 
@@ -1165,6 +1168,10 @@ def update_sound_sample_rate(sample_rate):
 
 _cancel_event = threading.Event()
 
+# Tracks time of last completed AI response — used by the Mem-Lock idle-unload timer.
+_last_response_time: float = 0.0
+_IDLE_UNLOAD_SECONDS = 20 * 60  # 20 minutes of inactivity → auto-unload (Mem-Lock mode only)
+
 
 def conversation_display(
     user_input, session_tuples, session_messages, loaded_files,
@@ -1571,6 +1578,10 @@ def conversation_display(
     cfg.session_attached_files = []
     beep()
 
+    # Update idle-unload timestamp after every completed response
+    global _last_response_time
+    _last_response_time = time.time()
+
     # Auto-TTS: synchronous with progress stages
     if tts_speak_enabled and cfg.TTS_ENABLED:
         try:
@@ -1607,6 +1618,19 @@ def conversation_display(
         except Exception as e:
             print(f"[AUTO-TTS] Error: {e}")
             traceback.print_exc()
+
+    # ── One-Shot mode: unload model immediately after each response ──────────
+    if cfg.LOADING_MODE == "One-Shot" and cfg.MODELS_LOADED and cfg.llm is not None:
+        try:
+            print("[ONE-SHOT] Unloading model after response (One-Shot mode)...")
+            _unload_status, _new_llm, _new_loaded = unload_models(llm_state, models_loaded_state)
+            cfg.llm = _new_llm
+            cfg.MODELS_LOADED = _new_loaded
+            llm_state = _new_llm
+            models_loaded_state = _new_loaded
+            print(f"[ONE-SHOT] {_unload_status}")
+        except Exception as _ue:
+            print(f"[ONE-SHOT] Unload error: {_ue}")
 
     # Final yield to reset UI
     yield (
@@ -1676,7 +1700,7 @@ def launch_display():
         MODEL_NAME, SESSION_ACTIVE,
         MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT,
         MODEL_FOLDER, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE, REPEAT_PENALTY,
-        VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, BACKEND_TYPE,
+        VRAM_SIZE, SELECTED_GPU, SELECTED_CPU, MLOCK, LOADING_MODE, BACKEND_TYPE,
         ALLOWED_EXTENSIONS, VRAM_OPTIONS, CTX_OPTIONS, BATCH_OPTIONS, TEMP_OPTIONS,
         REPEAT_OPTIONS, HISTORY_SLOT_OPTIONS, SESSION_LOG_HEIGHT_OPTIONS,
         ATTACH_SLOT_OPTIONS, HISTORY_DIR, USER_COLOR, THINK_COLOR, RESPONSE_COLOR,
@@ -1692,7 +1716,11 @@ def launch_display():
     css_common = """
     .scrollable { overflow-y: auto }
     .half-width { width: 80px !important }
-    .double-height { height: 80px !important }
+    .double-height {
+        height: 80px !important;
+        min-height: 80px !important;
+        border-radius: var(--radius-lg) !important;
+    }
     .clean-elements { gap: 4px !important; margin-bottom: 4px !important }
     .clean-elements-normbot { gap: 4px !important; margin-bottom: 20px !important }
     .send-button-green { background-color: green !important; color: white !important }
@@ -1813,6 +1841,14 @@ def launch_display():
                      "Segoe UI Emoji", "Apple Color Emoji",
                      "Noto Color Emoji", "Twemoji Mozilla",
                      sans-serif !important;
+    }
+    .config-btn {
+        border-radius: var(--radius-lg) !important;
+        padding: 0.5em 1em !important;
+        height: 2.8em !important;
+        min-height: 2.8em !important;
+        font-size: 14px !important;
+        line-height: 1.2 !important;
     }
     """
 
@@ -1978,37 +2014,56 @@ def launch_display():
                     gr.Markdown("### Hardware Configuration")
 
                     with gr.Row():
-                        backend_display = gr.Textbox(
-                            label="Backend Type", value=cfg.BACKEND_TYPE, interactive=False
-                        )
-                        layer_allocation_radio = gr.Radio(
-                            choices=["SRAM_ONLY"] if not cfg.VULKAN_AVAILABLE else ["SRAM_ONLY", "VRAM_SRAM"],
-                            label="Layer Allocation Mode",
-                            value=cfg.LAYER_ALLOCATION_MODE,
-                            interactive=cfg.VULKAN_AVAILABLE
-                        )
-
-                    with gr.Row():
                         cpu_select = gr.Dropdown(
                             choices=["Auto-Select"] + [c["label"] for c in get_cpu_info()],
-                            label="CPU", value=cfg.SELECTED_CPU,
+                            label="CPU Selection", value=cfg.SELECTED_CPU,
                             interactive=True, allow_custom_value=True
+                        )
+                        gpu_select = gr.Dropdown(
+                            choices=get_available_gpus(), label="GPU Selection",
+                            value=cfg.SELECTED_GPU, interactive=True, allow_custom_value=True,
+                            visible=cfg.BACKEND_TYPE in ["VULKAN_CPU", "VULKAN_VULKAN"]
                         )
                         cpu_threads = gr.Slider(
                             minimum=1, maximum=cfg.CPU_LOGICAL_CORES, step=1,
                             value=cfg.CPU_THREADS or max(1, cfg.CPU_LOGICAL_CORES // 2),
-                            label="CPU Threads", interactive=True
+                            label="CPU/Vulkan Threads", interactive=True
                         )
+                        
+                    with gr.Row():
 
-                    gpu_vram_row = gr.Row(visible=cfg.BACKEND_TYPE in ["VULKAN_CPU", "VULKAN_VULKAN"])
-                    with gpu_vram_row:
-                        gpu_select = gr.Dropdown(
-                            choices=get_available_gpus(), label="GPU",
-                            value=cfg.SELECTED_GPU, interactive=True, allow_custom_value=True
+                        loading_mode_radio = gr.Radio(
+                            choices=["Mem-Lock", "One-Shot"],
+                            label="Loading Mode",
+                            value=cfg.LOADING_MODE,
+                            min_width=200,
+                            interactive=True,
+                        )
+                        layer_allocation_radio = gr.Radio(
+                            choices=["SRAM_ONLY"] if not cfg.VULKAN_AVAILABLE else ["SRAM_ONLY", "VRAM_SRAM"],
+                            label="Layer Allocation Mode",
+                            min_width=200,
+                            value=cfg.LAYER_ALLOCATION_MODE,
+                            interactive=cfg.VULKAN_AVAILABLE
                         )
                         vram_size = gr.Dropdown(
                             choices=cfg.VRAM_OPTIONS, label="VRAM Allocation (MB)",
-                            value=cfg.VRAM_SIZE, interactive=True
+                            value=cfg.VRAM_SIZE, interactive=True,
+                            visible=cfg.BACKEND_TYPE in ["VULKAN_CPU", "VULKAN_VULKAN"]
+                        )
+
+                with gr.Group():
+                    gr.Markdown("### Text-to-Speech (TTS)")
+                    with gr.Row():
+                        tts_voice = gr.Dropdown(
+                            choices=get_voice_choices(), label="TTS Voice",
+                            value=cfg.TTS_VOICE_NAME or "Default",
+                            interactive=True, allow_custom_value=True
+                        )
+                        tts_max_len = gr.Slider(
+                            label="Max TTS Length (chars)",
+                            minimum=500, maximum=4500, step=500,
+                            value=cfg.MAX_TTS_LENGTH, interactive=True
                         )
 
                     with gr.Row():
@@ -2030,39 +2085,50 @@ def launch_display():
                         )
 
                 with gr.Group():
-                    gr.Markdown("### Text-to-Speech (TTS)")
-                    with gr.Row():
-                        tts_voice = gr.Dropdown(
-                            choices=get_voice_choices(), label="TTS Voice",
-                            value=cfg.TTS_VOICE_NAME or "Default",
-                            interactive=True, allow_custom_value=True
-                        )
-                        tts_max_len = gr.Slider(
-                            label="Max TTS Length (chars)",
-                            minimum=500, maximum=4500, step=500,
-                            value=cfg.MAX_TTS_LENGTH, interactive=True
-                        )
-
-                with gr.Group():
+                    _mem_lock_mode = (cfg.LOADING_MODE == "Mem-Lock")
                     gr.Markdown("### Model Configuration")
 
                     with gr.Row(elem_classes=["model-folder-row"]):
-                        model_folder_textbox = gr.Textbox(
-                            label="Model Folder", value=cfg.MODEL_FOLDER,
-                            interactive=False,
-                            placeholder="Click Browse Folder button to select...",
+                        model_dropdown = gr.Dropdown(
+                            choices=get_available_models(),
+                            label="Model Selected",
+                            value=cfg.MODEL_NAME,
+                            interactive=True,
+                            elem_classes="model-select",
                             scale=5
                         )
-                        model_dropdown = gr.Dropdown(
-                            choices=get_available_models(), label="Model Selected",
-                            value=cfg.MODEL_NAME, interactive=True,
-                            elem_classes="model-select", scale=4
+                        browse_folder_btn = gr.Button(
+                            "📁 Browse Folder",
+                            scale=1,                          # does not stretch
+                            elem_classes=["double-height"]
                         )
                         model_loaded_indicator = gr.Textbox(
                             label="Model Loaded",
                             value="🟢 SO LOADED" if cfg.MODELS_LOADED else "🔴 NOT LOADED",
-                            interactive=False, max_lines=1, scale=3
+                            interactive=False,
+                            max_lines=1,
+                            scale=1,
+                            visible=_mem_lock_mode
                         )
+                        load_unload_column = gr.Column(
+                            scale=0,                          # does not stretch
+                            visible=_mem_lock_mode
+                        )
+                        with load_unload_column:
+                            load_model_btn = gr.Button(
+                                "📥 Load Model",
+                                variant="primary",
+                                scale=1,
+                                elem_classes=["config-btn"],
+                                visible=_mem_lock_mode
+                            )
+                            unload_model_btn = gr.Button(
+                                "📤 Unload Model",
+                                variant="stop",
+                                scale=1,
+                                elem_classes=["config-btn"],
+                                visible=_mem_lock_mode
+                            )
 
                     with gr.Row():
                         ctx_size = gr.Dropdown(
@@ -2082,10 +2148,6 @@ def launch_display():
                             value=cfg.REPEAT_PENALTY, interactive=True
                         )
 
-                    with gr.Row():
-                        browse_folder_btn = gr.Button("📁 Browse Folder", scale=1, size="sm")
-                        load_model_btn = gr.Button("📥 Load Model", variant="primary", scale=1)
-                        unload_model_btn = gr.Button("📤 Unload Model", variant="stop", scale=1)
 
                 gr.Markdown("---")
                 with gr.Row():
@@ -2165,7 +2227,7 @@ def launch_display():
                     gr.Markdown("### System Constants (from constants.ini)")
                     ini_display = gr.Textbox(
                         label="INI Values (read-only, set by installer)",
-                        value=get_ini_display_text(), lines=11, interactive=False
+                        value=get_ini_display_text(), lines=12, interactive=False
                     )
 
                 with gr.Group():
@@ -2195,11 +2257,12 @@ def launch_display():
         )
 
         # ── Browse folder button ─────────────────────────────────────────────
-        def browse_and_update_folder(current_path):
+        def browse_and_update_folder():
             """Open folder dialog and update cfg.MODEL_FOLDER."""
             import tkinter as tk
             from tkinter import filedialog
 
+            current_path = cfg.MODEL_FOLDER
             print(f"[BROWSE] Handler called. current_path='{current_path}'")
 
             root = tk.Tk()
@@ -2219,7 +2282,7 @@ def launch_display():
             if not folder_path:
                 print("[BROWSE] Cancelled — no folder chosen.")
                 status = "Folder selection cancelled."
-                return (current_path, current_path, status, status, status)
+                return (cfg.MODEL_FOLDER, status, status, status)
 
             resolved = str(Path(folder_path).resolve())
             cfg.MODEL_FOLDER = resolved
@@ -2231,13 +2294,13 @@ def launch_display():
                 n = 0
             status = f"Folder: {short_path(resolved)} — {n} model(s) found"
             print(f"[BROWSE] Status: {status}")
-            return (cfg.MODEL_FOLDER, cfg.MODEL_FOLDER, status, status, status)
+            return (cfg.MODEL_FOLDER, status, status, status)
 
         browse_folder_btn.click(
             fn=browse_and_update_folder,
-            inputs=[model_folder_textbox],
+            inputs=[],
             outputs=[
-                model_folder_textbox, model_folder_state,
+                model_folder_state,
                 interaction_global_status, config_status, filter_status
             ]
         ).then(
@@ -2250,7 +2313,7 @@ def launch_display():
         load_model_btn.click(
             fn=handle_load_model,
             inputs=[
-                model_dropdown, model_folder_textbox, vram_size, ctx_size,
+                model_dropdown, model_folder_state, vram_size, ctx_size,
                 gpu_select, cpu_select, cpu_threads,
                 states["llm"], states["models_loaded"]
             ],
@@ -2409,7 +2472,7 @@ def launch_display():
             inputs=[
                 model_dropdown, model_dropdown,
                 states["llm"], states["models_loaded"],
-                model_folder_textbox
+                model_folder_state
             ],
             outputs=[
                 states["llm"], states["models_loaded"],
@@ -2484,6 +2547,39 @@ def launch_display():
             fn=lambda val: (setattr(cfg, 'CPU_THREADS', int(val)), f"CPU threads set to {int(val)}")[1],
             inputs=[cpu_threads],
             outputs=[config_status]
+        )
+
+        # Loading mode dropdown
+        _last_loading_mode = [cfg.LOADING_MODE]  # mutable cell to deduplicate Gradio 5 double-fire
+
+        def handle_loading_mode_change(mode):
+            if mode == _last_loading_mode[0]:
+                return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()  # 5 updates
+            _last_loading_mode[0] = mode
+            cfg.LOADING_MODE = mode
+            cfg.MLOCK = (mode == "Mem-Lock")
+            mem_lock = (mode == "Mem-Lock")
+            label = "Mem-Lock ON — model stays in RAM; auto-unloads after 20 min idle" if mem_lock \
+                    else "One-Shot ON — model unloads automatically after each response"
+            print(f"[LOADING-MODE] {label}")
+            return (
+                label,
+                gr.update(visible=mem_lock),   # model_loaded_indicator
+                gr.update(visible=mem_lock),   # load_model_btn
+                gr.update(visible=mem_lock),   # unload_model_btn
+                gr.update(visible=mem_lock)    # load_unload_column
+            )
+
+        loading_mode_radio.change(
+            fn=handle_loading_mode_change,
+            inputs=[loading_mode_radio],
+            outputs=[
+                config_status,
+                model_loaded_indicator,
+                load_model_btn,
+                unload_model_btn,
+                load_unload_column
+            ]
         )
 
         # Exit buttons
@@ -2646,11 +2742,13 @@ def launch_display():
         # ── Unified save handler ─────────────────────────────────────────────
         def unified_save_wrapper(
             layer_mode, cpu, cpu_threads_val, gpu, vram, sound_device, sample_rate,
-            model_folder_val, model, ctx, batch, temp, repeat,
+            model, ctx, batch, temp, repeat,
+            loading_mode_val,
             tts_voice_val, tts_max_len_val,
             show_think_val, bleep_val, print_raw_val,
             max_hist, max_att, log_height,
-            filter_text_val
+            filter_text_val,
+            tab="hardware"
         ):
             cfg.LAYER_ALLOCATION_MODE = layer_mode       if layer_mode       is not None else cfg.LAYER_ALLOCATION_MODE
             cfg.SELECTED_CPU          = cpu              if cpu              is not None else cfg.SELECTED_CPU
@@ -2659,12 +2757,14 @@ def launch_display():
             cfg.VRAM_SIZE             = int(vram)        if vram             is not None else cfg.VRAM_SIZE
             cfg.SOUND_OUTPUT_DEVICE   = sound_device     if sound_device     is not None else cfg.SOUND_OUTPUT_DEVICE
             cfg.SOUND_SAMPLE_RATE     = int(sample_rate) if sample_rate      is not None else cfg.SOUND_SAMPLE_RATE
-            cfg.MODEL_FOLDER          = model_folder_val if model_folder_val is not None else cfg.MODEL_FOLDER
             cfg.MODEL_NAME            = model            if model            is not None else cfg.MODEL_NAME
             cfg.CONTEXT_SIZE          = int(ctx)         if ctx              is not None else cfg.CONTEXT_SIZE
             cfg.BATCH_SIZE            = int(batch)       if batch            is not None else cfg.BATCH_SIZE
             cfg.TEMPERATURE           = float(temp)      if temp             is not None else cfg.TEMPERATURE
             cfg.REPEAT_PENALTY        = float(repeat)    if repeat           is not None else cfg.REPEAT_PENALTY
+            if loading_mode_val is not None:
+                cfg.LOADING_MODE = loading_mode_val
+                cfg.MLOCK        = (loading_mode_val == "Mem-Lock")
             cfg.TTS_VOICE_NAME        = tts_voice_val    if tts_voice_val    is not None else cfg.TTS_VOICE_NAME
             if tts_voice_val and tts_voice_val != "Default":
                 cfg.TTS_VOICE = get_voice_id_by_name(tts_voice_val)
@@ -2679,26 +2779,55 @@ def launch_display():
             cfg.MAX_ATTACH_SLOTS      = int(max_att)     if max_att          is not None else cfg.MAX_ATTACH_SLOTS
             cfg.SESSION_LOG_HEIGHT    = int(log_height)  if log_height       is not None else cfg.SESSION_LOG_HEIGHT
 
-            result = save_all_settings()
-            if filter_text_val and filter_text_val.strip():
+            result = save_all_settings()   # always saves everything
+
+            if tab == "filter" and filter_text_val and filter_text_val.strip():
                 filter_result = save_custom_filter(filter_text_val)
-                result += f"\n{filter_result}"
-            return result, result, result, result
+                result = f"{result}\n{filter_result}"
+            elif tab == "hardware":
+                result = "Hardware/TTS/Model Configs settings saved."
+
+            _ml = (cfg.LOADING_MODE == "Mem-Lock")
+            return (
+                result, result, result, result,
+                gr.update(visible=_ml),   # load_model_btn
+                gr.update(visible=_ml),   # unload_model_btn
+                gr.update(visible=_ml),   # model_loaded_indicator
+                gr.update(visible=_ml)    # load_unload_column  ← NEW
+            )
 
         _save_inputs = [
             layer_allocation_radio, cpu_select, cpu_threads, gpu_select, vram_size,
             sound_output_display, sound_sample_rate,
-            model_folder_textbox, model_dropdown,
+            model_dropdown,
             ctx_size, batch_size, temperature, repeat_penalty,
+            loading_mode_radio,
             tts_voice, tts_max_len,
             show_think, bleep_events, print_raw,
             max_history_slots, max_attach_slots, session_log_height,
             filter_text
         ]
-        _save_outputs = [interaction_global_status, config_status, filter_status, info_status]
+        _save_outputs = [
+            interaction_global_status,
+            config_status,
+            filter_status,
+            info_status,
+            load_model_btn,
+            unload_model_btn,
+            model_loaded_indicator,
+            load_unload_column   # <-- new output
+        ]
 
-        save_config_btn.click(fn=unified_save_wrapper, inputs=_save_inputs, outputs=_save_outputs)
-        save_all_btn.click(fn=unified_save_wrapper, inputs=_save_inputs, outputs=_save_outputs)
+        save_config_btn.click(
+            fn=lambda *args: unified_save_wrapper(*args, tab="hardware"),
+            inputs=_save_inputs,
+            outputs=_save_outputs
+        )
+        save_all_btn.click(
+            fn=lambda *args: unified_save_wrapper(*args, tab="filter"),
+            inputs=_save_inputs,
+            outputs=_save_outputs
+        )
 
         # Attach files handlers
         attach_files.upload(
@@ -2992,6 +3121,35 @@ def launch_display():
         tts_timer = gr.Timer(value=1.0, active=True)
         tts_timer.tick(fn=tts_heartbeat, inputs=[], outputs=[tts_state_box])
 
+        # Mem-Lock idle auto-unload timer (fires every 60 s; unloads after 20 min inactivity)
+        def idle_unload_tick(llm_st, loaded_st):
+            """Auto-unload after _IDLE_UNLOAD_SECONDS of inactivity in Mem-Lock mode."""
+            if cfg.LOADING_MODE != "Mem-Lock":
+                return llm_st, loaded_st, gr.update()
+            if not loaded_st or llm_st is None:
+                return llm_st, loaded_st, gr.update()
+            if _last_response_time == 0.0:
+                return llm_st, loaded_st, gr.update()
+            elapsed = time.time() - _last_response_time
+            if elapsed >= _IDLE_UNLOAD_SECONDS:
+                try:
+                    print(f"[IDLE-UNLOAD] {elapsed/60:.1f} min inactivity → unloading model...")
+                    _s, new_llm, new_loaded = unload_models(llm_st, loaded_st)
+                    cfg.llm = new_llm
+                    cfg.MODELS_LOADED = new_loaded
+                    cfg.set_status("Auto-unloaded (idle timeout)", console=True)
+                    return new_llm, new_loaded, gr.update(value="⚠️ Model auto-unloaded (idle timeout)")
+                except Exception as _e:
+                    print(f"[IDLE-UNLOAD] Error: {_e}")
+            return llm_st, loaded_st, gr.update()
+
+        idle_timer = gr.Timer(value=60.0, active=True)
+        idle_timer.tick(
+            fn=idle_unload_tick,
+            inputs=[states["llm"], states["models_loaded"]],
+            outputs=[states["llm"], states["models_loaded"], interaction_global_status]
+        )
+
         # Start New Session buttons (expanded + collapsed)
         _new_session_outputs = [
             conversation_components["session_log"],
@@ -3058,7 +3216,7 @@ def launch_display():
 
     launch_kwargs = {
         "server_name": "localhost",
-        "server_port": 7860,
+        "server_port": 7869,
         "show_error": True,
         "share": False,
         "inbrowser": False,
@@ -3070,9 +3228,9 @@ def launch_display():
     )
     gradio_thread.start()
 
-    if wait_for_gradio("http://localhost:7860", timeout=30):
+    if wait_for_gradio("http://localhost:7869", timeout=30):
         launch_custom_browser(
-            gradio_url="http://localhost:7860/?__theme=dark",
+            gradio_url="http://localhost:7869/?__theme=dark",
             frameless=False,
             width=1400,
             height=900,

@@ -67,6 +67,7 @@ REPEAT_PENALTY = 1.1
 DYNAMIC_GPU_LAYERS = True
 MMAP = True
 MLOCK = True
+LOADING_MODE = "Mem-Lock"   # "Mem-Lock" (mlock=True, keep in RAM) | "One-Shot" (mlock=False, unload after response)
 MAX_HISTORY_SLOTS = 12
 MAX_ATTACH_SLOTS = 6
 SESSION_LOG_HEIGHT = 650
@@ -689,7 +690,7 @@ def load_system_ini():
 def load_config():
     """Load configuration with validation - sane fallbacks on missing keys."""
     global MODEL_FOLDER, MODEL_NAME, CONTEXT_SIZE, VRAM_SIZE, TEMPERATURE
-    global REPEAT_PENALTY, MMAP, MLOCK, BATCH_SIZE, DYNAMIC_GPU_LAYERS
+    global REPEAT_PENALTY, MMAP, MLOCK, LOADING_MODE, BATCH_SIZE, DYNAMIC_GPU_LAYERS
     global MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, SHOW_THINK_PHASE
     global PRINT_RAW_OUTPUT, CPU_THREADS, BLEEP_ON_EVENTS, USE_PYTHON_BINDINGS
     global LAYER_ALLOCATION_MODE, SELECTED_GPU, SELECTED_CPU, SOUND_OUTPUT_DEVICE
@@ -724,6 +725,10 @@ def load_config():
     REPEAT_PENALTY = model_settings.get("repeat_penalty", 1.0)
     MMAP = model_settings.get("mmap", True)
     MLOCK = model_settings.get("mlock", True)
+    LOADING_MODE = model_settings.get("loading_mode", "Mem-Lock")
+    print(f"[CONFIG] LOADING_MODE read as: {LOADING_MODE}")
+    # Keep MLOCK consistent with LOADING_MODE (LOADING_MODE is the canonical source)
+    MLOCK = (LOADING_MODE == "Mem-Lock")
     BATCH_SIZE = model_settings.get("n_batch", 1024)
     DYNAMIC_GPU_LAYERS = model_settings.get("dynamic_gpu_layers", True)
     MAX_HISTORY_SLOTS = model_settings.get("max_history_slots", 12)
@@ -806,6 +811,7 @@ def save_config():
             "selected_cpu": SELECTED_CPU or "Auto-Select",
             "mmap": MMAP,
             "mlock": MLOCK,
+            "loading_mode": LOADING_MODE,
             "n_batch": BATCH_SIZE,
             "dynamic_gpu_layers": DYNAMIC_GPU_LAYERS,
             "max_history_slots": MAX_HISTORY_SLOTS,
