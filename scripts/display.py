@@ -1214,7 +1214,10 @@ def conversation_display(
         print("[CONVERSATION] Restored model state from global config after session reset")
 
     # AUTO-LOAD MODEL IF NOT LOADED YET
-    if not models_loaded_state or llm_state is None:
+    # Use globals as the authoritative source — Gradio state can be stale after
+    # a One-Shot unload or inline-edit re-submit (the state the UI holds may
+    # still reference the previous loaded model while cfg reflects reality).
+    if not cfg.MODELS_LOADED or cfg.llm is None:
         if cfg.MODEL_NAME in ["Select_a_model...", "No models found", "", None]:
             yield (
                 get_chatbot_output(session_tuples, session_messages),
@@ -2379,6 +2382,10 @@ def launch_display():
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
             outputs=attach_slots + [attach_files]
+        ).then(
+            fn=lambda: get_model_loaded_display(cfg.MODELS_LOADED),
+            inputs=[],
+            outputs=[model_loaded_indicator]
         )
 
         # ── Model dropdown change: unload old → countdown → load new ─────────
@@ -2737,6 +2744,10 @@ def launch_display():
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
             outputs=attach_slots + [attach_files]
+        ).then(
+            fn=lambda: get_model_loaded_display(cfg.MODELS_LOADED),
+            inputs=[],
+            outputs=[model_loaded_indicator]
         )
 
         # ── Unified save handler ─────────────────────────────────────────────

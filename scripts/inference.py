@@ -1139,26 +1139,12 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
     from scripts.utility import beep, read_file_content
     import traceback
 
-    # ── Auto-load if model is not ready ──────────────────────────────────────
+    # Model must already be loaded by conversation_display before reaching here.
+    # Doing a second load from inside the stream would double-allocate VRAM/RAM
+    # (critical on Vulkan), so we assert the state is valid and bail clearly if not.
     if not cfg.MODELS_LOADED or cfg.llm is None:
-        yield "Loading model... Please wait (this may take 10–90 seconds)."
-        try:
-            status, models_loaded, llm_state, _ = load_models(
-                cfg.MODEL_FOLDER, cfg.MODEL_NAME, cfg.VRAM_SIZE,
-                cfg.llm, cfg.MODELS_LOADED
-            )
-            if not models_loaded or llm_state is None:
-                yield ("\n\n**Model loading failed.** Check the console for details.\n"
-                       "Common causes: invalid model path, insufficient VRAM, corrupted GGUF.")
-                return
-            cfg.llm = llm_state
-            cfg.MODELS_LOADED = models_loaded
-            yield "\n**Model loaded successfully!** Generating response...\n\n"
-        except Exception as e:
-            traceback.print_exc()
-            yield (f"\n\n**Auto-load error:** {str(e)}\n"
-                   "Try a smaller model, reduce context size, or restart.")
-            return
+        yield "**Error:** Model is not loaded. Please load a model before sending a message."
+        return
 
     llm_state = cfg.llm
 
