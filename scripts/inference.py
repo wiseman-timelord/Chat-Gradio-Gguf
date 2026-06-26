@@ -67,7 +67,7 @@ Summarize the key information focusing on relevance and recency.""",
         "Before responding, work through your reasoning inside <think></think> tags. "
         "Your entire thinking process must be enclosed: "
         "<think>step-by-step reasoning here</think> "
-        "followed immediately by your final answer outside the tags. "
+        "followed immediately by your `Final Answer: ` after the tags. "
         "Do not place any text before the opening <think> tag."
     ),
 
@@ -811,38 +811,50 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
             gc.collect()
             time.sleep(0.5)
 
+    # ── Vulkan device selection via tensor_split ──────────────────────────────
+    #
+    # DESIGN: env vars (VK_VISIBLE_DEVICES, GGML_VULKAN_DEVICE) are ineffective
+    # here because llama.cpp enumerates all Vulkan physical devices at context
+    # creation time (inside Llama.__init__), before any env var written inside
+    # this function can influence the already-initialised Vulkan instance.
+    #
+    # The correct mechanism is tensor_split: a per-device fraction list passed
+    # directly to Llama(). Setting the selected device to 1.0 and all others to
+    # 0.0 ensures every offloaded layer lands on exactly one GPU, regardless of
+    # how many Vulkan devices are enumerated by the driver.
+    #
+    # main_gpu must also point at the selected device so that scratch/graph
+    # compute buffers are allocated there too (not just the weight tensors).
+    _vulkan_selected_idx = None  # resolved below; used when building kwargs
+
     if BACKEND_TYPE in ["VULKAN_VULKAN", "VULKAN_CPU"]:
+        from scripts.utility import get_available_gpus
+        gpu_list = get_available_gpus()
+
         if SELECTED_GPU and SELECTED_GPU != "Auto-Select":
-            from scripts.utility import get_available_gpus
-            gpu_list = get_available_gpus()
             selected_norm = SELECTED_GPU.lower().replace("(tm)", "").strip()
-            selected_idx = None
             print("\n[VULKAN] GPU Selection:")
             print(f"  User selected: {SELECTED_GPU}")
             for idx, gpu_name in enumerate(gpu_list):
                 gpu_norm = gpu_name.lower().replace("(tm)", "").strip()
                 marker = ""
                 if (gpu_norm == selected_norm or
-                    selected_norm in gpu_norm or
-                    gpu_norm in selected_norm):
-                    selected_idx = idx
+                        selected_norm in gpu_norm or
+                        gpu_norm in selected_norm):
+                    _vulkan_selected_idx = idx
                     marker = "  <- SELECTED"
                 print(f"    Vulkan{idx}: {gpu_name}{marker}")
 
-            if selected_idx is not None:
-                os.environ["VK_VISIBLE_DEVICES"] = str(selected_idx)
-                os.environ["GGML_VULKAN_DEVICE"] = str(selected_idx)
-                print(f"[VULKAN] Restricting to device index {selected_idx} ({gpu_list[selected_idx]})\n")
+            if _vulkan_selected_idx is not None:
+                print(f"[VULKAN] Restricting to device index {_vulkan_selected_idx} "
+                      f"({gpu_list[_vulkan_selected_idx]})\n")
             else:
-                print("[VULKAN] Selected GPU not found in device list, falling back to Vulkan0\n")
-                os.environ.pop("VK_VISIBLE_DEVICES", None)
-                os.environ["GGML_VULKAN_DEVICE"] = "0"
+                print("[VULKAN] Selected GPU not found in device list, "
+                      "falling back to Vulkan0\n")
+                _vulkan_selected_idx = 0
         else:
             print("[VULKAN] Auto-select mode - will use Vulkan0\n")
-            os.environ.pop("VK_VISIBLE_DEVICES", None)
-            os.environ["GGML_VULKAN_DEVICE"] = "0"
-    else:
-        os.environ.pop("VK_VISIBLE_DEVICES", None)
+            _vulkan_selected_idx = 0
 
     chat_handler = None
     if is_vision:
@@ -959,14 +971,22 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     if BACKEND_TYPE == "VULKAN_VULKAN":
         kwargs["n_gpu_layers"] = gpu_layers
-        if SELECTED_GPU and SELECTED_GPU != "Auto-Select":
-            from scripts.utility import get_available_gpus
-            gpu_list = get_available_gpus()
-            try:
-                kwargs["main_gpu"] = gpu_list.index(SELECTED_GPU)
-            except (ValueError, IndexError):
-                pass
-        print(f"[LOAD] Vulkan – off-loading {gpu_layers}/{num_layers} layers")
+        # tensor_split: one float per Vulkan device in driver-enumeration order.
+        # Setting the selected device to 1.0 and all others to 0.0 restricts
+        # ALL offloaded weight tensors to the single chosen GPU.
+        # main_gpu additionally routes scratch/graph compute buffers there.
+        # This is the only reliable way to prevent llama.cpp from distributing
+        # layers across multiple Vulkan devices based on free-VRAM heuristics.
+        if _vulkan_selected_idx is not None:
+            n_devices = len(gpu_list) if gpu_list else (_vulkan_selected_idx + 1)
+            split = [0.0] * n_devices
+            split[_vulkan_selected_idx] = 1.0
+            kwargs["tensor_split"] = split
+            kwargs["main_gpu"]     = _vulkan_selected_idx
+            print(f"[LOAD] Vulkan – off-loading {gpu_layers}/{num_layers} layers "
+                  f"→ device {_vulkan_selected_idx} only (tensor_split={split})")
+        else:
+            print(f"[LOAD] Vulkan – off-loading {gpu_layers}/{num_layers} layers")
     elif BACKEND_TYPE == "VULKAN_CPU":
         kwargs["n_gpu_layers"] = 0
         print(f"[LOAD] Vulkan binary – {gpu_layers} layers (CPU wheel)")
