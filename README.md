@@ -1,6 +1,9 @@
-# ![Chat-Windows-Gguf](media/project_banner.jpg)
-Status - v2 Release.
-- Currently on v2.02.x, see release notes.  Currently confirmed working on Windows 10 and I would assume windows 11 may be ok, but at some point Ubuntu 24-25 side must be checked. Possibly it will happen when I get to the end of v2 development plan, see development section. 
+# ![Chat-Gradio-Gguf](media/project_banner.jpg)
+Status - Troubled.
+- Future - After re-introducing One-Shot, i was not able to be fix this after multiple attempts with claude, so complexity is clearly maxxed, and I am unable/unwilling to test/develop linux and no-one has sponsored/donated, so, this project here is on hold, however I will be creating/developing Chat-Windows-Gguf as a different repository, that will be as the name suggests, streamlined for windows (again).
+- Currently v2.02.x - Seems to work great on Qwen v3.0-v3.6 and some other models, see list, but stick to Mem-Lock loading in the config, unless you intend to use one-shot, which will require restarting if you want to start a new session.  
+- Previously v1.xx - Linux installs/use was updated/confirmed working for linux in some versions of v1.
+- Previously v0.xx - there are some interesting quirks to some of them, some of them have rpg elements before I created Rpg-Gradio-Gguf.  
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 10-11 (WSL not required) and Ubuntu 24-25, with any Gpu on GGUF models through Python ~3.11-~3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration.
