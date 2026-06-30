@@ -92,6 +92,17 @@ SESSION_ACTIVE = False
 MODEL_NAME = "Select_a_model..."
 GPU_LAYERS = 0
 SELECTED_GPU = None
+
+# One-Shot session management
+# ONE_SHOT_PENDING_NEW_SESSION: set True when user clicks "Start New Session"
+# while in One-Shot mode. Cleared once a new response completes or user loads
+# an existing session. Drives the "⏳ New Session..." placeholder slot in the
+# history panel so the user knows a new session is in progress.
+ONE_SHOT_PENDING_NEW_SESSION = False
+# ONE_SHOT_LOADING: mutex flag - True while load_models() is executing inside
+# conversation_display() for a One-Shot new-session request. Prevents a second
+# concurrent call from triggering a double-load that exhausts VRAM.
+ONE_SHOT_LOADING = False
 USE_PYTHON_BINDINGS = True
 DATA_DIR = None  # Will be set by launcher.py
 llm = None

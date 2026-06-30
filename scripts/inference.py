@@ -780,8 +780,15 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         return (f"Error: Could not determine layer count for '{model}'.",
                 False, llm_state, models_loaded_state)
 
+    # Resolve mmproj path early so the GPU layer budget can reserve space for it.
+    # The CLIP encoder allocates its full weight buffer as a single contiguous
+    # Vulkan block at inference time — if we don't account for it here, the main
+    # model consumes just enough VRAM to make that allocation fail (OOM crash).
+    _early_mmproj = find_mmproj_file(str(model_path)) if is_vision else None
+
     gpu_layers = calculate_single_model_gpu_layers_with_layers(
-        str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS
+        str(model_path), vram_size, num_layers, DYNAMIC_GPU_LAYERS,
+        mmproj_path=_early_mmproj
     )
 
     use_cpu_threads = True
@@ -803,29 +810,46 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         llm_state = unloaded_llm
         models_loaded_state = new_loaded_state
         if "vulkan" in BACKEND_TYPE.lower():
+            # unload_models() already does 5 × 1 s GC; add 2 more seconds here
+            # so that any CLIP/vision handler memory is also released before the
+            # next chat_handler is constructed (chat_handler inits Vulkan context
+            # at construction time, before Llama() is even called).
             for _ in range(2):
                 gc.collect()
                 time.sleep(1.0)
-            print("[LOAD] Extended Vulkan cleanup complete (2s delay)")
+            print("[LOAD] Extended Vulkan cleanup complete (2 extra seconds)")
         else:
             gc.collect()
             time.sleep(0.5)
 
-    # ── Vulkan device selection via tensor_split ──────────────────────────────
+    # ── Vulkan device selection ────────────────────────────────────────────────
     #
-    # DESIGN: env vars (VK_VISIBLE_DEVICES, GGML_VULKAN_DEVICE) are ineffective
-    # here because llama.cpp enumerates all Vulkan physical devices at context
-    # creation time (inside Llama.__init__), before any env var written inside
-    # this function can influence the already-initialised Vulkan instance.
+    # DESIGN: GGML_VK_VISIBLE_DEVICES filters which physical Vulkan devices ggml
+    # enumerates at all, for every Vulkan context created in this process —
+    # including both the main Llama() context and the CLIP/mmproj chat_handler's
+    # separate context (created lazily inside create_chat_completion() →
+    # _init_mtmd_context()). Without this env var, CLIP ignores tensor_split
+    # entirely and always binds to whatever ggml calls "Vulkan0" — which, absent
+    # the filter, is the first device in the driver's own enumeration order
+    # (not necessarily the user's selected GPU).
     #
-    # The correct mechanism is tensor_split: a per-device fraction list passed
-    # directly to Llama(). Setting the selected device to 1.0 and all others to
-    # 0.0 ensures every offloaded layer lands on exactly one GPU, regardless of
-    # how many Vulkan devices are enumerated by the driver.
+    # We set GGML_VK_VISIBLE_DEVICES to the single selected device's ORIGINAL
+    # driver index (e.g. "1" for the second device in driver order) before
+    # constructing anything. This makes ggml enumerate only that one device,
+    # and — critically — RE-NUMBERS it as device 0 internally, since it is now
+    # the only device ggml can see.
     #
-    # main_gpu must also point at the selected device so that scratch/graph
-    # compute buffers are allocated there too (not just the weight tensors).
-    _vulkan_selected_idx = None  # resolved below; used when building kwargs
+    # Consequence: tensor_split and main_gpu, which are read by Llama() AFTER
+    # the env var has taken effect, must reference this re-numbered index (0),
+    # not the original driver index. tensor_split=[1.0] / main_gpu=0 means
+    # "put everything on the only visible device" — both the main model and
+    # the CLIP encoder then land on the same, correct, user-selected GPU.
+    #
+    # The env var is cleared in unload_models() so a later load with a
+    # different GPU selection starts from a clean slate.
+    _vulkan_selected_idx = None  # resolved below; original driver index, used
+                                 # for GGML_VK_VISIBLE_DEVICES and logging only —
+                                 # NOT used directly in tensor_split/main_gpu
 
     if BACKEND_TYPE in ["VULKAN_VULKAN", "VULKAN_CPU"]:
         from scripts.utility import get_available_gpus
@@ -855,6 +879,14 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
         else:
             print("[VULKAN] Auto-select mode - will use Vulkan0\n")
             _vulkan_selected_idx = 0
+
+        # Filter ggml's device enumeration to ONLY the selected device, for
+        # both the main model context and the lazily-created CLIP context.
+        import os as _os
+        _os.environ["GGML_VK_VISIBLE_DEVICES"] = str(_vulkan_selected_idx)
+        print(f"[VULKAN] GGML_VK_VISIBLE_DEVICES={_vulkan_selected_idx} "
+              f"(CLIP encoder will also use this device; "
+              f"ggml will see it re-numbered as device 0)")
 
     chat_handler = None
     if is_vision:
@@ -971,20 +1003,19 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
     if BACKEND_TYPE == "VULKAN_VULKAN":
         kwargs["n_gpu_layers"] = gpu_layers
-        # tensor_split: one float per Vulkan device in driver-enumeration order.
-        # Setting the selected device to 1.0 and all others to 0.0 restricts
-        # ALL offloaded weight tensors to the single chosen GPU.
-        # main_gpu additionally routes scratch/graph compute buffers there.
-        # This is the only reliable way to prevent llama.cpp from distributing
-        # layers across multiple Vulkan devices based on free-VRAM heuristics.
+        # When GGML_VK_VISIBLE_DEVICES is set to a single device index, ggml
+        # re-numbers that device as Vulkan0. tensor_split and main_gpu must
+        # therefore always use index 0 — there is only one device visible.
+        # Passing the original driver index (e.g. 1 for the RX 470) would
+        # reference a non-existent Vulkan1, causing ggml to silently fall back
+        # or attempt to load on CPU/the wrong card.
         if _vulkan_selected_idx is not None:
-            n_devices = len(gpu_list) if gpu_list else (_vulkan_selected_idx + 1)
-            split = [0.0] * n_devices
-            split[_vulkan_selected_idx] = 1.0
-            kwargs["tensor_split"] = split
-            kwargs["main_gpu"]     = _vulkan_selected_idx
+            kwargs["tensor_split"] = [1.0]   # single visible device → index 0
+            kwargs["main_gpu"]     = 0        # re-indexed as 0 by GGML_VK_VISIBLE_DEVICES
             print(f"[LOAD] Vulkan – off-loading {gpu_layers}/{num_layers} layers "
-                  f"→ device {_vulkan_selected_idx} only (tensor_split={split})")
+                  f"→ device {_vulkan_selected_idx} only "
+                  f"(GGML_VK_VISIBLE_DEVICES={_vulkan_selected_idx}, "
+                  f"tensor_split=[1.0], main_gpu=0)")
         else:
             print(f"[LOAD] Vulkan – off-loading {gpu_layers}/{num_layers} layers")
     elif BACKEND_TYPE == "VULKAN_CPU":
@@ -1050,9 +1081,22 @@ def load_models(model_folder, model, vram_size, llm_state, models_loaded_state):
 
 def calculate_single_model_gpu_layers_with_layers(
     model_path: str, available_vram: int,
-    num_layers: int, dynamic_gpu_layers: bool = True
+    num_layers: int, dynamic_gpu_layers: bool = True,
+    mmproj_path: str = None
 ) -> int:
-    """Conservative layer calculation with Vulkan safety margins."""
+    """Conservative layer calculation with Vulkan safety margins.
+
+    mmproj_path: if provided (vision model), the mmproj file size in MB is
+    subtracted from the usable VRAM budget BEFORE calculating layers. This
+    ensures the CLIP encoder can always allocate its full contiguous buffer
+    without competing with the main model's weight tensors.
+
+    Background: the CLIP context allocates its entire weight buffer as a
+    single contiguous Vulkan allocation (931 MB for Qwen3.6-27B BF16 mmproj).
+    If the layer budget doesn't reserve space for this, the main model can
+    consume just enough VRAM that the mmproj allocation fails with OOM.
+    This is the root cause of the 'ErrorOutOfDeviceMemory' crash on session 2+.
+    """
     from math import floor
     import scripts.configure as cfg
     if cfg.BACKEND_TYPE == "CPU_CPU" or available_vram <= 0 or num_layers <= 0:
@@ -1083,10 +1127,26 @@ def calculate_single_model_gpu_layers_with_layers(
         ctx_res  = int(available_vram * 0.15)
         bat_res  = int(cfg.BATCH_SIZE / 256) * 64
         vk_res   = int(available_vram * 0.15)
-        total_res = ctx_res + bat_res + vk_res
+
+        # Reserve space for the CLIP/mmproj encoder. It allocates a large
+        # contiguous Vulkan buffer at first inference. Without this reservation
+        # the main model can consume VRAM that CLIP then cannot allocate.
+        mmproj_res = 0
+        if mmproj_path:
+            try:
+                mmproj_mb = Path(mmproj_path).stat().st_size / (1024 * 1024)
+                mmproj_res = int(mmproj_mb * 1.10)
+                print(f"[GPU-LAYERS-VULKAN] mmproj reserve {mmproj_res}MB "
+                      f"(file {mmproj_mb:.0f}MB + 10%)")
+            except Exception as _e:
+                mmproj_res = 1024
+                print(f"[GPU-LAYERS-VULKAN] mmproj reserve fallback 1024MB ({_e})")
+
+        total_res = ctx_res + bat_res + vk_res + mmproj_res
         usable   = max(0, available_vram - total_res)
         print(f"[GPU-LAYERS-VULKAN] VRAM {available_vram}MB, "
-              f"reserve {total_res}MB (ctx:{ctx_res} bat:{bat_res} vk:{vk_res})")
+              f"reserve {total_res}MB (ctx:{ctx_res} bat:{bat_res} "
+              f"vk:{vk_res} mmproj:{mmproj_res})")
     else:
         embedding_dim = {
             "llama":4096,"qwen2":5120,"qwen":5120,"qwen3":5120,"qwen3_5":5120,
@@ -1124,10 +1184,22 @@ def unload_models(llm_state, models_loaded_state):
         del llm_state
         llm_state = None
 
+        # Clear the Vulkan device filter that was set during load_models().
+        # This ensures a subsequent load with a different GPU selection gets
+        # a clean environment and sets the env var correctly for the new device.
+        import os as _os
+        _os.environ.pop("GGML_VK_VISIBLE_DEVICES", None)
+
         if "vulkan" in cfg.BACKEND_TYPE.lower():
-            for _ in range(3):
+            # Extended flush: 5 cycles × 1 s gives the Vulkan driver time to
+            # release device-memory allocations before a subsequent load.
+            # This is especially important for vision models (mmproj CLIP) whose
+            # chat_handler re-allocates on Vulkan0 at handler construction time —
+            # if freed VRAM has not been returned to the OS yet, the next alloc
+            # will OOM even though the previous model was explicitly deleted.
+            for _ in range(5):
                 gc.collect()
-                time.sleep(0.8)
+                time.sleep(1.0)
             print("[UNLOAD] Vulkan aggressive cleanup complete")
         else:
             gc.collect()
@@ -1167,6 +1239,17 @@ def get_response_stream(session_log, settings, web_search_enabled=False, search_
         return
 
     llm_state = cfg.llm
+
+    # ── SSM / Hybrid-model state-reset note ──────────────────────────────────
+    # Qwen3.6 A3B (qwen35 arch) and similar SSM/Transformer hybrid models emit
+    # "recurrent/hybrid model requires full state reset" from llama.cpp when the
+    # KV/recurrent state is reused across sessions. In One-Shot mode the model
+    # is fully unloaded and reloaded for each session, so the state IS reset.
+    # In Mem-Lock mode the same model instance persists; llama.cpp resets the
+    # SSM state automatically at the start of each new sequence (the message is
+    # informational, not an error), so no action is needed here.
+    # The message appears because llama.cpp detects the SSM state needs clearing
+    # and clears it — generation proceeds correctly afterwards.
 
     # ── Build system message ──────────────────────────────────────────────────
     system_message = get_system_message(

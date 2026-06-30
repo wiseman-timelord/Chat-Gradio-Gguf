@@ -693,6 +693,18 @@ def start_new_session(session_messages, attached_files, llm_state, models_loaded
     cfg.session_label = ""
     cfg.session_attached_files = []
 
+    # In One-Shot mode the model was unloaded after the last response, so both
+    # cfg.llm and the Gradio llm_state are already None/False. Signal that a
+    # new session is pending so:
+    #   • update_session_buttons() can show a "⏳ New Session..." placeholder
+    #     at the top of the history panel immediately.
+    #   • If the user clicks an existing session instead, that handler clears
+    #     this flag and the placeholder disappears.
+    if cfg.LOADING_MODE == "One-Shot":
+        cfg.ONE_SHOT_PENDING_NEW_SESSION = True
+        cfg.ONE_SHOT_LOADING = False  # reset any stale load guard
+        print("[ONE-SHOT] New session pending — placeholder shown in history panel")
+
     chatbot_output = get_chatbot_output([], [])
     return (
         chatbot_output, [], [], "New session started.", False,
@@ -702,17 +714,50 @@ def start_new_session(session_messages, attached_files, llm_state, models_loaded
 
 
 def load_session_by_index(idx):
+    # If a One-Shot new-session placeholder is showing, slot 0 is the placeholder
+    # (not a real session).  Clicking it is a no-op; clicking any other slot
+    # should clear the pending flag and load the shifted real session.
+    pending = getattr(cfg, 'ONE_SHOT_PENDING_NEW_SESSION', False)
+    if pending:
+        if idx == 0:
+            # Placeholder slot clicked — ignore
+            chatbot_output = get_chatbot_output([], [])
+            return (chatbot_output, [], [], "New session in progress — send a message to begin.", False) + tuple(update_action_buttons("waiting_for_input", False))
+        # Real session slot: compensate for the one-slot shift
+        real_idx = idx - 1
+        cfg.ONE_SHOT_PENDING_NEW_SESSION = False
+        cfg.ONE_SHOT_LOADING = False
+        print("[ONE-SHOT] Pending new session cancelled — loading existing session")
+    else:
+        real_idx = idx
+
     saved_sessions = utility.get_saved_sessions()
-    if idx >= len(saved_sessions):
+    if real_idx >= len(saved_sessions):
         chatbot_output = get_chatbot_output([], [])
         return (chatbot_output, [], [], "No session found.", False) + tuple(update_action_buttons("waiting_for_input", False))
 
-    filename = saved_sessions[idx]
+    filename = saved_sessions[real_idx]
     session_id, label, history, attached_files = utility.load_session_history(filename)
 
     if not session_id:
         chatbot_output = get_chatbot_output([], [])
         return (chatbot_output, [], [], "Error loading session.", False) + tuple(update_action_buttons("waiting_for_input", False))
+
+    # ── One-Shot: ensure model is unloaded when switching sessions ────────────
+    # In One-Shot mode the model is normally unloaded after each response, but
+    # rapid session-switching (e.g. before a response completes, or when editing
+    # a node immediately after load) can leave it loaded. Explicitly unload here
+    # so the next inference starts fresh and the CLIP/mmproj context doesn't
+    # compete with leftover VRAM from the previous session's KV cache.
+    if cfg.LOADING_MODE == "One-Shot" and cfg.MODELS_LOADED and cfg.llm is not None:
+        try:
+            print("[ONE-SHOT] Unloading model on session switch...")
+            _us, _new_llm, _new_loaded = unload_models(cfg.llm, cfg.MODELS_LOADED)
+            cfg.llm = _new_llm
+            cfg.MODELS_LOADED = _new_loaded
+            print(f"[ONE-SHOT] {_us}")
+        except Exception as _ue:
+            print(f"[ONE-SHOT] Unload-on-switch error: {_ue}")
 
     cfg.current_session_id = session_id
     cfg.session_label = label
@@ -927,15 +972,40 @@ def handle_inline_retry(action_str, session_messages):
 
 
 def update_session_buttons():
-    """Update session history buttons."""
+    """Update session history buttons.
+
+    When ONE_SHOT_PENDING_NEW_SESSION is True a "⏳ New Session..." placeholder
+    is injected as the first visible slot so the user can see that a new session
+    is in progress. It is styled as a disabled slot (value starts with ⏳) and
+    is replaced by the real session label once the first response completes.
+    If the user clicks an existing session slot instead, the flag is cleared and
+    the placeholder disappears on the next button refresh.
+    """
     sessions = get_saved_sessions()[:cfg.MAX_HISTORY_SLOTS]
     button_updates = []
 
+    # Inject pending-new-session placeholder as first slot when applicable.
+    # The placeholder occupies slot index 0; real sessions shift down by one.
+    pending = getattr(cfg, 'ONE_SHOT_PENDING_NEW_SESSION', False)
+    effective_max = cfg.MAX_HISTORY_SLOTS
+    if pending:
+        # Slot 0 — placeholder (non-interactive label; user cannot load it)
+        button_updates.append(gr.update(value="⏳ New Session...", visible=True))
+        effective_sessions = sessions[: effective_max - 1]
+        slot_offset = 1
+    else:
+        effective_sessions = sessions[: effective_max]
+        slot_offset = 0
+
     for i in range(cfg.MAX_POSSIBLE_HISTORY_SLOTS):
-        if i >= cfg.MAX_HISTORY_SLOTS:
+        if pending and i == 0:
+            # Already appended above
+            continue
+        session_idx = i - slot_offset if pending else i
+        if i >= effective_max:
             button_updates.append(gr.update(value="", visible=False))
-        elif i < len(sessions):
-            session_path = Path(cfg.HISTORY_DIR) / sessions[i]
+        elif 0 <= session_idx < len(effective_sessions):
+            session_path = Path(cfg.HISTORY_DIR) / effective_sessions[session_idx]
             try:
                 stat = session_path.stat()
                 update_time = stat.st_mtime if stat.st_mtime else stat.st_ctime
@@ -1208,10 +1278,36 @@ def conversation_display(
         return text.strip()
 
     # CRITICAL FIX: Recover from Gradio state reset (e.g., after New Session)
-    if llm_state is None and cfg.llm is not None:
+    # IMPORTANT: Only restore from global if we are NOT in One-Shot mode.
+    # In One-Shot mode cfg.llm is intentionally None after every response, and
+    # restoring it here would skip the required fresh load, causing the model
+    # to attempt inference without a valid context.
+    if (llm_state is None and cfg.llm is not None and
+            cfg.LOADING_MODE != "One-Shot"):
         llm_state = cfg.llm
         models_loaded_state = cfg.MODELS_LOADED
         print("[CONVERSATION] Restored model state from global config after session reset")
+
+    # ONE-SHOT DOUBLE-LOAD GUARD
+    # If another concurrent call is already in the process of loading the model
+    # for this new One-Shot session, bail immediately to avoid double-allocating
+    # VRAM/RAM. This can happen when Gradio fires the generator twice (e.g. on
+    # rapid submit or after an inline-edit re-submit).
+    if cfg.LOADING_MODE == "One-Shot" and getattr(cfg, 'ONE_SHOT_LOADING', False):
+        yield (
+            get_chatbot_output(session_tuples, session_messages),
+            session_messages,
+            "⏳ Model is loading for new session, please wait...",
+            gr.update(visible=True),
+            gr.update(visible=False),
+            *update_action_buttons("waiting_for_input", has_ai_response_state),
+            cancel_flag,
+            loaded_files,
+            "waiting_for_input",
+            llm_state,
+            models_loaded_state
+        )
+        return
 
     # AUTO-LOAD MODEL IF NOT LOADED YET
     # Use globals as the authoritative source — Gradio state can be stale after
@@ -1266,6 +1362,22 @@ def conversation_display(
         )
 
         try:
+            if cfg.LOADING_MODE == "One-Shot":
+                cfg.ONE_SHOT_LOADING = True
+                # Extra GC flush for Vulkan before constructing chat_handler.
+                # The chat_handler (mmproj/CLIP) allocates Vulkan memory at
+                # construction time. If the previous unload's GC has not yet
+                # released device memory, the allocation will OOM even though
+                # the model object was deleted. 3 s total here + 5 s in
+                # unload_models() = 8 s maximum wait, well within user tolerance
+                # for a One-Shot session start.
+                if "vulkan" in cfg.BACKEND_TYPE.lower():
+                    import gc as _gc
+                    for _ in range(3):
+                        _gc.collect()
+                        time.sleep(1.0)
+                    print("[ONE-SHOT] Pre-load Vulkan flush complete (3 s)")
+
             status, loaded, new_llm, _ = load_models(
                 cfg.MODEL_FOLDER, cfg.MODEL_NAME, cfg.VRAM_SIZE,
                 llm_state, models_loaded_state
@@ -1275,6 +1387,8 @@ def conversation_display(
                 cfg.MODELS_LOADED = True
                 cfg.llm = new_llm
                 cfg.LOADED_CONTEXT_SIZE = cfg.CONTEXT_SIZE
+                if cfg.LOADING_MODE == "One-Shot":
+                    cfg.ONE_SHOT_LOADING = False
 
                 yield (
                     get_chatbot_output(session_tuples, session_messages),
@@ -1294,6 +1408,8 @@ def conversation_display(
                 models_loaded_state = True
 
             else:
+                if cfg.LOADING_MODE == "One-Shot":
+                    cfg.ONE_SHOT_LOADING = False
                 yield (
                     get_chatbot_output(session_tuples, session_messages),
                     session_messages,
@@ -1310,6 +1426,8 @@ def conversation_display(
                 return
 
         except Exception as e:
+            if cfg.LOADING_MODE == "One-Shot":
+                cfg.ONE_SHOT_LOADING = False
             yield (
                 get_chatbot_output(session_tuples, session_messages),
                 session_messages,
@@ -1566,6 +1684,11 @@ def conversation_display(
             cfg.current_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
             cfg.session_label = utility.summarize_session(session_messages)
             print(f"[SESSION] New session created: {cfg.session_label}")
+            # Clear pending new-session indicator now that a real session exists.
+            # The next update_session_buttons() call will show the proper label.
+            if getattr(cfg, 'ONE_SHOT_PENDING_NEW_SESSION', False):
+                cfg.ONE_SHOT_PENDING_NEW_SESSION = False
+                print("[ONE-SHOT] Pending indicator cleared — session label assigned")
         try:
             utility.save_session_history(session_messages, loaded_files)
             print("[SESSION] Auto-saved after complete response")
@@ -3215,6 +3338,11 @@ def launch_display():
                     action_buttons["cancel_input"],
                     action_buttons["cancel_response"]
                 ]
+            ).then(
+                # Refresh session panel: removes ⏳ placeholder if present
+                fn=update_session_buttons,
+                inputs=[],
+                outputs=buttons["session"]
             ).then(
                 fn=lambda files: update_file_slot_ui(files, True),
                 inputs=[states["attached_files"]],
