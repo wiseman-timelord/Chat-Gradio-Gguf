@@ -1,7 +1,6 @@
 # ![Chat-Gradio-Gguf](media/project_banner.jpg)
 Status - Troubled.
-- Future - After re-introducing One-Shot, i was not able to be fix this after multiple attempts with claude, so complexity is clearly maxxed, and I am unable/unwilling to test/develop linux and no-one has sponsored/donated, so, this project here is on hold, however I will be creating/developing Chat-Windows-Gguf as a different repository, that will be as the name suggests, streamlined for windows (again).
-- Currently v2.02.x - Seems to work great on Qwen v3.0-v3.6 and some other models, see list, but stick to Mem-Lock loading in the config, unless you intend to use one-shot, which will require restarting if you want to start a new session.  
+- Currently v2.0xx.xx - Seems to work great on Qwen v3.0-v3.6 and some other models, see list, but stick to Mem-Lock loading in the config, unless you intend to use one-shot, which will require restarting if you want to start a new session. One-Shot is being fixed.
 - Previously v1.xx - Linux installs/use was updated/confirmed working for linux in some versions of v1.
 - Previously v0.xx - there are some interesting quirks to some of them, some of them have rpg elements before I created Rpg-Gradio-Gguf.  
 
