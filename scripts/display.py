@@ -983,6 +983,7 @@ def update_session_buttons():
     """
     sessions = get_saved_sessions()[:cfg.MAX_HISTORY_SLOTS]
     button_updates = []
+    delete_updates = []
 
     # Inject pending-new-session placeholder as first slot when applicable.
     # The placeholder occupies slot index 0; real sessions shift down by one.
@@ -991,6 +992,7 @@ def update_session_buttons():
     if pending:
         # Slot 0 — placeholder (non-interactive label; user cannot load it)
         button_updates.append(gr.update(value="⏳ New Session...", visible=True))
+        delete_updates.append(gr.update(visible=False))  # no delete for pending placeholder
         effective_sessions = sessions[: effective_max - 1]
         slot_offset = 1
     else:
@@ -1004,6 +1006,7 @@ def update_session_buttons():
         session_idx = i - slot_offset if pending else i
         if i >= effective_max:
             button_updates.append(gr.update(value="", visible=False))
+            delete_updates.append(gr.update(visible=False))
         elif 0 <= session_idx < len(effective_sessions):
             session_path = Path(cfg.HISTORY_DIR) / effective_sessions[session_idx]
             try:
@@ -1016,10 +1019,49 @@ def update_session_buttons():
                 print(f"Error loading session {session_path}: {e}")
                 btn_label = f"Session {i+1}"
             button_updates.append(gr.update(value=btn_label, visible=True))
+            delete_updates.append(gr.update(visible=True))
         else:
             button_updates.append(gr.update(value="", visible=False))
+            delete_updates.append(gr.update(visible=False))
 
-    return button_updates
+    return button_updates + delete_updates
+
+
+def delete_session_by_index(idx):
+    """Delete a single saved session file corresponding to a history slot.
+
+    Mirrors the slot/offset logic of load_session_by_index() so that the
+    correct file is removed even when the "⏳ New Session..." placeholder is
+    occupying slot 0. If the deleted session is the currently-active one,
+    the active session state is cleared so it isn't re-saved on exit.
+    """
+    pending = getattr(cfg, 'ONE_SHOT_PENDING_NEW_SESSION', False)
+    if pending:
+        if idx == 0:
+            # Placeholder slot — nothing to delete
+            return "Nothing to delete."
+        real_idx = idx - 1
+    else:
+        real_idx = idx
+
+    saved_sessions = get_saved_sessions()
+    if real_idx >= len(saved_sessions):
+        return "No session found to delete."
+
+    filename = saved_sessions[real_idx]
+    filepath = Path(cfg.HISTORY_DIR) / filename
+
+    try:
+        session_id, label, _, _ = load_session_history(filepath)
+        if session_id and session_id == cfg.current_session_id:
+            cfg.current_session_id = None
+            cfg.session_label = ""
+            cfg.SESSION_ACTIVE = False
+        filepath.unlink(missing_ok=True)
+        return f"Deleted session: {label or filename}"
+    except Exception as e:
+        print(f"Error deleting session {filepath}: {e}")
+        return "Error deleting session."
 
 
 def format_session_id(session_id):
@@ -1976,6 +2018,20 @@ def launch_display():
         font-size: 14px !important;
         line-height: 1.2 !important;
     }
+    .session-slot-row { gap: 4px !important; margin-bottom: 4px !important; flex-wrap: nowrap !important; }
+    .session-slot-button {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+    .session-slot-delete {
+        min-width: 2.2em !important;
+        max-width: 2.2em !important;
+        width: 2.2em !important;
+        padding: 0 !important;
+        font-size: 14px !important;
+        flex: none !important;
+    }
     """
 
     final_css = css_common
@@ -2028,8 +2084,20 @@ def launch_display():
                         gr.Markdown("**History**")
                         with gr.Group(visible=True) as history_slots_group:
                             start_new_session_btn = gr.Button("Start New Session..", variant="secondary")
-                            buttons["session"] = [gr.Button(f"History Slot {i+1}", variant="huggingface", visible=False)
-                                                  for i in range(cfg.MAX_POSSIBLE_HISTORY_SLOTS)]
+                            buttons["session"] = []
+                            buttons["session_delete"] = []
+                            for i in range(cfg.MAX_POSSIBLE_HISTORY_SLOTS):
+                                with gr.Row(elem_classes=["session-slot-row"]):
+                                    buttons["session"].append(
+                                        gr.Button(f"History Slot {i+1}", variant="huggingface",
+                                                   visible=False, scale=9, min_width=0,
+                                                   elem_classes=["session-slot-button"])
+                                    )
+                                    buttons["session_delete"].append(
+                                        gr.Button("🗑️", variant="huggingface", visible=False,
+                                                   scale=1, min_width=0,
+                                                   elem_classes=["session-slot-delete"])
+                                    )
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as left_column_collapsed:
                         toggle_button_left_collapsed = gr.Button("<->", variant="secondary")
@@ -2500,7 +2568,7 @@ def launch_display():
         ).then(
             fn=update_session_buttons,
             inputs=[],
-            outputs=buttons["session"]
+            outputs=buttons["session"] + buttons["session_delete"]
         ).then(
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
@@ -2862,7 +2930,7 @@ def launch_display():
         ).then(
             fn=update_session_buttons,
             inputs=[],
-            outputs=buttons["session"]
+            outputs=buttons["session"] + buttons["session_delete"]
         ).then(
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
@@ -3014,7 +3082,7 @@ def launch_display():
         ).then(
             fn=update_session_buttons,
             inputs=[],
-            outputs=buttons["session"]
+            outputs=buttons["session"] + buttons["session_delete"]
         )
 
         # Initial load chain
@@ -3033,7 +3101,7 @@ def launch_display():
         ).then(
             fn=update_session_buttons,
             inputs=[],
-            outputs=buttons["session"]
+            outputs=buttons["session"] + buttons["session_delete"]
         ).then(
             fn=lambda model_name: gr.update(
                 interactive=(model_name not in ["Select_a_model...", "No models found", None, ""]),
@@ -3314,7 +3382,7 @@ def launch_display():
             ).then(
                 fn=update_session_buttons,
                 inputs=[],
-                outputs=buttons["session"],
+                outputs=buttons["session"] + buttons["session_delete"],
             ).then(
                 fn=lambda: update_file_slot_ui([], True),
                 inputs=[],
@@ -3342,11 +3410,23 @@ def launch_display():
                 # Refresh session panel: removes ⏳ placeholder if present
                 fn=update_session_buttons,
                 inputs=[],
-                outputs=buttons["session"]
+                outputs=buttons["session"] + buttons["session_delete"]
             ).then(
                 fn=lambda files: update_file_slot_ui(files, True),
                 inputs=[states["attached_files"]],
                 outputs=attach_slots + [attach_files]
+            )
+
+        # Session history delete buttons (slim icon button beside each slot)
+        for i, del_btn in enumerate(buttons["session_delete"]):
+            del_btn.click(
+                fn=lambda idx=i: delete_session_by_index(idx),
+                inputs=[],
+                outputs=[interaction_global_status]
+            ).then(
+                fn=update_session_buttons,
+                inputs=[],
+                outputs=buttons["session"] + buttons["session_delete"]
             )
 
     # Launch with browser
