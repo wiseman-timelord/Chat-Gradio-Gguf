@@ -305,7 +305,89 @@ project_root/
 
 # Development for v2
 v2 is now in Release stage, but there is still work planned...
-- LONG-RUNNING ISSUE: The output text has double blank lines inserted. Output text needs to be fixed, or we need to find alternate interface/browser solution. The long running issue of additional lines between each line is a long running problem, but we are now getting double blank lines, which may mean the filter is not working correctly. Surely one of the AI can by now say, "this is the issue" to the additional blank lines thing. Gur. As a result of recent updates both user input box and AI chat output seems to be having blank lines inbetween each line of text. This needs investigating urgently.
+- LONG-RUNNING ISSUE: The output text has a blank line between each line, this is a /p/p/p when a /p/p is called. thereabouts /p by itself would produce a single paragraph. There may be a solution, this for example would produce the issue of double lines...
+```
+def refresh_status():
+    """Refresh debug panel + status bars — used on initial load and debug button click."""
+    from scripts.inference import get_model_status
+
+    info          = get_model_status()
+    tts_state     = get_tts_state()
+    avatar_state  = get_avatar_state()
+    pool          = info.get("agent_pool", {})
+    active_agent  = pool.get("active_agent")
+    agent_str     = active_agent or "idle"
+    manager_phase = info.get("manager_phase", "idle")
+    manager_threads = info.get("manager_threads", "?")
+
+    # Manager and Display GPU are gone. The manager model filename was a
+    # restatement of the Configuration page's Manager Model Folder, and the
+    # display GPU is by definition the one card that never takes part in
+    # inference — a fixed fact about the machine, not a status. Model(s) and
+    # Vision Support move in here from the two Textboxes they used to occupy.
+    debug_lines = [
+        f"**Build:** display.py {DISPLAY_BUILD}",
+        f"**AI gate:** {'ENABLED' if get_ai_power_state('debug') else 'disabled'}",
+        f"**Backend:** {info['backend']}",
+        f"**Server:** {'Ready' if info.get('loaded') else 'Unreachable'} @ {runtime.manager_api_base}",
+        f"**Manager Phase:** {manager_phase} ({manager_threads} threads)",
+        f"**Model(s):** {_model_status_text(info)}",
+        f"**Vision Support:** {_vision_support_text(active_agent)}",
+        f"**TTS:** {tts_state} — tts_voice_agent (only loads when no other agent is deployed)",
+        f"**Active Agent:** {agent_str}",
+        f"**Agent GPU:** {runtime.agent_gpu_name} ({runtime.agent_gpu_vram_mb} MB)",
+        f"**Avatar:** {avatar_state}",
+        f"**RAG Chunks:** {get_rag_chunk_count()}",
+        f"**VRAM Budget:** {info.get('vram_budget', 'N/A')}",
+    ]
+
+    status_msg = "Startup complete."
+    set_global_status(status_msg)
+
+    return "\n\n".join(debug_lines), status_msg, status_msg, status_msg
+```
+...where as this would not produce the same issue, and each line would be under the previous line, not after a blank line after the previous line...
+```
+def refresh_status():
+    """Refresh debug panel + status bars — used on initial load and debug button click."""
+    from scripts.inference import get_model_status
+
+    info          = get_model_status()
+    tts_state     = get_tts_state()
+    avatar_state  = get_avatar_state()
+    pool          = info.get("agent_pool", {})
+    active_agent  = pool.get("active_agent")
+    agent_str     = active_agent or "idle"
+    manager_phase = info.get("manager_phase", "idle")
+    manager_threads = info.get("manager_threads", "?")
+
+    # Manager and Display GPU are gone. The manager model filename was a
+    # restatement of the Configuration page's Manager Model Folder, and the
+    # display GPU is by definition the one card that never takes part in
+    # inference — a fixed fact about the machine, not a status. Model(s) and
+    # Vision Support move in here from the two Textboxes they used to occupy.
+    debug_lines = [
+        f"**Build:** display.py {DISPLAY_BUILD}",
+        f"<br>**AI gate:** {'ENABLED' if get_ai_power_state('debug') else 'disabled'}",
+        f"<br>**Backend:** {info['backend']}",
+        f"<br>**Server:** {'Ready' if info.get('loaded') else 'Unreachable'} @ {runtime.manager_api_base}",
+        f"<br>**Manager Phase:** {manager_phase} ({manager_threads} threads)",
+        f"<br>**Model(s):** {_model_status_text(info)}",
+        f"<br>**Vision Support:** {_vision_support_text(active_agent)}",
+        f"<br>**TTS:** {tts_state} — tts_voice_agent (only loads when no other agent is deployed)",
+        f"<br>**Active Agent:** {agent_str}",
+        f"<br>**Agent GPU:** {runtime.agent_gpu_name} ({runtime.agent_gpu_vram_mb} MB)",
+        f"<br>**Avatar:** {avatar_state}",
+        f"<br>**RAG Chunks:** {get_rag_chunk_count()}",
+        f"<br>**VRAM Budget:** {info.get('vram_budget', 'N/A')}",
+    ]
+
+    status_msg = "Startup complete."
+    set_global_status(status_msg)
+
+    return "\n".join(debug_lines), status_msg, status_msg, status_msg
+```
+...so instead of using the buggy /p/p, we would use /p then put a <br> at the start of every line, and if you like a <br> at the end of every line.
 - The project now aims to support these specific models shown below, but do so well. Qwen3 and GLM 4.7 level models should be kept, in order to keep compatibility with non-compile install options. The main program needs to support the models shown below, thereabouts, we need complete handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response, in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
 ```
 GLM
