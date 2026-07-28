@@ -734,7 +734,15 @@ def create_files_and_directories(backend: str) -> None:
                 print_status(f"Protected directory preserved: {directory}")
                 continue
         dir_path.mkdir(parents=True, exist_ok=True)
-    print_status("Directories created/verified")
+
+    # TEMP_DIR cannot go in DIRECTORIES above: those are all relative to
+    # BASE_DIR, and on Windows TEMP_DIR is C:/temp_build (WIN_COMPILE_TEMP,
+    # kept short so build paths do not blow the path length limit). Nothing
+    # created it, which is why the first step to write a temp script there
+    # failed with "No such file or directory". On Linux TEMP_DIR is
+    # data/temp and already in the list, so this is a no-op there.
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    print_status(f"Directories created/verified (temp: {TEMP_DIR})")
 
 
 # =============================================================================
@@ -799,7 +807,8 @@ except Exception as e:
 '''
     verify_path = TEMP_DIR / "verify_embedding.py"
     try:
-        with open(verify_path, 'w') as f:
+        verify_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(verify_path, 'w', encoding='utf-8') as f:
             f.write(verify_script)
         verify_result = subprocess.run(
             [python_exe, str(verify_path)], capture_output=True, text=True, timeout=120
@@ -1921,63 +1930,81 @@ except Exception as e:
         return False
 
 
-def create_persistent_json(embedding_model: str = None):
-    """Create the persistent.json configuration file with defaults."""
-    json_path = BASE_DIR / "data" / "persistent.json"
+def create_config_jsons():
+    """Create data/configuration.json and data/preferences.json with defaults.
 
-    # Read existing JSON to preserve user settings if it exists
-    existing = {}
-    if json_path.exists():
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                existing = json.load(f)
-        except Exception:
-            pass
+    Existing values are preserved, so re-running the installer over a working
+    install does not wipe the user's settings; only missing keys are filled in.
 
-    model_settings = existing.get("model_settings", {})
-
-    defaults = {
+    These two dictionaries are duplicated from scripts/configure.py
+    (CONFIGURATION_DEFAULTS / PREFERENCES_DEFAULTS). The installer runs on the
+    system Python before the venv exists, so it cannot import that module.
+    If a default changes there, change it here too.
+    """
+    configuration_defaults = {
+        # Model
         "model_dir": "models",
         "model_name": "Select_a_model...",
         "context_size": 32768,
-        "vram_size": 8192,
+        "n_batch": 1024,
         "temperature": 0.66,
         "repeat_penalty": 1.1,
-        "selected_gpu": None,
-        "selected_cpu": "Auto-Select",
         "mmap": True,
-        "mlock": True,
-        "n_batch": 1024,
         "dynamic_gpu_layers": True,
-        "max_history_slots": 12,
-        "max_attach_slots": 6,
-        "session_log_height": 650,
-        "show_think_phase": False,
-        "print_raw_output": False,
-        "cpu_threads": None,
-        "bleep_on_events": False,
         "use_python_bindings": True,
+        # Hardware
+        "selected_cpu": "Auto-Select",
+        "cpu_threads": None,
+        "selected_gpu": None,
+        "vram_size": 8192,
+        "loading_mode": "Mem-Lock",
         "layer_allocation_mode": "SRAM_ONLY",
-        "sound_output_device": "Default Sound Device",
-        "sound_sample_rate": 44100,
+        # TTS and audio
         "tts_enabled": False,
         "tts_voice": None,
         "tts_voice_name": None,
         "max_tts_length": 4500,
+        "sound_output_device": "Default Sound Device",
+        "sound_sample_rate": 44100,
     }
 
-    for key, default_val in defaults.items():
-        if key not in model_settings:
-            model_settings[key] = default_val
+    preferences_defaults = {
+        # Program options
+        "session_log_height": 625,
+        "max_attach_slots": 6,
+        "max_history_slots": 12,
+        # Output options
+        "show_think_phase": False,
+        "bleep_on_events": False,
+        "print_raw_output": False,
+        # Filter settings, as [find, replace] pairs
+        "filter_rules": [["\r\n", "\n"], ["\r", "\n"]],
+    }
 
-    config = {"model_settings": model_settings}
+    def write_settings(filename, section, defaults):
+        path = BASE_DIR / "data" / filename
+        values = {}
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                if isinstance(existing, dict) and isinstance(existing.get(section), dict):
+                    values = existing[section]
+            except Exception:
+                print_status(f"{filename} unreadable — rewriting from defaults", False)
+                values = {}
 
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(config, f, indent=4, ensure_ascii=False)
+        for key, default_val in defaults.items():
+            if key not in values:
+                values[key] = default_val
 
-    print_status("Persistent configuration file created")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({section: values}, f, indent=4, ensure_ascii=False)
+        print_status(f"Settings file created: data/{filename}")
 
+    write_settings("configuration.json", "configuration", configuration_defaults)
+    write_settings("preferences.json", "preferences", preferences_defaults)
 
 def refresh_configs():
     """Only regenerate INI/JSON files without reinstalling packages."""
@@ -2038,7 +2065,7 @@ def refresh_configs():
         dx_feature_level=dx_feature_level,
     )
 
-    create_persistent_json(embedding_model)
+    create_config_jsons()
     print_status("Configuration files refreshed successfully")
 
 
@@ -2170,8 +2197,8 @@ def run_installer():
     if _INSTALLED_LLAMA_WHEEL_VERSION:
         update_ini_wheel_version(_INSTALLED_LLAMA_WHEEL_VERSION)
 
-    # Create persistent.json with defaults (preserving existing if present)
-    create_persistent_json(embedding_model)
+    # Create configuration.json and preferences.json (existing values preserved)
+    create_config_jsons()
 
     print()
     print("=" * (shutil.get_terminal_size().columns - 1))
