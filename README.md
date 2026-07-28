@@ -1,6 +1,6 @@
 # ![Chat-Gradio-Gguf](media/project_banner.jpg)
 Status - Troubled.
-- Currently v2.0xx.xx - Seems to work great on Qwen v3.0-v3.6 and some other models, see list, but stick to Mem-Lock loading in the config, unless you intend to use one-shot, which will require restarting if you want to start a new session. One-Shot is being fixed.
+- Currently v2.0xx.xx - Works great on Qwen v3.0-v3.6 and some other models, see list. Recently, the GUI is looking cleaner.
 - Previously v1.xx - Linux installs/use was updated/confirmed working for linux in some versions of v1.
 - Previously v0.xx - there are some interesting quirks to some of them, some of them have rpg elements before I created Rpg-Gradio-Gguf.  
 
