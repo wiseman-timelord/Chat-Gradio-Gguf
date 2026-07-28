@@ -14,7 +14,10 @@ import numpy as np
 # from langchain_text_splitters import RecursiveCharacterTextSplitter
 # from langchain_community.document_loaders import TextLoader
 
-CONFIG_PATH = Path("data/persistent.json")
+# Settings live in two files, one per settings page. See the PERSISTENCE
+# section further down for what each one holds.
+CONFIGURATION_PATH = Path("data/configuration.json")
+PREFERENCES_PATH   = Path("data/preferences.json")
 
 # =============================================================================
 # SYSTEM STATE VARIABLES
@@ -38,24 +41,23 @@ GRAPHICS_ACCELERATION = True  # Set by installer
 GRADIO_VERSION = "5.x"     # Gradio 5.x — written by installer; default 5.x for v2
 
 # Output Filtering Configuration
-FILTER_MODE = "gradio5"  # Options: "gradio5" or "custom"
+#
+# One rule set, no preset switch. DEFAULT_FILTER_RULES is what a fresh install
+# starts from and what Restore Defaults returns to; the live set is ACTIVE_FILTER
+# and it is persisted inside preferences.json with the rest of that page.
+#
+# Blank-line collapsing is deliberately not done here. A literal find/replace
+# pair can only ever shorten a run of newlines by a fixed amount, which is why
+# the old rules left a "\n\n" behind and the output stayed double-spaced. That
+# job belongs to display.single_space_output(). What remains here is line-ending
+# normalisation.
+DEFAULT_FILTER_RULES = [
+    ("\r\n", "\n"),
+    ("\r", "\n"),
+]
 
-FILTER_PRESETS = {
-    "gradio5": [
-        ("\n\n\n\r", "\n\r"),
-        ("\n\n\n\t", "\n\t"),
-        ("\r\n\n\n", "\r\n"),
-        ("\t\n\n\n", "\t\n"),
-        ("\n\n\r", "\n\r"),
-        ("\n\n\t", "\n\t"),
-        ("\r\n\n", "\r\n"),
-        ("\t\n\n", "\t\n"),
-        ("\n\n\n", "\n\n"),
-    ],
-}
-
-ACTIVE_FILTER = []
-CUSTOM_FILTER_PATH = "data/custom_filter.txt"
+ACTIVE_FILTER = [tuple(rule) for rule in DEFAULT_FILTER_RULES]
+FILTER_MODE = "default"   # informational only: "default" or "custom"
 
 # Configuration variables with defaults
 MODEL_FOLDER = "path/to/your/models"
@@ -698,99 +700,226 @@ def load_system_ini():
         raise RuntimeError(f"Cannot read constants.ini: {e}") from e
 
 
-def load_config():
-    """Load configuration with validation - sane fallbacks on missing keys."""
-    global MODEL_FOLDER, MODEL_NAME, CONTEXT_SIZE, VRAM_SIZE, TEMPERATURE
-    global REPEAT_PENALTY, MMAP, MLOCK, LOADING_MODE, BATCH_SIZE, DYNAMIC_GPU_LAYERS
-    global MAX_HISTORY_SLOTS, MAX_ATTACH_SLOTS, SESSION_LOG_HEIGHT, SHOW_THINK_PHASE
-    global PRINT_RAW_OUTPUT, CPU_THREADS, BLEEP_ON_EVENTS, USE_PYTHON_BINDINGS
-    global LAYER_ALLOCATION_MODE, SELECTED_GPU, SELECTED_CPU, SOUND_OUTPUT_DEVICE
-    global SOUND_SAMPLE_RATE, TTS_ENABLED, TTS_VOICE, TTS_VOICE_NAME, MAX_TTS_LENGTH
-    global TTS_PACK, TTS_ENABLED_VOICES, TTS_DEFAULT_VOICE_ID, TTS_DEFAULT_VOICE_NAME
-    global AVAILABLE_MODELS
+# =============================================================================
+# PERSISTENCE
+# =============================================================================
+# Two settings files, one per settings page:
+#
+#   data/configuration.json  <- the Configuration page (hardware, TTS, model)
+#   data/preferences.json    <- the Preferences page (interface, output, filter)
+#
+# The two dictionaries below are the single source of truth for what each file
+# holds and for what "Restore Defaults" resets to. installer.py carries its own
+# copy of both (see create_config_jsons) because it runs on the system Python
+# before the venv exists and so cannot import this module. Keep them in step.
 
-    if not CONFIG_PATH.exists():
-        raise RuntimeError(f"Configuration file not found: {CONFIG_PATH}\nRe-run the installer.")
+CONFIGURATION_DEFAULTS = {
+    # Model
+    "model_dir": "models",
+    "model_name": "Select_a_model...",
+    "context_size": 32768,
+    "n_batch": 1024,
+    "temperature": 0.66,
+    "repeat_penalty": 1.1,
+    "mmap": True,
+    "dynamic_gpu_layers": True,
+    "use_python_bindings": True,
+    # Hardware
+    "selected_cpu": "Auto-Select",
+    "cpu_threads": None,
+    "selected_gpu": None,
+    "vram_size": 8192,
+    "loading_mode": "Mem-Lock",
+    "layer_allocation_mode": "SRAM_ONLY",
+    # TTS and audio
+    "tts_enabled": False,
+    "tts_voice": None,
+    "tts_voice_name": None,
+    "max_tts_length": 4500,
+    "sound_output_device": "Default Sound Device",
+    "sound_sample_rate": 44100,
+}
+
+PREFERENCES_DEFAULTS = {
+    # Program options
+    "session_log_height": 650,
+    "max_attach_slots": 6,
+    "max_history_slots": 12,
+    # Output options
+    "show_think_phase": False,
+    "bleep_on_events": False,
+    "print_raw_output": False,
+    # Filter settings, as a list of [find, replace] pairs
+    "filter_rules": [list(rule) for rule in DEFAULT_FILTER_RULES],
+}
+
+
+def _read_settings(path: Path, section: str, required: bool) -> dict:
+    """Read one section out of a settings file. Returns {} when absent."""
+    if not path.exists():
+        if required:
+            raise RuntimeError(f"Settings file not found: {path}\nRe-run the installer.")
+        print(f"[CONFIG] {path} not found — using defaults")
+        return {}
 
     try:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-            file_content = f.read().strip()
-            if not file_content:
-                raise RuntimeError(f"Configuration file {CONFIG_PATH} is empty")
-            config = json.loads(file_content)
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+        if not content:
+            if required:
+                raise RuntimeError(f"Settings file {path} is empty")
+            print(f"[CONFIG] {path} is empty — using defaults")
+            return {}
+        data = json.loads(content)
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"Cannot parse configuration file {CONFIG_PATH}: {e}") from e
-    except Exception as e:
-        raise RuntimeError(f"Cannot read configuration file {CONFIG_PATH}: {e}") from e
+        raise RuntimeError(f"Cannot parse settings file {path}: {e}") from e
+    except OSError as e:
+        raise RuntimeError(f"Cannot read settings file {path}: {e}") from e
 
-    if not isinstance(config, dict) or "model_settings" not in config:
-        raise RuntimeError("Configuration file missing 'model_settings' section or invalid format.")
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Settings file {path} does not contain a JSON object")
 
-    model_settings = config["model_settings"]
+    values = data.get(section, {})
+    if not isinstance(values, dict):
+        raise RuntimeError(f"Settings file {path} has an invalid '{section}' section")
+    return values
 
-    MODEL_FOLDER = model_settings.get("model_dir", "path/to/your/models")
-    MODEL_NAME = model_settings.get("model_name", "Select_a_model...")
-    CONTEXT_SIZE = model_settings.get("context_size", 32768)
-    VRAM_SIZE = model_settings.get("vram_size", 8192)
-    TEMPERATURE = model_settings.get("temperature", 0.66)
-    REPEAT_PENALTY = model_settings.get("repeat_penalty", 1.0)
-    MMAP = model_settings.get("mmap", True)
-    MLOCK = model_settings.get("mlock", True)
-    LOADING_MODE = model_settings.get("loading_mode", "Mem-Lock")
-    print(f"[CONFIG] LOADING_MODE read as: {LOADING_MODE}")
-    # Keep MLOCK consistent with LOADING_MODE (LOADING_MODE is the canonical source)
+
+def _write_settings(path: Path, section: str, values: dict):
+    """Write one section to a settings file, replacing whatever was there."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({section: values}, f, indent=4, ensure_ascii=False)
+
+
+def _apply_configuration(values: dict):
+    """Copy a configuration mapping into the module globals."""
+    global MODEL_FOLDER, MODEL_NAME, CONTEXT_SIZE, BATCH_SIZE, TEMPERATURE
+    global REPEAT_PENALTY, MMAP, MLOCK, LOADING_MODE, DYNAMIC_GPU_LAYERS
+    global USE_PYTHON_BINDINGS, SELECTED_CPU, CPU_THREADS, SELECTED_GPU
+    global VRAM_SIZE, LAYER_ALLOCATION_MODE, TTS_ENABLED, TTS_VOICE
+    global TTS_VOICE_NAME, MAX_TTS_LENGTH, SOUND_OUTPUT_DEVICE, SOUND_SAMPLE_RATE
+
+    def get(key):
+        return values.get(key, CONFIGURATION_DEFAULTS[key])
+
+    # Model
+    MODEL_FOLDER        = get("model_dir")
+    MODEL_NAME          = get("model_name")
+    CONTEXT_SIZE        = get("context_size")
+    BATCH_SIZE          = get("n_batch")
+    TEMPERATURE         = get("temperature")
+    REPEAT_PENALTY      = get("repeat_penalty")
+    MMAP                = get("mmap")
+    DYNAMIC_GPU_LAYERS  = get("dynamic_gpu_layers")
+    USE_PYTHON_BINDINGS = get("use_python_bindings")
+
+    # Hardware
+    SELECTED_CPU          = get("selected_cpu")
+    CPU_THREADS           = get("cpu_threads")
+    SELECTED_GPU          = get("selected_gpu")
+    VRAM_SIZE             = get("vram_size")
+    LOADING_MODE          = get("loading_mode")
+    LAYER_ALLOCATION_MODE = get("layer_allocation_mode")
+    # MLOCK is derived, not stored: LOADING_MODE is the canonical source.
     MLOCK = (LOADING_MODE == "Mem-Lock")
-    BATCH_SIZE = model_settings.get("n_batch", 1024)
-    DYNAMIC_GPU_LAYERS = model_settings.get("dynamic_gpu_layers", True)
-    MAX_HISTORY_SLOTS = model_settings.get("max_history_slots", 12)
-    MAX_ATTACH_SLOTS = model_settings.get("max_attach_slots", 6)
-    SESSION_LOG_HEIGHT = model_settings.get("session_log_height", 650)
-    SHOW_THINK_PHASE = model_settings.get("show_think_phase", False)
-    PRINT_RAW_OUTPUT = model_settings.get("print_raw_output", False)
-    CPU_THREADS = model_settings.get("cpu_threads", None)
-    BLEEP_ON_EVENTS = model_settings.get("bleep_on_events", False)
-    USE_PYTHON_BINDINGS = model_settings.get("use_python_bindings", True)
-    LAYER_ALLOCATION_MODE = model_settings.get("layer_allocation_mode", "SRAM_ONLY")
 
-    SELECTED_GPU = model_settings.get("selected_gpu")
-    SELECTED_CPU = model_settings.get("selected_cpu", "Auto-Select")
-
-    # Sound / TTS
-    raw_sound_device = model_settings.get("sound_output_device", "default")
+    # TTS and audio. Pack, enabled voice list and default voice are read from
+    # constants.ini by load_system_ini() and never round-tripped through JSON.
+    TTS_ENABLED       = get("tts_enabled")
+    TTS_VOICE         = get("tts_voice")
+    TTS_VOICE_NAME    = get("tts_voice_name")
+    MAX_TTS_LENGTH    = get("max_tts_length")
+    SOUND_SAMPLE_RATE = get("sound_sample_rate")
     if PLATFORM == "windows":
         SOUND_OUTPUT_DEVICE = "Default Sound Device"
     else:
-        SOUND_OUTPUT_DEVICE = raw_sound_device if raw_sound_device else "default"
-    SOUND_SAMPLE_RATE = model_settings.get("sound_sample_rate", 44100)
-    # TTS runtime state — only live user selections come from JSON.
-    # Pack, enabled voices, and default voice are always read from constants.ini
-    # by load_system_ini() which runs before load_config().
-    TTS_ENABLED    = model_settings.get("tts_enabled", False)
-    TTS_VOICE      = model_settings.get("tts_voice")
-    TTS_VOICE_NAME = model_settings.get("tts_voice_name")
-    MAX_TTS_LENGTH = model_settings.get("max_tts_length", 4500)
+        SOUND_OUTPUT_DEVICE = get("sound_output_device") or "default"
 
-    # Post-load adjustment: ensure SELECTED_CPU is a valid string label
+
+def _apply_preferences(values: dict):
+    """Copy a preferences mapping into the module globals."""
+    global SESSION_LOG_HEIGHT, MAX_ATTACH_SLOTS, MAX_HISTORY_SLOTS
+    global SHOW_THINK_PHASE, BLEEP_ON_EVENTS, PRINT_RAW_OUTPUT
+    global ACTIVE_FILTER, FILTER_MODE
+
+    def get(key):
+        return values.get(key, PREFERENCES_DEFAULTS[key])
+
+    SESSION_LOG_HEIGHT = get("session_log_height")
+    MAX_ATTACH_SLOTS   = get("max_attach_slots")
+    MAX_HISTORY_SLOTS  = get("max_history_slots")
+    SHOW_THINK_PHASE   = get("show_think_phase")
+    BLEEP_ON_EVENTS    = get("bleep_on_events")
+    PRINT_RAW_OUTPUT   = get("print_raw_output")
+
+    rules = get("filter_rules") or []
+    ACTIVE_FILTER = [
+        (str(pair[0]), str(pair[1])) for pair in rules
+        if isinstance(pair, (list, tuple)) and len(pair) == 2
+    ]
+    FILTER_MODE = "default" if ACTIVE_FILTER == list(DEFAULT_FILTER_RULES) else "custom"
+
+
+def _configuration_values() -> dict:
+    """Build the configuration mapping from the current globals."""
+    return {
+        "model_dir": MODEL_FOLDER,
+        "model_name": MODEL_NAME,
+        "context_size": CONTEXT_SIZE,
+        "n_batch": BATCH_SIZE,
+        "temperature": TEMPERATURE,
+        "repeat_penalty": REPEAT_PENALTY,
+        "mmap": MMAP,
+        "dynamic_gpu_layers": DYNAMIC_GPU_LAYERS,
+        "use_python_bindings": USE_PYTHON_BINDINGS,
+        "selected_cpu": SELECTED_CPU or "Auto-Select",
+        "cpu_threads": CPU_THREADS,
+        "selected_gpu": SELECTED_GPU,
+        "vram_size": VRAM_SIZE,
+        "loading_mode": LOADING_MODE,
+        "layer_allocation_mode": LAYER_ALLOCATION_MODE,
+        "tts_enabled": TTS_ENABLED,
+        "tts_voice": TTS_VOICE,
+        "tts_voice_name": TTS_VOICE_NAME,
+        "max_tts_length": MAX_TTS_LENGTH,
+        "sound_output_device": SOUND_OUTPUT_DEVICE,
+        "sound_sample_rate": SOUND_SAMPLE_RATE,
+    }
+
+
+def _preferences_values() -> dict:
+    """Build the preferences mapping from the current globals."""
+    return {
+        "session_log_height": SESSION_LOG_HEIGHT,
+        "max_attach_slots": MAX_ATTACH_SLOTS,
+        "max_history_slots": MAX_HISTORY_SLOTS,
+        "show_think_phase": SHOW_THINK_PHASE,
+        "bleep_on_events": BLEEP_ON_EVENTS,
+        "print_raw_output": PRINT_RAW_OUTPUT,
+        "filter_rules": [list(rule) for rule in ACTIVE_FILTER],
+    }
+
+
+def _post_load_corrections():
+    """Validate loaded values against what the machine actually offers."""
+    global SELECTED_CPU, MODEL_NAME, SELECTED_GPU, AVAILABLE_MODELS
+
     from scripts.utility import get_cpu_info
-    cpu_info = get_cpu_info()
-    cpu_labels = ["Auto-Select"] + [c["label"] for c in cpu_info]
+    cpu_labels = ["Auto-Select"] + [c["label"] for c in get_cpu_info()]
     if SELECTED_CPU not in cpu_labels:
         SELECTED_CPU = "Auto-Select"
 
-    # Model list refresh
     from scripts.inference import get_available_models
     AVAILABLE_MODELS = get_available_models()
     if MODEL_NAME not in AVAILABLE_MODELS:
         real_models = [m for m in AVAILABLE_MODELS if m != "Select_a_model..."]
         MODEL_NAME = real_models[0] if real_models else "Select_a_model..."
 
-    # Post-load: Auto-select GPU if not configured
     if SELECTED_GPU is None or SELECTED_GPU == "Auto":
         try:
             from scripts.utility import get_available_gpus
-            available_gpus = get_available_gpus()
-            real_gpus = [g for g in available_gpus if g != "CPU Only"]
-
+            real_gpus = [g for g in get_available_gpus() if g != "CPU Only"]
             if len(real_gpus) == 1:
                 SELECTED_GPU = real_gpus[0]
                 print(f"[CONFIG] Auto-selected sole GPU: {SELECTED_GPU}")
@@ -803,55 +932,62 @@ def load_config():
             print(f"[CONFIG] GPU auto-selection failed: {e}")
             SELECTED_GPU = "Auto-Select"
 
+
+def load_config():
+    """Load both settings files. configuration.json is required, preferences.json
+    falls back to defaults so a missing or hand-deleted file is not fatal."""
+    _apply_configuration(_read_settings(CONFIGURATION_PATH, "configuration", required=True))
+    _apply_preferences(_read_settings(PREFERENCES_PATH, "preferences", required=False))
+
+    print(f"[CONFIG] LOADING_MODE read as: {LOADING_MODE}")
+    _post_load_corrections()
     print(f"[CONFIG] Loaded -> Model: {MODEL_NAME} | CPU: {SELECTED_CPU}")
+    print(f"[CONFIG] Filter: {FILTER_MODE} ({len(ACTIVE_FILTER)} rules)")
     set_status("Configuration loaded", console=True)
     return "Configuration loaded."
 
 
 def save_config():
-    """Save current configuration to persistent storage."""
-    config = {
-        "model_settings": {
-            "model_dir": MODEL_FOLDER,
-            "model_name": MODEL_NAME,
-            "context_size": CONTEXT_SIZE,
-            "vram_size": VRAM_SIZE,
-            "temperature": TEMPERATURE,
-            "repeat_penalty": REPEAT_PENALTY,
-            "selected_gpu": SELECTED_GPU,
-            "selected_cpu": SELECTED_CPU or "Auto-Select",
-            "mmap": MMAP,
-            "mlock": MLOCK,
-            "loading_mode": LOADING_MODE,
-            "n_batch": BATCH_SIZE,
-            "dynamic_gpu_layers": DYNAMIC_GPU_LAYERS,
-            "max_history_slots": MAX_HISTORY_SLOTS,
-            "max_attach_slots": MAX_ATTACH_SLOTS,
-            "session_log_height": SESSION_LOG_HEIGHT,
-            "show_think_phase": SHOW_THINK_PHASE,
-            "print_raw_output": PRINT_RAW_OUTPUT,
-            "cpu_threads": CPU_THREADS,
-            "bleep_on_events": BLEEP_ON_EVENTS,
-            "use_python_bindings": USE_PYTHON_BINDINGS,
-            "layer_allocation_mode": LAYER_ALLOCATION_MODE,
-            "sound_output_device": SOUND_OUTPUT_DEVICE,
-            "sound_sample_rate": SOUND_SAMPLE_RATE,
-            # TTS runtime state — only the user's live selections are saved here.
-            # Pack, enabled voice list, and default voice come from constants.ini
-            # (written by the installer) and are never round-tripped through JSON.
-            "tts_enabled": TTS_ENABLED,
-            "tts_voice": TTS_VOICE,
-            "tts_voice_name": TTS_VOICE_NAME,
-            "max_tts_length": MAX_TTS_LENGTH,
-        }
-    }
+    """Write the Configuration page settings to data/configuration.json."""
+    _write_settings(CONFIGURATION_PATH, "configuration", _configuration_values())
+    set_status("Configuration saved")
+    return "Configuration saved"
 
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-        json.dump(config, f, indent=4, ensure_ascii=False)
 
-    set_status("Settings saved")
-    return "Settings saved"
+def save_preferences():
+    """Write the Preferences page settings to data/preferences.json."""
+    _write_settings(PREFERENCES_PATH, "preferences", _preferences_values())
+    set_status("Preferences saved")
+    return "Preferences saved"
+
+
+def restore_configuration_defaults(keep_model_folder: bool = True):
+    """Reset every Configuration page setting, then write the file.
+
+    The model folder is kept by default. It is the one setting a user cannot
+    retype from memory, and clearing it would leave the model dropdown empty
+    with no hint as to where the GGUF files went.
+    """
+    global MODEL_FOLDER
+    folder = MODEL_FOLDER
+    _apply_configuration(dict(CONFIGURATION_DEFAULTS))
+    if keep_model_folder:
+        MODEL_FOLDER = folder
+    _post_load_corrections()
+    _write_settings(CONFIGURATION_PATH, "configuration", _configuration_values())
+    msg = "Configuration restored to defaults"
+    if keep_model_folder:
+        msg += " (model folder kept)"
+    set_status(msg)
+    return msg
+
+
+def restore_preferences_defaults():
+    """Reset every Preferences page setting, filter rules included, then save."""
+    _apply_preferences(dict(PREFERENCES_DEFAULTS))
+    _write_settings(PREFERENCES_PATH, "preferences", _preferences_values())
+    set_status("Preferences restored to defaults")
+    return "Preferences restored to defaults"
 
 
 # =============================================================================

@@ -328,23 +328,39 @@ def get_model_loaded_display(is_loaded):
     return gr.update(value="🔴 NOT LOADED")
 
 
-def get_ini_display_text():
-    """Build display string of INI constants NOT shown on the Hardware/Models Config tab."""
-    lines = []
-    lines.append(f"Platform:  {getattr(cfg, 'PLATFORM', 'N/A')}")
-    lines.append(f"Backend Type:  {getattr(cfg, 'BACKEND_TYPE', 'N/A')}")
-    lines.append(f"OS Version:  {getattr(cfg, 'OS_VERSION', 'N/A')}")
-    lines.append(f"Gradio Version:  {getattr(cfg, 'GRADIO_VERSION', 'N/A')}")
-    lines.append(f"Embedding Model:  {getattr(cfg, 'EMBEDDING_MODEL_NAME', 'N/A')}")
-    lines.append(f"Embedding Backend:  {getattr(cfg, 'EMBEDDING_BACKEND', 'N/A')}")
-    lines.append(f"Llama Bin Path:  {getattr(cfg, 'LLAMA_BIN_PATH', 'N/A')}")
-    lines.append(f"Llama Wheel:  {getattr(cfg, 'LLAMA_WHEEL_VERSION', 'N/A')}")
-    lines.append(f"TTS Engine:  {getattr(cfg, 'TTS_ENGINE', 'N/A')}")
-    if getattr(cfg, 'TTS_ENGINE', '') == "coqui":
-        lines.append(f"Coqui Voice ID:  {getattr(cfg, 'COQUI_VOICE_ID', 'N/A')}")
-        lines.append(f"Coqui Voice Accent:  {getattr(cfg, 'COQUI_VOICE_ACCENT', 'N/A')}")
-        lines.append(f"Coqui Model:  {getattr(cfg, 'COQUI_MODEL', 'N/A')}")
-    return "\n".join(lines)
+# =============================================================================
+# USER INPUT AVAILABILITY
+# =============================================================================
+# The User Input box is usable exactly when a model is selected, and nothing
+# else. Every place that can change the selection — startup, the model
+# dropdown, Save All Configuration, Restore Defaults — routes through
+# get_user_input_state() so those paths cannot drift apart, which is how the
+# box ended up stuck in the locked state.
+
+USER_INPUT_PLACEHOLDER_READY  = "Type your message here... (model auto-loads on first send)"
+USER_INPUT_PLACEHOLDER_LOCKED = "Configure models first on Configuration page."
+
+_NO_MODEL_VALUES = (None, "", "Select_a_model...", "No models found")
+
+# A distinct sentinel rather than None for "no argument given". A cleared
+# Gradio dropdown hands us None, and that has to read as "no model", not as
+# "fall back to the configured one".
+_UNSET = object()
+
+
+def model_is_selected(model_name=_UNSET):
+    """True when a real model is selected. Defaults to the configured one."""
+    name = cfg.MODEL_NAME if model_name is _UNSET else model_name
+    return name not in _NO_MODEL_VALUES
+
+
+def get_user_input_state(model_name=_UNSET):
+    """Return the gr.update that locks or unlocks the User Input box."""
+    ready = model_is_selected(model_name)
+    return gr.update(
+        interactive=ready,
+        placeholder=USER_INPUT_PLACEHOLDER_READY if ready else USER_INPUT_PLACEHOLDER_LOCKED,
+    )
 
 
 def get_debug_globals_text():
@@ -365,10 +381,159 @@ def get_debug_globals_text():
     return "\n".join(lines)
 
 
-def save_all_settings():
-    """Save all configuration settings and return a status message."""
-    cfg.save_config()
-    return cfg.STATUS_MESSAGES["config_saved"]
+# =============================================================================
+# OUTPUT LINE SPACING
+# =============================================================================
+# Why output came out double-spaced, and what actually fixes it.
+#
+# There are two separate mechanisms at work, and they need opposite treatment:
+#
+#   1. A blank line in the text is a markdown paragraph break. Gradio 5's
+#      chatbot stylesheet then puts margin-top: var(--spacing-xxl) -- about
+#      16px -- on every <p> after the first, and that margin is the blank line
+#      seen on screen. Fixed by collapsing the blank lines here, and by the
+#      ".message p" override in the stylesheet further down this file for the
+#      few paragraphs that have to survive.
+#
+#   2. gr.Chatbot is created with line_breaks=True by default, which means a
+#      single newline is ALREADY rendered as a line break. So no <br> is needed
+#      or wanted here: adding one on top of Gradio's own break is what produces
+#      a blank line between every line. gr.Markdown is the opposite case, its
+#      default is line_breaks=False, where single newlines are ignored and lines
+#      run together into one paragraph unless a <br> is supplied. That is why a
+#      <br> is the right answer for a gr.Markdown panel and the wrong answer
+#      here, for the same input text.
+#
+# Hence LINE_BREAK_TAG below is empty: collapse the blank line, insert nothing,
+# let the component's own line_breaks do the work.
+
+# Tag placed in front of a line to force a break. Empty for gr.Chatbot, which
+# breaks on single newlines by itself. Set to "<br>" only if the text is bound
+# for a component with line_breaks=False (a gr.Markdown panel, say), where every
+# line would otherwise be swallowed into one paragraph.
+LINE_BREAK_TAG = ""
+
+# Where the tag goes, when there is one. True -> in front of every prose line.
+# False -> only where a blank line was removed. No effect while LINE_BREAK_TAG
+# is empty.
+BREAK_EVERY_LINE = True
+
+_HR_RE      = re.compile(r'^ {0,3}(?:[-*_] *){3,}$')
+_HEADING_RE = re.compile(r'^ {0,3}#{1,6}(?:\s|$)')
+_LIST_RE    = re.compile(r'^ {0,3}(?:[-*+]\s|\d{1,9}[.)]\s)')
+
+# Blocks that absorb a following bare line, so the blank line after one of these
+# has to survive or the next paragraph disappears into the last item. A list or
+# quote takes it as a lazy continuation; a table keeps consuming rows until it
+# meets a blank line.
+_LAZY_BLOCKS = ("list", "quote", "table")
+
+# Blocks that already finish on their own row, so a tag after one of these would
+# only reintroduce a gap.
+_SELF_CLOSING = ("heading", "hr", "table", "code")
+
+
+def _line_category(line: str):
+    """Classify a line as a markdown block opener, or None for plain prose."""
+    if _HR_RE.match(line):
+        return "hr"
+    if _HEADING_RE.match(line):
+        return "heading"
+    if _LIST_RE.match(line):
+        return "list"
+    stripped = line.lstrip()
+    if stripped.startswith(">"):
+        return "quote"
+    if stripped.startswith("|"):
+        return "table"
+    return None
+
+
+def single_space_output(text: str) -> str:
+    """Return *text* single-spaced: one newline per line, no blank lines between.
+
+    Blank lines are kept in the three places markdown needs one: ahead of a
+    table (a table cannot interrupt a paragraph), ahead of a "---" rule (pulled
+    up against prose it becomes a setext heading underline instead), and after a
+    list or quote (a bare line following either is absorbed into the last item).
+
+    Code is handed through verbatim. Blank lines carry meaning inside a fenced
+    block and inside the <pre> that the Pygments highlighter produces.
+    """
+    if not text:
+        return text
+
+    out = []
+    in_fence = False    # inside a ``` or ~~~ block
+    pre_depth = 0       # inside <pre> from the highlighter
+    gap = False         # a blank line has been dropped since the last kept line
+    body = False        # at least one line has been written
+    prev = None         # category of the last line written
+
+    for line in text.split("\n"):
+        stripped = line.strip()
+        lowered = stripped.lower()
+
+        # ---- inside a verbatim region ---------------------------------------
+        if pre_depth:
+            out.append(line)
+            pre_depth += lowered.count("<pre") - lowered.count("</pre>")
+            if not pre_depth:
+                prev, gap = "code", False
+            continue
+
+        if in_fence:
+            out.append(line)
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                in_fence, prev, gap = False, "code", False
+            continue
+
+        # ---- blank lines -----------------------------------------------------
+        if not stripped:
+            gap = True                  # remember the gap, drop the empty line
+            continue
+
+        # ---- entering a verbatim region -------------------------------------
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            # Opening fence. Mid-stream the closing fence has not arrived yet,
+            # which is harmless: the block stays verbatim until it does, and the
+            # finished text is reprocessed by format_response() at the end.
+            in_fence = True
+            out.append(line)
+            body, gap, prev = True, False, "code"
+            continue
+
+        if "<pre" in lowered:
+            pre_depth = lowered.count("<pre") - lowered.count("</pre>")
+            out.append(line)
+            body, gap, prev = True, False, "code"
+            continue
+
+        # ---- ordinary lines --------------------------------------------------
+        cat = _line_category(line)
+
+        if not body:
+            pass                                # first line, nothing above it
+        elif gap:
+            if cat and cat == prev and cat in ("list", "table", "quote"):
+                pass                            # tighten a loose block
+            elif prev in _LAZY_BLOCKS or cat in ("table", "hr"):
+                out.append("")                  # this blank line is load-bearing
+            elif cat or prev:
+                pass                            # block boundary needs no blank
+            else:
+                line = LINE_BREAK_TAG + line    # prose following prose
+        elif prev == "table" and cat != "table":
+            # The model ran straight from the last row into ordinary text. Give
+            # the table the blank line it needs, or this line becomes a row.
+            out.append("")
+        elif BREAK_EVERY_LINE and not cat and prev not in _SELF_CLOSING:
+            line = LINE_BREAK_TAG + line
+
+        out.append(line)
+        body, gap, prev = True, False, cat
+
+    return "\n".join(out)
 
 
 def format_response(output: str) -> str:
@@ -437,9 +602,11 @@ def format_response(output: str) -> str:
 
     # 7. Combine thinking + final output
     if formatted:
-        return '\n'.join(formatted) + '\n\n' + clean_output
+        clean_output = '\n'.join(formatted) + '\n\n' + clean_output
 
-    return clean_output
+    # 8. Close up the paragraph gaps. Last step, so that it also catches the
+    #    blank lines introduced above and in step 3.
+    return single_space_output(clean_output)
 
 
 # =============================================================================
@@ -447,18 +614,14 @@ def format_response(output: str) -> str:
 # =============================================================================
 
 def get_filter_text_for_display():
-    """Get the current filter as displayable/editable text."""
-    if cfg.FILTER_MODE == "custom":
-        custom_path = Path(cfg.CUSTOM_FILTER_PATH)
-        if custom_path.exists():
-            try:
-                return custom_path.read_text(encoding='utf-8')
-            except Exception as e:
-                print(f"[FILTER] Error reading custom filter: {e}")
-        return filter_list_to_text(cfg.ACTIVE_FILTER)
-    else:
-        preset = cfg.FILTER_PRESETS.get(cfg.FILTER_MODE, [])
-        return filter_list_to_text(preset)
+    """Return the live filter rules as editable text.
+
+    One panel, no presets. A fresh install shows cfg.DEFAULT_FILTER_RULES; once
+    the user edits and presses Save All Preferences their rules are what comes
+    back, because they are stored in preferences.json alongside the rest of the
+    page. Restore Defaults puts cfg.DEFAULT_FILTER_RULES back.
+    """
+    return filter_list_to_text(cfg.ACTIVE_FILTER or cfg.DEFAULT_FILTER_RULES)
 
 
 def filter_list_to_text(filter_list):
@@ -490,60 +653,28 @@ def text_to_filter_list(text):
     return filter_list
 
 
-def load_filter_preset(preset_name):
-    """Load a filter preset and return the text for display."""
-    if preset_name == "User":
-        cfg.FILTER_MODE = "custom"
-        custom_path = Path(cfg.CUSTOM_FILTER_PATH)
-        if custom_path.exists():
-            try:
-                text = custom_path.read_text(encoding='utf-8')
-                cfg.ACTIVE_FILTER = text_to_filter_list(text)
-                return text, f"Loaded custom filter ({len(cfg.ACTIVE_FILTER)} rules)"
-            except Exception as e:
-                return "", f"Error loading custom filter: {e}"
-        else:
-            return "", "No custom filter saved yet. Edit and click Save."
-    elif preset_name == "Light":
-        cfg.FILTER_MODE = "gradio5"
-        preset = cfg.FILTER_PRESETS.get("gradio5", [])
-        cfg.ACTIVE_FILTER = preset.copy()
-        text = filter_list_to_text(preset)
-        return text, f"Loaded Light filter (Gradio 5 style, {len(preset)} rules)"
-    return "", "Unknown preset"
+def apply_filter_text(filter_text):
+    """Parse the filter panel into cfg.ACTIVE_FILTER. Saving is the caller's job.
 
-
-def save_custom_filter(filter_text):
-    """Save the current filter text as a custom filter."""
+    An empty panel is taken at face value: no rules. That is a legitimate
+    choice, so it is not quietly replaced with the defaults — Restore Defaults
+    is how the user asks for those back.
+    """
     try:
-        filter_list = text_to_filter_list(filter_text)
-        custom_path = Path(cfg.CUSTOM_FILTER_PATH)
-        custom_path.parent.mkdir(parents=True, exist_ok=True)
-        custom_path.write_text(filter_text, encoding='utf-8')
-        cfg.FILTER_MODE = "custom"
-        cfg.ACTIVE_FILTER = filter_list
-        cfg.save_config()
-        return f"Custom filter saved ({len(filter_list)} rules)"
+        cfg.ACTIVE_FILTER = text_to_filter_list(filter_text or "")
+        cfg.FILTER_MODE = (
+            "default" if cfg.ACTIVE_FILTER == list(cfg.DEFAULT_FILTER_RULES) else "custom"
+        )
+        return f"Filter set ({len(cfg.ACTIVE_FILTER)} rules)"
     except Exception as e:
-        return f"Error saving filter: {e}"
+        return f"Error parsing filter: {e}"
 
 
 def initialize_filter_from_config():
-    """Initialize the filter based on saved config or Gradio version."""
-    filter_mode = getattr(cfg, 'FILTER_MODE', None)
-    if filter_mode == "custom":
-        custom_path = Path(cfg.CUSTOM_FILTER_PATH)
-        if custom_path.exists():
-            try:
-                text = custom_path.read_text(encoding='utf-8')
-                cfg.ACTIVE_FILTER = text_to_filter_list(text)
-                print(f"[FILTER] Loaded custom filter ({len(cfg.ACTIVE_FILTER)} rules)")
-                return
-            except Exception as e:
-                print(f"[FILTER] Error loading custom filter: {e}")
-    # v2 default: always use gradio5 filter
-    cfg.FILTER_MODE = "gradio5"
-    cfg.ACTIVE_FILTER = cfg.FILTER_PRESETS.get("gradio5", []).copy()
+    """Report the filter that load_config() already put in place."""
+    if not getattr(cfg, "ACTIVE_FILTER", None):
+        cfg.ACTIVE_FILTER = list(cfg.DEFAULT_FILTER_RULES)
+        cfg.FILTER_MODE = "default"
     print(f"[FILTER] Using {cfg.FILTER_MODE} filter ({len(cfg.ACTIVE_FILTER)} rules)")
 
 
@@ -983,7 +1114,6 @@ def update_session_buttons():
     """
     sessions = get_saved_sessions()[:cfg.MAX_HISTORY_SLOTS]
     button_updates = []
-    delete_updates = []
 
     # Inject pending-new-session placeholder as first slot when applicable.
     # The placeholder occupies slot index 0; real sessions shift down by one.
@@ -992,7 +1122,6 @@ def update_session_buttons():
     if pending:
         # Slot 0 — placeholder (non-interactive label; user cannot load it)
         button_updates.append(gr.update(value="⏳ New Session...", visible=True))
-        delete_updates.append(gr.update(visible=False))  # no delete for pending placeholder
         effective_sessions = sessions[: effective_max - 1]
         slot_offset = 1
     else:
@@ -1006,7 +1135,6 @@ def update_session_buttons():
         session_idx = i - slot_offset if pending else i
         if i >= effective_max:
             button_updates.append(gr.update(value="", visible=False))
-            delete_updates.append(gr.update(visible=False))
         elif 0 <= session_idx < len(effective_sessions):
             session_path = Path(cfg.HISTORY_DIR) / effective_sessions[session_idx]
             try:
@@ -1019,49 +1147,10 @@ def update_session_buttons():
                 print(f"Error loading session {session_path}: {e}")
                 btn_label = f"Session {i+1}"
             button_updates.append(gr.update(value=btn_label, visible=True))
-            delete_updates.append(gr.update(visible=True))
         else:
             button_updates.append(gr.update(value="", visible=False))
-            delete_updates.append(gr.update(visible=False))
 
-    return button_updates + delete_updates
-
-
-def delete_session_by_index(idx):
-    """Delete a single saved session file corresponding to a history slot.
-
-    Mirrors the slot/offset logic of load_session_by_index() so that the
-    correct file is removed even when the "⏳ New Session..." placeholder is
-    occupying slot 0. If the deleted session is the currently-active one,
-    the active session state is cleared so it isn't re-saved on exit.
-    """
-    pending = getattr(cfg, 'ONE_SHOT_PENDING_NEW_SESSION', False)
-    if pending:
-        if idx == 0:
-            # Placeholder slot — nothing to delete
-            return "Nothing to delete."
-        real_idx = idx - 1
-    else:
-        real_idx = idx
-
-    saved_sessions = get_saved_sessions()
-    if real_idx >= len(saved_sessions):
-        return "No session found to delete."
-
-    filename = saved_sessions[real_idx]
-    filepath = Path(cfg.HISTORY_DIR) / filename
-
-    try:
-        session_id, label, _, _ = load_session_history(filepath)
-        if session_id and session_id == cfg.current_session_id:
-            cfg.current_session_id = None
-            cfg.session_label = ""
-            cfg.SESSION_ACTIVE = False
-        filepath.unlink(missing_ok=True)
-        return f"Deleted session: {label or filename}"
-    except Exception as e:
-        print(f"Error deleting session {filepath}: {e}")
-        return "Error deleting session."
+    return button_updates
 
 
 def format_session_id(session_id):
@@ -1690,6 +1779,9 @@ def conversation_display(
             )
 
             clean_response = strip_separators(clean_response)
+            # Single-space while streaming too, so the text does not reflow when
+            # the final format_response() pass replaces it.
+            clean_response = single_space_output(clean_response)
             session_messages[-1]['content'] = "AI-Chat:\n" + clean_response
 
             # During streaming, keep progress on Generate Stream
@@ -2010,6 +2102,25 @@ def launch_display():
                      "Noto Color Emoji", "Twemoji Mozilla",
                      sans-serif !important;
     }
+    /* Gradio 5's chatbot stylesheet carries
+           .message-wrap > div p:not(:first-child) { margin-top: var(--spacing-xxl) }
+       which is roughly 16px, and that margin is the blank line seen between
+       paragraphs. single_space_output() removes nearly every paragraph break
+       before it gets here; this closes up the handful that have to survive,
+       such as the one ahead of a table or after a list. */
+    .message-wrap > div p,
+    .message p,
+    .message-content p,
+    .prose.chatbot p {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    /* A Gradio column is a flex container and a row stretches its columns to
+       the tallest one, so margin-top:auto on the last child drops that child to
+       the foot of the column. Used by Delete All History in the left panel. */
+    .bottom-pinned {
+        margin-top: auto !important;
+    }
     .config-btn {
         border-radius: var(--radius-lg) !important;
         padding: 0.5em 1em !important;
@@ -2017,20 +2128,6 @@ def launch_display():
         min-height: 2.8em !important;
         font-size: 14px !important;
         line-height: 1.2 !important;
-    }
-    .session-slot-row { gap: 4px !important; margin-bottom: 4px !important; flex-wrap: nowrap !important; }
-    .session-slot-button {
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
-    }
-    .session-slot-delete {
-        min-width: 2.2em !important;
-        max-width: 2.2em !important;
-        width: 2.2em !important;
-        padding: 0 !important;
-        font-size: 14px !important;
-        flex: none !important;
     }
     """
 
@@ -2076,7 +2173,7 @@ def launch_display():
                 return gr.update(visible=True)
 
         with gr.Tabs():
-            with gr.Tab("Main Conversations/Interactions"):
+            with gr.Tab("Interactions"):
                 with gr.Row():
                     # LEFT PANEL
                     with gr.Column(visible=True, min_width=300, elem_classes=["clean-elements"]) as left_column_expanded:
@@ -2084,20 +2181,16 @@ def launch_display():
                         gr.Markdown("**History**")
                         with gr.Group(visible=True) as history_slots_group:
                             start_new_session_btn = gr.Button("Start New Session..", variant="secondary")
-                            buttons["session"] = []
-                            buttons["session_delete"] = []
-                            for i in range(cfg.MAX_POSSIBLE_HISTORY_SLOTS):
-                                with gr.Row(elem_classes=["session-slot-row"]):
-                                    buttons["session"].append(
-                                        gr.Button(f"History Slot {i+1}", variant="huggingface",
-                                                   visible=False, scale=9, min_width=0,
-                                                   elem_classes=["session-slot-button"])
-                                    )
-                                    buttons["session_delete"].append(
-                                        gr.Button("🗑️", variant="huggingface", visible=False,
-                                                   scale=1, min_width=0,
-                                                   elem_classes=["session-slot-delete"])
-                                    )
+                            buttons["session"] = [gr.Button(f"History Slot {i+1}", variant="huggingface", visible=False)
+                                                  for i in range(cfg.MAX_POSSIBLE_HISTORY_SLOTS)]
+
+                        # Sits below the session slots and is pushed to the foot
+                        # of the column by the .bottom-pinned margin-top:auto, so
+                        # it stays clear of the slots however many are shown.
+                        delete_history_btn = gr.Button(
+                            "Delete All History", variant="stop",
+                            elem_classes=["bottom-pinned"]
+                        )
 
                     with gr.Column(visible=False, min_width=60, elem_classes=["clean-elements"]) as left_column_collapsed:
                         toggle_button_left_collapsed = gr.Button("<->", variant="secondary")
@@ -2117,12 +2210,18 @@ def launch_display():
 
                         with gr.Row(elem_classes=["clean-elements"]):
                             with gr.Column(scale=10):
+                                # Starts usable when a model is already
+                                # configured, so a returning session can type
+                                # immediately rather than waiting on the load
+                                # chain to catch up.
+                                _input_ready = model_is_selected()
                                 conversation_components["user_input"] = gr.Textbox(
                                     label="User Input",
                                     lines=3,
                                     max_lines=initial_max_lines,
-                                    interactive=True,
-                                    placeholder="Type your message here... (model auto-loads on first send)"
+                                    interactive=_input_ready,
+                                    placeholder=(USER_INPUT_PLACEHOLDER_READY if _input_ready
+                                                 else USER_INPUT_PLACEHOLDER_LOCKED)
                                 )
                                 conversation_components["progress_indicator"] = gr.Markdown(
                                     value="",
@@ -2203,7 +2302,7 @@ def launch_display():
                     )
                     exit_interaction = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], scale=1)
 
-            with gr.Tab("Hardware/TTS/Model Configs"):
+            with gr.Tab("Configuration"):
                 with gr.Group():
                     gr.Markdown("### Hardware Configuration")
 
@@ -2346,6 +2445,7 @@ def launch_display():
                 gr.Markdown("---")
                 with gr.Row():
                     save_config_btn = gr.Button("Save All Configuration", variant="primary", size="lg")
+                    restore_config_btn = gr.Button("Restore Defaults", variant="secondary", size="lg")
                 gr.Markdown("---")
                 with gr.Row():
                     config_status = gr.Textbox(
@@ -2354,7 +2454,7 @@ def launch_display():
                     )
                     exit_config = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], scale=1)
 
-            with gr.Tab("Interface/Filter Settings"):
+            with gr.Tab("Preferences"):
                 with gr.Group():
                     gr.Markdown("### Program Options")
                     with gr.Row():
@@ -2370,7 +2470,6 @@ def launch_display():
                             choices=cfg.HISTORY_SLOT_OPTIONS, label="Max History Slots",
                             value=cfg.MAX_HISTORY_SLOTS, interactive=True
                         )
-                        delete_history_btn = gr.Button("Delete All History", variant="stop", size="double")
 
                     gr.Markdown("### Output Options")
                     with gr.Row():
@@ -2385,10 +2484,10 @@ def launch_display():
                         )
 
                 with gr.Group():
+                    # One panel, no User/Light switch. It opens on the saved
+                    # rules, or the defaults on a fresh install, and Restore
+                    # Defaults puts the defaults back.
                     gr.Markdown("### Filter Settings")
-                    with gr.Row():
-                        filter_user_btn = gr.Button("User Preset")
-                        filter_light_btn = gr.Button("Light Preset")
                     filter_text = gr.Textbox(
                         label="Custom Filter Rules (find→replace pairs)",
                         value=get_filter_text_for_display(),
@@ -2398,17 +2497,18 @@ def launch_display():
 
                 gr.Markdown("---")
                 with gr.Row():
-                    save_all_btn = gr.Button("Save All Settings", variant="primary", size="lg")
+                    save_all_btn = gr.Button("Save All Preferences", variant="primary", size="lg")
+                    restore_prefs_btn = gr.Button("Restore Defaults", variant="secondary", size="lg")
                 gr.Markdown("---")
 
                 with gr.Row():
                     filter_status = gr.Textbox(
-                        value="Filter settings loaded", label="Status",
+                        value="Preferences loaded", label="Status",
                         interactive=False, max_lines=1, scale=20
                     )
                     exit_filtering = gr.Button("Exit Program", variant="stop", elem_classes=["double-height"], scale=1)
 
-            with gr.Tab("About/Debug Info"):
+            with gr.Tab("About/Debug"):
                 with gr.Group():
                     gr.Markdown("### Chat-Gradio-Gguf")
                     gr.HTML("""
@@ -2418,17 +2518,10 @@ def launch_display():
                     """, elem_classes=["info-textbox-match"])
 
                 with gr.Group():
-                    gr.Markdown("### System Constants (from constants.ini)")
-                    ini_display = gr.Textbox(
-                        label="INI Values (read-only, set by installer)",
-                        value=get_ini_display_text(), lines=12, interactive=False
-                    )
-
-                with gr.Group():
                     gr.Markdown("### Runtime Globals (Debug)")
                     debug_display = gr.Textbox(
                         label="Critical Globals (click Refresh to update)",
-                        value=get_debug_globals_text(), lines=10, interactive=False
+                        value=get_debug_globals_text(), lines=12, interactive=False
                     )
                     refresh_debug_btn = gr.Button("🔄 Refresh Debug Info", variant="secondary")
 
@@ -2568,7 +2661,7 @@ def launch_display():
         ).then(
             fn=update_session_buttons,
             inputs=[],
-            outputs=buttons["session"] + buttons["session_delete"]
+            outputs=buttons["session"]
         ).then(
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
@@ -2579,99 +2672,60 @@ def launch_display():
             outputs=[model_loaded_indicator]
         )
 
-        # ── Model dropdown change: unload old → countdown → load new ─────────
-        def handle_model_change(new_model, current_model, llm_state, models_loaded_state, model_folder):
-            """Handle model selection change: unload → 3s countdown → load new model.
-            Outputs: [llm_state, models_loaded, status_text, user_input_update] (4 outputs).
-            """
-            import time
+        # ── Model dropdown change ────────────────────────────────────────────
+        # This was a generator whose first branch ended in `return (...)`. A
+        # value-carrying return inside a generator yields nothing at all, so
+        # that branch sent Gradio no updates and the User Input box was never
+        # unlocked. The branch was also unavoidable: the wiring passed
+        # model_dropdown as both `new_model` and `current_model`, so
+        # "has the model changed?" was always false by identity. Both fixed.
+        #
+        # Selecting a model no longer loads it. That matches the rest of the
+        # program — the input box says the model auto-loads on first send,
+        # Mem-Lock mode has an explicit Load Model button, and One-Shot unloads
+        # after every response. The old unload -> 3s countdown -> load body was
+        # unreachable for the same reason described above, so no behaviour that
+        # ever actually ran has been removed here.
+        def handle_model_change(new_model, llm_state, models_loaded_state):
+            """Record the selection, drop any stale model, refresh the input box.
 
-            if new_model == current_model or new_model in ["Select_a_model...", "No models found", "", None]:
-                placeholder = (
-                    "Enter text here... (model auto-loads on first send)"
-                    if new_model not in ["Select_a_model...", "No models found", "", None]
-                    else "Select a valid model first..."
-                )
+            Outputs: [llm_state, models_loaded, status_text, user_input_update]
+            """
+            previous = cfg.MODEL_NAME
+            if new_model:
+                cfg.MODEL_NAME = new_model
+
+            if not model_is_selected(new_model):
                 return (
                     llm_state, models_loaded_state,
-                    "Model selection unchanged or invalid.",
-                    gr.update(
-                        interactive=bool(new_model and new_model not in ["Select_a_model...", "No models found"]),
-                        placeholder=placeholder
+                    "No model selected — choose one on the Configuration page.",
+                    get_user_input_state(new_model),
+                )
+
+            status = f"Model selected: {new_model}"
+
+            # A different model means whatever sits in memory is now the wrong
+            # one, so drop it and let the next send load the right one.
+            if new_model != previous and models_loaded_state and llm_state is not None:
+                try:
+                    unload_status, llm_state, models_loaded_state = unload_models(
+                        llm_state, models_loaded_state
                     )
-                )
+                    cfg.llm = llm_state
+                    cfg.MODELS_LOADED = models_loaded_state
+                    status = f"{status} — {unload_status}"
+                except Exception as e:
+                    status = f"{status} — unload error: {e}"
 
-            status_msg = f"Changing model to: {new_model}"
-
-            # Step 1: Unload if loaded
-            if models_loaded_state and llm_state is not None:
-                yield (
-                    llm_state, models_loaded_state,
-                    status_msg + "\nUnloading current model...",
-                    gr.update(interactive=False)
-                )
-                unload_status, new_llm, new_loaded = unload_models(llm_state, models_loaded_state)
-                llm_state = new_llm
-                models_loaded_state = new_loaded
-                cfg.MODELS_LOADED = False
-                cfg.llm = None
-                status_msg += f"\n{unload_status}"
-
-            # Step 2: 3-second countdown
-            for i in range(3, 0, -1):
-                yield (
-                    llm_state, models_loaded_state,
-                    f"{status_msg}\nLoading new model in {i}...",
-                    gr.update(interactive=False)
-                )
-                time.sleep(1.0)
-
-            # Step 3: Load new model
-            yield (
+            return (
                 llm_state, models_loaded_state,
-                status_msg + "\nLoading model...",
-                gr.update(interactive=False)
+                status,
+                get_user_input_state(new_model),
             )
-
-            try:
-                load_status, loaded, new_llm, _ = load_models(
-                    model_folder, new_model, cfg.VRAM_SIZE,
-                    llm_state, models_loaded_state
-                )
-
-                if loaded:
-                    cfg.MODELS_LOADED = True
-                    cfg.llm = new_llm
-                    cfg.LOADED_CONTEXT_SIZE = cfg.CONTEXT_SIZE
-
-                    yield (
-                        new_llm, True,
-                        f"✅ Model loaded: {new_model}",
-                        gr.update(interactive=True,
-                                  placeholder="Enter text here... (model auto-loads on first send)")
-                    )
-                else:
-                    yield (
-                        llm_state, False,
-                        f"❌ Model load failed: {load_status[:150]}",
-                        gr.update(interactive=False, placeholder="Load failed — try again.")
-                    )
-
-            except Exception as e:
-                status_msg += f"\nError: {str(e)[:120]}"
-                yield (
-                    llm_state, False,
-                    status_msg,
-                    gr.update(interactive=False, placeholder="Select a valid model first...")
-                )
 
         model_dropdown.change(
             fn=handle_model_change,
-            inputs=[
-                model_dropdown, model_dropdown,
-                states["llm"], states["models_loaded"],
-                model_folder_state
-            ],
+            inputs=[model_dropdown, states["llm"], states["models_loaded"]],
             outputs=[
                 states["llm"], states["models_loaded"],
                 interaction_global_status,
@@ -2791,12 +2845,12 @@ def launch_display():
 
         # Refresh debug info
         def refresh_debug_info():
-            return get_ini_display_text(), get_debug_globals_text(), "Debug info refreshed"
+            return get_debug_globals_text(), "Debug info refreshed"
 
         refresh_debug_btn.click(
             fn=refresh_debug_info,
             inputs=[],
-            outputs=[ini_display, debug_display, info_status]
+            outputs=[debug_display, info_status]
         )
 
         # Panel expand/collapse
@@ -2930,7 +2984,7 @@ def launch_display():
         ).then(
             fn=update_session_buttons,
             inputs=[],
-            outputs=buttons["session"] + buttons["session_delete"]
+            outputs=buttons["session"]
         ).then(
             fn=lambda files: update_file_slot_ui(files, True),
             inputs=[states["attached_files"]],
@@ -2942,15 +2996,26 @@ def launch_display():
         )
 
         # ── Unified save handler ─────────────────────────────────────────────
-        def unified_save_wrapper(
-            layer_mode, cpu, cpu_threads_val, gpu, vram, sound_device, sample_rate,
+        # ── Configuration page: save / restore ───────────────────────────────
+        # Each page now writes its own file, so each button only reads the
+        # widgets that live on its own page. Pressing Save on one page no longer
+        # silently absorbs half-finished edits made on the other.
+
+        def _model_visibility():
+            """The four Model Configuration widgets that only Mem-Lock mode uses."""
+            visible = (cfg.LOADING_MODE == "Mem-Lock")
+            return (
+                gr.update(visible=visible),   # load_model_btn
+                gr.update(visible=visible),   # unload_model_btn
+                gr.update(visible=visible),   # model_loaded_indicator
+                gr.update(visible=visible),   # load_unload_column
+            )
+
+        def save_configuration_page(
+            layer_mode, cpu, cpu_threads_val, gpu, vram,
+            sound_device, sample_rate,
             model, ctx, batch, temp, repeat,
-            loading_mode_val,
-            tts_voice_val, tts_max_len_val,
-            show_think_val, bleep_val, print_raw_val,
-            max_hist, max_att, log_height,
-            filter_text_val,
-            tab="hardware"
+            loading_mode_val, tts_voice_val, tts_max_len_val
         ):
             cfg.LAYER_ALLOCATION_MODE = layer_mode       if layer_mode       is not None else cfg.LAYER_ALLOCATION_MODE
             cfg.SELECTED_CPU          = cpu              if cpu              is not None else cfg.SELECTED_CPU
@@ -2967,68 +3032,118 @@ def launch_display():
             if loading_mode_val is not None:
                 cfg.LOADING_MODE = loading_mode_val
                 cfg.MLOCK        = (loading_mode_val == "Mem-Lock")
-            cfg.TTS_VOICE_NAME        = tts_voice_val    if tts_voice_val    is not None else cfg.TTS_VOICE_NAME
+            cfg.TTS_VOICE_NAME = tts_voice_val if tts_voice_val is not None else cfg.TTS_VOICE_NAME
             if tts_voice_val and tts_voice_val != "Default":
                 cfg.TTS_VOICE = get_voice_id_by_name(tts_voice_val)
                 _tts_ok, _tts_warn = verify_tts_voice(cfg.TTS_VOICE)
                 if not _tts_ok:
                     print(f"[TTS] WARNING: {_tts_warn}")
-            cfg.MAX_TTS_LENGTH        = int(tts_max_len_val) if tts_max_len_val is not None else cfg.MAX_TTS_LENGTH
-            cfg.SHOW_THINK_PHASE      = bool(show_think_val) if show_think_val is not None else cfg.SHOW_THINK_PHASE
-            cfg.BLEEP_ON_EVENTS       = bool(bleep_val)  if bleep_val        is not None else cfg.BLEEP_ON_EVENTS
-            cfg.PRINT_RAW_OUTPUT      = bool(print_raw_val) if print_raw_val is not None else cfg.PRINT_RAW_OUTPUT
-            cfg.MAX_HISTORY_SLOTS     = int(max_hist)    if max_hist         is not None else cfg.MAX_HISTORY_SLOTS
-            cfg.MAX_ATTACH_SLOTS      = int(max_att)     if max_att          is not None else cfg.MAX_ATTACH_SLOTS
-            cfg.SESSION_LOG_HEIGHT    = int(log_height)  if log_height       is not None else cfg.SESSION_LOG_HEIGHT
+            cfg.MAX_TTS_LENGTH = int(tts_max_len_val) if tts_max_len_val is not None else cfg.MAX_TTS_LENGTH
 
-            result = save_all_settings()   # always saves everything
+            result = cfg.save_config()
+            return ((result, result, result, result)
+                    + _model_visibility()
+                    + (get_user_input_state(),))
 
-            if tab == "filter" and filter_text_val and filter_text_val.strip():
-                filter_result = save_custom_filter(filter_text_val)
-                result = f"{result}\n{filter_result}"
-            elif tab == "hardware":
-                result = "Hardware/TTS/Model Configs settings saved."
-
-            _ml = (cfg.LOADING_MODE == "Mem-Lock")
+        def restore_configuration_page():
+            """Reset every Configuration widget from cfg.CONFIGURATION_DEFAULTS."""
+            result = cfg.restore_configuration_defaults()
             return (
+                gr.update(value=cfg.LAYER_ALLOCATION_MODE),
+                gr.update(value=cfg.SELECTED_CPU),
+                gr.update(value=cfg.CPU_THREADS or max(1, cfg.CPU_LOGICAL_CORES // 2)),
+                gr.update(value=cfg.SELECTED_GPU),
+                gr.update(value=cfg.VRAM_SIZE),
+                gr.update(value=str(cfg.SOUND_SAMPLE_RATE)),
+                gr.update(choices=get_available_models(), value=cfg.MODEL_NAME),
+                gr.update(value=cfg.CONTEXT_SIZE),
+                gr.update(value=cfg.BATCH_SIZE),
+                gr.update(value=cfg.TEMPERATURE),
+                gr.update(value=cfg.REPEAT_PENALTY),
+                gr.update(value=cfg.LOADING_MODE),
+                gr.update(value=cfg.TTS_VOICE_NAME or "Default"),
+                gr.update(value=cfg.MAX_TTS_LENGTH),
                 result, result, result, result,
-                gr.update(visible=_ml),   # load_model_btn
-                gr.update(visible=_ml),   # unload_model_btn
-                gr.update(visible=_ml),   # model_loaded_indicator
-                gr.update(visible=_ml)    # load_unload_column  ← NEW
-            )
+            ) + _model_visibility() + (get_user_input_state(),)
 
-        _save_inputs = [
+        _config_inputs = [
             layer_allocation_radio, cpu_select, cpu_threads, gpu_select, vram_size,
             sound_output_display, sound_sample_rate,
-            model_dropdown,
-            ctx_size, batch_size, temperature, repeat_penalty,
-            loading_mode_radio,
-            tts_voice, tts_max_len,
-            show_think, bleep_events, print_raw,
-            max_history_slots, max_attach_slots, session_log_height,
-            filter_text
+            model_dropdown, ctx_size, batch_size, temperature, repeat_penalty,
+            loading_mode_radio, tts_voice, tts_max_len,
         ]
-        _save_outputs = [
-            interaction_global_status,
-            config_status,
-            filter_status,
-            info_status,
-            load_model_btn,
-            unload_model_btn,
-            model_loaded_indicator,
-            load_unload_column   # <-- new output
+        _status_outputs = [
+            interaction_global_status, config_status, filter_status, info_status,
+        ]
+        _model_vis_outputs = [
+            load_model_btn, unload_model_btn, model_loaded_indicator, load_unload_column,
         ]
 
+        _user_input_output = [conversation_components["user_input"]]
+
         save_config_btn.click(
-            fn=lambda *args: unified_save_wrapper(*args, tab="hardware"),
-            inputs=_save_inputs,
-            outputs=_save_outputs
+            fn=save_configuration_page,
+            inputs=_config_inputs,
+            outputs=_status_outputs + _model_vis_outputs + _user_input_output
         )
+        restore_config_btn.click(
+            fn=restore_configuration_page,
+            inputs=[],
+            outputs=[
+                layer_allocation_radio, cpu_select, cpu_threads, gpu_select, vram_size,
+                sound_sample_rate, model_dropdown, ctx_size, batch_size, temperature,
+                repeat_penalty, loading_mode_radio, tts_voice, tts_max_len,
+            ] + _status_outputs + _model_vis_outputs + _user_input_output
+        )
+
+        # ── Preferences page: save / restore ─────────────────────────────────
+
+        def save_preferences_page(
+            show_think_val, bleep_val, print_raw_val,
+            max_hist, max_att, log_height, filter_text_val
+        ):
+            cfg.SHOW_THINK_PHASE   = bool(show_think_val) if show_think_val is not None else cfg.SHOW_THINK_PHASE
+            cfg.BLEEP_ON_EVENTS    = bool(bleep_val)      if bleep_val      is not None else cfg.BLEEP_ON_EVENTS
+            cfg.PRINT_RAW_OUTPUT   = bool(print_raw_val)  if print_raw_val  is not None else cfg.PRINT_RAW_OUTPUT
+            cfg.MAX_HISTORY_SLOTS  = int(max_hist)        if max_hist       is not None else cfg.MAX_HISTORY_SLOTS
+            cfg.MAX_ATTACH_SLOTS   = int(max_att)         if max_att        is not None else cfg.MAX_ATTACH_SLOTS
+            cfg.SESSION_LOG_HEIGHT = int(log_height)      if log_height     is not None else cfg.SESSION_LOG_HEIGHT
+
+            filter_msg = apply_filter_text(filter_text_val)
+            result = f"{cfg.save_preferences()} — {filter_msg}"
+            return result, result, result, result
+
+        def restore_preferences_page():
+            """Reset every Preferences widget, filter panel included."""
+            result = cfg.restore_preferences_defaults()
+            return (
+                gr.update(value=cfg.SESSION_LOG_HEIGHT),
+                gr.update(value=cfg.MAX_ATTACH_SLOTS),
+                gr.update(value=cfg.MAX_HISTORY_SLOTS),
+                gr.update(value=cfg.SHOW_THINK_PHASE),
+                gr.update(value=cfg.BLEEP_ON_EVENTS),
+                gr.update(value=cfg.PRINT_RAW_OUTPUT),
+                gr.update(value=get_filter_text_for_display()),
+                result, result, result, result,
+            )
+
+        _prefs_widgets = [
+            session_log_height, max_attach_slots, max_history_slots,
+            show_think, bleep_events, print_raw, filter_text,
+        ]
+
         save_all_btn.click(
-            fn=lambda *args: unified_save_wrapper(*args, tab="filter"),
-            inputs=_save_inputs,
-            outputs=_save_outputs
+            fn=save_preferences_page,
+            inputs=[
+                show_think, bleep_events, print_raw,
+                max_history_slots, max_attach_slots, session_log_height, filter_text,
+            ],
+            outputs=_status_outputs
+        )
+        restore_prefs_btn.click(
+            fn=restore_preferences_page,
+            inputs=[],
+            outputs=_prefs_widgets + _status_outputs
         )
 
         # Attach files handlers
@@ -3063,26 +3178,14 @@ def launch_display():
                 outputs=attach_slots + [attach_files]
             )
 
-        # Filter tab handlers
-        def load_user_filter():
-            text, status = load_filter_preset("User")
-            return text, status
-
-        def load_light_filter():
-            text, status = load_filter_preset("Light")
-            return text, status
-
-        filter_user_btn.click(fn=load_user_filter, inputs=[], outputs=[filter_text, filter_status])
-        filter_light_btn.click(fn=load_light_filter, inputs=[], outputs=[filter_text, filter_status])
-
         delete_history_btn.click(
             fn=delete_all_sessions,
             inputs=[],
-            outputs=[filter_status]
+            outputs=[interaction_global_status]
         ).then(
             fn=update_session_buttons,
             inputs=[],
-            outputs=buttons["session"] + buttons["session_delete"]
+            outputs=buttons["session"]
         )
 
         # Initial load chain
@@ -3101,13 +3204,9 @@ def launch_display():
         ).then(
             fn=update_session_buttons,
             inputs=[],
-            outputs=buttons["session"] + buttons["session_delete"]
+            outputs=buttons["session"]
         ).then(
-            fn=lambda model_name: gr.update(
-                interactive=(model_name not in ["Select_a_model...", "No models found", None, ""]),
-                placeholder="Enter text here..." if model_name not in ["Select_a_model...", "No models found", None, ""]
-                            else "Select a valid model first..."
-            ),
+            fn=get_user_input_state,
             inputs=[model_dropdown],
             outputs=[conversation_components["user_input"]]
         ).then(
@@ -3382,7 +3481,7 @@ def launch_display():
             ).then(
                 fn=update_session_buttons,
                 inputs=[],
-                outputs=buttons["session"] + buttons["session_delete"],
+                outputs=buttons["session"],
             ).then(
                 fn=lambda: update_file_slot_ui([], True),
                 inputs=[],
@@ -3410,23 +3509,11 @@ def launch_display():
                 # Refresh session panel: removes ⏳ placeholder if present
                 fn=update_session_buttons,
                 inputs=[],
-                outputs=buttons["session"] + buttons["session_delete"]
+                outputs=buttons["session"]
             ).then(
                 fn=lambda files: update_file_slot_ui(files, True),
                 inputs=[states["attached_files"]],
                 outputs=attach_slots + [attach_files]
-            )
-
-        # Session history delete buttons (slim icon button beside each slot)
-        for i, del_btn in enumerate(buttons["session_delete"]):
-            del_btn.click(
-                fn=lambda idx=i: delete_session_by_index(idx),
-                inputs=[],
-                outputs=[interaction_global_status]
-            ).then(
-                fn=update_session_buttons,
-                inputs=[],
-                outputs=buttons["session"] + buttons["session_delete"]
             )
 
     # Launch with browser

@@ -160,6 +160,11 @@ def clean_content(role, content):
     if not content:
         return ""
 
+    # Strip the display-only line breaks that display.single_space_output()
+    # injects. They exist purely to stop Gradio opening a blank line between
+    # every line; if they reach the prompt the model starts imitating them.
+    content = re.sub(r'</?br\s*/?>', '', content, flags=re.IGNORECASE)
+
     prefixes_to_remove = [
         r'^User:\s*',
         r'^User Query:\s*',
