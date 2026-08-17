@@ -2,7 +2,7 @@
 Status - Troubled since introduction of One-Shot mode (just use one model per session, until fixed/solution, or use older version).
 - Currently v2.0xx.xx - Works great on Qwen v3.0-v3.6 and some other models, see list. Recently, the GUI is looking cleaner.
 - Previously v1.xx - Linux installs/use was updated/confirmed working for linux in some versions of v1.
-- Previously v0.xx - there are some interesting quirks to some of them, some of them have rpg elements before I created Rpg-Gradio-Gguf.  
+- There is now [Qwen-Windows-Gguf](https://github.com/wiseman-timelord/Chat-Gradio-Gguf), so if you are on Windows 10 and prefer Qwen, then use that instead.
 
 ## Description
 Intended as a high-quality chat interface with wide hardware/os support, windows 10-11 (WSL not required) and Ubuntu 24-25, with any Gpu on GGUF models through Python ~3.11-~3.13. An optimal number of features for a ChatBot, as well as, dynamic buttons/panels on the interface and websearch and RAG and TTS and archiving of sessions, and all on local models, so no imposed, limitations or guidelines (model dependent). This tool providing a comparable interface found on premium non-agentic AI services, where the configuration is intended to be intelligent, while without options reported in forums to make no difference on most models (no over-complication). The program using offline libraries (apart from websearch) instead of, online services or repeat download or registration.
