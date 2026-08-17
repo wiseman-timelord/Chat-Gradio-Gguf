@@ -1,5 +1,5 @@
 # ![Chat-Gradio-Gguf](media/project_banner.jpg)
-Status - Troubled.
+Status - Troubled since introduction of One-Shot mode (just use one model per session, until fixed).
 - Currently v2.0xx.xx - Works great on Qwen v3.0-v3.6 and some other models, see list. Recently, the GUI is looking cleaner.
 - Previously v1.xx - Linux installs/use was updated/confirmed working for linux in some versions of v1.
 - Previously v0.xx - there are some interesting quirks to some of them, some of them have rpg elements before I created Rpg-Gradio-Gguf.  
