@@ -1,6 +1,6 @@
 # ![Chat-Gradio-Gguf](media/project_banner.jpg)
 Status - Troubled since introduction of One-Shot mode (just use one model per session, until fixed/solution, or use older version).
-- Currently v2.0xx.xx - Works good on Qwen v3.0-v3.6 and some other models, see list. Next release will be better see development.
+- Currently v2.10+ - Works good on Qwen v3.0-v3.8, but things are still kept somewhat open for other models, but I will not be testing other than Qwen (see models list) . Next release will be better see development.
 - Previously v1.xx - Linux installs/use was updated/confirmed working for linux in some versions of v1.
 - There is now [Qwen-Windows-Gguf](https://github.com/wiseman-timelord/Qwen-Windows-Gguf), so if you are on Windows 10 and prefer Qwen, then use that instead.
 
@@ -31,7 +31,7 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
 
 ### Preview
-- The Interaction page, where things are looking cleaner now (Windows v2.04)...
+- The long-running issue of additional blank lines in model output is now fixed! (Windows v2.10)...
 ![image_missing](media/interaction_page.jpg)
 
 - The Configuration page, the settings for, Hardware, TTS, Models (Windows v2.04)...
