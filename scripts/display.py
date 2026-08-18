@@ -19,8 +19,6 @@ from queue import Queue
 # Third-party
 import gradio as gr
 import pyperclip
-import tkinter as tk
-from tkinter import filedialog
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
@@ -796,12 +794,14 @@ def handle_unload_model(llm_state, models_loaded_state):
         cfg.GPU_LAYERS = 0
         cfg.LOADED_CONTEXT_SIZE = None
         beep()
-        status_msg = "✅ Model unloaded successfully."
+        unloaded = not new_models_loaded
+        status_msg = ("✅ Model unloaded successfully." if unloaded
+                      else f"⚠️ {status}")
         return (
             new_llm, new_models_loaded,
             status_msg, status_msg, status_msg,
             gr.update(interactive=bool(cfg.MODEL_NAME and cfg.MODEL_NAME not in ["Select_a_model...", "No models found"])),
-            get_model_loaded_display(False)
+            get_model_loaded_display(not unloaded)
         )
     except Exception as e:
         traceback.print_exc()
@@ -2572,8 +2572,14 @@ def launch_display():
         # ── Browse folder button ─────────────────────────────────────────────
         def browse_and_update_folder():
             """Open folder dialog and update cfg.MODEL_FOLDER."""
-            import tkinter as tk
-            from tkinter import filedialog
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+            except ImportError:
+                status = ("Folder browser unavailable (Tk missing) - "
+                          "type the model folder path instead")
+                print(f"[BROWSE] {status}")
+                return (cfg.MODEL_FOLDER, status, status, status)
 
             current_path = cfg.MODEL_FOLDER
             print(f"[BROWSE] Handler called. current_path='{current_path}'")

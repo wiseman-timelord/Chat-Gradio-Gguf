@@ -902,7 +902,9 @@ def install_linux_system_dependencies(backend: str, skip_if_present: bool = Fals
     print_status("Installing Linux system dependencies...")
 
     base_packages = [
-        "python3-dev", "build-essential", "libffi-dev", "libssl-dev",
+        "python3-dev", "python3-tk", "build-essential", "libffi-dev", "libssl-dev",
+        "libglib2.0-0", "libnss3", "libxfixes3", "libxdamage1", "libxrandr2",
+        "libxcomposite1",
         "libegl1", "libgl1", "libxkbcommon0", "libxkbcommon-x11-0",
         "libxcb-cursor0", "libxcb-icccm4", "libxcb-image0", "libxcb-keysyms1",
         "libxcb-randr0", "libxcb-render-util0", "libxcb-shape0",
