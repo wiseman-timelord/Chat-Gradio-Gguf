@@ -1,6 +1,6 @@
 # ![Chat-Gradio-Gguf](media/project_banner.jpg)
 Status - Troubled since introduction of One-Shot mode (just use one model per session, until fixed/solution, or use older version).
-- Currently v2.0xx.xx - Works great on Qwen v3.0-v3.6 and some other models, see list. Recently, the GUI is looking cleaner.
+- Currently v2.0xx.xx - Works good on Qwen v3.0-v3.6 and some other models, see list. Currently working on fixing the long running issue with the text formatting issues with blank lines, as well as some other fixes.
 - Previously v1.xx - Linux installs/use was updated/confirmed working for linux in some versions of v1.
 - There is now [Qwen-Windows-Gguf](https://github.com/wiseman-timelord/Qwen-Windows-Gguf), so if you are on Windows 10 and prefer Qwen, then use that instead.
 
