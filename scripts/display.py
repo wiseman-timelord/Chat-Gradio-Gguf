@@ -455,7 +455,11 @@ def single_space_output(text: str) -> str:
     Blank lines are kept in the three places markdown needs one: ahead of a
     table (a table cannot interrupt a paragraph), ahead of a "---" rule (pulled
     up against prose it becomes a setext heading underline instead), and after a
-    list or quote (a bare line following either is absorbed into the last item).
+    list or quote (a bare line following either is absorbed into the last item),
+    plus between two prose paragraphs, so the model's own paragraph breaks (and
+    the Thinking→answer gap format_response inserts) survive. Gaps at block
+    boundaries — a lead-in line and its list, or between list items — are still
+    dropped.
 
     Code is handed through verbatim. Blank lines carry meaning inside a fenced
     block and inside the <pre> that the Pygments highlighter produces.
@@ -522,7 +526,7 @@ def single_space_output(text: str) -> str:
             elif cat or prev:
                 pass                            # block boundary needs no blank
             else:
-                line = LINE_BREAK_TAG + line    # prose following prose
+                out.append("")                  # prose following prose
         elif prev == "table" and cat != "table":
             # The model ran straight from the last row into ordinary text. Give
             # the table the blank line it needs, or this line becomes a row.
@@ -1752,6 +1756,7 @@ def conversation_display(
     session_messages.append({'role': 'assistant', 'content': "AI-Chat:\n"})
     accumulated_response = ""
 
+    cfg.GENERATION_ACTIVE = True
     try:
         for chunk in get_response_stream(
             session_log=session_messages,
@@ -1803,6 +1808,10 @@ def conversation_display(
     except Exception as e:
         accumulated_response = f"Error: {str(e)}"
         session_messages[-1]['content'] = accumulated_response
+    finally:
+        # Also runs when the generator is closed early (client disconnect),
+        # so the unload guard can never be left stuck on.
+        cfg.GENERATION_ACTIVE = False
 
     # Format Response phase
     yield yield_progress("Format Response")
@@ -1986,7 +1995,10 @@ def launch_display():
     .send-button-green { background-color: green !important; color: white !important }
     .send-button-orange { background-color: orange !important; color: white !important }
     .send-button-red { background-color: red !important; color: white !important }
-    .scrollable .message { white-space: pre-wrap; word-break: break-word; }
+    /* pre-wrap would render the newline text nodes the markdown renderer leaves
+       between block tags (</p> \n <ul> \n <li>) as visible blank lines. Prose
+       line breaks survive without it: gr.Chatbot has line_breaks=True. */
+    .scrollable .message { white-space: normal; word-break: break-word; }
     .hide-label { display:none !important; }
     .message { line-height: 1.4 !important; }
     .progress-indicator {
@@ -2115,6 +2127,20 @@ def launch_display():
         margin-top: 0 !important;
         margin-bottom: 0 !important;
     }
+    /* Real paragraph breaks (the ones single_space_output keeps) get a moderate
+       gap back, while lists stay tight. */
+    .message-wrap > div p:not(:first-child),
+    .message p:not(:first-child),
+    .message-content p:not(:first-child),
+    .prose.chatbot p:not(:first-child) {
+        margin-top: 0.7em !important;
+    }
+    .message-wrap > div ul, .message-wrap > div ol,
+    .message ul, .message ol {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    .message li { margin-top: 0 !important; margin-bottom: 0 !important; }
     /* A Gradio column is a flex container and a row stretches its columns to
        the tallest one, so margin-top:auto on the last child drops that child to
        the foot of the column. Used by Delete All History in the left panel. */
@@ -3428,6 +3454,10 @@ def launch_display():
             if cfg.LOADING_MODE != "Mem-Lock":
                 return llm_st, loaded_st, gr.update()
             if not loaded_st or llm_st is None:
+                return llm_st, loaded_st, gr.update()
+            if cfg.GENERATION_ACTIVE:
+                # _last_response_time only advances on completed responses, so a
+                # long generation looks like inactivity from here.
                 return llm_st, loaded_st, gr.update()
             if _last_response_time == 0.0:
                 return llm_st, loaded_st, gr.update()

@@ -911,8 +911,47 @@ def install_linux_system_dependencies(backend: str) -> bool:
 # PYTHON DEPENDENCY INSTALLATION
 # =============================================================================
 
-def install_python_deps(backend: str) -> bool:
-    """Install Python dependencies."""
+def get_installed_llama_info():
+    """Probe the venv for an existing llama-cpp-python.
+
+    Returns {"version": str, "build": "vulkan"|"cpu"} or None when the package
+    is absent or unusable. The build type comes from the shipped libraries: a
+    Vulkan build and a CPU wheel can carry the same version string.
+    """
+    python_exe = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / \
+                 ("python.exe" if PLATFORM == "windows" else "python")
+    if not python_exe.is_file():
+        return None
+
+    probe = (
+        "import llama_cpp, pathlib\n"
+        "lib = pathlib.Path(llama_cpp.__file__).parent / 'lib'\n"
+        "names = [p.name.lower() for p in lib.glob('*')] if lib.is_dir() else []\n"
+        "build = 'vulkan' if any('vulkan' in n for n in names) else 'cpu'\n"
+        "print(llama_cpp.__version__)\n"
+        "print(build)\n"
+    )
+    try:
+        result = subprocess.run(
+            [str(python_exe), "-c", probe],
+            capture_output=True, text=True, timeout=120
+        )
+        if result.returncode != 0:
+            return None
+        lines = [ln.strip() for ln in result.stdout.strip().splitlines() if ln.strip()]
+        if len(lines) < 2:
+            return None
+        return {"version": lines[-2], "build": lines[-1]}
+    except Exception:
+        return None
+
+
+def install_python_deps(backend: str, skip_if_present: bool = False) -> bool:
+    """Install Python dependencies.
+
+    With *skip_if_present* (Check/Install), an llama-cpp-python that already
+    matches the selected backend is left alone instead of being rebuilt.
+    """
     global _INSTALLED_LLAMA_WHEEL_VERSION
     print_status("Installing Python dependencies...")
     try:
@@ -942,6 +981,29 @@ def install_python_deps(backend: str) -> bool:
         install_qt_webengine()
 
         info = BACKEND_OPTIONS[backend]
+
+        if skip_if_present:
+            existing = get_installed_llama_info()
+            if existing:
+                if not info.get("compile_wheel"):
+                    wanted_version = LLAMACPP_PYTHON_PREBUILT_VERSION.lstrip("v")
+                    if existing["version"] == wanted_version:
+                        print_status(
+                            f"llama-cpp-python {existing['version']} (CPU wheel) "
+                            "already installed - skipping compile")
+                        _INSTALLED_LLAMA_WHEEL_VERSION = f"v{wanted_version}"
+                        print_status("Python dependencies installed successfully")
+                        return True
+                else:
+                    wanted_build = ("vulkan" if info.get("build_flags", {}).get("GGML_VULKAN")
+                                    else "cpu")
+                    if existing["build"] == wanted_build:
+                        print_status(
+                            f"llama-cpp-python {existing['version']} "
+                            f"({wanted_build} build) already installed - skipping compile")
+                        _INSTALLED_LLAMA_WHEEL_VERSION = f"v{existing['version']}"
+                        print_status("Python dependencies installed successfully")
+                        return True
 
         if not info.get("compile_wheel"):
             wheel_version = LLAMACPP_PYTHON_PREBUILT_VERSION.lstrip("v")
@@ -1811,7 +1873,7 @@ sys.exit(0)
         print()
 
         # Stream output live — user can see progress and it doesn't look like a hang.
-        # Timeout is a wall-clock deadline (15 min) rather than subprocess.run timeout 
+        # Timeout is a wall-clock deadline (30 min) rather than subprocess.run timeout 
         # which would kill a legitimately slow download mid-stream.
         proc = subprocess.Popen(
             [python_exe, str(script_path)],
@@ -1822,7 +1884,7 @@ sys.exit(0)
         )
 
         timed_out = False
-        deadline  = time.time() + 900   # 15-minute hard cap
+        deadline  = time.time() + 1800  # 30-minute hard cap (slow connections)
 
         for line in proc.stdout:
             # Suppress pip's "[notice] A new release of pip is available" noise
@@ -1838,7 +1900,7 @@ sys.exit(0)
         script_path.unlink(missing_ok=True)
 
         if timed_out:
-            print_status("Kokoro TTS download timed out (>15 min).  "
+            print_status("Kokoro TTS download timed out (>30 min).  "
                          "Check your internet connection and try again. ", False)
             return False
 
@@ -1871,27 +1933,43 @@ os.environ["HF_HOME"] = r"{cache_parent}"
 os.environ["SENTENCE_TRANSFORMERS_HOME"] = r"{cache_dir}"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-print("[EMBED] Downloading and initializing embedding model: {model_name}")
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "0"
+
+from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer
+
+# Already cached from an earlier (possibly interrupted then completed) run?
+# Skipping the network entirely is what makes a retry cheap.
 try:
-    from sentence_transformers import SentenceTransformer
-    from transformers import AutoTokenizer
-    
-    # Initialize model (downloads weights, config, pooling)
-    print("[EMBED] Loading SentenceTransformer model...")
-    model = SentenceTransformer("{model_name}", cache_folder=r"{cache_dir}")
-    
-    # Explicitly download and cache tokenizer files (vocab, merges, etc.)
-    print("[EMBED] Downloading and caching tokenizer files...")
-    tokenizer = AutoTokenizer.from_pretrained("{model_name}", cache_folder=r"{cache_dir}")
-    
-    # Run a test encode to ensure all runtime files are loaded/cached
-    print("[EMBED] Running test encoding to finalize cache...")
+    print("[EMBED] Checking local cache for: {model_name}", flush=True)
+    model = SentenceTransformer("{model_name}", cache_folder=r"{cache_dir}",
+                                local_files_only=True)
+    tokenizer = AutoTokenizer.from_pretrained("{model_name}", cache_dir=r"{cache_dir}",
+                                              local_files_only=True)
     test = model.encode(["test"], convert_to_numpy=True, show_progress_bar=False)
-    
-    print(f"[EMBED] Model and tokenizer fully initialized and cached (dim={{test.shape[1]}})")
+    print(f"[EMBED] Already cached - skipping download (dim={{test.shape[1]}})", flush=True)
     sys.exit(0)
 except Exception as e:
-    print(f"[EMBED] Error: {{e}}")
+    print(f"[EMBED] Not in local cache ({{e.__class__.__name__}}) - downloading...", flush=True)
+
+print("[EMBED] Downloading and initializing embedding model: {model_name}", flush=True)
+try:
+    # Initialize model (downloads weights, config, pooling)
+    print("[EMBED] Loading SentenceTransformer model...", flush=True)
+    model = SentenceTransformer("{model_name}", cache_folder=r"{cache_dir}")
+
+    # Explicitly download and cache tokenizer files (vocab, merges, etc.)
+    print("[EMBED] Downloading and caching tokenizer files...", flush=True)
+    tokenizer = AutoTokenizer.from_pretrained("{model_name}", cache_dir=r"{cache_dir}")
+
+    # Run a test encode to ensure all runtime files are loaded/cached
+    print("[EMBED] Running test encoding to finalize cache...", flush=True)
+    test = model.encode(["test"], convert_to_numpy=True, show_progress_bar=False)
+
+    print(f"[EMBED] Model and tokenizer fully initialized and cached (dim={{test.shape[1]}})", flush=True)
+    sys.exit(0)
+except Exception as e:
+    print(f"[EMBED] Error: {{e}}", flush=True)
     import traceback
     traceback.print_exc()
     sys.exit(1)
@@ -1903,25 +1981,50 @@ except Exception as e:
             f.write(script)
 
         print_status(f"Downloading embedding model: {model_name}...")
-        result = subprocess.run(
+        print("  (~430 MB; partial downloads resume if this is a retry)")
+
+        # Stream output live so tqdm's \r progress updates are visible, and use a
+        # generous wall-clock deadline: 430 MB over a slow line takes far longer
+        # than a subprocess.run timeout would allow.
+        proc = subprocess.Popen(
             [python_exe, str(script_path)],
-            capture_output=True, text=True, timeout=600
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
         )
 
-        if result.stdout:
-            for line in result.stdout.strip().split('\n'):
-                if line.strip():
-                    print(f"  {line}")
+        timed_out = False
+        deadline  = time.time() + 2700   # 45-minute hard cap
 
+        while True:
+            ch = proc.stdout.read(1)
+            if not ch:
+                break
+            sys.stdout.write(ch)
+            sys.stdout.flush()
+            if time.time() > deadline:
+                proc.kill()
+                timed_out = True
+                break
+
+        proc.wait()
         script_path.unlink(missing_ok=True)
 
-        if result.returncode == 0:
+        if timed_out:
+            print()
+            print_status("Embedding model download timed out (>45 min). "
+                         "Check your internet connection and re-run - "
+                         "partial downloads resume.", False)
+            return False
+
+        if proc.returncode == 0:
+            print()
             print_status(f"Embedding model installed: {model_name}")
             return True
         else:
-            print_status("Embedding model download failed", False)
-            if result.stderr:
-                print(f"  Error: {result.stderr[:200]}")
+            print()
+            print_status("Embedding model download failed - see output above", False)
             return False
 
     except Exception as e:
@@ -2150,7 +2253,7 @@ def run_installer():
             return
 
     # Install Python dependencies (includes llama-cpp-python wheel) - NOW FATAL
-    if not install_python_deps(backend):
+    if not install_python_deps(backend, skip_if_present=not is_clean_install):
         print_status("Python dependency installation failed. Installation aborted.", False)
         return
 

@@ -1174,6 +1174,12 @@ def calculate_single_model_gpu_layers_with_layers(
 def unload_models(llm_state, models_loaded_state):
     """Graceful model unload with aggressive Vulkan cleanup."""
     import gc
+    # Freeing the context while another thread is inside llama_decode is an
+    # access violation. Covers every unload path: idle timer, manual Unload
+    # button, and the unload half of a model switch.
+    if cfg.GENERATION_ACTIVE:
+        cfg.set_status("Generation in progress - unload skipped", console=True)
+        return "Generation in progress - unload skipped", llm_state, models_loaded_state
     if not models_loaded_state or llm_state is None:
         cfg.set_status("Model off", console=True)
         return "Model off", None, False
