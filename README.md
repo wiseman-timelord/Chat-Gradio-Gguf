@@ -33,6 +33,9 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The long-running issue of additional blank lines in model output is now fixed! (Windows v2.10)...
 ![image_missing](media/interaction_page.jpg)
 
+- Here is Devin testing the Interaction page on Linux (Linux v2.11)
+![image_missing](media/devin_linux.jpg)
+
 - The Configuration page, the settings for, Hardware, TTS, Models (Windows v2.04)...
 ![image_missing](media/configuration_page.jpg)
 
