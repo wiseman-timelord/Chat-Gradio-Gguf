@@ -7,6 +7,7 @@ import os
 import json
 import subprocess
 import sys
+import codecs
 import contextlib
 import time
 import threading
@@ -749,7 +750,7 @@ def create_files_and_directories(backend: str) -> None:
 # EMBEDDING BACKEND INSTALLATION
 # =============================================================================
 
-def install_embedding_backend() -> bool:
+def install_embedding_backend(skip_if_present: bool = False) -> bool:
     """Install PyTorch CPU and sentence-transformers."""
     python_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                     ("python.exe" if PLATFORM == "windows" else "python"))
@@ -760,36 +761,52 @@ def install_embedding_backend() -> bool:
     transformers_version        = "transformers>=4.44.0"
     sentence_transformers_version = "sentence-transformers>=3.3.0"
 
-    print_status(f"Installing PyTorch (CPU) — {torch_req}...")
-    if not pip_install_with_retry(pip_exe, torch_req,
-                                  ["--index-url", "https://download.pytorch.org/whl/cpu",
-                                   "--upgrade-strategy", "only-if-needed"],
-                                  max_retries=10, initial_delay=5.0):
-        print_status("PyTorch installation failed", False)
-        return False
-    print_status("PyTorch (CPU) installed")
+    unsatisfied = get_unsatisfied_requirements(
+        [torch_req, transformers_version, sentence_transformers_version]
+    ) if skip_if_present else None
 
-    subprocess.run(
-        [pip_exe, "install", "setuptools>=80.0", "--upgrade", "--quiet"],
-        capture_output=True, timeout=120
-    )
-    print_status("setuptools restored after torch install")
+    def _needed(req):
+        return unsatisfied is None or req in unsatisfied
 
-    print_status(f"Installing {transformers_version}...")
-    if not pip_install_with_retry(pip_exe, transformers_version,
-                                  ["--upgrade-strategy", "only-if-needed"],
-                                  max_retries=10, initial_delay=5.0):
-        print_status("transformers installation failed", False)
-        return False
-    print_status("transformers installed")
+    if _needed(torch_req):
+        print_status(f"Installing PyTorch (CPU) — {torch_req}...")
+        if not pip_install_with_retry(pip_exe, torch_req,
+                                      ["--index-url", "https://download.pytorch.org/whl/cpu",
+                                       "--upgrade-strategy", "only-if-needed"],
+                                      max_retries=10, initial_delay=5.0):
+            print_status("PyTorch installation failed", False)
+            return False
+        print_status("PyTorch (CPU) installed")
 
-    print_status(f"Installing {sentence_transformers_version}...")
-    if not pip_install_with_retry(pip_exe, sentence_transformers_version,
-                                  ["--upgrade-strategy", "only-if-needed"],
-                                  max_retries=10, initial_delay=5.0):
-        print_status("sentence-transformers installation failed", False)
-        return False
-    print_status("sentence-transformers installed")
+        subprocess.run(
+            [pip_exe, "install", "setuptools>=80.0", "--upgrade", "--quiet"],
+            capture_output=True, timeout=120
+        )
+        print_status("setuptools restored after torch install")
+    else:
+        print_status("PyTorch (CPU) already present - skipped")
+
+    if _needed(transformers_version):
+        print_status(f"Installing {transformers_version}...")
+        if not pip_install_with_retry(pip_exe, transformers_version,
+                                      ["--upgrade-strategy", "only-if-needed"],
+                                      max_retries=10, initial_delay=5.0):
+            print_status("transformers installation failed", False)
+            return False
+        print_status("transformers installed")
+    else:
+        print_status("transformers already present - skipped")
+
+    if _needed(sentence_transformers_version):
+        print_status(f"Installing {sentence_transformers_version}...")
+        if not pip_install_with_retry(pip_exe, sentence_transformers_version,
+                                      ["--upgrade-strategy", "only-if-needed"],
+                                      max_retries=10, initial_delay=5.0):
+            print_status("sentence-transformers installation failed", False)
+            return False
+        print_status("sentence-transformers installed")
+    else:
+        print_status("sentence-transformers already present - skipped")
 
     verify_script = '''
 import sys, os
@@ -831,12 +848,18 @@ except Exception as e:
 # QT WEBENGINE INSTALLATION
 # =============================================================================
 
-def install_qt_webengine() -> bool:
+def install_qt_webengine(skip_if_present: bool = False) -> bool:
     """Install PyQt6 + PyQt6-WebEngine for the custom browser window."""
-    print_status("Installing Qt6 WebEngine for custom browser...")
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                  ("pip.exe" if PLATFORM == "windows" else "pip"))
 
+    if skip_if_present:
+        missing = get_unsatisfied_requirements(["PyQt6>=6.6.0", "PyQt6-WebEngine>=6.6.0"])
+        if missing is not None and not missing:
+            print_status("Qt6 WebEngine already present - skipped")
+            return True
+
+    print_status("Installing Qt6 WebEngine for custom browser...")
     try:
         if not pip_install_with_retry(pip_exe, "PyQt6>=6.6.0", max_retries=3, initial_delay=5.0):
             print_status("PyQt6 installation failed - will use system browser", False)
@@ -858,7 +881,23 @@ def install_qt_webengine() -> bool:
 # LINUX SYSTEM DEPENDENCIES
 # =============================================================================
 
-def install_linux_system_dependencies(backend: str) -> bool:
+def _dpkg_missing(packages: list) -> list:
+    """Packages from *packages* that dpkg does not report as installed."""
+    missing = []
+    for package in packages:
+        try:
+            result = subprocess.run(
+                ["dpkg-query", "-W", "-f=${Status}", package],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode != 0 or "install ok installed" not in result.stdout:
+                missing.append(package)
+        except Exception:
+            missing.append(package)
+    return missing
+
+
+def install_linux_system_dependencies(backend: str, skip_if_present: bool = False) -> bool:
     """Install Linux system dependencies."""
     print_status("Installing Linux system dependencies...")
 
@@ -880,12 +919,22 @@ def install_linux_system_dependencies(backend: str) -> bool:
     elif "Vulkan" in backend:
         vulkan_packages = ["vulkan-tools", "libvulkan1"]
 
+    if skip_if_present:
+        base_packages = _dpkg_missing(list(set(base_packages)))
+        vulkan_packages = _dpkg_missing(vulkan_packages)
+        if not base_packages and not vulkan_packages:
+            print_status("Linux system dependencies already present - skipped")
+            return True
+
     try:
         subprocess.run(["sudo", "apt-get", "update"], check=True)
-        subprocess.run(
-            ["sudo", "apt-get", "install", "-y"] + list(set(base_packages)), check=True
-        )
-        print_status("Base dependencies installed")
+        if base_packages:
+            subprocess.run(
+                ["sudo", "apt-get", "install", "-y"] + list(set(base_packages)), check=True
+            )
+            print_status("Base dependencies installed")
+        else:
+            print_status("Base dependencies already present - skipped")
 
         if vulkan_packages:
             print_status("Installing Vulkan dependencies...")
@@ -911,46 +960,103 @@ def install_linux_system_dependencies(backend: str) -> bool:
 # PYTHON DEPENDENCY INSTALLATION
 # =============================================================================
 
+def get_unsatisfied_requirements(requirements: list):
+    """Return the subset of *requirements* the venv does not already satisfy.
+
+    Returns None when the check cannot be performed (no venv yet, or the venv
+    lacks `packaging`), which callers treat as "install everything".
+    """
+    if not requirements:
+        return []
+
+    python_exe = VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") / \
+                 ("python.exe" if PLATFORM == "windows" else "python")
+    if not python_exe.is_file():
+        return None
+
+    probe = (
+        "import json, sys\n"
+        "from importlib.metadata import version, PackageNotFoundError\n"
+        "from packaging.requirements import Requirement\n"
+        f"reqs = {requirements!r}\n"
+        "missing = []\n"
+        "for spec in reqs:\n"
+        "    try:\n"
+        "        req = Requirement(spec)\n"
+        "        installed = version(req.name)\n"
+        "    except PackageNotFoundError:\n"
+        "        missing.append(spec)\n"
+        "        continue\n"
+        "    except Exception:\n"
+        "        missing.append(spec)\n"
+        "        continue\n"
+        "    if req.specifier and not req.specifier.contains(installed, prereleases=True):\n"
+        "        missing.append(spec)\n"
+        "print('MISSING_JSON:' + json.dumps(missing))\n"
+    )
+    try:
+        result = subprocess.run(
+            [str(python_exe), "-c", probe],
+            capture_output=True, text=True, timeout=180
+        )
+        if result.returncode != 0:
+            return None
+        for line in result.stdout.splitlines():
+            if line.startswith("MISSING_JSON:"):
+                return json.loads(line[len("MISSING_JSON:"):])
+        return None
+    except Exception:
+        return None
+
+
 def _stream_child(cmd, deadline_secs: int, env=None, filter_pip_notices: bool = False):
     """Run *cmd*, echo its output live, and enforce a wall-clock deadline.
 
-    Returns (returncode, timed_out). Output is forwarded a character at a time
-    so tqdm's \\r progress updates survive; *filter_pip_notices* switches to
-    line mode where pip's "new release" noise can be dropped.
+    Returns (returncode, timed_out). The pipe is read as raw bytes and decoded
+    here: text mode would translate the child's carriage returns into newlines,
+    which turns every tqdm progress update into a new line of output. Segments
+    are flushed on either "\\r" or "\\n" so a progress bar redraws in place.
+    *filter_pip_notices* drops pip's "new release" noise.
     """
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+        bufsize=0,
         env=env,
     )
 
     timed_out = False
     deadline = time.time() + deadline_secs
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    segment = ""
 
-    if filter_pip_notices:
-        for line in proc.stdout:
-            if line.startswith("[notice]") or "new release of pip" in line:
-                continue
-            print(f"  {line}", end="", flush=True)
-            if time.time() > deadline:
-                proc.kill()
-                timed_out = True
-                break
-    else:
-        while True:
-            ch = proc.stdout.read(1)
-            if not ch:
-                break
-            sys.stdout.write(ch)
-            sys.stdout.flush()
-            if time.time() > deadline:
-                proc.kill()
-                timed_out = True
-                break
+    def emit(text):
+        if not text:
+            return
+        if filter_pip_notices:
+            stripped = text.strip()
+            if stripped.startswith("[notice]") or "new release of pip" in stripped:
+                return
+        sys.stdout.write(text)
+        sys.stdout.flush()
 
+    while True:
+        raw = proc.stdout.read(1)
+        if not raw:
+            break
+        ch = decoder.decode(raw)
+        if ch:
+            segment += ch
+            if ch in ("\r", "\n"):
+                emit(segment)
+                segment = ""
+        if time.time() > deadline:
+            proc.kill()
+            timed_out = True
+            break
+
+    emit(segment)
     proc.wait()
     return proc.returncode, timed_out
 
@@ -1018,26 +1124,33 @@ def install_python_deps(backend: str, skip_if_present: bool = False) -> bool:
                     ("pip.exe" if PLATFORM == "windows" else "pip"))
 
         all_requirements = get_dynamic_requirements()
+        unsatisfied = get_unsatisfied_requirements(all_requirements) if skip_if_present else None
 
-        print_status(f"Installing Python packages...")
-        total = len(all_requirements)
-        for i, req in enumerate(all_requirements, 1):
-            pkg_name = req.split('>=')[0].split('==')[0].split('[')[0]
-            print(f"  [{i}/{total}] Installing {pkg_name}...  ", end='', flush=True)
+        if unsatisfied is not None and not unsatisfied:
+            print_status(f"All {len(all_requirements)} base packages already present - skipped")
+        else:
+            print_status(f"Installing Python packages...")
+            total = len(all_requirements)
+            for i, req in enumerate(all_requirements, 1):
+                pkg_name = req.split('>=')[0].split('==')[0].split('[')[0]
+                if unsatisfied is not None and req not in unsatisfied:
+                    print(f"  [{i}/{total}] {pkg_name} present  OK")
+                    continue
+                print(f"  [{i}/{total}] Installing {pkg_name}...  ", end='', flush=True)
 
-            if pip_install_with_retry(pip_exe, req, max_retries=10, initial_delay=5.0):
-                print(f" OK")
-            else:
-                print(f" FAILED")
-                print_status(f"Failed to install {pkg_name} after 10 retries", False)
-                return False
+                if pip_install_with_retry(pip_exe, req, max_retries=10, initial_delay=5.0):
+                    print(f" OK")
+                else:
+                    print(f" FAILED")
+                    print_status(f"Failed to install {pkg_name} after 10 retries", False)
+                    return False
 
-        print_status("Base packages installed")
+            print_status("Base packages installed")
 
-        if not install_embedding_backend():
+        if not install_embedding_backend(skip_if_present=skip_if_present):
             return False
 
-        install_qt_webengine()
+        install_qt_webengine(skip_if_present=skip_if_present)
 
         info = BACKEND_OPTIONS[backend]
 
@@ -1129,7 +1242,7 @@ def install_python_deps(backend: str, skip_if_present: bool = False) -> bool:
         return False
 
 
-def install_optional_file_support() -> bool:
+def install_optional_file_support(skip_if_present: bool = False) -> bool:
     """Install optional file format libraries"""
     print_status("Installing optional file format support...")
     optional_packages = [
@@ -1142,12 +1255,21 @@ def install_optional_file_support() -> bool:
     pip_exe = str(VENV_DIR / ("Scripts" if PLATFORM == "windows" else "bin") /
                  ("pip.exe" if PLATFORM == "windows" else "pip"))
 
+    unsatisfied = get_unsatisfied_requirements(optional_packages) if skip_if_present else None
+    if unsatisfied is not None and not unsatisfied:
+        print_status("  All optional file format libraries already present - skipped")
+        return True
+
     for package in optional_packages:
+        name = package.split('>=')[0]
+        if unsatisfied is not None and package not in unsatisfied:
+            print_status(f"  {name} already present - skipped")
+            continue
         try:
             subprocess.run([pip_exe, "install", package], check=True, capture_output=True)
-            print_status(f"  Installed {package.split('>=')[0]}")
+            print_status(f"  Installed {name}")
         except subprocess.CalledProcessError:
-            print_status(f"  Optional package {package.split('>=')[0]} failed", False)
+            print_status(f"  Optional package {name} failed", False)
             return False  # <--- CHANGED: Return False instead of continuing
 
     return True
@@ -1868,14 +1990,48 @@ VOICE_IDS = {voice_ids!r}
 LANG_CODE = "{lang_code}"
 
 # ── Phase 1: model weights ──────────────────────────────────────────
+# Files are fetched one at a time (rather than via snapshot_download) so each
+# name and size is reported; a stalled file is then obvious from the output.
 print("[TTS] Phase 1/3 — Downloading Kokoro model weights... ", flush=True)
+
+def human(size):
+    if not size:
+        return "unknown size"
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{{size:.1f}} {{unit}}"
+        size /= 1024
+
 try:
-    from huggingface_hub import snapshot_download
-    local_dir = snapshot_download(
-        repo_id=REPO_ID,
-        cache_dir=r"{hf_cache}",
-        ignore_patterns=["*.md", "*.txt", "*.gitattributes"],
-    )
+    from huggingface_hub import HfApi, hf_hub_download, snapshot_download
+    try:
+        entries = [
+            f for f in HfApi().list_repo_tree(REPO_ID, recursive=True)
+            if getattr(f, "size", None) is not None
+            and not f.path.endswith((".md", ".txt", ".gitattributes"))
+        ]
+    except Exception as list_err:
+        print(f"[TTS] Could not list repo files ({{list_err}}) - using bulk download", flush=True)
+        entries = None
+
+    if entries:
+        total_files = len(entries)
+        total_bytes = sum(f.size or 0 for f in entries)
+        print(f"[TTS] {{total_files}} file(s), {{human(total_bytes)}} total", flush=True)
+        local_dir = None
+        for idx, entry in enumerate(entries, 1):
+            print(f"[TTS] ({{idx}}/{{total_files}}) {{entry.path}} - {{human(entry.size)}}", flush=True)
+            local_dir = hf_hub_download(
+                repo_id=REPO_ID,
+                filename=entry.path,
+                cache_dir=r"{hf_cache}",
+            )
+    else:
+        local_dir = snapshot_download(
+            repo_id=REPO_ID,
+            cache_dir=r"{hf_cache}",
+            ignore_patterns=["*.md", "*.txt", "*.gitattributes"],
+        )
     print(f"[TTS] Model weights downloaded to: {{local_dir}} ", flush=True)
 except Exception as e:
     print(f"[TTS] ERROR downloading model weights: {{e}} ", flush=True)
@@ -2297,7 +2453,7 @@ def run_installer():
 
     # Install system dependencies (Linux only) - NOW FATAL
     if PLATFORM == "linux":
-        if not install_linux_system_dependencies(backend):
+        if not install_linux_system_dependencies(backend, skip_if_present=not is_clean_install):
             print_status("Linux system dependencies installation failed. Installation aborted.", False)
             return
 
@@ -2307,7 +2463,7 @@ def run_installer():
         return
 
     # Install optional file format support - NOW FATAL
-    if not install_optional_file_support():
+    if not install_optional_file_support(skip_if_present=not is_clean_install):
         print_status("Optional file support installation failed. Installation aborted.", False)
         return
 
