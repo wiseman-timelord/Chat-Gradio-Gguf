@@ -1,5 +1,5 @@
 # ![Chat-Gradio-Gguf](media/project_banner.jpg)
-Status - Tested and works good, on Windows with Vulkan GPU, Linux testing is currently done by Devin through CPU inference. Another thing, if you are on Windows 10/11 and prefer Qwen, there is also now [Qwen-Windows-Gguf](https://github.com/wiseman-timelord/Qwen-Windows-Gguf), then use that instead.
+Status - Tested and works good, on Windows with Vulkan GPU, while Linux testing is currently done by Devin through CPU inference (as its been a while). Another thing, if you are on Windows 10/11 and prefer Qwen, there is also now [Qwen-Windows-Gguf](https://github.com/wiseman-timelord/Qwen-Windows-Gguf), then use that instead.
 - Currently v2.10 - Fixed long-running issues with Formatting of model text output (see update notes).
 - Upcoming v2.11 - as much as possible tested by Devin in a linux agent, which I assume will result in some kind of update.
 
