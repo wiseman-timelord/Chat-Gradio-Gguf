@@ -45,131 +45,12 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - The dynamic progress indication replaces the user input box upon submission, illustrating the phase of the prompt/response chain (Windows v2.01.00)...
 ![image_missing](media/dynamic_progress.jpg)
 
-- Startup looks like this in the Command Prompt console (v1.10.6)...
-<details>
-    
-    ===============================================================================
-        Chat-Gradio-Gguf: Launcher
-    ===============================================================================
-    
-    Starting Chat-Gradio-Gguf...
-    [COMPAT] NLP uses word-split fallback
-    [COMPAT] sentence_transformers loaded
-    [COMPAT] Pydantic v1.10.21 — Gradio 3.x compatible
-    `main` Function Started.
-    [INI] Platform: windows
-    [INI] Backend: VULKAN_CPU
-    [INI] Vulkan: True
-    [INI] Graphics Acceleration: True
-    [INI] Qt Version: 5 (v5)
-    [INI] DX Feature Level: 0xb100
-    [INI] Embedding Model: BAAI/bge-small-en-v1.5
-    [INI] Gradio Version: 3.50.2
-    [INI] OS Version: 10
-    [INI] Windows Version: 10
-    [INI] TTS Type: Built-in (pyttsx3/espeak-ng)
-    [MODELS] Scanning directory: G:\LargeModels\Size_ittle_1b-2b
-    [MODELS] ✓ Found 9 models:
-    [MODELS]   - Benchmaxx-Llama-3.2-1B-Instruct.Q6_K.gguf
-    [MODELS]   - DeepSeek-V3-1B-Test-Q6_K.gguf
-    [MODELS]   - deepseek-v3-tiny-random.Q6_K.gguf
-    [MODELS]   - Dolphin3.0-Qwen2.5-0.5B-Q4_K_M.gguf
-    [MODELS]   - gemma-3-1b-thinking-v2-q6_k.gguf
-    [MODELS]   ... and 4 more
-    [CONFIG] Loaded -> Model: qwen1_5-0_5b-chat-q3_k_m.gguf | CPU: Auto-Select
-    Configuration loaded
-    [TTS] Engine: pyttsx3
-    [TTS] Audio Backend: windows
-    [TTS] Voice from config: Microsoft Zira  - English (United States) (en-US) (HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-US_ZIRA_11.0)
-    [Vulkan] GGML_CUDA_NO_PINNED=1   (frees ~300 MB VRAM)
-    [Vulkan] GGML_VK_NO_PIPELINE_CACHE=0  (cached SPIR-V pipelines)
-    Script mode `windows` with backend `VULKAN_CPU`
-    Working directory: ...les\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.10.5
-    Data Directory: ...hat-Gradio-Gguf\Chat-Gradio-Gguf-1.10.5\data
-    Session History: ...io-Gguf\Chat-Gradio-Gguf-1.10.5\data\history
-    Temp Directory: ...radio-Gguf\Chat-Gradio-Gguf-1.10.5\data\temp
-    [CPU] Detected: 12 cores, 24 threads
-    [CPU] Current: 20
-    CPU Configuration: 12 physical cores, 24 logical cores
-    
-    Configuration:
-      Backend: VULKAN_CPU
-      Model: qwen1_5-0_5b-chat-q3_k_m.gguf
-      Context Size: 8192
-      VRAM Allocation: 8192 MB
-      CPU Threads: 20
-      GPU Layers: 0
-    
-    [INIT] Pre-loading auxiliary inference...
-    [INIT] WARN spaCy model not available (will use fallback)
-    [RAG] Loading embedding model: BAAI/bge-small-en-v1.5
-    [RAG] Downloading/loading to: C:\Inference_Files\Chat-Gradio-Gguf\Chat-Gradio-Gguf-1.10.5\data\embedding_cache
-    Loading weights: 100%|███████████████████████████████████████████| 199/199 [00:00<00:00, 11004.75it/s]
-    BertModel LOAD REPORT from: BAAI/bge-small-en-v1.5
-    Key                     | Status     |  |
-    ------------------------+------------+--+-
-    embeddings.position_ids | UNEXPECTED |  |
-    
-    Notes:
-    - UNEXPECTED:   can be ignored when loading from different task/architecture; not ok if you expect identical arch.
-    [RAG] Embedding model loaded successfully (dim=384)
-    [INIT] OK Embedding model pre-loaded from cache
-    
-    Launching Gradio display...
-    [DISPLAY] Qt Version: 5 (v5)
-    [DISPLAY] Gradio Version: 3.50.2
-    [DISPLAY] Graphics Acceleration: True
-    [FILTER] Using gradio3 filter (15 rules)
-    IMPORTANT: You are using gradio version 3.50.2, however version 4.44.1 is available, please upgrade.
-    --------
-    [MODELS] Scanning directory: G:\LargeModels\Size_ittle_1b-2b
-    [MODELS] ✓ Found 9 models:
-    [MODELS]   - Benchmaxx-Llama-3.2-1B-Instruct.Q6_K.gguf
-    [MODELS]   - DeepSeek-V3-1B-Test-Q6_K.gguf
-    [MODELS]   - deepseek-v3-tiny-random.Q6_K.gguf
-    [MODELS]   - Dolphin3.0-Qwen2.5-0.5B-Q4_K_M.gguf
-    [MODELS]   - gemma-3-1b-thinking-v2-q6_k.gguf
-    [MODELS]   ... and 4 more
-    [BROWSER] Starting Gradio server in background...
-    [BROWSER] Waiting for Gradio server at http://localhost:7860...
-    Running on local URL:  http://localhost:7860
-    
-</details>
-
-- The combined Info/Install menu, choose 3/4 if System Detections are as shown (v2.0.0)...
-<details>
-    
-    ===============================================================================
-     Chat-Gradio-Gguf v2 — Backend & Install Size
-    ===============================================================================
-    
-    System Detections...
-       CPU Features : AVX | AVX2 | FMA | F16C
-       Build Tools  : Git OK | CMake OK | MSVC OK | MSBuild OK
-       Platform     : Windows 10 | Python 3.12
-       GPU          : DX11.1 | Vulkan: YES
-    
-    Backend Options...
-       1) Download CPU Binary / Default CPU Wheel (Wheel v0.3.16)
-       2) Download Vulkan Binary / Default CPU Wheel (Wheel v0.3.16)
-       3) Compile CPU Binaries / Compile CPU Wheel (Wheel v0.3.22)
-       4) Compile Vulkan Binaries / Compile Vulkan Wheel (Wheel v0.3.22)
-    
-    Install Size...
-       a) Small  +450MB  - Bge-Small-En v1.5 + Coqui TTS (faster)
-       b) Medium +1.5GB  - Bge-Base-En v1.5  + Coqui TTS (quality)
-    
-    ===============================================================================
-    Selection; Backend=1-4, Size=a-b, Abandon=A; (e.g. 2b):
-
-</details>
-
 ## Hard Requirements
 - Windows 10-11 and/or Ubuntu 24-25 - Its BOTH programs in merged scripts, launching via, batch for windows and bash for Ubuntu. Note: Ubuntu has not been tested since v2, it likely will not work currently (check v1 releases for mentions of Ubuntu/Linux testing/work being done, but it will be older models only).
-- Python ~3.11-~3.13 - Requires [Python](https://www.python.org); AI warns me certain libraries wont work on Python 3.14, possibly Spacy. 
-- Llm Model - You will need a Large Language Model in GGUF format, check the models section for recommendations, but for quick start I advise one like a Qwen3 4B GGUF model such as [Qwen3-4B-abliterated-GGUF](https://huggingface.co/mradermacher/Qwen3-4B-abliterated-GGUF) for testing basic operation or fast responses, and a Qwen 30b A3B GGUF model for proper testing.
-- Suitable GPU - Gpu may be, Main or Compute, with VRam selection 4GB-96GB. Ideally you want the GPU to cover all model layers for fast interference.
-- System Ram - Your system ram must cover, the curren load and the size of the model layers not able to be covered by the GPU, plus smaller models like the embeddings model, plus the wheel if not built for Vulkan.
+- Python 3.10-3.12 - Requires [Python](https://www.python.org), one can install multiple versions of Python, I use "Program Files\Python312" folder. 
+- Llm Model - You will need a Large Language Model in GGUF format, the program intends to at least load these models, GLM, Qwen, Gemma, gpt oss, minstral, granite, Llama, Kimi, Deepseek, check the models section for recommendations.
+- Suitable GPU - Gpu may be, Main or Passive, cards with VRam Allocation/Max selection. Ideally you want the GPU to cover all model layers for optimal inference.
+- System Ram - Your system ram must cover, the current load and the size of the model layers not able to be covered by the GPU, plus smaller models like the embeddings model, plus the wheel if not built for Vulkan.
 
 ### Building Requirements 
 For compile options; If on PATH, ask AI how to check its on path, and as applicable fix...
@@ -241,8 +122,9 @@ Web Search = Slower actual website reading research.
 - Through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files.
 
 ### Models working (with gpt for comparrisson).
-- If you installed with compile option, then you will be able to use the newer models, otherwise with non-compile install will work with models from ~6 months ago, but dont quote me on that. This is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source. If not compiling, then the model handling will be limited to GLM4.7/Qwen3 level models.  
+- If you installed with compile option, then you will be able to use the newer models, otherwise with non-compile install will work with models from ~6 months ago. This is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source. If not compiling, then the model handling will be limited to GLM4.7/Qwen3 level models.  
 - Chat-Gradio-Ggud is currently being programmed towards these models, and performance for the intended models is reported to be like this (no good ~30b models for GLM 5.1 yet, currently GLM 4.7 seems consistently bad compared to Qwen, regardless of better scores people say were internal/faked)...
+- The program will automatically calculate the layer overflow to system ram, but I advise in Q5_K_M in, 3B-6B for 4GB VRAM or 7B-14B for 8GB VRAM, 8B-19B for 12GB VRAM, etc, or the models with Active/Inactive parameters are usually pretty fast/versatile.     
 
 | Model                                      | IFEval                  | BBH            | MATH / MATH-500 / AIME          | GPQA / Diamond       | MuSR       | MMLU / MMLU-Pro              | Notes / Other |
 |--------------------------------------------|-------------------------|----------------|---------------------------------|----------------------|------------|------------------------------|---------------|
@@ -310,7 +192,7 @@ project_root/
 # Development for v2
 v2 is now in Release stage, but there is still work planned...
 - LONG-RUNNING ISSUE: The output text has a blank line - This will be fixed in next update to main.
-- The project now aims to support thesemodels shown below. Qwen3 and GLM 4.7 level models should possibly be preferable to non-compile install options, unsure if this is still the case. Need check/improve handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response or what is best to instruct it to do for each model type, as they all have their syntax, then we will know it is actually using/not using think tags of some variety or some kind of phrase it uses for example Final Answer, we have only tested for qwen mostly. in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
+- The project now aims to support these models shown below. Qwen3 and GLM 4.7 level models should possibly be preferable to non-compile install options, unsure if this is still the case. Need check/improve handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response or what is best to instruct it to do for each model type, as they all have their syntax, then we will know it is actually using/not using think tags of some variety or some kind of phrase it uses for example Final Answer, we have only tested for qwen mostly. in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
 ```
 GLM
 Qwen
