@@ -1038,7 +1038,11 @@ def _stream_child(cmd, deadline_secs: int, env=None, filter_pip_notices: bool = 
             stripped = text.strip()
             if stripped.startswith("[notice]") or "new release of pip" in stripped:
                 return
-        sys.stdout.write(text)
+        try:
+            sys.stdout.write(text)
+        except UnicodeEncodeError:
+            enc = sys.stdout.encoding or "ascii"
+            sys.stdout.write(text.encode(enc, "replace").decode(enc))
         sys.stdout.flush()
 
     while True:
@@ -1069,6 +1073,7 @@ def _hf_download_env(disable_xet: bool):
     retry falls back to plain HTTPS range downloads.
     """
     env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"   # the parent decodes the pipe as UTF-8
     if disable_xet:
         env["HF_HUB_DISABLE_XET"] = "1"
     else:
@@ -1992,7 +1997,7 @@ LANG_CODE = "{lang_code}"
 # ── Phase 1: model weights ──────────────────────────────────────────
 # Files are fetched one at a time (rather than via snapshot_download) so each
 # name and size is reported; a stalled file is then obvious from the output.
-print("[TTS] Phase 1/3 — Downloading Kokoro model weights... ", flush=True)
+print("[TTS] Phase 1/3 - Downloading Kokoro model weights... ", flush=True)
 
 def human(size):
     if not size:
@@ -2039,7 +2044,7 @@ except Exception as e:
     sys.exit(1)
 
 # ── Phase 2: voice .pt files ────────────────────────────────────────
-print(f"[TTS] Phase 2/3 — Downloading {{len(VOICE_IDS)}} voice file(s)...", flush=True)
+print(f"[TTS] Phase 2/3 - Downloading {{len(VOICE_IDS)}} voice file(s)...", flush=True)
 failed_voices = []
 try:
     from huggingface_hub import hf_hub_download
@@ -2065,11 +2070,11 @@ if failed_voices:
     sys.exit(1)
 
 # ── Phase 3: warm-up / verify ───────────────────────────────────────
-print("[TTS] Phase 3/3 — Verifying Kokoro pipeline (warm-up)...", flush=True)
+print("[TTS] Phase 3/3 - Verifying Kokoro pipeline (warm-up)...", flush=True)
 try:
     from kokoro import KPipeline
     pipeline = KPipeline(lang_code=LANG_CODE, repo_id=REPO_ID)
-    print("[TTS] KPipeline created successfully — Kokoro is ready.", flush=True)
+    print("[TTS] KPipeline created successfully - Kokoro is ready.", flush=True)
 except Exception as e:
     print(f"[TTS] ERROR during pipeline warm-up: {{e}}", flush=True)
     traceback.print_exc()
