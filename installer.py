@@ -911,6 +911,65 @@ def install_linux_system_dependencies(backend: str) -> bool:
 # PYTHON DEPENDENCY INSTALLATION
 # =============================================================================
 
+def _stream_child(cmd, deadline_secs: int, env=None, filter_pip_notices: bool = False):
+    """Run *cmd*, echo its output live, and enforce a wall-clock deadline.
+
+    Returns (returncode, timed_out). Output is forwarded a character at a time
+    so tqdm's \\r progress updates survive; *filter_pip_notices* switches to
+    line mode where pip's "new release" noise can be dropped.
+    """
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        env=env,
+    )
+
+    timed_out = False
+    deadline = time.time() + deadline_secs
+
+    if filter_pip_notices:
+        for line in proc.stdout:
+            if line.startswith("[notice]") or "new release of pip" in line:
+                continue
+            print(f"  {line}", end="", flush=True)
+            if time.time() > deadline:
+                proc.kill()
+                timed_out = True
+                break
+    else:
+        while True:
+            ch = proc.stdout.read(1)
+            if not ch:
+                break
+            sys.stdout.write(ch)
+            sys.stdout.flush()
+            if time.time() > deadline:
+                proc.kill()
+                timed_out = True
+                break
+
+    proc.wait()
+    return proc.returncode, timed_out
+
+
+def _hf_download_env(disable_xet: bool):
+    """Child environment for a Hugging Face download.
+
+    Xet is the Hub's default transfer backend and it fails outright on some
+    connections ("CAS Client Error ... error decoding response body"), so a
+    retry falls back to plain HTTPS range downloads.
+    """
+    env = os.environ.copy()
+    if disable_xet:
+        env["HF_HUB_DISABLE_XET"] = "1"
+    else:
+        env.pop("HF_HUB_DISABLE_XET", None)
+    return env
+
+
 def get_installed_llama_info():
     """Probe the venv for an existing llama-cpp-python.
 
@@ -1801,6 +1860,7 @@ os.environ["HUGGINGFACE_HUB_CACHE"]         = r"{hf_cache}"
 os.environ["CUDA_VISIBLE_DEVICES"]          = " "
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "0"  # Enable progress to verify it's not hanging
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")
 os.environ["HF_HUB_VERBOSITY"]             = "info" # Show info/warnings (e.g., unauthenticated rate limits)
 
 REPO_ID   = "hexgrad/Kokoro-82M"
@@ -1875,28 +1935,22 @@ sys.exit(0)
         # Stream output live — user can see progress and it doesn't look like a hang.
         # Timeout is a wall-clock deadline (30 min) rather than subprocess.run timeout 
         # which would kill a legitimately slow download mid-stream.
-        proc = subprocess.Popen(
-            [python_exe, str(script_path)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,   # merge stderr into stdout
-            text=True,
-            bufsize=1,                  # line-buffered
-        )
-
-        timed_out = False
-        deadline  = time.time() + 1800  # 30-minute hard cap (slow connections)
-
-        for line in proc.stdout:
-            # Suppress pip's "[notice] A new release of pip is available" noise
-            if line.startswith("[notice]") or "new release of pip" in line:
-                continue
-            print(f"  {line}", end="", flush=True)
-            if time.time() > deadline:
-                proc.kill()
-                timed_out = True
+        # Attempt 2 retries with the Xet transfer backend disabled.
+        returncode, timed_out = 1, False
+        for attempt in (1, 2):
+            if attempt == 2:
+                print()
+                print_status("Retrying Kokoro download without the Xet transfer "
+                             "backend (already-downloaded files are reused)...")
+            returncode, timed_out = _stream_child(
+                [python_exe, str(script_path)],
+                deadline_secs=1800,     # 30-minute hard cap (slow connections)
+                env=_hf_download_env(disable_xet=(attempt == 2)),
+                filter_pip_notices=True,
+            )
+            if returncode == 0 or timed_out:
                 break
 
-        proc.wait()
         script_path.unlink(missing_ok=True)
 
         if timed_out:
@@ -1904,7 +1958,7 @@ sys.exit(0)
                          "Check your internet connection and try again. ", False)
             return False
 
-        if proc.returncode == 0:
+        if returncode == 0:
             print()
             print_status(f"Kokoro TTS installed: {pack['display']} ")
             return True
@@ -1934,6 +1988,7 @@ os.environ["SENTENCE_TRANSFORMERS_HOME"] = r"{cache_dir}"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "0"
+os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")  # slow links stall past the 10 s default
 
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
@@ -1985,30 +2040,24 @@ except Exception as e:
 
         # Stream output live so tqdm's \r progress updates are visible, and use a
         # generous wall-clock deadline: 430 MB over a slow line takes far longer
-        # than a subprocess.run timeout would allow.
-        proc = subprocess.Popen(
-            [python_exe, str(script_path)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-
-        timed_out = False
-        deadline  = time.time() + 2700   # 45-minute hard cap
-
-        while True:
-            ch = proc.stdout.read(1)
-            if not ch:
-                break
-            sys.stdout.write(ch)
-            sys.stdout.flush()
-            if time.time() > deadline:
-                proc.kill()
-                timed_out = True
+        # than a subprocess.run timeout would allow. Attempts 2 and 3 drop the Xet
+        # transfer backend, which errors out on some connections; the local-cache
+        # check at the top of the child makes each retry resume rather than restart.
+        returncode, timed_out = 1, False
+        for attempt in (1, 2, 3):
+            if attempt > 1:
+                print()
+                print_status(f"Download attempt {attempt}/3 without the Xet "
+                             "transfer backend (resuming)...")
+                time.sleep(3)
+            returncode, timed_out = _stream_child(
+                [python_exe, str(script_path)],
+                deadline_secs=2700,      # 45-minute hard cap
+                env=_hf_download_env(disable_xet=(attempt > 1)),
+            )
+            if returncode == 0 or timed_out:
                 break
 
-        proc.wait()
         script_path.unlink(missing_ok=True)
 
         if timed_out:
@@ -2018,7 +2067,7 @@ except Exception as e:
                          "partial downloads resume.", False)
             return False
 
-        if proc.returncode == 0:
+        if returncode == 0:
             print()
             print_status(f"Embedding model installed: {model_name}")
             return True
