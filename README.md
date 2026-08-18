@@ -1,6 +1,6 @@
 # ![Chat-Gradio-Gguf](media/project_banner.jpg)
 Status - Troubled since introduction of One-Shot mode (just use one model per session, until fixed/solution, or use older version).
-- Currently v2.0xx.xx - Works great on Qwen v3.0-v3.6 and some other models, see list. Recently, the GUI is looking cleaner.
+- Currently v2.0xx.xx - Works good on Qwen v3.0-v3.6 and some other models, see list. Next release will be better see development.
 - Previously v1.xx - Linux installs/use was updated/confirmed working for linux in some versions of v1.
 - There is now [Qwen-Windows-Gguf](https://github.com/wiseman-timelord/Qwen-Windows-Gguf), so if you are on Windows 10 and prefer Qwen, then use that instead.
 
@@ -308,90 +308,8 @@ project_root/
 
 # Development for v2
 v2 is now in Release stage, but there is still work planned...
-- LONG-RUNNING ISSUE: The output text has a blank line between each line, this is a /p/p/p when a /p/p is called. thereabouts /p by itself would produce a single paragraph. There may be a solution, this for example would produce the issue of double lines...
-```
-def refresh_status():
-    """Refresh debug panel + status bars — used on initial load and debug button click."""
-    from scripts.inference import get_model_status
-
-    info          = get_model_status()
-    tts_state     = get_tts_state()
-    avatar_state  = get_avatar_state()
-    pool          = info.get("agent_pool", {})
-    active_agent  = pool.get("active_agent")
-    agent_str     = active_agent or "idle"
-    manager_phase = info.get("manager_phase", "idle")
-    manager_threads = info.get("manager_threads", "?")
-
-    # Manager and Display GPU are gone. The manager model filename was a
-    # restatement of the Configuration page's Manager Model Folder, and the
-    # display GPU is by definition the one card that never takes part in
-    # inference — a fixed fact about the machine, not a status. Model(s) and
-    # Vision Support move in here from the two Textboxes they used to occupy.
-    debug_lines = [
-        f"**Build:** display.py {DISPLAY_BUILD}",
-        f"**AI gate:** {'ENABLED' if get_ai_power_state('debug') else 'disabled'}",
-        f"**Backend:** {info['backend']}",
-        f"**Server:** {'Ready' if info.get('loaded') else 'Unreachable'} @ {runtime.manager_api_base}",
-        f"**Manager Phase:** {manager_phase} ({manager_threads} threads)",
-        f"**Model(s):** {_model_status_text(info)}",
-        f"**Vision Support:** {_vision_support_text(active_agent)}",
-        f"**TTS:** {tts_state} — tts_voice_agent (only loads when no other agent is deployed)",
-        f"**Active Agent:** {agent_str}",
-        f"**Agent GPU:** {runtime.agent_gpu_name} ({runtime.agent_gpu_vram_mb} MB)",
-        f"**Avatar:** {avatar_state}",
-        f"**RAG Chunks:** {get_rag_chunk_count()}",
-        f"**VRAM Budget:** {info.get('vram_budget', 'N/A')}",
-    ]
-
-    status_msg = "Startup complete."
-    set_global_status(status_msg)
-
-    return "\n\n".join(debug_lines), status_msg, status_msg, status_msg
-```
-...where as this would not produce the same issue, and each line would be under the previous line, not after a blank line after the previous line...
-```
-def refresh_status():
-    """Refresh debug panel + status bars — used on initial load and debug button click."""
-    from scripts.inference import get_model_status
-
-    info          = get_model_status()
-    tts_state     = get_tts_state()
-    avatar_state  = get_avatar_state()
-    pool          = info.get("agent_pool", {})
-    active_agent  = pool.get("active_agent")
-    agent_str     = active_agent or "idle"
-    manager_phase = info.get("manager_phase", "idle")
-    manager_threads = info.get("manager_threads", "?")
-
-    # Manager and Display GPU are gone. The manager model filename was a
-    # restatement of the Configuration page's Manager Model Folder, and the
-    # display GPU is by definition the one card that never takes part in
-    # inference — a fixed fact about the machine, not a status. Model(s) and
-    # Vision Support move in here from the two Textboxes they used to occupy.
-    debug_lines = [
-        f"**Build:** display.py {DISPLAY_BUILD}",
-        f"<br>**AI gate:** {'ENABLED' if get_ai_power_state('debug') else 'disabled'}",
-        f"<br>**Backend:** {info['backend']}",
-        f"<br>**Server:** {'Ready' if info.get('loaded') else 'Unreachable'} @ {runtime.manager_api_base}",
-        f"<br>**Manager Phase:** {manager_phase} ({manager_threads} threads)",
-        f"<br>**Model(s):** {_model_status_text(info)}",
-        f"<br>**Vision Support:** {_vision_support_text(active_agent)}",
-        f"<br>**TTS:** {tts_state} — tts_voice_agent (only loads when no other agent is deployed)",
-        f"<br>**Active Agent:** {agent_str}",
-        f"<br>**Agent GPU:** {runtime.agent_gpu_name} ({runtime.agent_gpu_vram_mb} MB)",
-        f"<br>**Avatar:** {avatar_state}",
-        f"<br>**RAG Chunks:** {get_rag_chunk_count()}",
-        f"<br>**VRAM Budget:** {info.get('vram_budget', 'N/A')}",
-    ]
-
-    status_msg = "Startup complete."
-    set_global_status(status_msg)
-
-    return "\n".join(debug_lines), status_msg, status_msg, status_msg
-```
-...so instead of using the buggy /p/p, we would use /p then put a <br> at the start of every line, and if you like a <br> at the end of every line.
-- The project now aims to support these specific models shown below, but do so well. Qwen3 and GLM 4.7 level models should be kept, in order to keep compatibility with non-compile install options. The main program needs to support the models shown below, thereabouts, we need complete handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response, in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
+- LONG-RUNNING ISSUE: The output text has a blank line - This will be fixed in next update to main.
+- The project now aims to support thesemodels shown below. Qwen3 and GLM 4.7 level models should possibly be preferable to non-compile install options, unsure if this is still the case. Need check/improve handling for each one. This includes, if they are thinking, then what is the end thinking tag? `</THINK>`, `Answer :`, "Final Response:", before final response or what is best to instruct it to do for each model type, as they all have their syntax, then we will know it is actually using/not using think tags of some variety or some kind of phrase it uses for example Final Answer, we have only tested for qwen mostly. in order for the thinking phase to end correctly, and other such handling quirks that we have for models in the list, but that also only those models, including variants of those models, eg abliterated, huihui, etc....
 ```
 GLM
 Qwen
@@ -404,13 +322,10 @@ Kimi
 Deepseek
 ```
 - STT - We could have a STT button in the tools section, enabling the input box to switch to a sample display and a button, the user would click and hold the button to record, and then let go of mouse when they finished recording, and then the wave appear in the box, then AI translate this into words, these words are then shown/editable in the text input box, and the wave record box will hide, but there will be a new button at bottom of text input when STT is enabled, to switch back to the STT Recording box and hide the text box again, so the user can re-record (blanking the previous recorded text upon pressing record). if the user selects STT again to disable it then, the wave box will hide, the text input box will be shown, and the Re-Record button will be hidden. Hmm. Is this the best way to do this? needs a brainstorm. 
+- Think/NoThink button turned out to be bad idea, because quantized highly trained models are designed to either be a Thinking or Non-Thinking model, and thinking models simply, do not work well without or are unable to stop using, thinking mode. While one could say it would be useful to have a thinking mode button for non-thinking models, I consider current 8b-14b models to be performing in one mode or the other, unless we could have switch between 2 pre-configured models on configruation page, where there would be a row with 2 columns for total of 2 models for configuration of 1-2 models, then in Interaction page there would be a dropdown auto-populated list in optimal location, showing the 1 non-interactive or if 2 configured then interactive plus able to switch between the 2 models. for mem-lock loading, where it would then be actually switching to the other model if required, upon very next iteration where user clicks to submit input, while one-shot mode would instead just use whatever model is selected when it does, as as it unloads after each iteration instead, ignoring the idle timer auto unload. In configuration in a shortlist dropdown models list, and we would have 2 configuration spaces for, "Chat Model" and "Instruct Model", able to be switched between.
 
 ### Development (reasoning notes)
-- Think/NoThink button turned out to be bad idea, because quantized highly trained models are designed to either be a Thinking or Non-Thinking model, and thinking models simply, do not work well without or are unable to stop using, thinking mode. While one could say it would be useful to have a thinking mode button for non-thinking models, I consider current non-thinking models to be Nieche or low performers.
-- Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far. If attempted again, then start with test scripts.
-
-### Development for v1 
-- Best way to do a Legacy compatible version will be cloned from main, and then add compatibility back in and release that as the final v1 version. 
+- No Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far. If attempted again, then start with test scripts.
 
 ## Credits
 Thanks to all the following teams for their assistance/comtributions...
