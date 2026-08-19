@@ -78,11 +78,11 @@ For compile options; If on PATH, ask AI how to check its on path, and as applica
 3. Go back to the `Interaction` page and begin interactions, ensuring to notice tool options available, and select appropriately for your intended use, then type your input into the User Input box, and then click Send Input.
 4. When all is finished, click `Exit` on the bottom right, then you are left with the terminal menu, where you type `x` to exit.
 ```
-- Test Prompts for common sense...
+- Test Prompts for common sense (if it realizes its a joke then its a model with light-hearted conversation, otherwise if not then its for more technical/straight conversation)...
 ```
 How much wood could a wood chuck chuck if a wood chuck could chuck wood?!
 ```
-- Test Prompt for web-search...
+- Test Prompt for web-search (the input prompt should automatically contain a date/time stamp)...
 ```
 Produce web research upon recent events relating to the events in most recent 7 days, relating to the war in the middle-east, ie Iraq/Iran/Others(if present), then compile a report for me on the most significant events.
 ```
