@@ -84,7 +84,7 @@ How much wood could a wood chuck chuck if a wood chuck could chuck wood?!
 ```
 - Test Prompt for web-search (the input prompt should automatically contain a date/time stamp)...
 ```
-Produce web research upon recent events relating to the events in most recent 7 days, relating to the war in the middle-east, ie Iraq/Iran/Others(if present), then compile a report for me on the most significant events.
+Produce web research relating to events in most recent 7 days, in relevance to the war in the middle-east, ie Iraq/Iran/Others(if present), then compile a report for me on the more significant events.
 ```
 
 
