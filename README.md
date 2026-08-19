@@ -121,7 +121,8 @@ Web Search = Slower actual website reading research.
 - "Chat-Windows-Gguf" and "Chat-Linux-Gguf", is now "Chat-Gradio-Gguf", as yes, these dual-mode scripts used to be 2 different/same programs.
 - Through detection/use of flags AVX/AVX2/AVX512, FMA, F16C, then supposedly we can expect ≈ 1.4 – 1.6× the tokens-per-second you would get from a plain AVX2-only build and roughly half the RAM footprint when you load FP16-quantised GGUF files.
 
-### Models working (with gpt for comparrisson).
+### Models Support 
+somewhat outdated here on readme, remember you can always update model support via editing the llama.cpp version in the installer ie b8943 or whatever the [latest release](https://github.com/ggml-org/llama.cpp/releases) is...
 - If you installed with compile option, then you will be able to use the newer models, otherwise with non-compile install will work with models from ~6 months ago. This is due to a versioning difference between, the [latest pre-built install](https://github.com/eswarthammana/llama-cpp-wheels/releases) and compiling the latest llama.cpp wheel from source. If not compiling, then the model handling will be limited to GLM4.7/Qwen3 level models.  
 - Chat-Gradio-Ggud is currently being programmed towards these models, and performance for the intended models is reported to be like this (no good ~30b models for GLM 5.1 yet, currently GLM 4.7 seems consistently bad compared to Qwen, regardless of better scores people say were internal/faked)...
 - The program will automatically calculate the layer overflow to system ram, but I advise in Q5_K_M in, 3B-6B for 4GB VRAM or 7B-14B for 8GB VRAM, 8B-19B for 12GB VRAM, etc, or the models with Active/Inactive parameters are usually pretty fast/versatile.     
