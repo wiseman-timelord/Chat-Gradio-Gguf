@@ -16,18 +16,17 @@ Intended as a high-quality chat interface with wide hardware/os support, windows
 - **Qt-Web Custom Browser**: The interface uses Qt-Web with Gradio, it appears as a regular application, and means your default browser are untouched.  
 - **Comprihensive GPU Support**: Vulkan, with dropdown list in configuration selection supporting multi CPU/GPU setup.
 - **Research-Grade Tools**: Includes RAG, web search, chunking, THINK, and Markdown formatting, and file attachments. 
-- **Text To Speech**: Corqui-TTS for realistic reading of output, where output is filtered for all symbols/tags/thinking appropriately.
+- **Text To Speech**: Corqui-TTS for reading completed response, pre-filtered for symbols/tags/thinking, and a Play icon at bottom of each complete output.
 - **Common File Support**: Handles `.bat`, `.py`, `.ps1`, `.txt`, `.json`, `.yaml`, `.psd1`, `.xaml`, and other common formats of files.
 - **Configurable Context**: Set model context to 8192-138072, and batch output to 256-8192.
 - **Enhanced Interface Controls**: Load/unload models, manage sessions, shutdown, and configure settings.
 - **Highly Customizable UI**: Configurable; 4-16 Session History slots, 2-10 file slots, Session Log 450-1300px height, 2-8 Lines of input. 
-- **Speak Summaries**: Click `Speech` for a special prompt for a concise spoken summary of the generated output. Text to speak uses `PyWin32`.
 - **Attach Files**: Attach Files is complete raw input, there is no Vectorise Files anymore, so the files should ideally be small enough to fit in context. 
 - **Collapsable Left/Right Column**: Like one would find on modern AI interface, and with concise collapsed view interface for commonly used buttons. 
-- **ASynchronous Response Stream**: Separate thread with its own event loop, allowing chunks of response queued/processed without blocking Gradio UI event loop.
+- **ASynchronous Response Stream**: Separate thread in its own event loop, allowing chunks of response queued/processed without blocking Gradio UI event loop.
 - **Reasoning Compatible**: Dynamic prompt system adapts handling for reasoning models optimally, ie, uncensored, nsfw, chat, code.
 - **Virtual Environment**: Isolated Python setup in `.venv` with `models` and `data` directories.
-- **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special AVX/FMA/F16C optimisations, as well as runtime optimizations for vulkan.
+- **Fast and Optimised**: Optionally compiling Vulkan backend/wheel with special cpu feature optimisations, and runtime optimizations for vulkan.
 
 ### Preview
 - The long-running issue of additional blank lines in model output is now fixed! (Windows v2.10)...
