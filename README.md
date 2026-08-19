@@ -210,6 +210,7 @@ Deepseek
 
 ### Development (reasoning notes)
 - No Image reading (this would additionally require vllm, which could switch for such iterations involving image reading). So, the spanner in the works is we would need VLLM, but even then AI has ALWAYS failed at implementing this so far. If attempted again, then start with test scripts.
+- No model format support other than Gguf, this is because, the only Llama.Cpp is able to compile for Vulkan and Gguf is the only format supported by Llama.cpp and the program is intended to work on any gpu.
 
 ## Credits
 Thanks to all the following teams for their assistance/comtributions...
